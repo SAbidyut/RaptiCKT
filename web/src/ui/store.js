@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS = {
   voltColors: true,
   showValues: true,
   showNames: false,
+  liveVolts: true,
+  liveAmps: true,
   showCharge: true,
   haptics: true,
   sound: true,

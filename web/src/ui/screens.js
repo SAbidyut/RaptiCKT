@@ -260,6 +260,8 @@ export function renderSettings(app, root) {
       ${row('Capacitor charge', tog('showCharge'), '± signs on capacitor plates')}
       ${row('Value labels', tog('showValues'))}
       ${row('Component names', tog('showNames'))}
+      ${row('Live node voltages', tog('liveVolts'), 'Voltage of every net written on its wire')}
+      ${row('Live currents', tog('liveAmps'), 'Current and its direction beside each part')}
       <h4>Simulation</h4>
       ${row('Integration method', sel('method', [['trap', 'Trapezoidal (accurate)'], ['be', 'Backward Euler (damped)']]))}
       ${row('Start from DC operating point', tog('initialDC'), 'Off = power-on from zero state')}

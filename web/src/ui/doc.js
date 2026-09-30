@@ -77,6 +77,8 @@ export class CircuitDoc {
       grow(e.worldBox());
       const r = e.labelRect(e.valueLabel());
       if (r) grow(r);
+      // room for the live current reading on the opposite side
+      if (e.liveCurrent() != null) { const [sx, sy] = e.labelSide(); grow(e.labelRect('↓ 000.0 mA', [-sx, -sy])); }
     }
     for (const w of this.wires) for (const [x, y] of w.pts) { x1 = Math.min(x1, x); y1 = Math.min(y1, y); x2 = Math.max(x2, x); y2 = Math.max(y2, y); }
     if (!Number.isFinite(x1)) return null;

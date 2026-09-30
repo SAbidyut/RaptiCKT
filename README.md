@@ -26,6 +26,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Switches: SPST, SPDT, push buttons, relay
   - Outputs: lamp, LED, 7-segment, DC motor, buzzer
   - Meters: voltmeter, ammeter, ohmmeter, wattmeter
+- **Live readings on the schematic**: while the simulation runs, every net shows its voltage (blue) and every two-terminal part shows its current with a direction arrow (green), placed so they never overlap. Both can be switched off in Settings.
 - **Oscilloscope**: 6 channels with auto-scale, frequency/RMS/p-p, FFT spectrum, XY mode and CSV export.
 - **Multimeter**: draggable probes for V (DC + true RMS), A, Ω (small-signal) and W.
 - **Analyses**:

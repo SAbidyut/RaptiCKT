@@ -8,7 +8,7 @@ export const THEMES = {
     accent: '#22d3ee', accent2: '#a78bfa', select: '#22d3ee',
     pos: '#4ade80', neg: '#f87171', neutral: [125, 138, 160], posRGB: [74, 222, 128], negRGB: [248, 113, 113],
     dot: '#fbbf24', hi: '#4ade80', lo: '#475569', hiFill: 'rgba(34,197,94,0.85)', loFill: 'rgba(71,85,105,0.9)', hiRGB: '74,222,128',
-    junction: '#e8eef8',
+    junction: '#e8eef8', vLabel: '#8fa2ff', iLabel: '#4ade80',
   },
   amoled: {
     name: 'AMOLED Black',
@@ -17,7 +17,7 @@ export const THEMES = {
     accent: '#22d3ee', accent2: '#a78bfa', select: '#22d3ee',
     pos: '#4ade80', neg: '#f87171', neutral: [120, 130, 150], posRGB: [74, 222, 128], negRGB: [248, 113, 113],
     dot: '#fbbf24', hi: '#4ade80', lo: '#475569', hiFill: 'rgba(34,197,94,0.85)', loFill: 'rgba(71,85,105,0.9)', hiRGB: '74,222,128',
-    junction: '#f1f5f9',
+    junction: '#f1f5f9', vLabel: '#8fa2ff', iLabel: '#4ade80',
   },
   light: {
     name: 'Blueprint Light',
@@ -26,6 +26,6 @@ export const THEMES = {
     accent: '#0891b2', accent2: '#7c3aed', select: '#0891b2',
     pos: '#16a34a', neg: '#dc2626', neutral: [100, 116, 139], posRGB: [22, 163, 74], negRGB: [220, 38, 38],
     dot: '#d97706', hi: '#16a34a', lo: '#94a3b8', hiFill: 'rgba(22,163,74,0.9)', loFill: 'rgba(100,116,139,0.85)', hiRGB: '22,163,74',
-    junction: '#0f172a',
+    junction: '#0f172a', vLabel: '#4338ca', iLabel: '#15803d',
   },
 };

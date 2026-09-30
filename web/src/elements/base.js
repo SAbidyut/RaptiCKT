@@ -143,12 +143,15 @@ export class Element {
   draw(g) {
     g.box(-GRID * 0.8, -GRID * 0.5, GRID * 0.8, GRID * 0.5);
   }
+  /** Current (post 0 → post 1) shown as a live annotation; null for parts that have none. */
+  liveCurrent() { return this.localPosts().length === 2 && this.postCurrents.length === 2 ? this.postCurrents[0] : null; }
+
   /** side (local unit vector) on which the value label is placed, outside the part */
   labelSide() { return [0, -1]; }
 
   /** World anchor for the value label: [x, y, align, baseline]. */
-  labelAnchor() {
-    const [sx, sy] = this.labelSide();
+  labelAnchor(side = this.labelSide()) {
+    const [sx, sy] = side;
     const [ox, oy] = this.toWorld(0, 0), [px, py] = this.toWorld(sx, sy);
     const dx = Math.round(px - ox), dy = Math.round(py - oy);
     const [x1, y1, x2, y2] = this.worldBox();
@@ -160,10 +163,10 @@ export class Element {
   }
 
   /** Approximate world rectangle covered by the label text (for Fit). */
-  labelRect(txt) {
+  labelRect(txt, side) {
     if (!txt) return null;
-    const [x, y, al, bl] = this.labelAnchor();
-    const w = txt.length * 6.4, h = 12;
+    const [x, y, al, bl] = this.labelAnchor(side);
+    const w = txt.length * 6.8, h = 12;
     const lx = al === 'left' ? x : al === 'right' ? x - w : x - w / 2;
     const ty = bl === 'top' ? y : bl === 'middle' ? y - h / 2 : y - h;
     return [lx, ty, lx + w, ty + h];

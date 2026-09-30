@@ -24,6 +24,7 @@ class Meter extends TwoTerm {
     }
   }
   valueLabel() { return ''; }
+  liveCurrent() { return null; } // the display already shows the reading
   // The display is always drawn upright, so its extent along the leads depends on rotation.
   half() { return (this.rot & 1) ? [0.8 * G, 1.4 * G] : [1.4 * G, 0.8 * G]; }
   localBox() { const [a, b] = this.half(); return [-2 * G, -b, 2 * G, b]; }

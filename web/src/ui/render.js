@@ -1,7 +1,7 @@
 // Canvas renderer: grid, wires, components, animated current, overlays.
 
 import { GRID } from '../elements/index.js';
-import { fmtShort } from '../engine/units.js';
+import { fmtShort, fmtSI } from '../engine/units.js';
 
 const key = (x, y) => Math.round(x) + ',' + Math.round(y);
 
@@ -353,7 +353,10 @@ export class Renderer {
     }
 
     // labels
-    if (st.settings.showValues !== false) this.drawLabels(st, g);
+    if (st.settings.showValues !== false) {
+      this.drawLabels(st, g);
+      if (running) this.drawLive(st, sim);
+    }
 
     // probes
     for (const pr of st.probes || []) this.drawProbe(pr, g, st);
@@ -464,6 +467,159 @@ export class Renderer {
       const o = e.labelAnchor();
       g.text(txt, o[0], o[1], { size: 10.5, color: th.text2, align: o[2], baseline: o[3], bold: true, follow: false });
     }
+  }
+
+  /** EveryCircuit-style live annotations: net voltages on wires, part currents beside parts. */
+  drawLive(st, sim) {
+    const ctx = this.ctx, th = st.theme, set = st.settings;
+    const volts = set.liveVolts !== false, amps = set.liveAmps !== false;
+    if (!volts && !amps) return;
+    const lay = this.liveLayout(st, sim);
+    ctx.font = '600 10px Inter, system-ui, sans-serif';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = th.bg;
+    const put = (txt, x, y, align, base, col) => {
+      ctx.textAlign = align; ctx.textBaseline = base;
+      ctx.strokeText(txt, x, y); // halo keeps text legible over wires and grid
+      ctx.fillStyle = col; ctx.fillText(txt, x, y);
+    };
+    if (volts) {
+      for (const L of lay.volts) {
+        const v = sim.nodeVoltage(L.node);
+        put(fmtSI(Math.abs(v) < 1e-9 ? 0 : v, 'V', 3), L.x, L.y, L.align, L.base, th.vLabel);
+      }
+    }
+    if (amps) {
+      for (const L of lay.amps) {
+        const i = L.el.liveCurrent();
+        if (i == null || !Number.isFinite(i)) continue;
+        const a = Math.abs(i) < 1e-10 ? 0 : i; // gmin-level residue reads as zero
+        const arrow = !a ? '' : (a > 0 ? L.fwd : L.back) + ' ';
+        put(arrow + fmtSI(Math.abs(a), 'A', 3), L.x, L.y, L.align, L.base, th.iLabel);
+      }
+    }
+  }
+
+  /** Placement of live labels; recomputed only when the circuit geometry or the solver changes. */
+  liveLayout(st, sim) {
+    const doc = st.doc;
+    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0);
+    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '');
+    for (const p of st.probes || []) if (p.pos) sig += '|p' + p.pos[0] + ',' + p.pos[1];
+    if (this._live && this._live.sim === sim && this._live.sig === sig) return this._live;
+
+    const VW = 50, VH = 12, AW = 56; // text extents for layout (widest typical reading)
+    const obs = [];
+    const box = (r, pad = 0, py = pad) => obs.push([r[0] - pad, r[1] - py, r[2] + pad, r[3] + py]);
+    const overlap = (r) => {
+      let a = 0;
+      for (const o of obs) {
+        const w = Math.min(r[2], o[2]) - Math.max(r[0], o[0]), h = Math.min(r[3], o[3]) - Math.max(r[1], o[1]);
+        if (w > 0 && h > 0) a += w * h;
+      }
+      return a;
+    };
+    const rectOf = (x, y, w, h, align, base) => {
+      const x1 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+      const y1 = base === 'top' ? y : base === 'bottom' ? y - h : y - h / 2;
+      return [x1, y1, x1 + w, y1 + h];
+    };
+
+    for (const e of doc.elements) {
+      box(e.worldBox(), 2);
+      const val = e.valueLabel();
+      const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
+      const r = e.labelRect(txt);
+      if (r) box(r, 9, 1); // a clear gap so two readings on one line never run together
+    }
+    // probe pins stand above their point; keep readings out from under them
+    for (const p of st.probes || []) if (p.pos) box([p.pos[0] - 14, p.pos[1] - 30, p.pos[0] + 14, p.pos[1] + 12]);
+    for (const w of doc.wires) for (let k = 1; k < w.pts.length; k++) {
+      const [a, b] = [w.pts[k - 1], w.pts[k]];
+      box([Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])], 1.5);
+    }
+
+    // currents: opposite the value label, or stacked under it when that side is crowded
+    const amps = [];
+    for (const e of doc.elements) {
+      if (e.liveCurrent() == null) continue;
+      const [sx, sy] = e.labelSide();
+      const val = e.valueLabel();
+      const cands = [];
+      const push = (x, y, align, base, pen) => cands.push({ x, y, align, base: base === 'alphabetic' ? 'bottom' : base, pen });
+      const [ox, oy, oa, ob] = e.labelAnchor([-sx, -sy]);
+      push(ox, oy, oa, ob, 0);
+      if (ob === 'middle') { push(ox, oy + 14, oa, 'middle', 6); push(ox, oy - 14, oa, 'middle', 7); }
+      const [vx, vy, va, vb] = e.labelAnchor();
+      if (!val) push(vx, vy, va, vb, 2);
+      else if (vb === 'middle') { push(vx, vy + 14, va, 'middle', 3); push(vx, vy - 14, va, 'middle', 4); }
+      else if (vb === 'top') push(vx, vy + 14, va, 'top', 4);
+      else push(vx, vy - 14, va, 'bottom', 5);
+      let best = null, bestScore = Infinity;
+      for (const c of cands) {
+        const r = rectOf(c.x, c.y, AW, VH, c.align, c.base);
+        const sc = overlap(r) * 2 + c.pen;
+                if (sc < bestScore) { bestScore = sc; best = { ...c, r }; }
+      }
+      const [p0, p1] = e.getPosts();
+      const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+      const dir = (ux, uy) => Math.abs(ux) >= Math.abs(uy) ? (ux > 0 ? '→' : '←') : (uy > 0 ? '↓' : '↑');
+      amps.push({ el: e, x: best.x, y: best.y, align: best.align, base: best.base, fwd: dir(dx, dy), back: dir(-dx, -dy) });
+      box(best.r, 9, 1);
+    }
+
+    // one voltage label per net, on the free-est stretch of its wiring
+    const nets = new Map();
+    const net = (n) => { if (!nets.has(n)) nets.set(n, { segs: [], posts: [] }); return nets.get(n); };
+    const wn = sim.wireNodes && sim.wireNodes.length === doc.wires.length ? sim.wireNodes : null;
+    if (wn) doc.wires.forEach((w, i) => {
+      if (wn[i] < 0) return;
+      for (let k = 1; k < w.pts.length; k++) net(wn[i]).segs.push([w.pts[k - 1], w.pts[k]]);
+    });
+    for (const e of doc.elements) {
+      const ps = e.getPosts();
+      (e.nodes || []).forEach((n, k) => { if (n >= 0 && ps[k]) net(n).posts.push(ps[k]); });
+    }
+    const volts = [];
+    const order = [...nets.keys()].sort((a, b) => a - b);
+    for (const n of order) {
+      const { segs, posts } = nets.get(n);
+      const cands = [];
+      for (const [a, b] of segs) {
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (len < GRID * 0.9) continue;
+        const horiz = a[1] === b[1];
+        for (const t of [0.5, 0.3, 0.7, 0.15, 0.85]) {
+          const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+          if (horiz) {
+            const room = len >= VW + 8 ? 0 : 12; // prefer stretches wide enough for the text
+            cands.push({ x, y: y - 5, align: 'center', base: 'bottom', pen: room + Math.abs(t - 0.5) * 6 });
+            cands.push({ x, y: y + 5, align: 'center', base: 'top', pen: room + 4 + Math.abs(t - 0.5) * 6 });
+          } else {
+            cands.push({ x: x + 6, y, align: 'left', base: 'middle', pen: 10 + Math.abs(t - 0.5) * 6 });
+            cands.push({ x: x - 6, y, align: 'right', base: 'middle', pen: 12 + Math.abs(t - 0.5) * 6 });
+          }
+        }
+      }
+      for (const [x, y] of posts) {
+        cands.push({ x: x + 5, y: y - 5, align: 'left', base: 'bottom', pen: 30 });
+        cands.push({ x: x - 5, y: y - 5, align: 'right', base: 'bottom', pen: 32 });
+        cands.push({ x: x + 5, y: y + 5, align: 'left', base: 'top', pen: 34 });
+        cands.push({ x: x - 5, y: y + 5, align: 'right', base: 'top', pen: 36 });
+      }
+      let best = null, bestScore = Infinity;
+      for (const c of cands) {
+        const r = rectOf(c.x, c.y, VW, VH, c.align, c.base);
+        const sc = overlap(r) * 2 + c.pen;
+        if (sc < bestScore) { bestScore = sc; best = { ...c, r }; }
+      }
+      if (!best) continue;
+      box(best.r, 2);
+      volts.push({ node: n, x: best.x, y: best.y, align: best.align, base: best.base });
+    }
+    this._live = { sim, sig, volts, amps };
+    return this._live;
   }
 
   drawProbe(pr, g, st) {

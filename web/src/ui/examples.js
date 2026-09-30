@@ -159,13 +159,13 @@ export const EXAMPLES = [
     desc: 'The diode conducts only on positive half-cycles; the 470 µF reservoir capacitor holds the voltage up between peaks. Ripple ≈ I/(f·C).',
     build(b) {
       b.v('acv', 0, 0, { amp: 12, freq: 50 });
-      b.h('diode', 4, -4, { model: '1N4007', is: 7e-9, n: 1.9, bv: 1000 });
-      b.v('ecap', 8, 0, { c: 470e-6 });
-      b.v('resistor', 12, 0, { r: 1000 });
+      b.h('diode', 5, -4, { model: '1N4007', is: 7e-9, n: 1.9, bv: 1000 });
+      b.v('ecap', 10, 0, { c: 470e-6 });
+      b.v('resistor', 15, 0, { r: 1000 });
       b.el('ground', 0, 6);
-      b.w([0, -2], [0, -4], [2, -4]); b.w([6, -4], [8, -4], [8, -2]); b.w([8, -4], [12, -4], [12, -2]);
-      b.w([12, 2], [12, 4], [0, 4]); b.w([8, 2], [8, 4]); b.w([0, 2], [0, 4]); b.w([0, 4], [0, 6]);
-      b.node(0, -4, C[0]); b.node(12, -4, C[1]);
+      b.w([0, -2], [0, -4], [3, -4]); b.w([7, -4], [10, -4], [10, -2]); b.w([10, -4], [15, -4], [15, -2]);
+      b.w([15, 2], [15, 4], [0, 4]); b.w([10, 2], [10, 4]); b.w([0, 2], [0, 4]); b.w([0, 4], [0, 6]);
+      b.node(0, -4, C[0]); b.node(15, -4, C[1]);
     },
   },
   {
