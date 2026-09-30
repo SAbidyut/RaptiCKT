@@ -385,10 +385,11 @@ export class SevenSeg extends Digital {
     segs.forEach(([a, b, c, d], i) => {
       const lit = on[i];
       ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d);
-      ctx.lineCap = 'round'; ctx.lineWidth = w;
-      if (lit) { ctx.shadowColor = `rgb(${col})`; ctx.shadowBlur = 12; }
+      ctx.lineCap = 'round';
+      if (lit) { ctx.lineWidth = w * 2.2; ctx.strokeStyle = `rgba(${col},0.25)`; ctx.stroke(); }
+      ctx.lineWidth = w;
       ctx.strokeStyle = lit ? `rgb(${col})` : 'rgba(255,255,255,0.07)';
-      ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.stroke();
     });
     'abcdefg'.split('').forEach((t, i) => g.text(t, -1.5 * G, (i - 3) * G - 6, { size: 7, color: g.muted }));
   }

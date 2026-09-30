@@ -14,6 +14,8 @@ import { APP } from './ui/brand.js';
 class App {
   constructor() {
     this.bridge = bridge;
+    // Android pads the WebView for system bars natively; don't add CSS safe-area insets on top.
+    if (bridge.isAndroid()) document.documentElement.classList.add('android');
     this.settings = store.settings();
     this.el = document.getElementById('app');
     this.el.innerHTML = `

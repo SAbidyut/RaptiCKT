@@ -25,7 +25,7 @@ export class Palette {
       <div class="sheet-grip" data-close></div>
       <div class="pal-head">
         <b>Add component</b>
-        <div class="search">${icon('search', 18)}<input type="search" placeholder="Search ${allTypes().length}+ components…" value=""></div>
+        <div class="search">${icon('search', 18)}<input type="search" placeholder="Search components…" value=""></div>
         <button class="icon-btn" data-close>${icon('x', 20)}</button>
       </div>
       <div class="pal-tabs">
@@ -41,12 +41,27 @@ export class Palette {
     }));
     const inp = this.host.querySelector('input');
     inp.addEventListener('input', () => { this.query = inp.value.trim().toLowerCase(); this.fill(); });
-    this.fill();
+    // slide in first, then build the grid on the next frame so the animation never stutters
+    this.host.querySelector('.pal-grid').innerHTML = '<div class="pal-loading"></div>';
     this.host.classList.add('open');
+    this.ed.root.classList.add('pal-open');
     this.ed.overlayOpen('palette');
+    requestAnimationFrame(() => requestAnimationFrame(() => this.fill()));
   }
 
-  close() { this.host.classList.remove('open'); this.ed.overlayClosed('palette'); }
+  close() { this.host.classList.remove('open'); this.ed.root.classList.remove('pal-open'); this.ed.overlayClosed('palette'); }
+
+  /** Render all component icons ahead of time during idle frames. */
+  prewarm() {
+    const types = allTypes().filter((C) => C.type !== 'base');
+    let i = 0;
+    const idle = window.requestIdleCallback || ((f) => setTimeout(() => f({ timeRemaining: () => 8 }), 50));
+    const work = (dl) => {
+      while (i < types.length && dl.timeRemaining() > 2) this.iconUrl(types[i++]);
+      if (i < types.length) idle(work);
+    };
+    idle(work);
+  }
   get isOpen() { return this.host.classList.contains('open'); }
 
   items() {

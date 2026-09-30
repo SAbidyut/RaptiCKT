@@ -106,7 +106,7 @@ export class Scope {
 
   resize() {
     const r = this.cv.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
     this.cv.width = Math.max(1, Math.round(r.width * dpr));
     this.cv.height = Math.max(1, Math.round(r.height * dpr));
     this.w = r.width; this.h = r.height; this.dpr = dpr;
@@ -145,7 +145,7 @@ export class Scope {
     ctx.stroke();
     ctx.strokeStyle = 'rgba(120,160,220,0.28)';
     ctx.beginPath(); ctx.moveTo(0, Math.round(H / 2) + 0.5); ctx.lineTo(W, Math.round(H / 2) + 0.5); ctx.stroke();
-    if (!this.channels.length || !this.count) { this.measEl.innerHTML = ''; return; }
+    if (!this.channels.length || !this.count) { this.setMeas(''); return; }
 
     const tNow = this.tbuf[(this.head - 1 + N) % N];
     const t0 = tNow - this.window;
@@ -165,16 +165,23 @@ export class Scope {
       if (lo > 0 && lo < (hi - lo) * 0.6) lo = 0;
       if (hi < 0 && -hi < (hi - lo) * 0.6) hi = 0;
       const col = c.probe.color;
+      // min/max decimation: at most two vertices per pixel column keeps the path short
       ctx.beginPath();
-      let first = true;
+      const ky = H / (hi - lo), kx = W / this.window;
+      let col0 = -1, mn = 0, mx = 0, started = false;
+      const flush = () => {
+        if (col0 < 0) return;
+        const ymn = H - (mn - lo) * ky, ymx = H - (mx - lo) * ky;
+        if (!started) { ctx.moveTo(col0, ymn); started = true; } else ctx.lineTo(col0, ymn);
+        if (ymx !== ymn) ctx.lineTo(col0, ymx);
+      };
       for (const i of idxs) {
-        const x = ((this.tbuf[i] - t0) / this.window) * W;
-        const y = H - ((c.buf[i] - lo) / (hi - lo)) * H;
-        if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+        const x = Math.round((this.tbuf[i] - t0) * kx), v = c.buf[i];
+        if (x !== col0) { flush(); col0 = x; mn = v; mx = v; } else { if (v < mn) mn = v; if (v > mx) mx = v; }
       }
-      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.lineJoin = 'round';
-      ctx.shadowColor = col; ctx.shadowBlur = 6;
-      ctx.stroke(); ctx.shadowBlur = 0;
+      flush();
+      ctx.lineJoin = 'bevel';
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
       // live dot
       const li = idxs[idxs.length - 1];
       const ly = H - ((c.buf[li] - lo) / (hi - lo)) * H;
@@ -188,7 +195,15 @@ export class Scope {
     });
     ctx.fillStyle = 'rgba(200,215,240,0.7)'; ctx.textAlign = 'right';
     ctx.fillText(`${fmtSI(this.window / 10, 's', 3)}/div`, W - 6, H - 5);
-    this.measEl.innerHTML = meas.join('<br>');
+    this.setMeas(meas.join('<br>'));
+  }
+
+  /** measurement text changes the DOM, so throttle it to 4 Hz */
+  setMeas(html) {
+    const now = performance.now();
+    if (html === this.lastMeas || (now - (this.measT || 0) < 250 && html)) return;
+    this.measT = now; this.lastMeas = html;
+    this.measEl.innerHTML = html;
   }
 
   drawXY(idxs) {
@@ -204,7 +219,7 @@ export class Scope {
       const x = 10 + ((a.buf[i] - sa.mn) / rx) * (W - 20), y = H - 10 - ((b.buf[i] - sb.mn) / ry) * (H - 20);
       if (f) { ctx.moveTo(x, y); f = false; } else ctx.lineTo(x, y);
     }
-    ctx.strokeStyle = '#4ade80'; ctx.lineWidth = 1.8; ctx.shadowColor = '#4ade80'; ctx.shadowBlur = 6; ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#4ade80'; ctx.globalAlpha = 0.25; ctx.lineWidth = 6; ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 1.8; ctx.stroke();
     this.measEl.innerHTML = `XY: X = ${a.probe.label} (${fmtSI(sa.mn, a.probe.unit, 3)} … ${fmtSI(sa.mx, a.probe.unit, 3)}), Y = ${b.probe.label} (${fmtSI(sb.mn, b.probe.unit, 3)} … ${fmtSI(sb.mx, b.probe.unit, 3)})`;
   }
 

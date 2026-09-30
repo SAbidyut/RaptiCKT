@@ -5,6 +5,41 @@ import { fmtShort } from '../engine/units.js';
 
 const key = (x, y) => Math.round(x) + ',' + Math.round(y);
 
+// Pre-rendered glow sprites: radial gradients and shadowBlur are very slow on
+// mobile GPUs, so every glow is a cached bitmap drawn with drawImage.
+const SPRITES = new Map();
+function glowSprite(rgb) {
+  let c = SPRITES.get(rgb);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, `rgba(${rgb},1)`);
+  gr.addColorStop(0.45, `rgba(${rgb},0.35)`);
+  gr.addColorStop(1, `rgba(${rgb},0)`);
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+  SPRITES.set(rgb, c);
+  return c;
+}
+function dotSprite(color) {
+  const k = 'dot' + color;
+  let c = SPRITES.get(k);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const x = c.getContext('2d');
+  const gr = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, '#ffffff');
+  gr.addColorStop(0.28, color);
+  gr.addColorStop(0.5, color + '88');
+  gr.addColorStop(1, color + '00');
+  x.fillStyle = gr; x.fillRect(0, 0, 32, 32);
+  SPRITES.set(k, c);
+  return c;
+}
+export const MAX_DPR = 2;
+
 // -------------------------------------------------------------- wire graph
 /** Graph of wire sub-segments used for current animation (KCL on each node's wire tree). */
 export class WireGraph {
@@ -155,12 +190,10 @@ export function makeGraphics(ctx, theme, opts) {
     },
     glow(x, y, r, rgb, a) {
       if (a <= 0.01) return;
-      const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
-      gr.addColorStop(0, `rgba(${rgb},${Math.min(1, a)})`);
-      gr.addColorStop(0.45, `rgba(${rgb},${Math.min(1, a) * 0.35})`);
-      gr.addColorStop(1, `rgba(${rgb},0)`);
-      ctx.fillStyle = gr;
-      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      const ga = ctx.globalAlpha;
+      ctx.globalAlpha = Math.min(1, a);
+      ctx.drawImage(glowSprite(rgb), x - r, y - r, 2 * r, 2 * r);
+      ctx.globalAlpha = ga;
     },
     text(str, x, y, o = {}) {
       ctx.save();
@@ -190,7 +223,7 @@ export class Renderer {
 
   resize() {
     const r = this.canvas.getBoundingClientRect();
-    this.dpr = Math.min(window.devicePixelRatio || 1, 3);
+    this.dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr || MAX_DPR);
     this.cw = r.width; this.ch = r.height;
     this.canvas.width = Math.max(1, Math.round(r.width * this.dpr));
     this.canvas.height = Math.max(1, Math.round(r.height * this.dpr));
@@ -362,17 +395,14 @@ export class Renderer {
     const ctx = this.ctx, th = st.theme;
     const spacing = 16;
     const rr = Math.max(1.8, 1.6 / this.scale);
-    ctx.fillStyle = th.dot;
+    const spr = dotSprite(th.dot), d = rr * 4.2, h = d / 2;
     const dotsAlong = (ax, ay, bx, by, phase) => {
       const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy);
       if (len < 1) return;
       const ux = dx / len, uy = dy / len;
       let s = ((phase % spacing) + spacing) % spacing;
-      for (; s < len; s += spacing) {
-        ctx.beginPath(); ctx.arc(ax + ux * s, ay + uy * s, rr, 0, Math.PI * 2); ctx.fill();
-      }
+      for (; s < len; s += spacing) ctx.drawImage(spr, ax + ux * s - h, ay + uy * s - h, d, d);
     };
-    ctx.shadowColor = th.dot; ctx.shadowBlur = 4;
     if (st.graph) for (const ed of st.graph.edges) if (Math.abs(ed.i) > st.iMin) dotsAlong(ed.a[0], ed.a[1], ed.b[0], ed.b[1], ed.phase);
     for (const e of st.doc.elements) {
       const posts = e._posts || e.getPosts();
@@ -387,7 +417,6 @@ export class Renderer {
         dotsAlong(ax, ay, bx, by, e.dotPhase[li] || 0);
       });
     }
-    ctx.shadowBlur = 0;
   }
 
   /** advance dot phases; speed in world units per second per ampere-scale */
@@ -429,7 +458,7 @@ export class Renderer {
   drawProbe(pr, g, st) {
     if (!pr.pos) return;
     const [x, y] = pr.pos;
-    this.drawPin(x, y, pr.color, g, pr.label);
+    this.drawPin(x, y, pr.color, g);
   }
 
   drawPin(x, y, col, g, label) {
@@ -438,7 +467,8 @@ export class Renderer {
     ctx.translate(x, y);
     ctx.scale(s, s);
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-5, -12); ctx.arc(0, -15, 6.5, Math.PI * 0.8, Math.PI * 0.2); ctx.closePath();
-    ctx.fillStyle = col; ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.fillStyle = col; ctx.fill();
+    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.stroke();
     ctx.beginPath(); ctx.arc(0, -15, 2.5, 0, Math.PI * 2); ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
     if (label) {
       ctx.font = '600 9px Inter, system-ui, sans-serif'; ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';

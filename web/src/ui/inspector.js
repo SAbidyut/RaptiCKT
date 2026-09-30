@@ -23,60 +23,110 @@ export function niceRound(v) {
 }
 
 export class Inspector {
-  constructor(editor, host) {
+  constructor(editor, host, quick) {
     this.ed = editor;
-    this.host = host;
+    this.host = host;     // full property sheet
+    this.quick = quick;   // compact floating bar shown on selection
     this.el = null;
-    this.expanded = false;
+    this.sheetOpen = false;
+    this.iconCache = new Map();
   }
 
+  icon(C) {
+    const k = C.type + this.ed.settings.theme;
+    if (!this.iconCache.has(k)) this.iconCache.set(k, Renderer.iconFor(C, this.ed.theme, 44));
+    return this.iconCache.get(k);
+  }
+
+  /** Select an element: show the compact quick bar (no sheet animation). */
   show(el) {
+    const same = el && el === this.el;
     this.el = el;
-    this.ed.root.classList.toggle('insp-open', !!el);
-    if (!el) { this.host.classList.remove('open'); this.host.innerHTML = ''; this.ed.knob.hide(); return; }
+    if (!el) {
+      this.closeSheet();
+      this.quick.classList.remove('open');
+      this.ed.knob.hide();
+      return;
+    }
+    if (!same) this.renderQuick();
+    this.quick.classList.add('open');
+    if (this.sheetOpen) this.render();
+    const kp = el.knobProp();
+    if (kp && !this.sheetOpen) this.ed.knob.show(el, kp); else this.ed.knob.hide();
+  }
+
+  renderQuick() {
+    const e = this.el, C = e.constructor;
+    const posts = e.localPosts().length;
+    const canScope = posts >= 1 && C.type !== 'ground' && C.type !== 'label';
+    this.quick.innerHTML = `
+      <button class="qb-main" data-q="edit">
+        <img src="${this.icon(C)}" alt="">
+        <div><b>${esc(e.name)} <small>${esc(C.title)}</small></b><span class="qb-read"></span></div>
+      </button>
+      <button data-q="rotate" title="Rotate">${icon('rotate', 19)}</button>
+      ${canScope ? `<button data-q="scope" title="Add to oscilloscope">${icon('scope', 19)}</button>` : ''}
+      <button data-q="edit" title="Edit properties">${icon('sliders', 19)}</button>
+      <button data-q="del" class="danger" title="Delete">${icon('trash', 19)}</button>`;
+    this.quick.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => {
+      const a = b.dataset.q;
+      if (a === 'edit') this.openSheet();
+      if (a === 'rotate') this.ed.rotateSelection();
+      if (a === 'del') this.ed.deleteSelection();
+      if (a === 'scope') this.ed.addProbe({ kind: posts >= 2 ? 'volt' : 'cur', el: this.el.id });
+    }));
+    this.updateReadings();
+  }
+
+  openSheet() {
+    if (!this.el) return;
+    this.sheetOpen = true;
     this.render();
     this.host.classList.add('open');
-    const kp = el.knobProp();
-    if (kp) this.ed.knob.show(el, kp); else this.ed.knob.hide();
-    this.placeKnob();
+    this.ed.root.classList.add('sheet-open');
+    this.ed.knob.hide();
+    this.ed.overlayOpen('inspector');
   }
 
-  placeKnob() {
-    requestAnimationFrame(() => {
-      const h = this.host.classList.contains('open') && window.innerWidth < 900 ? this.host.getBoundingClientRect().height : 0;
-      this.ed.knob.host.style.bottom = h ? `${h + 10}px` : '';
-    });
+  closeSheet() {
+    if (!this.sheetOpen) return;
+    this.sheetOpen = false;
+    this.host.classList.remove('open');
+    this.ed.root.classList.remove('sheet-open');
+    this.ed.overlayClosed('inspector');
+    const kp = this.el && this.el.knobProp();
+    if (kp) this.ed.knob.show(this.el, kp);
   }
 
   render() {
     const e = this.el, C = e.constructor;
-    const img = Renderer.iconFor(C, this.ed.theme, 44);
     const props = C.props.filter((p) => !p.hidden);
     const posts = e.localPosts().length;
     this.host.innerHTML = `
-      <div class="sheet-grip" data-a="toggle"></div>
+      <div class="sheet-grip" data-a="close"></div>
       <div class="insp-head">
-        <img class="insp-ico" src="${img}" alt="">
+        <img class="insp-ico" src="${this.icon(C)}" alt="">
         <div class="insp-title"><b>${esc(e.name)}</b><span>${esc(C.title)}</span></div>
-        <button class="icon-btn add" data-a="add" title="Add component">${icon('plus', 22)}</button>
-        <button class="icon-btn" data-a="toggle" title="Properties">${icon('sliders', 20)}</button>
-        <button class="icon-btn" data-a="close" title="Close">${icon('x', 20)}</button>
+        <button class="icon-btn" data-a="close" title="Done">${icon('check', 22)}</button>
       </div>
-      <div class="insp-read"></div>
-      <div class="insp-actions">
-        <button data-a="rotate">${icon('rotate', 18)}<span>Rotate</span></button>
-        <button data-a="flip">${icon('flip', 18)}<span>Flip</span></button>
-        <button data-a="dup">${icon('copy', 18)}<span>Copy</span></button>
-        ${posts >= 2 ? `<button data-a="scopeV">${icon('scope', 18)}<span>Scope V</span></button>` : ''}
-        ${posts >= 1 && C.type !== 'ground' ? `<button data-a="scopeI">${icon('wave', 18)}<span>Scope I</span></button>` : ''}
-        <button data-a="del" class="danger">${icon('trash', 18)}<span>Delete</span></button>
-      </div>
-      <div class="insp-body ${this.expanded ? 'show' : ''}">
-        ${props.map((p) => this.propRow(p)).join('')}
-        <p class="insp-desc">${esc(C.description || '')}</p>
+      <div class="insp-scroll">
+        <div class="insp-read"></div>
+        <div class="insp-actions">
+          <button data-a="rotate">${icon('rotate', 18)}<span>Rotate</span></button>
+          <button data-a="flip">${icon('flip', 18)}<span>Flip</span></button>
+          <button data-a="dup">${icon('copy', 18)}<span>Copy</span></button>
+          ${posts >= 2 ? `<button data-a="scopeV">${icon('scope', 18)}<span>Scope V</span></button>` : ''}
+          ${posts >= 1 && C.type !== 'ground' ? `<button data-a="scopeI">${icon('wave', 18)}<span>Scope I</span></button>` : ''}
+          <button data-a="del" class="danger">${icon('trash', 18)}<span>Delete</span></button>
+        </div>
+        <div class="insp-body">
+          ${props.map((p) => this.propRow(p)).join('')}
+          <p class="insp-desc">${esc(C.description || '')}</p>
+        </div>
       </div>`;
     this.host.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this.action(b.dataset.a)));
     this.host.querySelectorAll('.prop').forEach((row) => this.bindRow(row));
+    this.readKey = null;
     this.updateReadings();
   }
 
@@ -155,24 +205,38 @@ export class Inspector {
 
   updateReadings() {
     if (!this.el) return;
+    const sim = this.ed.sim;
+    const live = this.ed.running && sim && sim.ready;
+    let r = [];
+    if (live) { try { r = this.el.readings(sim); } catch { r = []; } }
+    const fmt = ([, v, u]) => (typeof v === 'number' ? fmtSI(v, u, 4) : String(v));
+    // quick bar: value label + first two readings, updated via textContent (no relayout of the bar)
+    const q = this.quick.querySelector('.qb-read');
+    if (q) {
+      const val = this.el.valueLabel();
+      q.textContent = live && r.length ? r.slice(0, 2).map((x) => `${x[0]} ${fmt(x)}`).join(' · ') : val || 'Tap ⚙ to edit';
+    }
+    if (!this.sheetOpen) return;
     const box = this.host.querySelector('.insp-read');
     if (!box) return;
-    const sim = this.ed.sim;
-    if (!this.ed.running || !sim || !sim.ready) {
-      box.innerHTML = `<div class="read muted">${this.ed.running ? '' : 'Press ▶ to simulate and see live values'}</div>`;
+    if (!live) {
+      if (this.readKey !== 'idle') box.innerHTML = '<div class="read muted">Press ▶ Run to see live values</div>';
+      this.readKey = 'idle';
       return;
     }
-    let r = [];
-    try { r = this.el.readings(sim); } catch { r = []; }
-    box.innerHTML = r.map(([k, v, u]) => `<div class="read"><span>${esc(k)}</span><b>${typeof v === 'number' ? esc(fmtSI(v, u, 4)) : esc(v)}</b></div>`).join('');
+    const key = r.map((x) => x[0]).join('|');
+    if (key !== this.readKey) {
+      box.innerHTML = r.map(([k]) => `<div class="read"><span>${esc(k)}</span><b></b></div>`).join('');
+      this.readKey = key;
+    }
+    const bs = box.querySelectorAll('b');
+    r.forEach((x, i) => { if (bs[i]) bs[i].textContent = fmt(x); });
   }
 
   action(a) {
     const e = this.el;
     switch (a) {
-      case 'close': this.ed.select(null); break;
-      case 'add': this.ed.palette.open(); break;
-      case 'toggle': this.expanded = !this.expanded; this.host.querySelector('.insp-body').classList.toggle('show', this.expanded); this.placeKnob(); break;
+      case 'close': this.closeSheet(); break;
       case 'rotate': this.ed.rotateSelection(); break;
       case 'flip': this.ed.flipSelection(); break;
       case 'dup': this.ed.duplicateSelection(); break;

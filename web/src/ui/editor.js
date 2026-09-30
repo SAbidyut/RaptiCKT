@@ -35,7 +35,8 @@ export class Editor {
     this.buildDOM();
     this.renderer = new Renderer(this.canvas);
     this.scope = new Scope(this, this.q('.scope-panel'));
-    this.inspector = new Inspector(this, this.q('.inspector'));
+    this.inspector = new Inspector(this, this.q('.inspector'), this.q('.quickbar'));
+    this.q('.scrim').addEventListener('click', () => { this.palette.close(); this.inspector.closeSheet(); });
     this.knob = new Knob(this, this.q('.knob'));
     this.palette = new Palette(this, this.q('.palette'));
     this.analysis = new Analysis(this, this.q('.analysis'));
@@ -79,11 +80,13 @@ export class Editor {
         <div class="hud-error"></div>
         <div class="hint"></div>
         <div class="selbar"></div>
+        <div class="quickbar"></div>
         <div class="knob"></div>
         <div class="meter-card"></div>
         <button class="fab" data-a="add" title="Add component">${icon('plus', 28)}</button>
         <div class="toast"></div>
       </div>
+      <div class="scrim"></div>
       <div class="sheet inspector"></div>
       <div class="sheet palette"></div>
       <div class="overlay analysis"></div>
@@ -92,7 +95,7 @@ export class Editor {
     this.canvas = this.q('.board');
     this.root.addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-a]');
-      if (!b || !this.root.contains(b) || b.closest('.inspector,.palette,.analysis,.meter-card,.more-menu,.speed-pop,.scope-panel,.selbar')) return;
+      if (!b || !this.root.contains(b) || b.closest('.inspector,.palette,.analysis,.meter-card,.more-menu,.speed-pop,.scope-panel,.selbar,.quickbar')) return;
       this.command(b.dataset.a, b);
     });
   }
@@ -128,6 +131,7 @@ export class Editor {
     this.undoStack = []; this.redoStack = [];
     this.running = false; this.paused = false;
     this.meterProbes = null;
+    this.renderer.maxDpr = undefined;
     this.q('.doc-name').textContent = doc.name;
     this.q('.doc-sub').textContent = doc.description ? doc.description.slice(0, 60) : `${doc.elements.length} components`;
     this.inspector.show(null);
@@ -144,6 +148,7 @@ export class Editor {
     if (autoRun && doc.elements.length) this.setRunning(true);
     if (!this.raf) this.raf = requestAnimationFrame(this.loop);
     this.active = true;
+    if (!this.prewarmed) { this.prewarmed = true; setTimeout(() => this.palette.prewarm(), 1200); }
     if (!store.flag('editorTips')) setTimeout(() => this.showTips(), 400);
   }
 
@@ -163,7 +168,7 @@ export class Editor {
 
   fit() {
     const top = 0;
-    const bottom = this.inspector.el ? Math.min(260, this.renderer.ch * 0.35) : 70;
+    const bottom = 80;
     this.renderer.fit(this.doc.bounds(), 50, top, bottom);
     this.dirtyDraw = true;
   }
@@ -307,12 +312,13 @@ export class Editor {
     this.raf = requestAnimationFrame(this.loop);
     if (!this.active) return;
     const dtReal = Math.min(0.05, Math.max(0, (ts - this.last) / 1000));
+    this.adaptResolution(ts - this.last);
     this.last = ts;
     if (this.needRebuild && !this.drag) this.rebuildNow();
     let frac = 1;
     const live = this.running && this.sim && this.sim.ready;
     if (live && !this.paused) {
-      frac = this.advance(this.speed * dtReal);
+      frac = this.advance(this.speed * dtReal, Math.max(3, 10 - (this.drawMs || 0)));
       this.slow = frac < 0.9;
     }
     if (live) {
@@ -323,15 +329,31 @@ export class Editor {
     }
     this.frameCount = (this.frameCount || 0) + 1;
     if (live || this.dirtyDraw || this.drag) {
+      const t0 = performance.now();
       this.renderer.draw(this.drawState(ts / 1000));
+      this.drawMs = 0.8 * (this.drawMs || 0) + 0.2 * (performance.now() - t0);
       this.dirtyDraw = false;
     }
-    if (this.scopeOpen && (live || this.frameCount % 20 === 0)) this.scope.draw();
+    // scope at 30 fps while running is plenty for the eye and halves its cost
+    if (this.scopeOpen && (live ? this.frameCount % 2 === 0 : this.frameCount % 20 === 0)) this.scope.draw();
     if (this.frameCount % 12 === 0) {
       this.updateStatus();
       if (live) this.inspector.updateReadings();
     }
     if (this.meter.open) this.meter.update(dtReal);
+  }
+
+  /** Dynamic resolution: lower the canvas pixel density on slow devices to keep ~60 fps. */
+  adaptResolution(frameMs) {
+    const R = this.renderer;
+    if (!(this.running && !this.paused) || frameMs > 250) { this.slowFrames = 0; return; }
+    this.frameEma = 0.92 * (this.frameEma || 16.7) + 0.08 * frameMs;
+    this.slowFrames = this.frameEma > 24 ? (this.slowFrames || 0) + 1 : 0;
+    if (this.slowFrames > 45 && R.dpr > 1.01) {
+      R.maxDpr = Math.max(1, R.dpr - 0.5);
+      this.slowFrames = 0; this.frameEma = 16.7;
+      this.onResize();
+    }
   }
 
   autoScale(dt) {
@@ -720,7 +742,7 @@ export class Editor {
   toggleScope(on = !this.scopeOpen) {
     this.scopeOpen = on;
     this.root.classList.toggle('with-scope', on);
-    setTimeout(() => { this.onResize(); this.scope.draw(); }, 260);
+    requestAnimationFrame(() => { this.onResize(); this.scope.draw(); });
     this.updateToolbar();
   }
 
@@ -872,6 +894,7 @@ export class Editor {
     if (this.q('.more-menu').classList.contains('open')) { this.closeMenu(); return true; }
     if (this.analysis.isOpen) { this.analysis.close(); return true; }
     if (this.palette.isOpen) { this.palette.close(); return true; }
+    if (this.inspector.sheetOpen) { this.inspector.closeSheet(); return true; }
     if (this.selection.size || this.selWires.size) { this.select(null); return true; }
     if (this.meter.open) { this.toggleMeter(false); return true; }
     return false;
@@ -1018,8 +1041,7 @@ export class Editor {
     if (g.hit.kind === 'element') {
       this.gesture = { type: 'done' };
       this.select(g.hit.el);
-      this.inspector.expanded = true;
-      this.inspector.show(g.hit.el);
+      this.inspector.openSheet();
       this.haptic(15);
     } else if (g.hit.kind === 'none') {
       this.gesture = { type: 'marquee', sx: g.sx, sy: g.sy };
@@ -1191,7 +1213,7 @@ export class Editor {
       if (this.multi) { this.select(e, { add: true }); return; }
       if (!g.pressed && e.onTap && e.onTap()) { this.pressChanged(e); this.checkpointQuiet(); }
       if (this.selected() !== e) this.select(e);
-      else this.inspector.render();
+      else this.inspector.updateReadings();
       return;
     }
     if (h.kind === 'post') {
