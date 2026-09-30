@@ -4,10 +4,12 @@ import { icon, LOGO_SVG } from './icons.js';
 import { APP, RAPTI } from './brand.js';
 import { EXAMPLES, exampleCategories, buildExample } from './examples.js';
 import { store, DEFAULT_SETTINGS } from './store.js';
-import { allTypes } from '../elements/index.js';
+import { allTypes, CATEGORIES } from '../elements/index.js';
 import { THEMES } from './theme.js';
 import { fmtSI, parseSI } from '../engine/units.js';
 
+// 01617-345534 style, as printed by RAPTI
+const fmtPhone = (p) => p.replace(/^\+880/, '0').replace(/^(\d{5})(\d+)$/, '$1-$2');
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function ago(ts) {
@@ -47,7 +49,10 @@ export class HomeScreen {
     if (this.tab === 'examples') this.renderExamples(body);
     if (this.tab === 'library') this.renderLibrary(body);
     if (this.tab === 'about') renderAbout(this.app, body);
-    this.root.querySelector('.home-scroll').scrollTop = 0;
+    const scroller = this.root.querySelector('.home-scroll');
+    const head = this.root.querySelector('.home-head');
+    scroller.scrollTop = 0;
+    scroller.addEventListener('scroll', () => head.classList.toggle('scrolled', scroller.scrollTop > 4), { passive: true });
   }
 
   renderHome(body, n) {
@@ -78,7 +83,7 @@ export class HomeScreen {
           ['sweep', 'DC sweep', 'I–V & transfer curves'],
           ['sensor', 'Sensors', 'LDR, NTC, Hall, PV…'],
           ['code', 'SPICE export', 'Validate in ngspice'],
-        ].map(([ic, t, s]) => `<div class="feat">${icon(ic, 22)}<b>${t}</b><span>${s}</span></div>`).join('')}
+        ].map(([ic, t, s]) => `<button class="feat" data-feat="${ic}"><span class="fi">${icon(ic, 20)}</span><b>${t}</b><span>${s}</span></button>`).join('')}
       </section>
       ${lib.length ? `<h3 class="sec-title">Recent circuits <button class="link" data-tab2="library">See all</button></h3>
       <div class="card-row">${lib.slice(0, 6).map((c) => this.circuitCard(c)).join('')}</div>` : ''}
@@ -86,11 +91,15 @@ export class HomeScreen {
       <div class="card-row">${EXAMPLES.slice(0, 8).map((e) => this.exampleCard(e)).join('')}</div>
       <section class="rapti-banner" data-h="about">
         ${LOGO_SVG(40, 'rb')}
-        <div><b>${RAPTI.full}</b><span>Industrial automation & electrical training · Dhaka</span></div>
+        <div><b>${RAPTI.full}</b><span>Industrial automation & electrical training · ${esc(RAPTI.city)}</span></div>
         ${icon('back', 18, 'flipx')}
       </section>
-      <p class="bangla">${APP.bangla}</p>`;
+      <p class="bangla">${APP.bangla}</p>
+      <p class="bangla-foot">${esc(APP.slogan)} · rapti.net</p>`;
     this.bindCards(body);
+    body.querySelectorAll('[data-feat]').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.feat === 'sensor') { this.tab = 'examples'; this.render(); } else this.app.newCircuit();
+    }));
     body.querySelector('[data-h=new]').addEventListener('click', () => this.app.newCircuit());
     body.querySelector('[data-h=open]').addEventListener('click', () => this.app.importFile());
     body.querySelector('[data-h=resume]')?.addEventListener('click', () => this.app.resume());
@@ -211,7 +220,7 @@ export function renderAbout(app, body) {
       <p><b>RaptiCKT</b> is a real-time circuit simulator built for electrical & electronic engineering students, hobbyists and researchers. Build analog, digital and mixed-signal circuits on an unlimited canvas and watch voltages and currents come alive.</p>
       <p>Under the hood is a SPICE-class engine: Modified Nodal Analysis, Newton–Raphson with junction limiting, trapezoidal / backward-Euler integration, DC operating point with gmin and source stepping, and small-signal AC analysis. Device models include Shockley diodes, Ebers–Moll BJTs with Early effect, level-1 MOSFETs, JFETs, op-amp macromodels with GBW and slew rate, coupled-inductor transformers and electromechanical DC motors.</p>
       <ul class="about-list">
-        <li>${icon('chip', 16)} 90+ components incl. sensors, logic, 555, regulators</li>
+        <li>${icon('chip', 16)} ${allTypes().filter((t) => t.type !== 'base').length} components in ${CATEGORIES.length} categories</li>
         <li>${icon('scope', 16)} 6-channel oscilloscope with FFT & XY modes</li>
         <li>${icon('bode', 16)} Bode plots, DC sweeps, operating-point tables</li>
         <li>${icon('code', 16)} SPICE netlist & CSV export for research work</li>
@@ -227,7 +236,9 @@ export function renderAbout(app, body) {
       <h4>Contact</h4>
       <div class="contact">
         <button data-u="${RAPTI.website}">${icon('globe', 18)}<div><b>Website</b><span>rapti.net</span></div></button>
-        ${RAPTI.phones.map((p) => `<button data-u="tel:${p}">${icon('phone', 18)}<div><b>Call</b><span>${p.replace('+880', '0')}</span></div></button>`).join('')}
+        ${RAPTI.phones.map((p) => `<button data-u="tel:${p}">${icon('phone', 18)}<div><b>Call</b><span>${fmtPhone(p)}</span></div></button>`).join('')}
+        <button data-u="https://wa.me/${RAPTI.whatsapp.replace(/\D/g, '')}">${icon('chat', 18)}<div><b>WhatsApp</b><span>${fmtPhone(RAPTI.whatsapp)} · we reply fast</span></div></button>
+        <button data-u="mailto:${RAPTI.email}">${icon('mail', 18)}<div><b>Email</b><span>${esc(RAPTI.email)}</span></div></button>
         <button data-u="${RAPTI.mapsUrl}">${icon('pin', 18)}<div><b>Visit</b><span>${esc(RAPTI.address)}</span></div></button>
         <button data-u="${RAPTI.coursesUrl}">${icon('book', 18)}<div><b>Courses & admission</b><span>rapti.net/app-course</span></div></button>
       </div>
@@ -262,6 +273,7 @@ export function renderSettings(app, root) {
       ${row('Component names', tog('showNames'))}
       ${row('Live node voltages', tog('liveVolts'), 'Voltage of every net written on its wire')}
       ${row('Live currents', tog('liveAmps'), 'Current and its direction beside each part')}
+      ${row('AC readings', sel('acReadings', [['rms', 'RMS (like a meter)'], ['inst', 'Instantaneous']]), 'Live labels in circuits with an AC supply')}
       <h4>Simulation</h4>
       ${row('Integration method', sel('method', [['trap', 'Trapezoidal (accurate)'], ['be', 'Backward Euler (damped)']]))}
       ${row('Start from DC operating point', tog('initialDC'), 'Off = power-on from zero state')}

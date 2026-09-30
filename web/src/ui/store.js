@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS = {
   showNames: false,
   liveVolts: true,
   liveAmps: true,
+  acReadings: 'rms',
   showCharge: true,
   haptics: true,
   sound: true,

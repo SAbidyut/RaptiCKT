@@ -8,18 +8,50 @@ const G = GRID;
 export class Meter extends TwoTerm {
   static category = 'Meters';
   shortCheck = false;
-  reset() { this.acc = 0; this.acc2 = 0; this.shown = 0; this.setCurrent(0); }
+  reset() { this.acc = 0; this.acc2 = 0; this.shown = 0; this.win = null; this.setCurrent(0); }
   track(s, x) {
     // exponential moving averages for DC (mean) and RMS readings
-    if (s.mode === 'dc') { this.acc = x; this.acc2 = x * x; return; }
+    if (s.mode === 'dc') { this.acc = x; this.acc2 = x * x; this.win = null; return; }
     const a = Math.min(1, s.dt / Math.max(this.p.tau ?? 0.1, s.dt));
     this.acc += (x - this.acc) * a;
     this.acc2 += (x * x - this.acc2) * a;
+    // Auto mode in an AC circuit: exact RMS over the last supply cycle
+    this.acPeriod = s.acPeriod || 0;
+    if (this.p.mode === 'auto' && this.acPeriod > 0) this.windowAdd(x * x * s.dt, x * s.dt, s.dt, this.acPeriod);
   }
+  windowAdd(q, l, dt, T) {
+    let w = this.win;
+    const mk = (n) => ({ q: new Float64Array(n), l: new Float64Array(n), d: new Float64Array(n) });
+    if (!w || w.T !== T) w = this.win = { T, ...mk(256), head: 0, n: 0, sum: 0, lin: 0, span: 0 };
+    if (w.n === w.q.length) { // grow the ring
+      const b = mk(w.n * 2);
+      for (let k = 0; k < w.n; k++) { const j = (w.head + k) % w.n; b.q[k] = w.q[j]; b.l[k] = w.l[j]; b.d[k] = w.d[j]; }
+      Object.assign(w, b); w.head = 0;
+    }
+    const slot = (w.head + w.n) % w.q.length;
+    w.q[slot] = q; w.l[slot] = l; w.d[slot] = dt; w.n++; w.sum += q; w.lin += l; w.span += dt;
+    while (w.n > 1 && w.span - w.d[w.head] >= T) {
+      w.sum -= w.q[w.head]; w.lin -= w.l[w.head]; w.span -= w.d[w.head]; w.head = (w.head + 1) % w.q.length; w.n--;
+    }
+  }
+  /** Auto mode over a full cycle: { v, ac } — average for mostly-DC signals, RMS for AC ones. */
+  autoReading() {
+    const w = this.win;
+    if (!(this.acPeriod > 0) || !w || w.span < w.T * 0.999) return null;
+    const r = Math.sqrt(Math.max(0, w.sum) / w.span), m = w.lin / w.span;
+    return Math.abs(m) >= 0.7 * r ? { v: m, ac: false } : { v: r, ac: true };
+  }
+  /** true when the reading shown is an RMS value */
+  showsRms() { if (this.p.mode === 'rms') return true; const a = this.p.mode === 'auto' && this.autoReading(); return !!(a && a.ac); }
   display(x) {
     switch (this.p.mode) {
       case 'avg': return this.acc;
       case 'rms': return Math.sqrt(Math.max(0, this.acc2));
+      case 'auto': {
+        if (!(this.acPeriod > 0)) return x;
+        const a = this.autoReading();
+        return a ? a.v : x; // instantaneous until a whole cycle has run
+      }
       default: return x;
     }
   }
@@ -33,7 +65,7 @@ export class Meter extends TwoTerm {
     g.upright(() => {
       g.box(-1.4 * G, -0.8 * G, 1.4 * G, 0.8 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.bg, r: 6 });
       g.text(sym, -1.12 * G, -0.46 * G, { size: 8, color: g.accent, bold: true });
-      const m = this.p.mode === 'rms' ? 'RMS' : this.p.mode === 'avg' ? 'AVG' : '';
+      const m = this.showsRms() ? 'RMS' : this.p.mode === 'avg' ? 'AVG' : '';
       if (m) g.text(m, 1.15 * G, -0.46 * G, { size: 6, color: g.muted, align: 'right', follow: false });
       g.text(g.running ? fmtSI(value, unit, 4) : '— ' + unit, 0, 0.18 * G, { size: 9, color: g.text1, bold: true, mono: true });
     });
@@ -42,7 +74,7 @@ export class Meter extends TwoTerm {
   }
 }
 
-const MODE = { key: 'mode', label: 'Reading', type: 'select', def: 'inst', options: [['inst', 'Instantaneous'], ['avg', 'Average (DC)'], ['rms', 'True RMS (AC)']] };
+const MODE = { key: 'mode', label: 'Reading', type: 'select', def: 'auto', options: [['auto', 'Auto (RMS in AC circuits)'], ['inst', 'Instantaneous'], ['avg', 'Average (DC)'], ['rms', 'True RMS (moving)']] };
 const TAU = { key: 'tau', label: 'Averaging time', unit: 's', def: 0.1, min: 1e-6, max: 100, log: true };
 
 export class Voltmeter extends Meter {

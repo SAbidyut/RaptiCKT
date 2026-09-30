@@ -4,7 +4,7 @@
 RaptiCKT: Circuit Simulator
 
 ## Short description (80 chars max)
-Real-time circuit simulator with oscilloscope, Bode plots & 90+ components.
+Real-time circuit simulator with oscilloscope, Bode plots & 330+ components.
 
 ## Full description (English)
 
@@ -15,7 +15,7 @@ RaptiCKT is a powerful, beautifully designed circuit simulator for electrical & 
 
 ⚡ BUILD & SIMULATE
 • Unlimited workspace with pinch-zoom, smart wire routing and snap-to-grid
-• 90+ components in clean categories: sources, passives, semiconductors, analog ICs, digital logic, sensors, switches, outputs and meters
+• 330+ components in 20 categories: sources, passives, semiconductors, analog ICs, digital logic, sensors, switches, outputs and meters
 • Live voltage colouring, animated current flow and capacitor charge
 • Tap switches and push buttons while the circuit runs; turn the rotary knob to change any value live
 • Undo/redo, multi-select, copy, rotate, flip
@@ -63,7 +63,7 @@ Made by RAPTI — Resonance Automation Professional Training Institute, Dhaka. S
 Education · Tools — electronics, circuit simulator, electrical engineering, EEE, oscilloscope, SPICE, arduino, PLC, physics
 
 ## What's new (v1.0.0)
-First release: real-time simulation engine, 90+ components with sensors, oscilloscope with FFT/XY, multimeter, Bode plots, DC sweep, SPICE export and 20+ examples.
+First release: real-time simulation engine, 330+ components with sensors, oscilloscope with FFT/XY, multimeter, Bode plots, DC sweep, SPICE export and 20+ examples.
 
 ## Assets in this folder
 - `icon-512.png` — hi-res app icon (512 × 512)

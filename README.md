@@ -34,6 +34,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Output (13): RGB/bicolour/IR LEDs, laser, bar graph, 7-segment and hex displays, speaker, buzzers, solenoid, servo
   - Vacuum Tubes (3): vacuum diode, triode, pentode
   - Meters (20): voltmeter, ammeter, ohmmeter, wattmeter, true-RMS AC meters, frequency, phase, power-factor, VAR, kWh, dB, peak, LCR, megger, moving-coil voltmeter/ammeter, galvanometer, test point
+- **AC readings like a real meter**: in circuits with a sinusoidal supply (mains, AC sources, 3-phase), live labels show the RMS over one supply cycle (e.g. `12 V~` on a 230 V : 12-0-12 V transformer) and DC nets show their average. Voltmeters and ammeters default to *Auto* (RMS in AC circuits). Switch to instantaneous values in Settings → AC readings.
 - **Live readings on the schematic**: while the simulation runs, every net shows its voltage (blue) and every two-terminal part shows its current with a direction arrow (green), placed so they never overlap. Both can be switched off in Settings.
 - **Oscilloscope**: 6 channels with auto-scale, frequency/RMS/p-p, FFT spectrum, XY mode and CSV export.
 - **Multimeter**: draggable probes for V (DC + true RMS), A, Ω (small-signal) and W.

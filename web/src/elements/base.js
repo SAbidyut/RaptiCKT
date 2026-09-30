@@ -150,7 +150,7 @@ export class Element {
   labelSide() { return [0, -1]; }
 
   /** World anchor for the value label: [x, y, align, baseline]. */
-  labelAnchor(side = this.labelSide()) {
+  labelAnchor(side = this.chosenSide || this.labelSide()) {
     const [sx, sy] = side;
     const [ox, oy] = this.toWorld(0, 0), [px, py] = this.toWorld(sx, sy);
     const dx = Math.round(px - ox), dy = Math.round(py - oy);

@@ -42,7 +42,7 @@ class App {
     };
     this.show('home');
     this.home.render();
-    setTimeout(() => this.el.querySelector('.splash').classList.add('hide'), 1300);
+    setTimeout(() => { this.el.querySelector('.splash').classList.add('hide'); document.documentElement.classList.add('app-ready'); }, 1300);
     setTimeout(() => this.el.querySelector('.splash')?.remove(), 2000);
   }
 

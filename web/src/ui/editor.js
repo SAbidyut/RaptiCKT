@@ -13,6 +13,7 @@ import { Palette } from './palette.js';
 import { Analysis } from './analysis.js';
 import { Multimeter } from './meter.js';
 import { store } from './store.js';
+import { RmsTracker, acFrequency } from './rms.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const same = (a, b) => a[0] === b[0] && a[1] === b[1];
@@ -192,6 +193,10 @@ export class Editor {
     this.graph = new WireGraph(this.doc);
     this.resolveProbes();
     this.computeTiming();
+    // one supply cycle of RMS history for the live labels and Auto meters
+    const fac = acFrequency(this.doc.elements);
+    this.sim.acPeriod = fac >= 0.5 ? 1 / fac : 0;
+    this.rms = this.sim.acPeriod ? new RmsTracker(this.sim.acPeriod, this.sim.nodeCount, this.doc.elements.filter((e) => e.localPosts().length === 2)) : null;
     if (this.running) {
       this.sim.start();
       this.scope.reset();
@@ -204,7 +209,9 @@ export class Editor {
     let fmax = 0;
     for (const e of this.doc.elements) {
       const p = e.p;
-      if (p.wave && p.wave !== 'dc' && p.freq) fmax = Math.max(fmax, p.wave === 'sweep' ? p.freq : p.freq);
+      // waveform sources, and fixed-frequency supplies such as mains and 3-phase (which have no wave)
+      const periodic = p.freq > 0 && (p.wave ? p.wave !== 'dc' : e.constructor.category === 'Sources');
+      if (periodic) fmax = Math.max(fmax, p.freq);
       if (e.constructor.type === 'mic') fmax = Math.max(fmax, p.freq);
     }
     this.fmax = fmax;
@@ -278,9 +285,11 @@ export class Editor {
     const target = sim.t + simTime;
     let n = 0;
     while (sim.t < target - this.dt * 1e-6) {
+      const t0s = sim.t;
       const ok = sim.step(Math.min(this.dt, target - sim.t) > this.dt * 0.01 ? this.dt : this.dt);
       n++;
       if (!ok) { this.showError(); this.paused = true; this.updateToolbar(); break; }
+      if (this.rms) this.rms.sample(sim, sim.t - t0s);
       this.scope.sample(sim);
       if ((n & 7) === 0 && performance.now() - t0 > budgetMs) break;
     }
@@ -372,7 +381,7 @@ export class Editor {
       doc: this.doc, sim: this.sim, running: this.running, theme: this.theme, settings: this.settings,
       selection: this.selection, selWires: this.selWires, graph: this.graph, t, preview: this.preview,
       probes: this.doc.probes, hoverPost: this.hoverPost, marquee: this.marquee, meterProbes: this.meter.open ? this.meterProbes : null,
-      vScale: this.vScale, iScale: this.iScale, iMin: this.iScale * 1e-3 + 1e-12, errorEl: this.errorEl,
+      vScale: this.vScale, iScale: this.iScale, iMin: this.iScale * 1e-3 + 1e-12, errorEl: this.errorEl, rms: this.running ? this.rms : null,
     };
   }
 
@@ -879,7 +888,7 @@ export class Editor {
     store.setFlag('editorTips');
     this.app.showSheet('How to use the editor', `
       <ul class="tips">
-        <li>${icon('plus', 18)}<span><b>Add parts</b> with the + button. Search 90+ components by name.</span></li>
+        <li>${icon('plus', 18)}<span><b>Add parts</b> with the + button. Search 330+ components by name.</span></li>
         <li>${icon('wire', 18)}<span><b>Draw wires</b> by dragging from any terminal (small circle) to another terminal or wire.</span></li>
         <li>${icon('hand', 18)}<span><b>Move</b> parts by dragging them – connected wires follow. Pinch to zoom, drag empty space to pan.</span></li>
         <li>${icon('play', 18)}<span><b>Run</b> to simulate: wires glow with voltage, yellow dots show current. Tap switches and buttons to operate them live.</span></li>
@@ -1119,7 +1128,21 @@ export class Editor {
     const consider = (p) => { const d = Math.hypot(p[0] - wx, p[1] - wy); if (d < bd && !(exclude && same(p, exclude))) { bd = d; best = p; } };
     for (const e of this.doc.elements) for (const p of e.getPosts()) consider(p);
     for (const w of this.doc.wires) for (const p of w.pts) consider(p);
-    return best ? [...best] : [snap(wx), snap(wy)];
+    if (best) return [...best];
+    // Dropped on a part's body or lead: attach to that part's nearest terminal instead of
+    // leaving a wire end sitting on the symbol, unconnected.
+    const pad = 4 / R.scale + 2;
+    let pick = null, pd = Infinity;
+    for (const e of this.doc.elements) {
+      const [x1, y1, x2, y2] = e.worldBox();
+      if (wx < x1 - pad || wx > x2 + pad || wy < y1 - pad || wy > y2 + pad) continue;
+      for (const p of e.getPosts()) {
+        if (exclude && same(p, exclude)) continue;
+        const d = Math.hypot(p[0] - wx, p[1] - wy);
+        if (d < pd) { pd = d; pick = p; }
+      }
+    }
+    return pick ? [...pick] : [snap(wx), snap(wy)];
   }
 
   updateDrag(sx, sy) {

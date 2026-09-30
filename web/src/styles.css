@@ -62,7 +62,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .splash p { margin: 0; color: #9fb0cc; letter-spacing: 3px; text-transform: uppercase; font-size: 12px; animation: rise 0.8s 0.35s both; }
 .splash-bar { width: 140px; height: 3px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); margin-top: 26px; overflow: hidden; }
 .splash-bar i { display: block; height: 100%; width: 40%; background: var(--grad); animation: load 1.1s ease-in-out infinite; }
-.logo-wave { stroke-dasharray: 120; animation: wave 2.4s ease-in-out infinite; }
+.splash .logo-dot { transform-origin: 98px 30px; animation: dotPulse 1.6s ease-in-out 0.6s infinite; }
+@keyframes dotPulse { 50% { transform: scale(1.25); opacity: .75; } }
 @keyframes wave { 0% { stroke-dashoffset: 120; } 50% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -120; } }
 @keyframes pop { from { transform: scale(0.6) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes rise { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -85,13 +86,26 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 button:disabled { opacity: 0.35; pointer-events: none; }
 
 /* ------------------------------------------------------------- home */
-.home-scroll { flex: 1; overflow-y: auto; padding-bottom: calc(86px + var(--safe-b)); -webkit-overflow-scrolling: touch; }
+.home-scroll { flex: 1; overflow-y: auto; padding-bottom: calc(104px + var(--safe-b)); -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
+/* solid header: scrolled content never shows through the title */
 .home-head { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: calc(10px + var(--safe-t)) 16px 10px;
-  background: linear-gradient(var(--bg) 70%, transparent); }
+  background: var(--bg); border-bottom: 1px solid transparent; transition: border-color 0.25s, box-shadow 0.25s; }
+.home-head.scrolled { border-bottom-color: var(--border); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28); }
+:root[data-theme='light'] .home-head.scrolled { box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }
+.home-head .brand svg { flex: none; }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand b { display: block; font-size: 21px; font-weight: 800; letter-spacing: 0.3px; line-height: 1.1; }
 .brand small { color: var(--muted); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
-.home-body { padding: 4px 16px 20px; max-width: 980px; margin: 0 auto; }
+.home-body { padding: 6px 16px 20px; max-width: 980px; margin: 0 auto; }
+/* page switch + staggered entrance */
+.home-body > * { animation: homeIn 0.45s cubic-bezier(.2, .8, .2, 1) both; }
+.home-body > :nth-child(2) { animation-delay: 0.04s; } .home-body > :nth-child(3) { animation-delay: 0.08s; }
+.home-body > :nth-child(4) { animation-delay: 0.12s; } .home-body > :nth-child(5) { animation-delay: 0.16s; }
+.home-body > :nth-child(6) { animation-delay: 0.2s; } .home-body > :nth-child(n+7) { animation-delay: 0.24s; }
+@keyframes homeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+/* the home page rises in as the splash fades out */
+:root:not(.app-ready) .home-body > * { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .home-body > * { animation: none; } }
 .hero { position: relative; overflow: hidden; border-radius: 24px; padding: 26px 20px 20px; color: #fff;
   background: radial-gradient(circle at 85% 10%, rgba(139, 92, 246, 0.55), transparent 55%), radial-gradient(circle at 10% 100%, rgba(34, 211, 238, 0.4), transparent 55%), linear-gradient(135deg, #0d1b3d, #1a1450);
   box-shadow: var(--shadow); border: 1px solid rgba(255, 255, 255, 0.08); }
@@ -112,14 +126,20 @@ button:disabled { opacity: 0.35; pointer-events: none; }
 .resume b { display: block; font-size: 14.5px; }
 .resume span { color: var(--muted); font-size: 12.5px; }
 .feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 6px; }
-.feat { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 10px; }
-.feat .ic { color: var(--accent); margin-bottom: 6px; }
+.feat { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 12px 10px; text-align: left; transition: transform 0.15s, border-color 0.2s, background 0.2s; }
+.feat:active { transform: scale(0.96); border-color: var(--border2); background: var(--surface2); }
+.feat .fi { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; margin-bottom: 8px; color: #fff; background: var(--grad); box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3); }
+.feat .fi .ic { color: #fff; margin: 0; }
 .feat b { display: block; font-size: 13px; }
 .feat span { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.3; }
 .sec-title { display: flex; justify-content: space-between; align-items: center; margin: 22px 2px 10px; font-size: 16px; }
 .card-row { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 8px; scroll-snap-type: x mandatory; }
 .card-row::-webkit-scrollbar { display: none; }
-.card { flex: none; width: 168px; text-align: left; scroll-snap-align: start; }
+.card { flex: none; width: 168px; text-align: left; scroll-snap-align: start; transition: transform 0.15s; }
+.card:active, .ex-item:active, .lib-item:active, .resume:active, .rapti-banner:active { transform: scale(0.97); }
+.ex-item, .lib-item, .resume, .rapti-banner { transition: transform 0.15s; }
+img.thumb { animation: thumbIn 0.35s ease both; }
+@keyframes thumbIn { from { opacity: 0; } to { opacity: 1; } }
 .card .thumb, .ex-item .thumb, .lib-item .thumb { display: block; width: 100%; aspect-ratio: 16/10; border-radius: 14px; background: var(--bg2); border: 1px solid var(--border); object-fit: cover; }
 .card b { display: block; margin-top: 8px; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card span { color: var(--muted); font-size: 12px; }
@@ -128,7 +148,11 @@ button:disabled { opacity: 0.35; pointer-events: none; }
 .rapti-banner div { flex: 1; }
 .rapti-banner b { display: block; font-size: 13.5px; }
 .rapti-banner span { color: var(--muted); font-size: 12px; }
-.bangla { text-align: center; color: var(--muted); font-size: 13px; margin: 22px 0 6px; }
+/* Bengali text: a Bengali font, no letter-spacing (it breaks conjuncts) and room for the vowel signs */
+.bangla { text-align: center; color: var(--text2); font-family: 'Noto Sans Bengali', 'Hind Siliguri', 'Kalpurush', 'SolaimanLipi', var(--font);
+  font-size: 14.5px; line-height: 1.9; letter-spacing: 0; margin: 24px 0 8px; padding: 10px 14px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--border); }
+.bangla-foot { text-align: center; color: var(--muted); font-size: 11.5px; margin: 6px 0 0; }
 .page-title { margin: 6px 2px 2px; font-size: 24px; }
 .page-sub { margin: 0 2px 14px; color: var(--muted); font-size: 13.5px; }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }
@@ -150,7 +174,9 @@ button:disabled { opacity: 0.35; pointer-events: none; }
 .empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 50px 20px; color: var(--muted); }
 .empty b { color: var(--text); }
 .bottom-nav { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-around; padding: 8px 8px calc(8px + var(--safe-b));
-  background: var(--glass); border-top: 1px solid var(--border); z-index: 10; }
+  background: var(--bg2); border-top: 1px solid var(--border); z-index: 10; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.25); }
+.bottom-nav button { transition: color 0.2s, background 0.2s; }
+.bottom-nav button.on { background: rgba(34, 211, 238, 0.1); }
 .bottom-nav button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 14px; border-radius: 14px; color: var(--muted); font-size: 11.5px; font-weight: 600; }
 .bottom-nav button.on { color: var(--accent); }
 .bottom-nav button.on .ic { filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.6)); }

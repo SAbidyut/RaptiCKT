@@ -43,7 +43,7 @@ for (const [name, js, wait] of shots) {
 
 // ---- icon 512
 const ip = await browser.newPage({ viewport: { width: 512, height: 512 } });
-await ip.setContent(`<html><body style="margin:0;background:#070b14">${LOGO_SVG(512, 'i').replace('<rect x="6" y="6" width="116" height="116" rx="30" fill="#0b1120"/>', '<rect width="128" height="128" fill="#0b1120"/>')}</body></html>`);
+await ip.setContent(`<html><body style="margin:0;background:#070b14">${LOGO_SVG(512, 'i').replace('viewBox="0 0 128 128"', 'viewBox="-14 -14 156 156"').replace(/<rect x="4" y="4" width="120" height="120" rx="32"/g, '<rect x="-14" y="-14" width="156" height="156"')}</body></html>`);
 await ip.screenshot({ path: path.join(out, 'icon-512.png'), omitBackground: false });
 
 // ---- feature graphic 1024x500
@@ -63,7 +63,7 @@ await fp.setContent(`<html><head><style>
 </style></head><body>
   <svg class="wave" viewBox="0 0 1024 120"><path d="M0 60 C60 0 120 0 180 60 S300 120 360 60 480 0 540 60 660 120 720 60 840 0 900 60 1020 120 1080 60" fill="none" stroke="#22d3ee" stroke-width="3"/></svg>
   <div class="t">${LOGO_SVG(84, 'f')}<h1>Rapti<span>CKT</span></h1><div class="tag">Resonance Automation</div>
-  <p>Real-time circuit simulator with oscilloscope, Bode plots &amp; 90+ components</p></div>
+  <p>Real-time circuit simulator with oscilloscope, Bode plots &amp; 330+ components</p></div>
   <img class="ph" style="left:620px;top:40px;transform:rotate(-6deg)" src="data:image/png;base64,${shot2}">
   <img class="ph" style="left:760px;top:70px;transform:rotate(5deg)" src="data:image/png;base64,${shot}">
 </body></html>`);

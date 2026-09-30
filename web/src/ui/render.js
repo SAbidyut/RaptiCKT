@@ -458,8 +458,54 @@ export class Renderer {
     }
   }
 
+  /**
+   * Put each value label on the side of its part where it does not sit on a wire
+   * or another part (e.g. a transformer rating above a primary wire). Cached per geometry.
+   */
+  chooseLabelSides(st) {
+    const doc = st.doc;
+    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0);
+    for (const w of doc.wires) sig += '|' + w.pts.join(';');
+    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + e.valueLabel();
+    if (this._sidesSig === sig) return;
+    this._sidesSig = sig;
+    const segs = [];
+    for (const w of doc.wires) for (let k = 1; k < w.pts.length; k++) {
+      const [a, b] = [w.pts[k - 1], w.pts[k]];
+      segs.push([Math.min(a[0], b[0]) - 2, Math.min(a[1], b[1]) - 2, Math.max(a[0], b[0]) + 2, Math.max(a[1], b[1]) + 2]);
+    }
+    const boxes = doc.elements.map((e) => e.worldBox());
+    const hit = (r, own) => {
+      let a = 0;
+      const add = (o) => {
+        const w = Math.min(r[2], o[2]) - Math.max(r[0], o[0]), h = Math.min(r[3], o[3]) - Math.max(r[1], o[1]);
+        if (w > 0 && h > 0) a += w * h;
+      };
+      for (const o of segs) add(o);
+      boxes.forEach((o, i) => { if (i !== own) add(o); });
+      return a;
+    };
+    doc.elements.forEach((e, i) => {
+      e.chosenSide = null;
+      const val = e.valueLabel();
+      const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
+      if (!txt) return;
+      const [sx, sy] = e.labelSide();
+      const sides = [[sx, sy], [-sx, -sy], [sy, sx], [-sy, -sx]];
+      let best = null, bestScore = Infinity;
+      sides.forEach((sd, k) => {
+        const r = e.labelRect(txt, sd);
+        if (!r) return;
+        const sc = hit(r, i) + k * 4; // keep the part's usual side unless it collides
+        if (sc < bestScore) { bestScore = sc; best = sd; }
+      });
+      if (best && (best[0] !== sx || best[1] !== sy)) e.chosenSide = best;
+    });
+  }
+
   drawLabels(st, g) {
     const th = st.theme;
+    this.chooseLabelSides(st);
     for (const e of st.doc.elements) {
       const val = e.valueLabel();
       const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
@@ -484,14 +530,31 @@ export class Renderer {
       ctx.strokeText(txt, x, y); // halo keeps text legible over wires and grid
       ctx.fillStyle = col; ctx.fillText(txt, x, y);
     };
+    // AC circuits: show the RMS over one supply cycle (what a meter reads), marked with "~"
+    const rms = st.rms && st.rms.ready && set.acReadings !== 'inst' ? st.rms : null;
     if (volts) {
       for (const L of lay.volts) {
+        if (rms) {
+          const r = rms.node(L.node), v = Math.abs(r.v) < 1e-9 ? 0 : r.v;
+          put(fmtSI(v, 'V', 3) + (r.ac && v ? '~' : ''), L.x, L.y, L.align, L.base, th.vLabel);
+          continue;
+        }
         const v = sim.nodeVoltage(L.node);
         put(fmtSI(Math.abs(v) < 1e-9 ? 0 : v, 'V', 3), L.x, L.y, L.align, L.base, th.vLabel);
       }
     }
     if (amps) {
       for (const L of lay.amps) {
+        if (rms && L.el.liveCurrent() != null) {
+          const r = rms.part(L.el);
+          if (r) {
+            const a = Math.abs(r.v) < 1e-10 ? 0 : r.v;
+            if (r.ac) { put(fmtSI(a, 'A', 3) + (a ? '~' : ''), L.x, L.y, L.align, L.base, th.iLabel); continue; }
+            const arrow = !a ? '' : (a > 0 ? L.fwd : L.back) + ' ';
+            put(arrow + fmtSI(Math.abs(a), 'A', 3), L.x, L.y, L.align, L.base, th.iLabel);
+            continue;
+          }
+        }
         const i = L.el.liveCurrent();
         if (i == null || !Number.isFinite(i)) continue;
         const a = Math.abs(i) < 1e-10 ? 0 : i; // gmin-level residue reads as zero
@@ -544,7 +607,7 @@ export class Renderer {
     const amps = [];
     for (const e of doc.elements) {
       if (e.liveCurrent() == null) continue;
-      const [sx, sy] = e.labelSide();
+      const [sx, sy] = e.chosenSide || e.labelSide();
       const val = e.valueLabel();
       const cands = [];
       const push = (x, y, align, base, pen) => cands.push({ x, y, align, base: base === 'alphabetic' ? 'bottom' : base, pen });
@@ -585,6 +648,7 @@ export class Renderer {
     const order = [...nets.keys()].sort((a, b) => a - b);
     for (const n of order) {
       const { segs, posts } = nets.get(n);
+      if (!segs.length && posts.length < 2) continue; // an unconnected terminal: no reading to show
       const cands = [];
       for (const [a, b] of segs) {
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]);

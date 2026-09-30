@@ -47,6 +47,7 @@ const P = {
   check: '<path d="M20 6 9 17l-5-5"/>',
   globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
   phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
+  chat: '<path d="M21 11.5a8.4 8.4 0 0 1-12.4 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"/>',
   pin: '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
   mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
   camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/>',
@@ -80,14 +81,20 @@ export function icon(name, size = 22, cls = '') {
 }
 
 export const LOGO_SVG = (size = 64, id = 'lg') => `
-<svg width="${size}" height="${size}" viewBox="0 0 128 128" aria-label="RaptiCKT logo">
+<svg width="${size}" height="${size}" viewBox="0 0 128 128" aria-label="RaptiCKT logo" class="rlogo">
   <defs>
-    <linearGradient id="${id}a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>
-    <linearGradient id="${id}b" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+    <linearGradient id="${id}a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>
+    <radialGradient id="${id}b" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect x="6" y="6" width="116" height="116" rx="30" fill="#0b1120"/>
-  <rect x="6" y="6" width="116" height="116" rx="30" fill="none" stroke="url(#${id}a)" stroke-width="5"/>
-  <path d="M34 92V36h26a17 17 0 0 1 0 34H34m26 0 16 22" fill="none" stroke="url(#${id}a)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <path class="logo-wave" d="M22 64c6-14 11-14 16 0s10 14 16 0 11-14 16 0 10 14 16 0 11-14 16 0" fill="none" stroke="url(#${id}b)" stroke-width="4.5" stroke-linecap="round" opacity="0.95"/>
-  <circle cx="98" cy="36" r="7" fill="#fbbf24"/>
+  <rect x="4" y="4" width="120" height="120" rx="32" fill="url(#${id}a)"/>
+  <rect x="4" y="4" width="120" height="120" rx="32" fill="url(#${id}b)"/>
+  <!-- "R" whose leg is a resistor, with circuit terminals -->
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M45 66V28h22a19 19 0 0 1 0 38H45" stroke-width="9.5"/>
+    <path d="M45 66V92" stroke-width="9.5"/>
+    <path d="M61.0 66.0 L65.0 70.4 L61.9 78.8 L79.2 74.1 L72.8 90.9 L90.1 86.2 L87.0 94.6 L91.0 99.0" stroke-width="7.5"/>
+    <circle cx="45" cy="99.5" r="6.5" stroke-width="5"/>
+    <circle cx="95.5" cy="103.5" r="6.5" stroke-width="5"/>
+  </g>
+  <circle class="logo-dot" cx="98" cy="30" r="8.5" fill="#fbbf24"/>
 </svg>`;

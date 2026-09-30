@@ -1,11 +1,17 @@
-<svg width="128" height="128" viewBox="0 0 128 128" aria-label="RaptiCKT logo">
+<svg width="128" height="128" viewBox="0 0 128 128" aria-label="RaptiCKT logo" class="rlogo">
   <defs>
-    <linearGradient id="fava" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>
-    <linearGradient id="favb" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+    <linearGradient id="fava" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>
+    <radialGradient id="favb" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect x="6" y="6" width="116" height="116" rx="30" fill="#0b1120"/>
-  <rect x="6" y="6" width="116" height="116" rx="30" fill="none" stroke="url(#fava)" stroke-width="5"/>
-  <path d="M34 92V36h26a17 17 0 0 1 0 34H34m26 0 16 22" fill="none" stroke="url(#fava)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-  <path class="logo-wave" d="M22 64c6-14 11-14 16 0s10 14 16 0 11-14 16 0 10 14 16 0 11-14 16 0" fill="none" stroke="url(#favb)" stroke-width="4.5" stroke-linecap="round" opacity="0.95"/>
-  <circle cx="98" cy="36" r="7" fill="#fbbf24"/>
+  <rect x="4" y="4" width="120" height="120" rx="32" fill="url(#fava)"/>
+  <rect x="4" y="4" width="120" height="120" rx="32" fill="url(#favb)"/>
+  <!-- "R" whose leg is a resistor, with circuit terminals -->
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M45 66V28h22a19 19 0 0 1 0 38H45" stroke-width="9.5"/>
+    <path d="M45 66V92" stroke-width="9.5"/>
+    <path d="M61.0 66.0 L65.0 70.4 L61.9 78.8 L79.2 74.1 L72.8 90.9 L90.1 86.2 L87.0 94.6 L91.0 99.0" stroke-width="7.5"/>
+    <circle cx="45" cy="99.5" r="6.5" stroke-width="5"/>
+    <circle cx="95.5" cy="103.5" r="6.5" stroke-width="5"/>
+  </g>
+  <circle class="logo-dot" cx="98" cy="30" r="8.5" fill="#fbbf24"/>
 </svg>
