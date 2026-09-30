@@ -1,6 +1,6 @@
 // RaptiCKT application shell.
 
-import './elements/index.js';
+import { CATEGORIES } from './elements/index.js';
 import { Editor } from './ui/editor.js';
 import { HomeScreen, renderSettings } from './ui/screens.js';
 import { CircuitDoc } from './ui/doc.js';
@@ -207,4 +207,4 @@ class App {
   closeSheet() { this.el.querySelector('.modal').classList.remove('open'); }
 }
 
-window.addEventListener('DOMContentLoaded', () => { window.app = new App(); });
+window.addEventListener('DOMContentLoaded', () => { window.app = new App(); window.app.categories = CATEGORIES; });

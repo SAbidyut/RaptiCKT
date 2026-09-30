@@ -16,16 +16,24 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## Features
 
-- **90+ components** in 9 categories:
-  - Sources: DC/AC/pulse/triangle/saw/noise/chirp, rails, clock, VCVS/VCCS/CCVS/CCCS
-  - Passives: R, pot, C, electrolytic, L, transformer, fuse
-  - Semiconductors: diode, Zener, Schottky, LED, NPN/PNP, N/P-MOSFET, N/P-JFET, with real part presets
-  - Analog ICs: op-amp macromodel, comparator, 555, 78xx, LM317
-  - Digital: gates, Schmitt trigger, D/JK/T flip-flops, SR latch, counter, 7-segment decoder, ADC, DAC
-  - Sensors: LDR, NTC, Pt100, thermocouple, LM35, photodiode, phototransistor, solar cell, Hall, strain gauge, FSR, flex, gas, humidity, microphone, PIR
-  - Switches: SPST, SPDT, push buttons, relay
-  - Outputs: lamp, LED, 7-segment, DC motor, buzzer
-  - Meters: voltmeter, ammeter, ohmmeter, wattmeter
+- **335 components** in 20 categories:
+  - Sources (32): DC/AC/pulse/triangle/saw/noise/chirp, AM/FM, PWM, step, exponential, damped sine, PWL, f(t) expression, single-phase mains presets, 3-phase star/delta supply, bench PSU (CV/CC), dual PSU, PV module, rails, clock, controlled sources, earth/chassis
+  - Batteries (8): AA, 9 V, coin cell, NiMH, Li-ion, 2S Li-Po, 12 V lead-acid, each with a state-of-charge model
+  - Passive (17): R, pot, rheostat, trimmer, C, electrolytic, non-polar, tantalum, supercapacitor, variable C, real capacitor (ESR/ESL), L, variable and iron-core inductor, ferrite bead, crystal, transmission line, memristor
+  - Transformers (11): single-phase, centre-tapped, dual secondary, isolation, step-down/up, autotransformer (variac), 3-phase Dyn11/Yyn0/Yd1/Dd0, CT, PT, coupled inductors
+  - Protection (16): fuse, HRC fuse, PTC polyfuse, MCB 1P/2P/3P (B/C/D curves), MCCB, RCCB, RCBO, MOV, lightning arrester, GDT, TVS, overload relay, IDMT relay
+  - Switches & Relays (27): one-way, two-way, three-way, intermediate, DPST, DPDT, rotary, selector, push buttons, latching button, emergency stop, limit, reed, float, pressure, thermostat, isolator, changeover, relays, reed relay, contactor, timer relay, SSR
+  - Electrical (15): incandescent bulb, lamp, fluorescent tube, choke, starter, LED bulb, neon lamp, ceiling fan, heater, socket + appliance, dimmer, resistive and capacitive fan regulators, bell, earth electrode
+  - Power Systems (8): R-L and R-C rated loads, PF-correction capacitor, 3-phase star/delta loads, short line, π line
+  - Machines (8): DC motor, separately excited/shunt/series DC machines, DC generator, 3-phase and single-phase induction motors, alternator
+  - Diodes, Transistors, Thyristors & Power: tunnel, CRD, varactor, bridge and 3-phase rectifiers, Darlington, IGBT, depletion MOSFET, UJT, optocoupler, SCR, TRIAC, GTO, PUT, DIAC, opto-TRIAC, gate driver, buck/boost modules, charge pump
+  - Analog ICs (18): op-amp, comparator, 555, 78xx/79xx, LM317, LDO, instrumentation amp, LM386, AD633 multiplier, sample & hold, VCO, RMS-to-DC, OTA, analog switch, TL431, LM4040
+  - Control & Math (22): gain, sum, multiply, divide, limiter, abs, sqrt, power, log, exp, trig, f(u,v), integrator, differentiator, 1st/2nd-order transfer functions, PID, delay, ZOH, rate limiter, relay
+  - Logic Gates and Digital ICs (47): 2/3/4-input gates, tri-state, adders, comparator, mux, decoders, encoder, parity, latches, flip-flops, shift register, up/down, decade, BCD and 8-bit counters, register, clock divider, monostable, ADC, DAC
+  - Sensors (41): light, temperature (NTC, PTC, Pt100/1000, thermocouple, LM35, LM335), Hall, current (ACS712), voltage, gas, humidity, soil moisture, rain, pressure, accelerometer, IR distance, ultrasonic, flame, UV, wind, flow, encoder, pH, piezo, tacho-generator, load cell, LVDT and more
+  - Output (13): RGB/bicolour/IR LEDs, laser, bar graph, 7-segment and hex displays, speaker, buzzers, solenoid, servo
+  - Vacuum Tubes (3): vacuum diode, triode, pentode
+  - Meters (20): voltmeter, ammeter, ohmmeter, wattmeter, true-RMS AC meters, frequency, phase, power-factor, VAR, kWh, dB, peak, LCR, megger, moving-coil voltmeter/ammeter, galvanometer, test point
 - **Live readings on the schematic**: while the simulation runs, every net shows its voltage (blue) and every two-terminal part shows its current with a direction arrow (green), placed so they never overlap. Both can be switched off in Settings.
 - **Oscilloscope**: 6 channels with auto-scale, frequency/RMS/p-p, FFT spectrum, XY mode and CSV export.
 - **Multimeter**: draggable probes for V (DC + true RMS), A, Ω (small-signal) and W.
@@ -39,7 +47,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Tap switches and buttons live
   - Rotary knob for any value
   - Undo/redo and multi-select
-- 20+ explained examples, save/export/import `.rckt` files, PNG export, 3 themes, and an About section with RAPTI information.
+- 29 explained examples (including tube light, staircase wiring, house wiring, dimmer, power-factor correction and a DOL motor starter), save/export/import `.rckt` files, PNG export, 3 themes, and an About section with RAPTI information.
 
 ## Simulation engine (web/src/engine)
 

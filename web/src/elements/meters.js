@@ -5,7 +5,7 @@ import { fmtSI } from '../engine/units.js';
 
 const G = GRID;
 
-class Meter extends TwoTerm {
+export class Meter extends TwoTerm {
   static category = 'Meters';
   shortCheck = false;
   reset() { this.acc = 0; this.acc2 = 0; this.shown = 0; this.setCurrent(0); }

@@ -8,12 +8,12 @@ const G = GRID;
 const BW = 1.3 * GRID; // half-width of IC bodies; pins end exactly at the box edge
 const icLeads = (e) => e.localPosts().map(([x, y], i) => [i, x, y, Math.sign(x) * BW, y]);
 
-const DIGI_PROPS = [
+export const DIGI_PROPS = [
   { key: 'vdd', label: 'Logic high level', unit: 'V', def: 5, min: 0.5, max: 30 },
   { key: 'rout', label: 'Output resistance', unit: 'Ω', def: 25, min: 0.01, max: 1e5 },
 ];
 
-class Digital extends Element {
+export class Digital extends Element {
   static category = 'Digital';
   static prefix = 'U';
   static props = DIGI_PROPS;

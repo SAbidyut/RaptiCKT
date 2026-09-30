@@ -90,3 +90,38 @@ for (const ex of EXAMPLES) {
     }
   });
 }
+
+test('electrical examples behave like the real installations', () => {
+  const doc = buildExample(find('tubelight'));
+  const sim = new Simulator().build(doc.elements, doc.wires);
+  assert.ok(sim.start());
+  const t = doc.elements.find((e) => e.constructor.type === 'tube');
+  for (let k = 0; k < 60000; k++) sim.step(5e-5);
+  assert.ok(t.arc.lit && t.pavg > 20 && t.pavg < 60, 'tube ' + t.pavg);
+
+  const pdoc = buildExample(find('pfc'));
+  const ps = new Simulator().build(pdoc.elements, pdoc.wires);
+  assert.ok(ps.start());
+  const pf = pdoc.elements.find((e) => e.constructor.type === 'pfmeter');
+  for (let k = 0; k < 6000; k++) ps.step(5e-5);
+  assert.ok(Math.abs(pf.PF() - 0.7) < 0.02, 'PF before ' + pf.PF());
+  pdoc.elements.find((e) => e.constructor.type === 'oneway').onTap(); ps.dirty = true;
+  for (let k = 0; k < 8000; k++) ps.step(5e-5);
+  assert.ok(pf.PF() > 0.93 && pf.lagging(), 'PF after ' + pf.PF());
+
+  const ddoc = buildExample(find('dol'));
+  const ds = new Simulator().build(ddoc.elements, ddoc.wires);
+  assert.ok(ds.start());
+  const m = ddoc.elements.find((e) => e.constructor.type === 'im3');
+  const km = ddoc.elements.find((e) => e.constructor.type === 'contactor');
+  const start = ddoc.elements.find((e) => e.constructor.type === 'pushno');
+  const stop = ddoc.elements.find((e) => e.constructor.type === 'pushnc');
+  const run = (T) => { for (let k = 0; k < T / 1e-4; k++) assert.ok(ds.step(1e-4), ds.error); };
+  run(0.1); assert.ok(!km.contactsClosed());
+  start.pressed = true; ds.dirty = true; run(0.1); start.pressed = false; ds.dirty = true; run(1.5);
+  assert.ok(km.contactsClosed(), 'sealed in');
+  const rpm = (m.wm * 60) / (2 * Math.PI);
+  assert.ok(rpm > 1400 && rpm < 1500, 'rpm ' + rpm);
+  stop.pressed = true; ds.dirty = true; run(0.2);
+  assert.ok(!km.contactsClosed(), 'stopped');
+});

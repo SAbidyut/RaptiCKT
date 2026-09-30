@@ -560,7 +560,10 @@ export class Simulator {
     };
     for (let k = 1; k < this.nodeCount; k++) re[(k - 1) * m + (k - 1)] += this.opt.gmin;
     for (const nd of this.groundTies) ac.addY(nd, 0, 1);
-    for (const e of this.elements) if (e.stampAC) e.stampAC(ac);
+    for (const e of this.elements) {
+      if (e.stampAC) e.stampAC(ac);
+      else for (const k of e.branches || []) ac.addA(k, k, 1); // no small-signal model: branch treated as open
+    }
     if (extra) extra(ac);
     return complexSolve(m, re, im, br, bi);
   }

@@ -11,7 +11,7 @@ import { fmtShort, fmtQty } from '../engine/units.js';
 const G = GRID;
 
 // ------------------------------------------------ resistive sensors (base)
-class ResSensor extends TwoTerm {
+export class ResSensor extends TwoTerm {
   static category = 'Sensors';
   static prefix = 'RS';
   get R() { return Math.min(1e12, Math.max(1e-3, this.resistance())); }
@@ -356,7 +356,7 @@ export class PhotoTransistor extends NPN {
 register(PhotoTransistor);
 
 // ---------------------------------------------------- active 3-pin sensors
-class ThreePinSensor extends Element {
+export class ThreePinSensor extends Element {
   static category = 'Sensors';
   static prefix = 'U';
   constructor(x, y) { super(x, y); this.postCurrents = [0, 0, 0]; }
@@ -369,7 +369,9 @@ class ThreePinSensor extends Element {
   valueLabel() { const k = this.knobProp(); return fmtQty(this.p[k.key], k.unit); }
   drawBox(g, title) {
     g.box(-1.8 * G, -G, 0.8 * G, G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 5 });
-    g.text(title, -0.5 * G, -0.35 * G, { size: 9, color: g.accent, bold: true });
+    // sideways, the box is only 2 grid squares wide: centre the title across it and squeeze it to fit
+    const side = g.rot & 1;
+    g.text(title, -0.5 * G, side ? 0 : -0.35 * G, { size: 9, color: g.accent, bold: true, maxW: side ? 1.7 * G : 2.4 * G });
     g.text('VCC', -0.65 * G, -1.35 * G, { size: 7, color: g.muted, align: 'left' });
     g.text('GND', -0.65 * G, 1.35 * G, { size: 7, color: g.muted, align: 'left' });
     g.text('OUT', 1.4 * G, -0.35 * G, { size: 7, color: g.muted });

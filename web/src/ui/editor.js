@@ -921,14 +921,14 @@ export class Editor {
   }
   updateSound() {
     if (!this.audio || !this.settings.sound) return;
-    const bz = this.doc.elements.find((e) => e.constructor.type === 'buzzer' && e.sounding);
+    const bz = this.doc.elements.find((e) => e.sounding); // buzzer, bell, speaker…
     if (bz && !this.paused) {
       if (!this.osc) {
         this.osc = this.audio.createOscillator(); this.gain = this.audio.createGain();
         this.osc.type = 'square'; this.gain.gain.value = 0.04;
         this.osc.connect(this.gain).connect(this.audio.destination); this.osc.start();
       }
-      this.osc.frequency.value = bz.p.tone;
+      this.osc.frequency.value = bz.soundTone ?? bz.p.tone ?? 800;
     } else this.stopSound();
   }
   stopSound() { try { this.osc?.stop(); } catch { /* ignore */ } this.osc = null; }

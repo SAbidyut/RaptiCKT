@@ -1,6 +1,17 @@
 // Stroke icon set (24×24, currentColor).
 
 const P = {
+  shield: '<path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/>',
+  motor: '<circle cx="12" cy="12" r="9"/><path d="M8.5 15.5v-7l3.5 4.5 3.5-4.5v7"/>',
+  coil: '<path d="M8 2v3a2 2 0 0 1 0 4 2 2 0 0 1 0 4 2 2 0 0 1 0 4v5"/><path d="M16 2v3a2 2 0 0 0 0 4 2 2 0 0 0 0 4 2 2 0 0 0 0 4v5"/><path d="M11 5v14M13 5v14"/>',
+  home: '<path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+  tower: '<path d="M12 2 7.5 22M12 2l4.5 20M8.6 16h6.8M10 10h4M3 6h18M5 6l2.2 3M19 6l-2.2 3"/>',
+  diode: '<path d="M2 12h6M16 12h6"/><path d="M8 6v12l8-6z"/><path d="M16 6v12"/>',
+  transistor: '<circle cx="12" cy="12" r="9.5"/><path d="M9 7v10M3 12h6M9 10l6-4V2.5M9 14l6 4v3.5"/>',
+  thyristor: '<path d="M2 10h6M16 10h6"/><path d="M8 4v12l8-6z"/><path d="M16 4v12M14.5 13.5l4 7"/>',
+  tube: '<path d="M7 21V9a5 5 0 0 1 10 0v12z"/><path d="M9.5 9h5M9.5 13h5" stroke-dasharray="1.5 1.5"/><path d="M9 17h6"/>',
+  sigma: '<path d="M18 5H6l6 7-6 7h12"/>',
+  battery: '<rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 11v2M6 10v4M10 10v4"/>',
   play: '<path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" fill="currentColor" stroke="none"/>',
   pause: '<rect x="6" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1.2" fill="currentColor" stroke="none"/>',
   reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',

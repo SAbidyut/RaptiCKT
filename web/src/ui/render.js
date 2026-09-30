@@ -231,7 +231,7 @@ export function makeGraphics(ctx, theme, opts) {
       ctx.fillStyle = o.color || theme.text1;
       ctx.textAlign = align;
       ctx.textBaseline = o.baseline || 'middle';
-      ctx.fillText(str, 0, 0);
+      if (o.maxW) ctx.fillText(str, 0, 0, o.maxW); else ctx.fillText(str, 0, 0);
       ctx.restore();
     },
   };

@@ -22,16 +22,19 @@ page.on('pageerror', (e) => console.log('ERR', e.message));
 await page.addInitScript(() => localStorage.setItem('raptickt.flags.v1', JSON.stringify({ editorTips: true })));
 await page.goto(`http://127.0.0.1:${server.address().port}/`);
 await page.waitForTimeout(1800);
-const chunks = await page.evaluate(() => {
+const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
+const cats = (process.argv.find((a) => a.startsWith('--cats=')) || '').slice(7).split(',').filter(Boolean);
+const chunks = await page.evaluate(({ only, cats }) => {
   const P = app.editor.palette, ids = [];
-  for (const t of ['Sources', 'Passive', 'Semiconductors', 'Analog ICs', 'Digital', 'Sensors', 'Switches', 'Output', 'Meters']) {
+  for (const t of app.categories.map((c) => c.id)) {
+    if (cats.length && !cats.includes(t)) continue;
     P.tab = t; P.query = '';
-    for (const C of P.items()) if (!ids.includes(C.type)) ids.push(C.type);
+    for (const C of P.items()) if (!ids.includes(C.type) && (!only.length || only.includes(C.type))) ids.push(C.type);
   }
   const res = [];
   for (let i = 0; i < ids.length; i += 7) res.push(ids.slice(i, i + 7));
   return res;
-});
+}, { only, cats });
 let n = 0;
 for (const chunk of chunks) {
   await page.evaluate(({ chunk, running }) => {

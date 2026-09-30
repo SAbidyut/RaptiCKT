@@ -336,7 +336,7 @@ export class Regulator extends Element {
   }
   draw(g) {
     g.box(-1.4 * G, -G, 1.4 * G, G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
-    g.text(this.adj ? 'LM317' : '78xx', 0, -0.42 * G, { size: 8.5, color: g.accent, bold: true, follow: true });
+    g.text(this.constructor.chipName ?? (this.adj ? 'LM317' : '78xx'), 0, -0.42 * G, { size: 8.5, color: g.accent, bold: true, follow: true });
     g.text('IN', -1.2 * G, 0.12 * G, { size: 6.5, color: g.muted, align: 'left' });
     g.text('OUT', 1.2 * G, 0.12 * G, { size: 6.5, color: g.muted, align: 'right' });
     g.text(this.adj ? 'ADJ' : 'GND', 0, 0.68 * G, { size: 6.5, color: g.muted, follow: true });

@@ -411,6 +411,122 @@ export const EXAMPLES = [
       b.w([8, 3], [8, 6]); b.w([0, 2], [0, 6], [11, 6], [11, 2]); b.w([12, -3], [12, -2]); b.w([0, 6], [0, 8]);
     },
   },
+  {
+    id: 'tubelight', cat: 'Electrical Wiring', title: 'Tube light (choke + starter)',
+    desc: 'Classic fluorescent fitting. Switch on: the starter glows and closes, pre-heating both filaments through the choke. When the bimetal opens, the choke\'s L·di/dt kick strikes the arc, and the choke then limits the lamp current while the tube runs at ≈100 V.',
+    build(b) {
+      b.v('mains', 0, 0);
+      b.h('oneway', 4, -6, { on: true });
+      const ch = b.h('ballast', 10, -6);
+      b.h('tube', 18, 0);
+      b.h('starter', 18, 4);
+      b.w([0, -2], [0, -6], [2, -6]); b.w([6, -6], [8, -6]);
+      b.w([12, -6], [15, -6], [15, -1]);
+      b.w([15, 1], [15, 4], [16, 4]); b.w([20, 4], [21, 4], [21, 1]);
+      b.w([21, -1], [24, -1], [24, 8], [0, 8], [0, 2]);
+      b.cur(ch, C[0]);
+      b.doc.simSettings.speed = 0.2;
+    },
+  },
+  {
+    id: 'staircase', cat: 'Electrical Wiring', title: 'Staircase wiring (2-way + intermediate)',
+    desc: 'One lamp controlled from three places: a two-way switch at each end of the stairs and an intermediate switch on the landing. Tap any switch to toggle the lamp.',
+    build(b) {
+      b.v('mains', 0, 0);
+      b.h('twoway', 4, -6);
+      b.h('intermediate', 10, -6);
+      b.el('twoway', 16, -6, { pos: true }, 2);
+      b.v('bulb', 22, 0, { w: 60 });
+      b.w([0, -2], [0, -6], [2, -6]);
+      b.w([6, -7], [8, -7]); b.w([6, -5], [8, -5]);
+      b.w([12, -7], [14, -7]); b.w([12, -5], [14, -5]);
+      b.w([18, -6], [22, -6], [22, -2]);
+      b.w([22, 2], [22, 6], [0, 6], [0, 2]);
+      b.el('label', 4, -9, { text: 'Downstairs', size: 11 });
+      b.el('label', 10, -9, { text: 'Landing', size: 11 });
+      b.el('label', 16, -9, { text: 'Upstairs', size: 11 });
+      b.doc.simSettings.speed = 0.1;
+    },
+  },
+  {
+    id: 'housewiring', cat: 'Electrical Wiring', title: 'House wiring: meter, RCCB, MCBs',
+    desc: 'Energy meter → RCCB (main switch + earth-leakage protection) → MCB per circuit. The lighting circuit has a switch and lamp; the socket feeds a 1 kW heater. Change the socket\'s appliance to "Faulty" to trip the RCCB, or to "Short circuit" to trip the MCB.',
+    build(b) {
+      b.v('mains', 0, 0);
+      b.h('kwh', 4, -6);
+      b.el('rccb', 12, -5);
+      b.v('mcb', 18, -2, { in: 6, curve: 'B' });
+      b.v('oneway', 18, 4, { on: true });
+      const lamp = b.v('bulb', 18, 10, { w: 100 });
+      b.v('mcb', 30, -2, { in: 16, curve: 'C' });
+      const sk = b.h('socket', 32, 6, { app: 'heater' });
+      b.el('earth', 32, 10);
+      b.w([0, -2], [0, -6], [2, -6]); b.w([6, -6], [10, -6]);
+      b.w([0, 2], [0, 4], [4, 4]); b.w([4, 4], [8, 4], [8, -4], [10, -4]); b.w([4, -4], [4, 4]);
+      b.w([14, -6], [18, -6], [18, -4]); b.w([18, -6], [30, -6], [30, -4]);
+      b.w([18, 0], [18, 2]); b.w([18, 6], [18, 8]); b.w([18, 12], [18, 14]);
+      b.w([14, -4], [14, 14], [18, 14]); b.w([18, 14], [30, 14]);
+      b.w([30, 0], [30, 5]); b.w([30, 7], [30, 14]); b.w([32, 8], [32, 10]);
+      b.cur(lamp, C[0]); void sk;
+      b.doc.simSettings.speed = 0.1;
+    },
+  },
+  {
+    id: 'dimmer', cat: 'Electrical Wiring', title: 'TRIAC lamp dimmer & fan regulator',
+    desc: 'A TRIAC phase-control dimmer — turn its level knob and watch the RMS lamp voltage follow Vrms = V·√(1 − α/π + sin2α/2π). The top branch is a capacitor-type fan regulator — each step changes the series capacitor and so the fan speed.',
+    build(b) {
+      b.v('mains', 0, 0);
+      b.h('dimmer', 4, -6, { level: 60 });
+      b.v('bulb', 10, -2, { w: 100 });
+      b.v('acvolt', 16, -2);
+      b.h('fanregcap', 4, -10, { step: 3 });
+      b.v('fan', 21, -6);
+      b.w([0, -2], [0, -10], [2, -10]); b.w([0, -6], [2, -6]);
+      b.w([6, -6], [10, -6], [10, -4]); b.w([10, -6], [16, -6], [16, -4]);
+      b.w([6, -10], [21, -10], [21, -8]);
+      b.w([10, 0], [10, 2], [0, 2]); b.w([16, 0], [16, 2], [10, 2]); b.w([21, -4], [21, 2], [16, 2]);
+      b.doc.simSettings.speed = 0.05;
+    },
+  },
+  {
+    id: 'pfc', cat: 'Power Systems', title: 'Power-factor correction',
+    desc: 'A 1 kW inductive load at PF 0.7 draws extra reactive current. Close the switch to add a 700 VAR capacitor: the PF meter rises to ≈0.96 while the real power stays the same.',
+    build(b) {
+      b.v('mains', 0, 0);
+      b.h('pfmeter', 4, -6);
+      b.v('rlload', 10, -2, { p: 1000, pf: 0.7 });
+      b.v('oneway', 16, -2, { on: false });
+      b.v('pfcap', 16, 4, { q: 700 });
+      b.w([0, -2], [0, -6], [2, -6]); b.w([6, -6], [16, -6], [16, -4]); b.w([10, -6], [10, -4]);
+      b.w([16, 0], [16, 2]);
+      b.w([0, 2], [0, 8], [16, 8], [16, 6]); b.w([10, 0], [10, 8]); b.w([4, -4], [4, 8]);
+      b.doc.simSettings.speed = 0.05;
+    },
+  },
+  {
+    id: 'dol', cat: 'Power Systems', title: 'DOL starter: 3-phase motor',
+    desc: 'Direct-on-line starter. Press START: the contactor coil pulls in and its auxiliary contact (13–14) seals itself in, so the motor keeps running after you let go. Press STOP to break the coil circuit. Watch the ≈6× starting current settle as the motor reaches ≈1440 rpm.',
+    build(b) {
+      b.el('ac3y', 0, 0);
+      b.el('earth', 2, 3);
+      b.el('mcb3p', 7, -1, { in: 32, curve: 'D' });
+      b.el('contactor', 12, 10);
+      b.el('im3', 12, 17, { load: 10 }, 1);
+      b.h('pushnc', 0, 9);
+      b.h('pushno', 6, 9);
+      b.el('earth', 9, 13);
+      b.w([2, 1], [2, 3]);
+      b.w([2, -2], [3, -2], [3, -3], [5, -3]); b.w([2, -1], [5, -1]); b.w([2, 0], [3, 0], [3, 1], [5, 1]);
+      b.w([9, 1], [11, 1], [11, 7]); b.w([9, -1], [12, -1], [12, 7]); b.w([9, -3], [13, -3], [13, 7]);
+      b.w([11, 13], [11, 15]); b.w([12, 13], [12, 15]); b.w([13, 13], [13, 15]);
+      b.w([11, 5], [-2, 5], [-2, 9]); b.w([2, 9], [4, 9]); b.w([8, 9], [9, 9]); b.w([9, 11], [9, 13]);
+      b.w([15, 9], [17, 9], [17, 23], [3, 23], [3, 9]);
+      b.w([15, 11], [16, 11], [16, 22], [8, 22], [8, 9]);
+      b.el('label', 0, 11.5, { text: 'STOP', size: 11 });
+      b.el('label', 6, 11.5, { text: 'START', size: 11 });
+      b.doc.simSettings.speed = 0.1;
+    },
+  },
 ];
 
 export const EXAMPLE_ALLOW_OPEN = { relay: 1 };
