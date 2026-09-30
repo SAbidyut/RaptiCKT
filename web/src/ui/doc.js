@@ -1,0 +1,121 @@
+// Circuit document: elements + wires, serialisation, designators, routing helpers.
+
+import { Element, GRID, getType } from '../elements/index.js';
+
+let wid = 1;
+
+export class Wire {
+  constructor(pts) { this.id = wid++; this.pts = pts.map((p) => [p[0], p[1]]); this.dotPhase = []; }
+  get a() { return this.pts[0]; }
+  get b() { return this.pts[this.pts.length - 1]; }
+}
+
+export const snap = (v) => Math.round(v / GRID) * GRID;
+
+/** Orthogonal route between two grid points. hFirst: start horizontally. */
+export function route(a, b, hFirst = true) {
+  if (a[0] === b[0] || a[1] === b[1]) return [a, b];
+  const c = hFirst ? [b[0], a[1]] : [a[0], b[1]];
+  return [a, c, b];
+}
+
+/** Remove duplicate and collinear intermediate points. */
+export function simplify(pts) {
+  const out = [];
+  for (const p of pts) {
+    const q = out[out.length - 1];
+    if (q && q[0] === p[0] && q[1] === p[1]) continue;
+    out.push([p[0], p[1]]);
+  }
+  for (let i = out.length - 2; i >= 1; i--) {
+    const [a, b, c] = [out[i - 1], out[i], out[i + 1]];
+    const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    if (cross === 0) out.splice(i, 1);
+  }
+  return out;
+}
+
+export class CircuitDoc {
+  constructor(name = 'Untitled circuit') {
+    this.name = name;
+    this.elements = [];
+    this.wires = [];
+    this.probes = [];
+    this.meta = { created: Date.now() };
+    this.simSettings = {};
+    this.id = null;
+    this.description = '';
+  }
+
+  add(e) { this.elements.push(e); return e; }
+  addWire(pts) {
+    const s = simplify(pts);
+    if (s.length < 2) return null;
+    const w = new Wire(s);
+    this.wires.push(w);
+    return w;
+  }
+  remove(e) {
+    this.elements = this.elements.filter((x) => x !== e);
+    this.probes = this.probes.filter((p) => p.el !== e.id);
+  }
+  removeWire(w) { this.wires = this.wires.filter((x) => x !== w); }
+
+  assignNames() {
+    const count = {};
+    for (const e of this.elements) {
+      const pre = e.constructor.prefix;
+      count[pre] = (count[pre] || 0) + 1;
+      e.name = pre + count[pre];
+    }
+  }
+
+  bounds() {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const e of this.elements) {
+      const [a, b, c, d] = e.worldBox();
+      x1 = Math.min(x1, a); y1 = Math.min(y1, b); x2 = Math.max(x2, c); y2 = Math.max(y2, d);
+    }
+    for (const w of this.wires) for (const [x, y] of w.pts) { x1 = Math.min(x1, x); y1 = Math.min(y1, y); x2 = Math.max(x2, x); y2 = Math.max(y2, y); }
+    if (!Number.isFinite(x1)) return null;
+    return [x1, y1, x2, y2];
+  }
+
+  toJSON() {
+    const idx = new Map(this.elements.map((e, i) => [e.id, i]));
+    return {
+      app: 'RaptiCKT', v: 1, name: this.name, description: this.description || undefined,
+      elements: this.elements.map((e) => e.toJSON()),
+      wires: this.wires.map((w) => w.pts),
+      probes: this.probes.map((p) => ({ ...p, el: p.el != null ? idx.get(p.el) : undefined })),
+      sim: this.simSettings,
+    };
+  }
+
+  static fromJSON(o) {
+    if (typeof o === 'string') o = JSON.parse(o);
+    const d = new CircuitDoc(o.name || 'Imported circuit');
+    d.description = o.description || '';
+    for (const eo of o.elements || []) {
+      const e = Element.fromJSON(eo);
+      if (e) d.elements.push(e);
+    }
+    for (const pts of o.wires || []) d.addWire(pts);
+    d.probes = (o.probes || []).map((p) => ({ ...p, el: p.el != null && d.elements[p.el] ? d.elements[p.el].id : undefined })).filter((p) => p.kind === 'node' || p.el != null);
+    d.simSettings = o.sim || {};
+    d.assignNames();
+    return d;
+  }
+
+  clone() { const c = CircuitDoc.fromJSON(JSON.parse(JSON.stringify(this.toJSON()))); c.id = this.id; return c; }
+}
+
+/** Serialise a selection (elements + wires) for copy/paste. */
+export function serializeSelection(elements, wires) {
+  return { elements: elements.map((e) => e.toJSON()), wires: wires.map((w) => w.pts.map((p) => [...p])) };
+}
+
+export function makeElement(type, x, y) {
+  const C = getType(type);
+  return C ? new C(x, y) : null;
+}

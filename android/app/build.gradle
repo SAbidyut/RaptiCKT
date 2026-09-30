@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file('keystore/keystore.properties')
+if (keystorePropsFile.exists()) keystorePropsFile.withInputStream { keystoreProps.load(it) }
+
+// CI can override the signing key with repository secrets (see README).
+def env = { String k, String fallback -> System.getenv(k) ?: fallback }
+
+android {
+    namespace 'net.rapti.raptickt'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'net.rapti.raptickt'
+        minSdk 26
+        targetSdk 35
+        versionCode Integer.parseInt(env('RAPTI_VERSION_CODE', '1'))
+        versionName env('RAPTI_VERSION_NAME', '1.0.0')
+    }
+
+    signingConfigs {
+        release {
+            storeFile file(env('RAPTI_KEYSTORE_FILE', rootProject.file('keystore/raptickt-release.jks').path))
+            storePassword env('RAPTI_KEYSTORE_PASSWORD', keystoreProps.getProperty('storePassword', ''))
+            keyAlias env('RAPTI_KEY_ALIAS', keystoreProps.getProperty('keyAlias', 'raptickt'))
+            keyPassword env('RAPTI_KEY_PASSWORD', keystoreProps.getProperty('keyPassword', ''))
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        // keep the web bundle uncompressed-friendly and never strip it
+        ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+}
+
+tasks.register('checkWebAssets') {
+    doLast {
+        if (!file('src/main/assets/www/app.js').exists()) {
+            throw new GradleException('Web bundle missing. Run: cd web && npm ci && npm run build')
+        }
+    }
+}
+preBuild.dependsOn checkWebAssets

@@ -1,0 +1,96 @@
+name: Build RaptiCKT APK
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      RAPTI_VERSION_NAME: '1.0.0'
+      RAPTI_VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Test simulation engine & build web bundle
+        working-directory: web
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Use signing key from secrets (if configured)
+        env:
+          KEYSTORE_B64: ${{ secrets.RAPTI_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.RAPTI_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.RAPTI_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.RAPTI_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "RAPTI_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "RAPTI_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "RAPTI_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "RAPTI_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "Using signing key from repository secrets"
+          else
+            echo "Using the bundled keystore in android/keystore"
+          fi
+
+      - name: Build signed release APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Collect APK
+        id: apk
+        run: |
+          mkdir -p out
+          NAME="RaptiCKT-v${RAPTI_VERSION_NAME}-build${{ github.run_number }}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "out/$NAME"
+          cp android/app/build/outputs/apk/release/app-release.apk "out/RaptiCKT-latest.apk"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RaptiCKT-apk-build${{ github.run_number }}
+          path: out/*.apk
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0-build.${{ github.run_number }}
+          name: RaptiCKT v1.0.0 (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          body: |
+            **RaptiCKT – Resonance Automation Circuit Simulator**
+
+            Download **${{ steps.apk.outputs.name }}** below and open it on your Android phone (Android 8.0+).
+            If Android asks, allow "Install unknown apps" for your browser / file manager.
+
+            Built from `${{ github.ref_name }}` @ ${{ github.sha }}.
+          files: out/*.apk

@@ -1,0 +1,19 @@
+{
+  "name": "raptickt-web",
+  "version": "1.0.0",
+  "description": "RaptiCKT circuit simulator (web core)",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.js",
+    "dev": "node build.mjs --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "playwright": "^1.56.1"
+  },
+  "type": "module",
+  "private": true
+}

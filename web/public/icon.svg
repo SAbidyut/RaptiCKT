@@ -1,0 +1,11 @@
+<svg width="128" height="128" viewBox="0 0 128 128" aria-label="RaptiCKT logo">
+  <defs>
+    <linearGradient id="fava" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>
+    <linearGradient id="favb" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fbbf24"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+  </defs>
+  <rect x="6" y="6" width="116" height="116" rx="30" fill="#0b1120"/>
+  <rect x="6" y="6" width="116" height="116" rx="30" fill="none" stroke="url(#fava)" stroke-width="5"/>
+  <path d="M34 92V36h26a17 17 0 0 1 0 34H34m26 0 16 22" fill="none" stroke="url(#fava)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path class="logo-wave" d="M22 64c6-14 11-14 16 0s10 14 16 0 11-14 16 0 10 14 16 0 11-14 16 0" fill="none" stroke="url(#favb)" stroke-width="4.5" stroke-linecap="round" opacity="0.95"/>
+  <circle cx="98" cy="36" r="7" fill="#fbbf24"/>
+</svg>
