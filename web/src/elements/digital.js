@@ -5,6 +5,8 @@
 import { Element, register, GRID } from './base.js';
 
 const G = GRID;
+const BW = 1.3 * GRID; // half-width of IC bodies; pins end exactly at the box edge
+const icLeads = (e) => e.localPosts().map(([x, y], i) => [i, x, y, Math.sign(x) * BW, y]);
 
 const DIGI_PROPS = [
   { key: 'vdd', label: 'Logic high level', unit: 'V', def: 5, min: 0.5, max: 30 },
@@ -173,7 +175,7 @@ export class LogicInput extends Digital {
   onPress() { if (!this.p.momentary) return false; this.p.on = true; return true; }
   onRelease() { if (!this.p.momentary) return false; this.p.on = false; return true; }
   interactive = true;
-  labelPos() { return [-0.2 * G, -1.2 * G]; }
+  labelSide() { return [0, -1]; }
   draw(g) {
     const on = !!this.p.on;
     g.circle(-0.35 * G, 0, 0.72 * G, { fill: on ? g.hiFill : g.loFill, stroke: on ? g.hi : g.lo, width: g.lw });
@@ -193,7 +195,7 @@ export class LogicOutput extends Digital {
   inputs() { return [0]; }
   connectivity() { return null; }
   compute(ins) { this.level = ins[0]; return []; }
-  labelPos() { return [0.2 * G, -1.2 * G]; }
+  labelSide() { return [0, -1]; }
   draw(g) {
     const on = this.inState[0];
     g.box(-0.3 * G, -0.7 * G, 1.1 * G, 0.7 * G, { fill: on ? g.hiFill : g.loFill, stroke: on ? g.hi : g.lo, width: g.lw, r: 5 });
@@ -208,16 +210,17 @@ class FlipFlop extends Digital {
   resetState() { this.q = false; this.prevClk = false; }
   outLevel(k) { const q = k === 0 ? this.q : !this.q; return q ? this.p.vdd : 0; }
   compute() { return [this.q, !this.q]; }
+  localBox() { return [-2 * G, -2.4 * G, 2 * G, 2.4 * G]; }
+  leads() { return icLeads(this); }
   boxDraw(g, title, labels) {
-    const [x1, y1, x2, y2] = this.localBox();
-    g.box(x1 + G, y1 + 0.2 * G, x2 - G, y2 - 0.2 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
-    g.text(title, 0, y1 + 0.75 * G, { size: 9, color: g.accent, bold: true });
+    g.box(-BW, -2.2 * G, BW, 2.2 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
+    g.text(title, 0, -1.72 * G, { size: 8.5, color: g.accent, bold: true, follow: true });
     this.localPosts().forEach(([px, py], i) => {
       if (!labels[i]) return;
       const left = px < 0;
-      g.text(labels[i], left ? x1 + 1.2 * G : x2 - 1.2 * G, py, { size: 8, color: g.muted, align: left ? 'left' : 'right' });
+      g.text(labels[i], left ? -BW + 0.25 * G : BW - 0.25 * G, py, { size: 7.5, color: g.muted, align: left ? 'left' : 'right' });
     });
-    if (g.running) g.circle(0, 0.3 * G, 3.5, { fill: this.q ? g.hi : g.lo });
+    if (g.running) g.circle(0, 1.65 * G, 3.2, { fill: this.q ? g.hi : g.lo });
   }
 }
 
@@ -225,8 +228,6 @@ export class DFlipFlop extends FlipFlop {
   static type = 'dff'; static title = 'D Flip-Flop'; static keywords = 'd flip flop register latch edge triggered memory';
   static description = 'Positive-edge-triggered D flip-flop: Q takes the value of D on each rising clock edge.';
   localPosts() { return [[-2 * G, -G], [-2 * G, G], [2 * G, -G], [2 * G, G]]; }
-  localBox() { return [-2 * G, -2 * G, 2 * G, 2 * G]; }
-  leads() { return [[0, -2 * G, -G, -G, -G], [1, -2 * G, G, -G, G], [2, 2 * G, -G, G, -G], [3, 2 * G, G, G, G]]; }
   inputs() { return [0, 1]; }
   outputs() { return [2, 3]; }
   pinNames() { return ['D', 'CLK', 'Q', 'Q̄']; }
@@ -258,8 +259,6 @@ export class JKFlipFlop extends FlipFlop {
   static type = 'jkff'; static title = 'JK Flip-Flop'; static keywords = 'jk flip flop';
   static description = 'JK flip-flop (rising edge): J=K=1 toggles, J=1 sets, K=1 resets.';
   localPosts() { return [[-2 * G, -G], [-2 * G, 0], [-2 * G, G], [2 * G, -G], [2 * G, G]]; }
-  localBox() { return [-2 * G, -2 * G, 2 * G, 2 * G]; }
-  leads() { return [[0, -2 * G, -G, -G, -G], [1, -2 * G, 0, -G, 0], [2, -2 * G, G, -G, G], [3, 2 * G, -G, G, -G], [4, 2 * G, G, G, G]]; }
   inputs() { return [0, 1, 2]; }
   outputs() { return [3, 4]; }
   pinNames() { return ['J', 'CLK', 'K', 'Q', 'Q̄']; }
@@ -279,8 +278,6 @@ export class SRLatch extends FlipFlop {
   static type = 'srlatch'; static title = 'SR Latch'; static keywords = 'sr latch set reset nor nand memory';
   static description = 'Level-sensitive SR latch (NOR type): S sets, R resets, S=R=1 is invalid (both outputs low).';
   localPosts() { return [[-2 * G, -G], [-2 * G, G], [2 * G, -G], [2 * G, G]]; }
-  localBox() { return [-2 * G, -2 * G, 2 * G, 2 * G]; }
-  leads() { return [[0, -2 * G, -G, -G, -G], [1, -2 * G, G, -G, G], [2, 2 * G, -G, G, -G], [3, 2 * G, G, G, G]]; }
   inputs() { return [0, 1]; }
   outputs() { return [2, 3]; }
   pinNames() { return ['S', 'R', 'Q', 'Q̄']; }
@@ -303,10 +300,8 @@ export class Counter extends Digital {
   static type = 'counter'; static title = '4-bit Counter'; static keywords = 'counter binary 74hc161 74hc393 divider';
   static description = '4-bit binary up-counter: increments on rising clock edges, synchronous-free reset when RST is high.';
   localPosts() { return [[-2 * G, -G], [-2 * G, G], [2 * G, -2 * G], [2 * G, -G], [2 * G, 0], [2 * G, G]]; }
-  localBox() { return [-2 * G, -2.8 * G, 2 * G, 1.8 * G]; }
-  leads() {
-    return [[0, -2 * G, -G, -G, -G], [1, -2 * G, G, -G, G], [2, 2 * G, -2 * G, G, -2 * G], [3, 2 * G, -G, G, -G], [4, 2 * G, 0, G, 0], [5, 2 * G, G, G, G]];
-  }
+  localBox() { return [-2 * G, -3.4 * G, 2 * G, 2.4 * G]; }
+  leads() { return icLeads(this); }
   inputs() { return [0, 1]; }
   outputs() { return [2, 3, 4, 5]; }
   pinNames() { return ['CLK', 'RST', 'Q0', 'Q1', 'Q2', 'Q3']; }
@@ -320,12 +315,12 @@ export class Counter extends Digital {
   }
   readings(s) { return [['Count', this.count, ''], ...super.readings(s)]; }
   draw(g) {
-    g.box(-G, -2.6 * G, G, 1.6 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
-    g.text('CTR4', 0, -2.15 * G, { size: 8, color: g.accent, bold: true });
-    g.text('▷', -0.75 * G, -G, { size: 8, color: g.muted, align: 'left' });
-    g.text('R', -0.75 * G, G, { size: 8, color: g.muted, align: 'left' });
-    ['Q0', 'Q1', 'Q2', 'Q3'].forEach((t, i) => g.text(t, 0.8 * G, (i - 2) * G, { size: 7, color: g.muted, align: 'right' }));
-    g.text(String(this.count ?? 0), -0.1 * G, 0.1 * G, { size: 14, color: g.text1, bold: true });
+    g.box(-BW, -3.2 * G, BW, 2.2 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
+    g.text('CTR4', 0, -2.72 * G, { size: 8.5, color: g.accent, bold: true, follow: true });
+    g.text('▷CLK', -BW + 0.25 * G, -G, { size: 7, color: g.muted, align: 'left' });
+    g.text('RST', -BW + 0.25 * G, G, { size: 7, color: g.muted, align: 'left' });
+    ['Q0', 'Q1', 'Q2', 'Q3'].forEach((t, i) => g.text(t, BW - 0.25 * G, (i - 2) * G, { size: 7, color: g.muted, align: 'right' }));
+    g.text(String(this.count ?? 0), 0, 1.6 * G, { size: 12, color: g.text1, bold: true, mono: true });
   }
 }
 register(Counter);
@@ -341,8 +336,8 @@ export class SevenSegDecoder extends Digital {
     for (let i = 0; i < 7; i++) p.push([2 * G, (i - 3) * G]);
     return p;
   }
-  localBox() { return [-2 * G, -3.6 * G, 2 * G, 3.6 * G]; }
-  leads() { return this.localPosts().map(([x, y], i) => [i, x, y, x < 0 ? -G : G, y]); }
+  localBox() { return [-2 * G, -4.4 * G, 2 * G, 3.8 * G]; }
+  leads() { return icLeads(this); }
   inputs() { return [0, 1, 2, 3]; }
   outputs() { return [4, 5, 6, 7, 8, 9, 10]; }
   pinNames() { return ['A0', 'A1', 'A2', 'A3', 'a', 'b', 'c', 'd', 'e', 'f', 'g']; }
@@ -352,10 +347,10 @@ export class SevenSegDecoder extends Digital {
     return [0, 1, 2, 3, 4, 5, 6].map((i) => !!(m >> i & 1));
   }
   draw(g) {
-    g.box(-G, -3.4 * G, G, 3.4 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
-    g.text('DEC', 0, -2.9 * G, { size: 8, color: g.accent, bold: true });
-    ['A0', 'A1', 'A2', 'A3'].forEach((t, i) => g.text(t, -0.8 * G, (i - 2) * G, { size: 7, color: g.muted, align: 'left' }));
-    'abcdefg'.split('').forEach((t, i) => g.text(t, 0.8 * G, (i - 3) * G, { size: 7, color: g.muted, align: 'right' }));
+    g.box(-BW, -4.2 * G, BW, 3.6 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
+    g.text('DEC', 0, -3.72 * G, { size: 8.5, color: g.accent, bold: true, follow: true });
+    ['A0', 'A1', 'A2', 'A3'].forEach((t, i) => g.text(t, -BW + 0.25 * G, (i - 2) * G, { size: 7, color: g.muted, align: 'left' }));
+    'abcdefg'.split('').forEach((t, i) => g.text(t, BW - 0.25 * G, (i - 3) * G, { size: 7, color: g.muted, align: 'right' }));
   }
 }
 register(SevenSegDecoder);
@@ -402,8 +397,8 @@ export class ADC extends Digital {
   static keywords = 'adc analog to digital converter flash';
   static description = '4-bit flash ADC: code = floor(16·Vin/Vref), clamped to 0–15.';
   localPosts() { return [[-2 * G, -G], [-2 * G, G], [2 * G, -2 * G], [2 * G, -G], [2 * G, 0], [2 * G, G]]; }
-  localBox() { return [-2 * G, -2.8 * G, 2 * G, 1.8 * G]; }
-  leads() { return this.localPosts().map(([x, y], i) => [i, x, y, x < 0 ? -G : G, y]); }
+  localBox() { return [-2 * G, -3.4 * G, 2 * G, 2.4 * G]; }
+  leads() { return icLeads(this); }
   inputs() { return []; }
   outputs() { return [2, 3, 4, 5]; }
   pinNames() { return ['Vin', 'Vref', 'D0', 'D1', 'D2', 'D3']; }
@@ -422,12 +417,12 @@ export class ADC extends Digital {
   digitalSettle(s) { const o = this.sample(s); const ch = o.some((v, k) => v !== this.out[k]); this.out = o; return ch; }
   readings(s) { return [['Code', this.code, ''], ...super.readings(s)]; }
   draw(g) {
-    g.box(-G, -2.6 * G, G, 1.6 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
-    g.text('ADC', 0, -2.15 * G, { size: 8, color: g.accent, bold: true });
-    g.text('IN', -0.8 * G, -G, { size: 7, color: g.muted, align: 'left' });
-    g.text('REF', -0.8 * G, G, { size: 7, color: g.muted, align: 'left' });
-    ['D0', 'D1', 'D2', 'D3'].forEach((t, i) => g.text(t, 0.8 * G, (i - 2) * G, { size: 7, color: g.muted, align: 'right' }));
-    g.text(String(this.code ?? 0), -0.1 * G, 0, { size: 12, color: g.text1, bold: true });
+    g.box(-BW, -3.2 * G, BW, 2.2 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
+    g.text('ADC', 0, -2.72 * G, { size: 8.5, color: g.accent, bold: true, follow: true });
+    g.text('IN', -BW + 0.25 * G, -G, { size: 7, color: g.muted, align: 'left' });
+    g.text('REF', -BW + 0.25 * G, G, { size: 7, color: g.muted, align: 'left' });
+    ['D0', 'D1', 'D2', 'D3'].forEach((t, i) => g.text(t, BW - 0.25 * G, (i - 2) * G, { size: 7, color: g.muted, align: 'right' }));
+    g.text(String(this.code ?? 0), 0, 1.6 * G, { size: 12, color: g.text1, bold: true, mono: true });
   }
 }
 register(ADC);
@@ -441,8 +436,8 @@ export class DAC extends Digital {
   ];
   static description = '4-bit DAC: Vout = Vref · code / 16.';
   localPosts() { return [[-2 * G, -2 * G], [-2 * G, -G], [-2 * G, 0], [-2 * G, G], [2 * G, -G]]; }
-  localBox() { return [-2 * G, -2.8 * G, 2 * G, 1.8 * G]; }
-  leads() { return this.localPosts().map(([x, y], i) => [i, x, y, x < 0 ? -G : G, y]); }
+  localBox() { return [-2 * G, -3.4 * G, 2 * G, 2.4 * G]; }
+  leads() { return icLeads(this); }
   inputs() { return [0, 1, 2, 3]; }
   outputs() { return [4]; }
   pinNames() { return ['D0', 'D1', 'D2', 'D3', 'OUT']; }
@@ -459,10 +454,10 @@ export class DAC extends Digital {
   digitalSettle(s) { const old = this.code; this.inState = this.readInputs(s); this.compute(this.inState); return old !== this.code; }
   readings(s) { return [['Code', this.code, ''], ['Vout', s.v(this.nodes[4]), 'V']]; }
   draw(g) {
-    g.box(-G, -2.6 * G, G, 1.6 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
-    g.text('DAC', 0, -2.15 * G, { size: 8, color: g.accent, bold: true });
-    ['D0', 'D1', 'D2', 'D3'].forEach((t, i) => g.text(t, -0.8 * G, (i - 2) * G, { size: 7, color: g.muted, align: 'left' }));
-    g.text('OUT', 0.8 * G, -G, { size: 7, color: g.muted, align: 'right' });
+    g.box(-BW, -3.2 * G, BW, 2.2 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
+    g.text('DAC', 0, -2.72 * G, { size: 8.5, color: g.accent, bold: true, follow: true });
+    ['D0', 'D1', 'D2', 'D3'].forEach((t, i) => g.text(t, -BW + 0.25 * G, (i - 2) * G, { size: 7, color: g.muted, align: 'left' }));
+    g.text('OUT', BW - 0.25 * G, -G, { size: 7, color: g.muted, align: 'right' });
   }
 }
 register(DAC);

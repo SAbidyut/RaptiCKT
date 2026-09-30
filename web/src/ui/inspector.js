@@ -1,6 +1,6 @@
 // Component inspector (bottom sheet) and the EveryCircuit-style rotary knob.
 
-import { fmtSI, parseSI } from '../engine/units.js';
+import { fmtSI, parseSI, fmtQty, isPlainUnit } from '../engine/units.js';
 import { icon } from './icons.js';
 import { Renderer } from './render.js';
 
@@ -209,12 +209,14 @@ export class Inspector {
     const live = this.ed.running && sim && sim.ready;
     let r = [];
     if (live) { try { r = this.el.readings(sim); } catch { r = []; } }
-    const fmt = ([, v, u]) => (typeof v === 'number' ? fmtSI(v, u, 4) : String(v));
+    const fmt = ([, v, u]) => (typeof v !== 'number' ? String(v) : isPlainUnit(u) ? fmtQty(v, u) : fmtSI(v, u, 4));
     // quick bar: value label + first two readings, updated via textContent (no relayout of the bar)
     const q = this.quick.querySelector('.qb-read');
     if (q) {
       const val = this.el.valueLabel();
-      q.textContent = live && r.length ? r.slice(0, 2).map((x) => `${x[0]} ${fmt(x)}`).join(' · ') : val || 'Tap ⚙ to edit';
+      // compact: values of the first two readings (e.g. "3.837 V · 816 µA")
+      const nums = r.filter((x) => typeof x[1] === 'number').slice(0, 2).map(fmt);
+      q.textContent = live && r.length ? (nums.length ? nums.join(' · ') : fmt(r[0])) : val || 'Tap ⚙ to edit';
     }
     if (!this.sheetOpen) return;
     const box = this.host.querySelector('.insp-read');

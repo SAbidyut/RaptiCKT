@@ -188,6 +188,25 @@ export function makeGraphics(ctx, theme, opts) {
       if (o.fill) { ctx.fillStyle = o.fill; ctx.fill(); }
       if (o.stroke) { ctx.strokeStyle = o.stroke; ctx.lineWidth = o.width || g.lw; ctx.stroke(); }
     },
+    /** run fn in an upright (unrotated, unmirrored) frame centred on the part */
+    upright(fn, cx = 0, cy = 0) {
+      const r = g.rot, f = g.flip;
+      ctx.save();
+      ctx.translate(cx, cy);
+      if (f) ctx.scale(1, -1);
+      if (r) ctx.rotate((-r * Math.PI) / 2);
+      g.rot = 0; g.flip = false;
+      try { fn(); } finally { ctx.restore(); g.rot = r; g.flip = f; }
+    },
+    /** upright text at local (lx, ly), anchored so it extends away from the part in that direction */
+    textSide(str, lx, ly, o = {}) {
+      let x = lx, y = g.flip ? -ly : ly;
+      [x, y] = [[x, y], [-y, x], [-x, -y], [y, -x]][g.rot & 3];
+      let align = 'center', baseline = 'middle';
+      if (Math.abs(x) > Math.abs(y)) align = x > 0 ? 'left' : 'right';
+      else baseline = y < 0 ? 'alphabetic' : 'top';
+      g.text(str, lx, ly, { ...o, align, baseline, follow: false });
+    },
     glow(x, y, r, rgb, a) {
       if (a <= 0.01) return;
       const ga = ctx.globalAlpha;
@@ -199,10 +218,18 @@ export function makeGraphics(ctx, theme, opts) {
       ctx.save();
       ctx.translate(x, y);
       if (g.flip) ctx.scale(1, -1);
-      if (g.rot) ctx.rotate((-g.rot * Math.PI) / 2);
+      let align = o.align || 'center';
+      const follow = o.follow ?? (align !== 'center');
+      if (!follow) {
+        if (g.rot) ctx.rotate((-g.rot * Math.PI) / 2);
+      } else if (g.rot === 1 || g.rot === 2) {
+        // keep pin labels readable: rotate a half turn instead of reading upside down
+        ctx.rotate(Math.PI);
+        align = align === 'left' ? 'right' : align === 'right' ? 'left' : align;
+      }
       ctx.font = `${o.bold ? '600 ' : ''}${o.size || 10}px ${o.mono ? 'JetBrains Mono, ui-monospace, monospace' : 'Inter, system-ui, sans-serif'}`;
       ctx.fillStyle = o.color || theme.text1;
-      ctx.textAlign = o.align || 'center';
+      ctx.textAlign = align;
       ctx.textBaseline = o.baseline || 'middle';
       ctx.fillText(str, 0, 0);
       ctx.restore();
@@ -318,7 +345,7 @@ export class Renderer {
       }
     }
     if (st.graph) {
-      for (const p of st.graph.junctions) g.circle(p[0], p[1], r * 1.35, { fill: th.junction });
+      for (const p of st.graph.junctions) g.circle(p[0], p[1], Math.max(3, wireW * 1.25), { fill: th.junction });
       // dangling wire ends
       for (const w of st.doc.wires) for (const p of [w.a, w.b]) {
         if ((st.graph.degree.get(key(p[0], p[1])) || 0) <= 1) g.circle(p[0], p[1], r, { fill: th.bg, stroke: th.accent, width: 1.3 });
@@ -405,11 +432,6 @@ export class Renderer {
     };
     if (st.graph) for (const ed of st.graph.edges) if (Math.abs(ed.i) > st.iMin) dotsAlong(ed.a[0], ed.a[1], ed.b[0], ed.b[1], ed.phase);
     for (const e of st.doc.elements) {
-      const posts = e._posts || e.getPosts();
-      if (posts.length === 2 && e.dotThrough !== false && e.postCurrents.length === 2) {
-        if (Math.abs(e.postCurrents[0]) > st.iMin) dotsAlong(posts[0][0], posts[0][1], posts[1][0], posts[1][1], e.dotPhase[0] || 0);
-        continue;
-      }
       e.leads().forEach(([pi, x1, y1, x2, y2], li) => {
         const cur = e.postCurrents[pi] || 0;
         if (Math.abs(cur) <= st.iMin) return;
@@ -429,8 +451,6 @@ export class Renderer {
     };
     if (st.graph) for (const ed of st.graph.edges) ed.phase += f(ed.i);
     for (const e of st.doc.elements) {
-      const posts = e._posts || e.getPosts();
-      if (posts.length === 2 && e.postCurrents.length === 2) { e.dotPhase[0] = (e.dotPhase[0] || 0) + f(e.postCurrents[0]); continue; }
       e.leads().forEach(([pi], li) => { e.dotPhase[li] = (e.dotPhase[li] || 0) + f(e.postCurrents[pi] || 0); });
     }
   }
@@ -438,33 +458,25 @@ export class Renderer {
   drawLabels(st, g) {
     const th = st.theme;
     for (const e of st.doc.elements) {
-      const [lx, ly] = e.labelPos();
-      const [x, y] = e.toWorld(lx, ly);
       const val = e.valueLabel();
-      const showName = st.settings.showNames;
-      let txt = showName ? e.name + (val ? ' ' + val : '') : val;
+      const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
       if (!txt) continue;
-      // keep labels readable for vertical parts: place to the side
-      let ax = x, ay = y, align = 'center';
-      if ((e.rot & 1) === 1 && e.localPosts().length === 2) {
-        const [cx, cy] = e.toWorld(0, 0);
-        ax = cx + 14; ay = cy; align = 'left';
-        if (e.rot === 1 ? e.flip : !e.flip) { ax = cx - 14; align = 'right'; }
-      }
-      g.text(txt, ax, ay, { size: 10.5, color: th.text2, align, bold: true });
+      const o = e.labelAnchor();
+      g.text(txt, o[0], o[1], { size: 10.5, color: th.text2, align: o[2], baseline: o[3], bold: true, follow: false });
     }
   }
 
   drawProbe(pr, g, st) {
     if (!pr.pos) return;
     const [x, y] = pr.pos;
-    this.drawPin(x, y, pr.color, g);
+    this.drawPin(x, y, pr.color, g, null, pr.kind === 'node' ? 0 : pr.ang || 0);
   }
 
-  drawPin(x, y, col, g, label) {
+  drawPin(x, y, col, g, label, ang = 0) {
     const ctx = this.ctx, s = 1 / Math.max(0.6, this.scale) * 1.2;
     ctx.save();
     ctx.translate(x, y);
+    if (ang) ctx.rotate(ang);
     ctx.scale(s, s);
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-5, -12); ctx.arc(0, -15, 6.5, Math.PI * 0.8, Math.PI * 0.2); ctx.closePath();
     ctx.fillStyle = col; ctx.fill();

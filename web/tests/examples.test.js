@@ -62,3 +62,31 @@ test('example values are physically correct', () => {
   assert.ok(q.postCurrents[1] > 1e-3 && q.postCurrents[1] < 2e-3, 'Ic ' + q.postCurrents[1]);
   void s;
 });
+
+// Robustness: run every example with the same timestep the editor picks
+// (and a few awkward multiples of it) for several seconds of screen time.
+function appTiming(doc) {
+  let fmax = 0;
+  for (const e of doc.elements) {
+    const p = e.p;
+    if (p.wave && p.wave !== 'dc' && p.freq) fmax = Math.max(fmax, p.freq);
+    if (e.constructor.type === 'mic') fmax = Math.max(fmax, p.freq);
+  }
+  const speed = doc.simSettings.speed || (fmax > 0 ? Math.min(1, 2 / fmax) : 5e-3);
+  let dt = speed / 2400;
+  if (fmax > 0) dt = Math.min(dt, 1 / (fmax * 200));
+  return { speed, dt: Math.min(dt, 1e-4) };
+}
+
+for (const ex of EXAMPLES) {
+  test(`example runs robustly in the editor: ${ex.title}`, () => {
+    const base = appTiming(buildExample(ex));
+    for (const k of [1, 0.37, 1.7, 3]) {
+      const doc = buildExample(ex);
+      const sim = new Simulator().build(doc.elements, doc.wires);
+      assert.ok(sim.start(), sim.error);
+      const dt = base.dt * k, n = Math.min(6000, Math.ceil((base.speed * 3) / dt));
+      for (let i = 0; i < n; i++) assert.ok(sim.step(dt), `dt=${dt.toExponential(3)} failed at t=${sim.t.toExponential(3)}: ${sim.error}`);
+    }
+  });
+}

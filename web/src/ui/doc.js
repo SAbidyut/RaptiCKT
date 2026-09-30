@@ -72,9 +72,11 @@ export class CircuitDoc {
 
   bounds() {
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    const grow = ([a, b, c, d]) => { x1 = Math.min(x1, a); y1 = Math.min(y1, b); x2 = Math.max(x2, c); y2 = Math.max(y2, d); };
     for (const e of this.elements) {
-      const [a, b, c, d] = e.worldBox();
-      x1 = Math.min(x1, a); y1 = Math.min(y1, b); x2 = Math.max(x2, c); y2 = Math.max(y2, d);
+      grow(e.worldBox());
+      const r = e.labelRect(e.valueLabel());
+      if (r) grow(r);
     }
     for (const w of this.wires) for (const [x, y] of w.pts) { x1 = Math.min(x1, x); y1 = Math.min(y1, y); x2 = Math.max(x2, x); y2 = Math.max(y2, y); }
     if (!Number.isFinite(x1)) return null;

@@ -306,7 +306,34 @@ export class Simulator {
       if (!this.checkFinite()) return false;
       if (conv) { this.iterations = it + 1; return true; }
     }
-    return false;
+    // Newton stalled on the update criterion. This happens when a node is only
+    // weakly defined (e.g. every diode of a floating bridge is off) and rounding
+    // noise moves its voltage. Accept the point if every equation's residual is
+    // negligible relative to the currents / voltages acting in that row.
+    return this.residualConverged();
+  }
+
+  residualConverged() {
+    const m = this.size, n = m, A = this.A, b = this.b, x = this.x;
+    const { reltol, abstol, vntol } = this.opt;
+    const nNodes = this.nodeCount - 1;
+    this.A.set(this.Alin);
+    this.b.set(this.bStep);
+    this.limited = false;
+    for (const e of this.nonlinear) e.stampNL(this);
+    if (this.limited) return false;
+    for (let i = 0; i < m; i++) {
+      let r = -b[i], scale = Math.abs(b[i]);
+      const ri = i * n;
+      for (let j = 0; j < m; j++) {
+        const t = A[ri + j] * x[j];
+        r += t; scale += Math.abs(t);
+      }
+      const tol = reltol * scale + (i < nNodes ? abstol : vntol);
+      if (!(Math.abs(r) <= tol)) return false;
+    }
+    this.iterations = this.opt.maxIter;
+    return true;
   }
 
   checkFinite() {

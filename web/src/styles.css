@@ -427,7 +427,8 @@ input.toggle:checked::after { transform: translateX(18px); }
 .quickbar .qb-read { display: block; font: 11.5px var(--mono); color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .editor.sheet-open .quickbar { opacity: 0; pointer-events: none; }
 .knob { bottom: calc(92px + var(--safe-b)); }
-@media (max-width: 380px) { .quickbar > button { width: 36px; } .quickbar .qb-main img { display: none; } }
+@media (max-width: 520px) { .quickbar .qb-main img { display: none; } .quickbar .qb-main b small { display: none; } }
+@media (max-width: 380px) { .quickbar > button { width: 36px; } }
 
 /* pressed-state feedback everywhere */
 .tb, .icon-btn, .btn, .pal-item, .card, .ex-item, .lib-item, .quickbar > button, .insp-actions button { transition: transform 0.12s ease, background 0.15s; }

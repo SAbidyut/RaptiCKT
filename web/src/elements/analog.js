@@ -51,7 +51,7 @@ export class OpAmp extends Element {
   connectivity() { return [[0, 1], [2, 'gnd', 'i0']]; }
   internalNodeCount() { return 1; }
   branchCount() { return 1; }
-  labelPos() { return [0, -2.3 * G]; }
+  labelSide() { return [0, -1]; }
   valueLabel() { return this.p.model === 'custom' ? '' : this.p.model; }
   limits() {
     const hi = this.p.vpos - this.p.drop, lo = this.p.vneg + this.p.drop;
@@ -207,7 +207,7 @@ export class Timer555 extends Element {
   }
   internalNodeCount() { return 1; }
   valueLabel() { return ''; }
-  labelPos() { return [0, 4.6 * G]; }
+  labelSide() { return [0, -1]; }
   reset() { this.q = false; this.vccPrev = 0; }
   evalQ(s) {
     const [vcc, gnd, trig, thr, ctrl, rst] = this.nodes;
@@ -259,9 +259,9 @@ export class Timer555 extends Element {
   }
   draw(g) {
     g.box(-2 * G, -3 * G, 2 * G, 3 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 5 });
-    g.text('555', 0.15 * G, -0.9 * G, { size: 15, color: g.accent, bold: true });
-    g.circle(0.15 * G, 0.9 * G, 4, { fill: this.q ? g.hi : g.lo });
-    const lab = (t, x, y, al) => g.text(t, x, y, { size: 8, color: g.muted, align: al });
+    g.text('555', 0, -0.7 * G, { size: 15, color: g.accent, bold: true, follow: true });
+    if (g.running) g.circle(0, 0.7 * G, 3.5, { fill: this.q ? g.hi : g.lo });
+    const lab = (t, x, y, al) => g.text(t, x, y, { size: 7.5, color: g.muted, align: al, follow: true });
     lab('VCC', -G, -2.55 * G, 'center'); lab('RST', G, -2.55 * G, 'center'); lab('GND', 0, 2.55 * G, 'center');
     lab('DIS', -1.85 * G, -2 * G, 'left'); lab('THR', -1.85 * G, 0, 'left'); lab('TRIG', -1.85 * G, 2 * G, 'left');
     lab('OUT', 1.85 * G, -2 * G, 'right'); lab('CTRL', 1.85 * G, 2 * G, 'right');
@@ -289,11 +289,11 @@ export class Regulator extends Element {
   constructor(x, y) { super(x, y); this.postCurrents = [0, 0, 0]; }
   // posts: IN, OUT, GND/ADJ
   localPosts() { return [[-2 * G, 0], [2 * G, 0], [0, 2 * G]]; }
-  localBox() { return [-2 * G, -G, 2 * G, 2 * G]; }
-  leads() { return [[0, -2 * G, 0, -1.2 * G, 0], [1, 2 * G, 0, 1.2 * G, 0], [2, 0, 2 * G, 0, 0.8 * G]]; }
+  localBox() { return [-2 * G, -1.2 * G, 2 * G, 2 * G]; }
+  leads() { return [[0, -2 * G, 0, -1.4 * G, 0], [1, 2 * G, 0, 1.4 * G, 0], [2, 0, 2 * G, 0, 1.0 * G]]; }
   branchCount() { return 1; }
-  labelPos() { return [0, -1.5 * G]; }
-  valueLabel() { return this.adj ? 'LM317' : fmtShort(this.p.vout, 'V'); }
+  labelSide() { return [0, -1]; }
+  valueLabel() { return this.adj ? '' : fmtShort(this.p.vout, 'V'); }
   vset() { return this.adj ? 1.25 : this.p.vout; }
   reset() { this.postCurrents = [0, 0, 0]; }
   stamp(s) {
@@ -335,11 +335,11 @@ export class Regulator extends Element {
     return [['Vin', s.v(inp) - s.v(gnd), 'V'], ['Vout', s.v(out) - s.v(gnd), 'V'], ['Iout', this.i, 'A'], ['Dissipation', (s.v(inp) - s.v(out)) * this.i, 'W']];
   }
   draw(g) {
-    g.box(-1.2 * G, -0.8 * G, 1.2 * G, 0.8 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
-    g.text(this.adj ? '317' : '78xx', 0, -0.15 * G, { size: 10, color: g.accent, bold: true });
-    g.text('IN', -0.85 * G, 0.4 * G, { size: 7, color: g.muted, align: 'left' });
-    g.text('OUT', 0.85 * G, 0.4 * G, { size: 7, color: g.muted, align: 'right' });
-    g.text(this.adj ? 'ADJ' : 'GND', 0, 0.55 * G, { size: 7, color: g.muted });
+    g.box(-1.4 * G, -G, 1.4 * G, G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
+    g.text(this.adj ? 'LM317' : '78xx', 0, -0.42 * G, { size: 8.5, color: g.accent, bold: true, follow: true });
+    g.text('IN', -1.2 * G, 0.12 * G, { size: 6.5, color: g.muted, align: 'left' });
+    g.text('OUT', 1.2 * G, 0.12 * G, { size: 6.5, color: g.muted, align: 'right' });
+    g.text(this.adj ? 'ADJ' : 'GND', 0, 0.68 * G, { size: 6.5, color: g.muted, follow: true });
   }
 }
 register(Regulator);

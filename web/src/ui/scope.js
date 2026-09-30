@@ -155,6 +155,9 @@ export class Scope {
     if (this.mode === 'xy' && this.channels.length >= 2) return this.drawXY(idxs);
 
     const meas = [];
+    // plot area keeps clear of the chip/button header and the measurement lines
+    const [top, bot] = this.plotArea(), ph = bot - top;
+    const scaleLabels = [];
     this.channels.forEach((c, ci) => {
       const st = this.stats(c, idxs);
       if (!st) return;
@@ -167,11 +170,11 @@ export class Scope {
       const col = c.probe.color;
       // min/max decimation: at most two vertices per pixel column keeps the path short
       ctx.beginPath();
-      const ky = H / (hi - lo), kx = W / this.window;
+      const ky = ph / (hi - lo), kx = W / this.window;
       let col0 = -1, mn = 0, mx = 0, started = false;
       const flush = () => {
         if (col0 < 0) return;
-        const ymn = H - (mn - lo) * ky, ymx = H - (mx - lo) * ky;
+        const ymn = bot - (mn - lo) * ky, ymx = bot - (mx - lo) * ky;
         if (!started) { ctx.moveTo(col0, ymn); started = true; } else ctx.lineTo(col0, ymn);
         if (ymx !== ymn) ctx.lineTo(col0, ymx);
       };
@@ -184,18 +187,29 @@ export class Scope {
       ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
       // live dot
       const li = idxs[idxs.length - 1];
-      const ly = H - ((c.buf[li] - lo) / (hi - lo)) * H;
+      const ly = bot - ((c.buf[li] - lo) / (hi - lo)) * ph;
       ctx.beginPath(); ctx.arc(W - 3, ly, 3.5, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
       // axis labels for this channel
       const u = c.probe.unit;
-      ctx.fillStyle = col; ctx.textAlign = 'right';
-      ctx.fillText(fmtSI(hi, u, 3), W - 8, 48 + ci * 12);
-      ctx.fillText(fmtSI(lo, u, 3), W - 8, H - 20 - (this.channels.length - 1 - ci) * 12);
+      scaleLabels.push([fmtSI(hi, u, 3), top + 10 + ci * 12, col], [fmtSI(lo, u, 3), bot - 4 - (this.channels.length - 1 - ci) * 12, col]);
       meas.push(`<span style="color:${col}">● ${c.probe.label}</span> ${fmtSI(c.buf[li], u, 4)} <em>pp</em> ${fmtSI(st.pp, u, 3)} <em>rms</em> ${fmtSI(st.rms, u, 3)}${st.freq ? ` <em>f</em> ${fmtSI(st.freq, 'Hz', 4)}` : ''}`);
     });
-    ctx.fillStyle = 'rgba(200,215,240,0.7)'; ctx.textAlign = 'right';
+    // scale readouts go on a backing plate, drawn after every trace so they stay legible
+    ctx.textAlign = 'right';
+    for (const [txt, y, col] of scaleLabels) {
+      const w = ctx.measureText(txt).width;
+      ctx.fillStyle = 'rgba(6,10,18,0.82)'; ctx.fillRect(W - 14 - w, y - 10, w + 8, 13);
+      ctx.fillStyle = col; ctx.fillText(txt, W - 10, y);
+    }
+    ctx.fillStyle = 'rgba(200,215,240,0.7)';
     ctx.fillText(`${fmtSI(this.window / 10, 's', 3)}/div`, W - 6, H - 5);
     this.setMeas(meas.join('<br>'));
+  }
+
+  /** [top, bottom] of the trace area in CSS px */
+  plotArea() {
+    const n = Math.max(1, this.channels.length);
+    return [44, Math.max(80, this.h - 22 - n * 16)];
   }
 
   /** measurement text changes the DOM, so throttle it to 4 Hz */
@@ -213,10 +227,11 @@ export class Scope {
     const sa = this.stats(a, idxs), sb = this.stats(b, idxs);
     if (!sa || !sb) return;
     const rx = Math.max(sa.pp, 1e-9), ry = Math.max(sb.pp, 1e-9);
+    const [top, bot] = this.plotArea();
     ctx.beginPath();
     let f = true;
     for (const i of idxs) {
-      const x = 10 + ((a.buf[i] - sa.mn) / rx) * (W - 20), y = H - 10 - ((b.buf[i] - sb.mn) / ry) * (H - 20);
+      const x = 10 + ((a.buf[i] - sa.mn) / rx) * (W - 20), y = bot - ((b.buf[i] - sb.mn) / ry) * (bot - top);
       if (f) { ctx.moveTo(x, y); f = false; } else ctx.lineTo(x, y);
     }
     ctx.strokeStyle = '#4ade80'; ctx.globalAlpha = 0.25; ctx.lineWidth = 6; ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 1.8; ctx.stroke();
@@ -233,6 +248,7 @@ export class Scope {
     const dtS = (this.tbuf[sel[n - 1]] - this.tbuf[sel[0]]) / (n - 1);
     const fs = 1 / dtS;
     const meas = [];
+    const [top, bot] = this.plotArea();
     this.channels.forEach((c) => {
       const re = new Float64Array(n), im = new Float64Array(n);
       let mean = 0;
@@ -249,7 +265,7 @@ export class Scope {
       for (let k = 1; k < half; k++) {
         const x = (Math.log10(k) / Math.log10(half)) * W;
         const db = 20 * Math.log10(Math.max(mag[k] / peak, 1e-5));
-        const y = (-db / 100) * H;
+        const y = top + (-db / 100) * (bot - top);
         if (k === 1) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
       ctx.strokeStyle = c.probe.color; ctx.lineWidth = 1.6; ctx.stroke();

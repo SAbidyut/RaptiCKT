@@ -183,7 +183,7 @@ export class VoltageSource extends TwoTerm {
       return;
     }
     g.circle(0, 0, G * 0.8, { stroke: g.body, width: g.lw * 0.9, fill: g.fill });
-    drawWaveGlyph(g, this.p.wave, G * 0.8, g.accent);
+    g.upright(() => drawWaveGlyph(g, this.p.wave, G * 0.8, g.accent));
     g.text('+', -G * 1.1, -G * 0.55, { size: 11, color: g.pos, bold: true });
   }
 }
@@ -229,8 +229,7 @@ export class CurrentSource extends TwoTerm {
     g.line(-G * 0.45, 0, G * 0.35, 0, g.accent, g.lw);
     g.poly([[G * 0.45, 0], [G * 0.12, -G * 0.24], [G * 0.12, G * 0.24]], { fill: g.accent });
     if (this.p.wave !== 'dc') {
-      g.ctx.save(); g.ctx.translate(0, -G * 0.42); g.ctx.scale(0.45, 0.45);
-      drawWaveGlyph(g, this.p.wave, G * 0.8, g.accent); g.ctx.restore();
+      g.upright(() => { g.ctx.scale(0.42, 0.42); drawWaveGlyph(g, this.p.wave, G * 0.8, g.accent); }, 0, -G * 0.45);
     }
   }
 }
@@ -258,6 +257,7 @@ export class Rail extends Element {
     { key: 'phase', label: 'Phase', unit: '°', def: 0, min: -360, max: 360 },
   ];
   static description = 'Single-terminal source referenced to ground (e.g. +5 V supply rail).';
+  static noName = true;
   constructor(x, y) { super(x, y); this.postCurrents = [0]; this.noiseVal = 0; }
   localPosts() { return [[0, 0]]; }
   localBox() { return [-G * 0.9, -G * 1.4, G * 0.9, 2]; }
@@ -290,7 +290,7 @@ export class Rail extends Element {
     const txt = this.p.wave === 'dc' ? (this.p.amp >= 0 ? '+' : '') + fmtShort(this.p.amp, 'V')
       : this.p.wave === 'square' || this.p.wave === 'pulse' ? '⎍ ' + fmtShort(this.p.freq, 'Hz') : '∿ ' + fmtShort(this.p.freq, 'Hz');
     g.poly([[-G * 0.55, -G * 0.6], [G * 0.55, -G * 0.6]], { stroke: g.vc(g.pv(0)), width: g.lw * 1.2 });
-    g.text(txt, 0, -G * 1.05, { size: 11, color: g.accent, bold: true });
+    g.textSide(txt, 0, -G * 0.85, { size: 11, color: g.accent, bold: true });
   }
 }
 register(Rail);
@@ -308,13 +308,16 @@ export class Clock extends Rail {
   ];
   static description = 'Digital clock (0 V / high level square wave) referenced to ground.';
   draw(g) {
-    g.box(-G * 0.9, -G * 1.35, G * 0.9, -G * 0.6, { stroke: g.body, width: g.lw * 0.8, fill: g.fill, r: 3 });
-    const hi = g.pv(0) > this.p.amp / 2;
-    const c = hi ? g.hi : g.lo;
-    g.poly([[-G * 0.6, -G * 0.75], [-G * 0.3, -G * 0.75], [-G * 0.3, -G * 1.2], [G * 0.15, -G * 1.2], [G * 0.15, -G * 0.75], [G * 0.6, -G * 0.75]], { stroke: c, width: g.lw * 0.8 });
+    const hi = g.running && g.pv(0) > this.p.amp / 2;
+    const c = hi ? g.hi : g.running ? g.lo : g.accent;
+    g.upright(() => {
+      g.box(-G * 0.6, -G * 0.6, G * 0.6, G * 0.6, { stroke: g.body, width: g.lw * 0.8, fill: g.fill, r: 3 });
+      g.poly([[-G * 0.4, G * 0.25], [-G * 0.15, G * 0.25], [-G * 0.15, -G * 0.25], [G * 0.15, -G * 0.25], [G * 0.15, G * 0.25], [G * 0.4, G * 0.25]], { stroke: c, width: g.lw * 0.8 });
+    }, 0, -G * 1.2);
   }
   valueLabel() { return fmtShort(this.p.freq, 'Hz'); }
-  labelPos() { return [0, -G * 1.8]; }
+  localBox() { return [-G * 0.6, -G * 1.8, G * 0.6, 2]; }
+  labelSide() { return [0, -1]; }
 }
 register(Clock);
 
@@ -329,7 +332,7 @@ class Controlled extends Element {
       [2, 2 * G, -G, G * 0.9, -G], [3, 2 * G, G, G * 0.9, G]];
   }
   connectivity() { return [[0, 1], [2, 3]]; }
-  labelPos() { return [0, -1.8 * G]; }
+  labelSide() { return [0, -1]; }
   drawBody(g, sym, isCurrent) {
     g.poly([[-G * 1.2, -G], [-G * 1.2, G]], { stroke: g.body, width: g.lw * 0.6, dash: [3, 3] });
     g.poly([[G * 0.9, -G], [G * 0.9, -G * 0.7]], { stroke: g.vc(g.pv(2)), width: g.lw });

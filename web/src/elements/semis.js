@@ -176,6 +176,7 @@ export class LED extends Diode {
   constructor(x, y) { super(x, y); this.onParamChange(); }
   valueLabel() { return ''; }
   spice(n) { return `${this.name} ${n[0]} ${n[1]} D${this.name}\n.model D${this.name} D(Is=${this.p.is.toExponential(3)} N=${this.p.n})`; }
+  localBox() { return [-2 * G, -1.2 * G, 2 * G, 0.75 * G]; }
   draw(g) {
     const c = LED_COLORS[this.p.color] || LED_COLORS.red;
     const b = g.running ? Math.max(0, Math.min(1.5, this.i / this.p.imax)) : 0;
@@ -232,7 +233,7 @@ export class NPN extends Element {
   localPosts() { return [[-2 * G, 0], [G, -2 * G], [G, 2 * G]]; }
   localBox() { return [-2 * G, -2 * G, G * 1.4, 2 * G]; }
   leads() { return [[0, -2 * G, 0, -G * 0.45, 0], [1, G, -2 * G, G, -G * 0.95], [2, G, 2 * G, G, G * 0.95]]; }
-  labelPos() { return [G * 1.1, 0]; }
+  labelSide() { return [1, 0]; }
   valueLabel() { return this.p.model === 'custom' ? `β=${this.p.bf}` : this.p.model; }
   onParamChange() { this.jbe?.set(this.p.is, 1); this.jbc?.set(this.p.is, 1); }
   reset() {
@@ -378,7 +379,7 @@ export class NMOS extends Element {
   localPosts() { return [[-2 * G, 0], [G, -2 * G], [G, 2 * G]]; }
   localBox() { return [-2 * G, -2 * G, G * 1.4, 2 * G]; }
   leads() { return [[0, -2 * G, 0, -G * 0.55, 0], [1, G, -2 * G, G, -G * 0.6], [2, G, 2 * G, G, G * 0.6]]; }
-  labelPos() { return [G * 1.1, 0]; }
+  labelSide() { return [1, 0]; }
   valueLabel() { return this.p.model === 'custom' ? '' : this.p.model; }
   reset() {
     this.cgs.reset(0); this.cgd.reset(0); this.jbd.vd = 0;
@@ -530,7 +531,7 @@ export class NJFET extends Element {
   localPosts() { return [[-2 * G, 0], [G, -2 * G], [G, 2 * G]]; }
   localBox() { return [-2 * G, -2 * G, G * 1.4, 2 * G]; }
   leads() { return [[0, -2 * G, 0, -G * 0.3, 0], [1, G, -2 * G, G, -G * 0.55], [2, G, 2 * G, G, G * 0.55]]; }
-  labelPos() { return [G * 1.1, 0]; }
+  labelSide() { return [1, 0]; }
   reset() { this.jgs.vd = 0; this.jgd.vd = 0; this.postCurrents = [0, 0, 0]; this.sm = null; this.vgsOld = 0; this.vdsOld = 0; }
   ids(vgs, vds) {
     const vp = -Math.abs(this.p.vp), beta = this.p.idss / (vp * vp), lam = this.p.lambda;

@@ -507,6 +507,9 @@ export class Editor {
   }
 
   // ------------------------------------------------------------- editing
+  makeEl(type, x, y) { return makeElement(type, x, y); }
+  newDoc(name) { return new CircuitDoc(name); }
+
   addComponent(type) {
     const [cx, cy] = this.renderer.toWorld(this.renderer.cw / 2, this.renderer.ch * 0.42);
     const e = makeElement(type, snap(cx), snap(cy));
@@ -690,10 +693,11 @@ export class Editor {
     const e = p._el || this.doc.elements.find((x) => x.id === p.el);
     if (!e) return null;
     const posts = e.getPosts();
-    const q = posts[p.kind === 'cur' && posts.length > 1 ? 1 : 0] || e.toWorld(0, 0);
-    const [cx, cy] = e.toWorld(0, 0);
-    // sit just inside the terminal, pointing at the part
-    p.pos = [q[0] + (cx - q[0]) * 0.35, q[1] + (cy - q[1]) * 0.35];
+    // pin marks the measured terminal (never covers the symbol itself)
+    p.pos = posts[p.kind === 'cur' && posts.length > 1 ? 1 : 0] || e.toWorld(0, 0);
+    // lean the pin away from the body so it never covers the symbol
+    const c = e.toWorld(0, 0), dx = p.pos[0] - c[0], dy = p.pos[1] - c[1];
+    p.ang = dx || dy ? Math.atan2(dx, -dy) + 0.55 : 0;
     return p.pos;
   }
 

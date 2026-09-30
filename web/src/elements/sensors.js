@@ -6,7 +6,7 @@ import { Element, TwoTerm, register, GRID } from './base.js';
 import { Capacitor } from './passive.js';
 import { NPN, Junction, diodeIV } from './semis.js';
 import { VT } from '../engine/sim.js';
-import { fmtShort } from '../engine/units.js';
+import { fmtShort, fmtQty } from '../engine/units.js';
 
 const G = GRID;
 
@@ -23,7 +23,7 @@ class ResSensor extends TwoTerm {
     const k = this.knobProp();
     return [[k.label, this.p[k.key], k.unit], ['Resistance', this.R, 'Ω'], ['Voltage', this.voltageDiff(s), 'V'], ['Current', this.i, 'A']];
   }
-  valueLabel() { const k = this.knobProp(); return fmtShort(this.p[k.key], k.unit); }
+  valueLabel() { const k = this.knobProp(); return fmtQty(this.p[k.key], k.unit); }
   spice(n) { return `R${this.name} ${n[0]} ${n[1]} ${this.R} ; ${this.constructor.title}`; }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
   drawBody(g) {
@@ -45,6 +45,7 @@ export class LDR extends ResSensor {
     const r = this.p.r10 * Math.pow(Math.max(this.p.lux, 1e-4) / 10, -this.p.gamma);
     return 1 / (1 / r + 1 / this.p.rdark);
   }
+  localBox() { return [-2 * G, -1.5 * G, 2 * G, 1.2 * G]; }
   draw(g) {
     this.drawBody(g);
     g.circle(0, 0, 1.15 * G, { stroke: g.muted, width: g.lw * 0.5 });
@@ -67,6 +68,7 @@ export class NTC extends ResSensor {
   ];
   static description = 'NTC thermistor, β-model: R = R25·exp(β(1/T − 1/298.15 K)).';
   resistance() { return this.p.r25 * Math.exp(this.p.beta * (1 / (this.p.temp + 273.15) - 1 / 298.15)); }
+  localBox() { return [-2 * G, -1.0 * G, 2 * G, 1.15 * G]; }
   draw(g) {
     this.drawBody(g);
     g.poly([[-1.2 * G, 0.8 * G], [-0.9 * G, 0.8 * G], [0.9 * G, -0.8 * G]], { stroke: g.accent, width: g.lw * 0.7 });
@@ -86,6 +88,7 @@ export class RTD extends ResSensor {
     const T = this.p.temp, A = 3.9083e-3, B = -5.775e-7, C = T < 0 ? -4.183e-12 : 0;
     return this.p.r0 * (1 + A * T + B * T * T + C * (T - 100) * T * T * T);
   }
+  localBox() { return [-2 * G, -1.0 * G, 2 * G, 1.15 * G]; }
   draw(g) {
     this.drawBody(g);
     g.poly([[-1.2 * G, 0.8 * G], [-0.9 * G, 0.8 * G], [0.9 * G, -0.8 * G]], { stroke: g.accent, width: g.lw * 0.7 });
@@ -122,6 +125,7 @@ export class FSR extends ResSensor {
   ];
   static description = 'Force-sensing resistor (FSR 402-like): R ≈ R1N / F (power-law), open-circuit when unloaded.';
   resistance() { const F = this.p.force; const r = F > 1e-6 ? this.p.r1n / Math.pow(F, 0.95) : this.p.roff; return 1 / (1 / r + 1 / this.p.roff); }
+  localBox() { return [-2 * G, -1.5 * G, 2 * G, 0.75 * G]; }
   draw(g) {
     this.drawBody(g);
     g.line(0, -1.4 * G, 0, -0.55 * G, g.accent, g.lw * 0.8);
@@ -158,6 +162,7 @@ export class GasSensor extends ResSensor {
   ];
   static description = 'Metal-oxide gas sensor element (MQ-series, heater omitted): Rs = R0·(ppm/1000)^(−slope).';
   resistance() { return this.p.r0 * Math.pow(this.p.ppm / 1000, -this.p.slope); }
+  localBox() { return [-2 * G, -1.45 * G, 2 * G, 0.75 * G]; }
   draw(g) {
     this.drawBody(g);
     const k = Math.min(1, Math.log10(this.p.ppm) / 5);
@@ -181,6 +186,7 @@ export class HumiditySensor extends Capacitor {
   constructor(x, y) { super(x, y); this.onParamChange(); }
   valueLabel() { return `${this.p.rh.toFixed(0)}%RH`; }
   readings(s) { return [['Humidity', this.p.rh, '%RH'], ['Capacitance', this.p.c, 'F'], ['Voltage', this.voltageDiff(s), 'V']]; }
+  localBox() { return [-2 * G, -1.55 * G, 2 * G, 0.75 * G]; }
   draw(g) {
     super.draw(g);
     for (let i = 0; i < 3; i++) {
@@ -224,9 +230,10 @@ export class Photodiode extends TwoTerm {
     this.setCurrent(d.i - this.iph());
   }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], this.gd + 1e-12); }
-  valueLabel() { return fmtShort(this.p.lux, 'lx'); }
+  valueLabel() { return fmtQty(this.p.lux, 'lx'); }
   readings(s) { return [['Light', this.p.lux, 'lx'], ['Photocurrent', this.iph(), 'A'], ['Voltage', this.voltageDiff(s), 'V'], ['Current (A→K)', this.i, 'A']]; }
   leads() { return [[0, -2 * G, 0, -G * 0.5, 0], [1, 2 * G, 0, G * 0.5, 0]]; }
+  localBox() { return [-2 * G, -1.55 * G, 2 * G, 0.75 * G]; }
   draw(g) {
     const h = G * 0.5;
     g.poly([[-G * 0.5, -h], [G * 0.45, 0], [-G * 0.5, h]], { stroke: g.vc(g.pv(0)), width: g.lw, fill: g.fill, close: true });
@@ -280,13 +287,14 @@ export class SolarCell extends Photodiode {
     return [['Irradiance', this.p.irr, 'W/m²'], ['Voltage', v, 'V'], ['Current out', -this.i, 'A'], ['Power out', -v * this.i, 'W']];
   }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
+  localBox() { return [-2 * G, -0.9 * G, 2 * G, 0.9 * G]; }
   draw(g) {
     const k = this.p.irr / 1000;
     g.box(-G, -0.75 * G, G, 0.75 * G, { stroke: g.body, width: g.lw * 0.9, fill: `rgba(40,80,170,${0.35 + 0.4 * k})`, r: 3 });
     for (let i = 1; i < 4; i++) g.line(-G + i * 0.5 * G, -0.75 * G, -G + i * 0.5 * G, 0.75 * G, 'rgba(255,255,255,0.25)', 1);
     g.line(-G, 0, G, 0, 'rgba(255,255,255,0.25)', 1);
     g.text('+', -1.3 * G, -0.6 * G, { size: 11, color: g.pos, bold: true });
-    if (k > 0.05) g.glow(0, -G, G * 1.2, '255,220,100', 0.3 * k);
+    if (g.running && k > 0.05) g.glow(0, -G, G * 1.2, '255,220,100', 0.3 * k);
   }
 }
 register(SolarCell);
@@ -306,7 +314,7 @@ export class PhotoTransistor extends NPN {
   localPosts() { return [[G, -2 * G], [G, 2 * G]]; }
   leads() { return [[0, G, -2 * G, G, -G * 0.95], [1, G, 2 * G, G, G * 0.95]]; }
   internalNodeCount() { return 1; }
-  valueLabel() { return fmtShort(this.p.lux, 'lx'); }
+  valueLabel() { return fmtQty(this.p.lux, 'lx'); }
   with(fn) {
     const n = this.nodes;
     this.nodes = [this.inodes[0], n[0], n[1]];
@@ -357,8 +365,8 @@ class ThreePinSensor extends Element {
   localBox() { return [-2 * G, -2 * G, 2 * G, 2 * G]; }
   leads() { return [[0, -G, -2 * G, -G, -G], [1, 2 * G, 0, 0.8 * G, 0], [2, -G, 2 * G, -G, G]]; }
   branchCount() { return 1; }
-  labelPos() { return [0, -2.4 * G]; }
-  valueLabel() { const k = this.knobProp(); return fmtShort(this.p[k.key], k.unit); }
+  labelSide() { return [-1, 0]; }
+  valueLabel() { const k = this.knobProp(); return fmtQty(this.p[k.key], k.unit); }
   drawBox(g, title) {
     g.box(-1.8 * G, -G, 0.8 * G, G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 5 });
     g.text(title, -0.5 * G, -0.35 * G, { size: 9, color: g.accent, bold: true });
@@ -540,6 +548,7 @@ export class Microphone extends TwoTerm {
   valueLabel() { return `${this.p.spl.toFixed(0)} dB`; }
   readings(s) { return [['Sound level', this.p.spl, 'dB SPL'], ['Open-circuit peak', this.amp(), 'V'], ['Voltage', this.voltageDiff(s), 'V']]; }
   leads() { return [[0, -2 * G, 0, -0.8 * G, 0], [1, 2 * G, 0, 0.8 * G, 0]]; }
+  localBox() { return [-2 * G, -1.7 * G, 2 * G, 0.95 * G]; }
   draw(g) {
     g.circle(0, 0, 0.8 * G, { stroke: g.body, width: g.lw, fill: g.fill });
     g.line(-0.8 * G, -0.9 * G, -0.8 * G, 0.9 * G, g.body, g.lw * 1.3);

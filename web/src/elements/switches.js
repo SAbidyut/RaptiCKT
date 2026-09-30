@@ -2,7 +2,7 @@
 // DC motor, buzzer.
 
 import { Element, TwoTerm, register, GRID } from './base.js';
-import { fmtShort } from '../engine/units.js';
+import { fmtShort, fmtQty } from '../engine/units.js';
 
 const G = GRID;
 
@@ -44,6 +44,7 @@ export class Switch extends TwoTerm {
   readings(s) { return [['State', this.isClosed() ? 'Closed' : 'Open', ''], ['Voltage', this.voltageDiff(s), 'V'], ['Current', this.i, 'A']]; }
   spice(n) { return `R${this.name} ${n[0]} ${n[1]} ${this.isClosed() ? Math.max(this.p.ron, 1e-6) : 1e12} ; switch`; }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
+  localBox() { return [-2 * G, -1.1 * G, 2 * G, 0.6 * G]; }
   draw(g) {
     const c = this.isClosed();
     g.circle(-G, 0, 3, { fill: g.vc(g.pv(0)) });
@@ -146,7 +147,7 @@ export class Relay extends Element {
   connectivity() { return [[0, 1], [2, 3, 4]]; }
   branchCount() { return 3; }
   valueLabel() { return fmtShort(this.p.vcoil, 'V'); }
-  labelPos() { return [-1.2 * G, -2.4 * G]; }
+  labelSide() { return [-1, 0]; }
   reset() { this.on = false; this.iPrev = 0; this.vlPrev = 0; }
   req(s) { return this.p.rcoil + (s.mode === 'dc' ? 0 : (s.method === 'be' ? 1 : 2) * this.p.lcoil / s.dt); }
   stamp(s) {
@@ -218,7 +219,7 @@ export class DCMotor extends TwoTerm {
   static description = 'Permanent-magnet DC motor: V = R·i + L·di/dt + K·ω and J·dω/dt = K·i − b·ω − T_load, solved simultaneously.';
   constructor(x, y) { super(x, y); this.angle = 0; this.w = 0; }
   branchCount() { return 2; } // armature current, angular speed
-  valueLabel() { return `${Math.round((this.w || 0) * 60 / (2 * Math.PI))} rpm`; }
+  valueLabel() { return fmtQty(Math.round((this.w || 0) * 60 / (2 * Math.PI)), 'rpm'); }
   reset() { this.iPrev = 0; this.w = 0; this.angle = 0; this.setCurrent(0); }
   stamp(s) {
     const [a, b] = this.nodes, [ki, kw] = this.branches, p = this.p;
@@ -259,6 +260,7 @@ export class DCMotor extends TwoTerm {
       ['Back-EMF', this.p.k * this.w, 'V'], ['Mech. power', this.p.k * this.i * this.w, 'W']];
   }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
+  localBox() { return [-2 * G, -1.1 * G, 2 * G, 1.65 * G]; }
   draw(g) {
     g.circle(0, 0, G, { stroke: g.body, width: g.lw, fill: g.fill });
     const a = this.angle || 0;
@@ -270,7 +272,8 @@ export class DCMotor extends TwoTerm {
       ctx.strokeStyle = g.accent; ctx.lineWidth = g.lw * 1.1; ctx.lineCap = 'round'; ctx.stroke();
     }
     g.circle(0, 0, 3, { fill: g.accent });
-    g.text('M', 0, -G * 1.35, { size: 9, color: g.muted, bold: true });
+    // symbol letter sits opposite the value label
+    g.text('M', 0, G * 1.4, { size: 9, color: g.muted, bold: true });
   }
 }
 register(DCMotor);

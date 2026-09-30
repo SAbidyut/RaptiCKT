@@ -1,6 +1,6 @@
 // Base class shared by all circuit elements: geometry, properties, serialisation.
 
-import { fmtShort } from '../engine/units.js';
+import { fmtQty } from '../engine/units.js';
 
 export const GRID = 20;
 
@@ -83,7 +83,7 @@ export class Element {
 
   /** Leads: [postIndex, x1, y1, x2, y2] local segments from post into body. */
   leads() {
-    return [[0, -2 * GRID, 0, -GRID * 0.8, 0], [1, 2 * GRID, 0, GRID * 0.8, 0]];
+    return [[0, -2 * GRID, 0, -GRID, 0], [1, 2 * GRID, 0, GRID, 0]];
   }
 
   // -------------------------------------------------------- properties
@@ -93,7 +93,7 @@ export class Element {
   valueLabel() {
     const k = this.knobProp() || this.constructor.props[0];
     if (!k || k.type === 'select' || k.type === 'bool') return '';
-    return fmtShort(this.p[k.key], k.unit || '');
+    return fmtQty(this.p[k.key], k.unit || '');
   }
   onParamChange() {}
 
@@ -143,8 +143,31 @@ export class Element {
   draw(g) {
     g.box(-GRID * 0.8, -GRID * 0.5, GRID * 0.8, GRID * 0.5);
   }
-  /** position of the value label in local coordinates */
-  labelPos() { return [0, -GRID * 0.95]; }
+  /** side (local unit vector) on which the value label is placed, outside the part */
+  labelSide() { return [0, -1]; }
+
+  /** World anchor for the value label: [x, y, align, baseline]. */
+  labelAnchor() {
+    const [sx, sy] = this.labelSide();
+    const [ox, oy] = this.toWorld(0, 0), [px, py] = this.toWorld(sx, sy);
+    const dx = Math.round(px - ox), dy = Math.round(py - oy);
+    const [x1, y1, x2, y2] = this.worldBox();
+    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, m = 7;
+    if (dx > 0) return [x2 + m, cy, 'left', 'middle'];
+    if (dx < 0) return [x1 - m, cy, 'right', 'middle'];
+    if (dy > 0) return [cx, y2 + m, 'center', 'top'];
+    return [cx, y1 - m, 'center', 'alphabetic'];
+  }
+
+  /** Approximate world rectangle covered by the label text (for Fit). */
+  labelRect(txt) {
+    if (!txt) return null;
+    const [x, y, al, bl] = this.labelAnchor();
+    const w = txt.length * 6.4, h = 12;
+    const lx = al === 'left' ? x : al === 'right' ? x - w : x - w / 2;
+    const ty = bl === 'top' ? y : bl === 'middle' ? y - h / 2 : y - h;
+    return [lx, ty, lx + w, ty + h];
+  }
 }
 
 /** Two-terminal element helper with current stored in this.i (post0 -> post1). */

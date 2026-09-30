@@ -24,13 +24,20 @@ class Meter extends TwoTerm {
     }
   }
   valueLabel() { return ''; }
-  leads() { return [[0, -2 * G, 0, -1.1 * G, 0], [1, 2 * G, 0, 1.1 * G, 0]]; }
+  // The display is always drawn upright, so its extent along the leads depends on rotation.
+  half() { return (this.rot & 1) ? [0.8 * G, 1.4 * G] : [1.4 * G, 0.8 * G]; }
+  localBox() { const [a, b] = this.half(); return [-2 * G, -b, 2 * G, b]; }
+  leads() { const a = this.half()[0]; return [[0, -2 * G, 0, -a, 0], [1, 2 * G, 0, a, 0]]; }
   drawMeter(g, sym, value, unit) {
-    g.box(-1.1 * G, -0.75 * G, 1.1 * G, 0.75 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.bg, r: 6 });
-    g.text(sym, -0.78 * G, -0.42 * G, { size: 8, color: g.accent, bold: true });
-    g.text(this.p.mode === 'rms' ? 'RMS' : this.p.mode === 'avg' ? 'AVG' : '', 0.7 * G, -0.42 * G, { size: 6, color: g.muted });
-    g.text(g.running ? fmtSI(value, unit, 4) : '— ' + unit, 0, 0.18 * G, { size: 10, color: g.text1, bold: true, mono: true });
-    g.text('+', -1.45 * G, -0.55 * G, { size: 9, color: g.pos, bold: true });
+    g.upright(() => {
+      g.box(-1.4 * G, -0.8 * G, 1.4 * G, 0.8 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.bg, r: 6 });
+      g.text(sym, -1.12 * G, -0.46 * G, { size: 8, color: g.accent, bold: true });
+      const m = this.p.mode === 'rms' ? 'RMS' : this.p.mode === 'avg' ? 'AVG' : '';
+      if (m) g.text(m, 1.15 * G, -0.46 * G, { size: 6, color: g.muted, align: 'right', follow: false });
+      g.text(g.running ? fmtSI(value, unit, 4) : '— ' + unit, 0, 0.18 * G, { size: 9, color: g.text1, bold: true, mono: true });
+    });
+    const a = this.half()[0];
+    g.text('+', -a - 0.35 * G, -0.45 * G, { size: 9, color: g.pos, bold: true });
   }
 }
 
@@ -97,8 +104,9 @@ export class Wattmeter extends Element {
   static description = 'Series current path (left → right) and voltage sense from the current path to the bottom terminal. Shows average power P = ⟨v·i⟩.';
   constructor(x, y) { super(x, y); this.postCurrents = [0, 0, 0]; }
   localPosts() { return [[-2 * G, 0], [2 * G, 0], [0, 2 * G]]; }
-  localBox() { return [-2 * G, -G, 2 * G, 2 * G]; }
-  leads() { return [[0, -2 * G, 0, -1.1 * G, 0], [1, 2 * G, 0, 1.1 * G, 0], [2, 0, 2 * G, 0, 0.75 * G]]; }
+  half() { return (this.rot & 1) ? [0.8 * G, 1.4 * G] : [1.4 * G, 0.8 * G]; }
+  localBox() { const b = this.half()[1]; return [-2 * G, -b, 2 * G, 2 * G]; }
+  leads() { const [a, b] = this.half(); return [[0, -2 * G, 0, -a, 0], [1, 2 * G, 0, a, 0], [2, 0, 2 * G, 0, b]]; }
   branchCount() { return 1; }
   valueLabel() { return ''; }
   reset() { this.pavg = 0; this.pinst = 0; }
@@ -113,9 +121,11 @@ export class Wattmeter extends Element {
   }
   readings() { return [['Average power', this.pavg, 'W'], ['Instantaneous', this.pinst, 'W'], ['Current', this.i, 'A']]; }
   draw(g) {
-    g.box(-1.1 * G, -0.75 * G, 1.1 * G, 0.75 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.bg, r: 6 });
-    g.text('W', -0.78 * G, -0.42 * G, { size: 8, color: g.accent, bold: true });
-    g.text(g.running ? fmtSI(this.pavg, 'W', 4) : '— W', 0, 0.18 * G, { size: 10, color: g.text1, bold: true, mono: true });
+    g.upright(() => {
+      g.box(-1.4 * G, -0.8 * G, 1.4 * G, 0.8 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.bg, r: 6 });
+      g.text('W', -1.12 * G, -0.46 * G, { size: 8, color: g.accent, bold: true });
+      g.text(g.running ? fmtSI(this.pavg, 'W', 4) : '— W', 0, 0.18 * G, { size: 9, color: g.text1, bold: true, mono: true });
+    });
   }
 }
 register(Wattmeter);
@@ -128,10 +138,12 @@ export class Label extends Element {
     { key: 'size', label: 'Size', unit: 'px', def: 14, min: 6, max: 72 },
   ];
   static description = 'Free text annotation for documenting your circuit.';
+  static noName = true;
   localPosts() { return []; }
   localBox() {
-    const w = Math.max(20, String(this.p.text).length * this.p.size * 0.3);
-    return [-w, -this.p.size * 0.7, w, this.p.size * 0.7];
+    // the text is always drawn upright, so the box must not rotate with the part
+    const w = Math.max(12, String(this.p.text).length * this.p.size * 0.3), h = this.p.size * 0.7;
+    return (this.rot & 1) ? [-h, -w, h, w] : [-w, -h, w, h];
   }
   leads() { return []; }
   valueLabel() { return ''; }

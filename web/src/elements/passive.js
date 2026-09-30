@@ -9,6 +9,7 @@ export class Ground extends Element {
   static type = 'ground'; static title = 'Ground'; static category = 'Sources';
   static prefix = 'GND'; static keywords = 'earth reference 0v common';
   static description = 'Reference node (0 V). All voltages are measured relative to ground.';
+  static noName = true;
   localPosts() { return [[0, 0]]; }
   localBox() { return [-G * 0.6, -4, G * 0.6, G * 1.1]; }
   leads() { return [[0, 0, 0, 0, G * 0.5]]; }
@@ -103,7 +104,7 @@ export class Potentiometer extends Element {
     const [r1, r2] = this.rs();
     return `${this.name}a ${n[0]} ${n[2]} ${r1}\n${this.name}b ${n[2]} ${n[1]} ${r2}`;
   }
-  labelPos() { return [0, G * 1.05]; }
+  labelSide() { return [0, 1]; }
   draw(g) {
     const grad = g.grad(-G, 0, G, 0, g.pv(0), g.pv(1));
     const pts = [[-G, 0]];
@@ -276,7 +277,7 @@ export class Transformer extends Element {
   connectivity() { return [[0, 1], [2, 3]]; }
   branchCount() { return 2; }
   valueLabel() { return `1:${+this.p.n.toPrecision(3)}`; }
-  labelPos() { return [0, -2.6 * G]; }
+  labelSide() { return [0, -1]; }
   mat() {
     const L1 = this.p.l1, L2 = L1 * this.p.n * this.p.n;
     const M = Math.min(this.p.k, 0.99999) * Math.sqrt(L1 * L2);
@@ -407,6 +408,7 @@ export class Lamp extends TwoTerm {
   accept(s) { this.setCurrent(this.voltageDiff(s) / this.R); }
   spice(n) { return `${this.name} ${n[0]} ${n[1]} ${this.R} ; lamp`; }
   leads() { return [[0, -2 * G, 0, -G * 0.8, 0], [1, 2 * G, 0, G * 0.8, 0]]; }
+  localBox() { return [-2 * G, -0.9 * G, 2 * G, 0.9 * G]; }
   draw(g) {
     const v = g.pv(0) - g.pv(1);
     const b = g.running ? Math.min(1.2, (v * v) / this.R / this.p.w) : 0;

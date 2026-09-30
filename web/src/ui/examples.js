@@ -247,12 +247,12 @@ export const EXAMPLES = [
     build(b) {
       b.el('rail', 10, -10, { amp: 12 });
       const m = b.v('motor', 10, -4);
-      b.vr('diode', 14, -4, { model: '1N5819', is: 3e-6, n: 1.1, bv: 40 });
+      b.vr('diode', 22, -4, { model: '1N5819', is: 3e-6, n: 1.1, bv: 40 });
       b.el('nmos', 9, 2, { model: 'IRLZ44N', vt: 1.6, kp: 25, lambda: 0.005, cgs: 1.6e-9, cgd: 2e-10, bodyDiode: true });
       b.v('pulse', 0, 4, { amp: 5, freq: 1000, duty: 60 });
       b.h('resistor', 4, 2, { r: 100 });
       b.el('ground', 10, 6);
-      b.w([10, -10], [10, -6]); b.w([10, -6], [14, -6]); b.w([14, -2], [10, -2]); b.w([10, -2], [10, 0]);
+      b.w([10, -10], [10, -6]); b.w([10, -6], [22, -6]); b.w([22, -2], [10, -2]); b.w([10, -2], [10, 0]);
       b.w([10, 4], [10, 6]); b.w([0, 2], [2, 2]); b.w([6, 2], [7, 2]); b.w([0, 6], [0, 8], [10, 8], [10, 6]);
       b.cur(m, C[0]);
       b.doc.simSettings.speed = 0.02;
@@ -342,19 +342,19 @@ export const EXAMPLES = [
     id: 'timer555', cat: 'Timers & ICs', title: '555 astable LED flasher',
     desc: 'Classic NE555 astable: the capacitor charges through R1 + R2 and discharges through R2. f = 1.44/((R1 + 2R2)·C) ≈ 6.9 Hz, duty ≈ 52 %.',
     build(b) {
-      b.el('rail', 4, -8, { amp: 9 });
+      b.el('rail', 3, -8, { amp: 9 });
       b.el('timer555', 10, 0);
-      b.v('resistor', 4, -4, { r: 1000 });
-      b.v('resistor', 4, 0, { r: 10000 });
-      const c = b.v('capacitor', 4, 6, { c: 10e-6 });
+      b.v('resistor', 3, -4, { r: 1000 });
+      b.v('resistor', 3, 0, { r: 10000 });
+      const c = b.v('capacitor', 3, 6, { c: 10e-6 });
       b.el('capacitor', 13, 5, { c: 10e-9 }, 1);
       b.h('resistor', 17, -2, { r: 470 });
       b.v('led', 19, 2, { color: 'green' });
-      b.el('ground', 4, 10);
-      b.w([4, -8], [4, -6]); b.w([4, -6], [11, -6]); b.w([9, -4], [9, -6]); b.w([11, -4], [11, -6]);
-      b.w([4, -2], [7, -2]); b.w([4, 2], [7, 2]); b.w([7, 0], [6, 0], [6, 2]); b.w([4, 2], [4, 4]);
-      b.w([4, 8], [19, 8]); b.w([10, 4], [10, 8]); b.w([13, 2], [13, 3]); b.w([13, 7], [13, 8]);
-      b.w([13, -2], [15, -2]); b.w([19, -2], [19, 0]); b.w([19, 4], [19, 8]); b.w([4, 8], [4, 10]);
+      b.el('ground', 3, 10);
+      b.w([3, -8], [3, -6]); b.w([3, -6], [11, -6]); b.w([9, -4], [9, -6]); b.w([11, -4], [11, -6]);
+      b.w([3, -2], [7, -2]); b.w([3, 2], [7, 2]); b.w([7, 0], [6, 0], [6, 2]); b.w([3, 2], [3, 4]);
+      b.w([3, 8], [19, 8]); b.w([10, 4], [10, 8]); b.w([13, 2], [13, 3]); b.w([13, 7], [13, 8]);
+      b.w([13, -2], [15, -2]); b.w([19, -2], [19, 0]); b.w([19, 4], [19, 8]); b.w([3, 8], [3, 10]);
       b.volt(c, C[0]); b.node(13, -2, C[1]);
       b.doc.simSettings.speed = 0.5;
     },

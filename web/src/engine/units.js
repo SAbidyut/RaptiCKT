@@ -52,4 +52,19 @@ export function fmtShort(v, unit = '', digits = 3) {
   return fmtSI(v, unit, digits).replace(' ', '');
 }
 
+// Units that never take an SI prefix (a "klx" or "kµε" reads wrong).
+const PLAIN_UNITS = new Set(['lx', 'µε', 'ppm', '°C', 'W/m²', '%RH', 'dB', 'dB SPL', 'G', '°', '%', 'N', 'rpm']);
+
+/** Format a physical quantity for labels: SI prefixes where they make sense, plain numbers otherwise. */
+export const isPlainUnit = (u) => PLAIN_UNITS.has(u);
+
+export function fmtQty(v, unit = '') {
+  if (!PLAIN_UNITS.has(unit)) return fmtShort(v, unit);
+  if (!Number.isFinite(v)) return '—';
+  const a = Math.abs(v);
+  let num = a >= 1000 || a === 0 ? String(Math.round(v)) : trimNum(v, 3);
+  if (a >= 1000) num = num.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return unit === '%' || unit === '°' || unit === '°C' || unit === '%RH' ? num + unit : num + ' ' + unit;
+}
+
 export function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
