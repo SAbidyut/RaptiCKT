@@ -12,8 +12,9 @@ function copyStatic() {
   for (const f of ['index.html', 'src/styles.css', 'public/icon.svg']) {
     if (fs.existsSync(f)) fs.copyFileSync(f, path.join(out, path.basename(f)));
   }
-  if (fs.existsSync(path.dirname(android))) {
+  if (fs.existsSync(path.resolve('../android/app'))) {
     fs.rmSync(android, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(android), { recursive: true });
     fs.cpSync(out, android, { recursive: true });
   }
 }
