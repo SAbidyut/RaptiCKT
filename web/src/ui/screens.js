@@ -45,16 +45,68 @@ export class HomeScreen {
     this.root.querySelector('[data-h=settings]').addEventListener('click', () => this.app.openSettings());
     this.root.querySelectorAll('.bottom-nav button').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.tab; this.render(); }));
     const body = this.root.querySelector('.home-body');
+    const scroller = this.root.querySelector('.home-scroll');
+    const head = this.root.querySelector('.home-head');
+    this.scroller = scroller;
+    this.lastScroll = 0;
+    let scrolled = false;
+    scroller.addEventListener('scroll', () => {
+      this.lastScroll = performance.now();
+      const s2 = scroller.scrollTop > 4;
+      if (s2 !== scrolled) { scrolled = s2; head.classList.toggle('scrolled', s2); }
+    }, { passive: true });
+    // once the reveal of a card has finished, drop its classes so press feedback works as usual
+    body.addEventListener('transitionend', (ev) => {
+      const t = ev.target;
+      if (ev.propertyName === 'transform' && t.classList.contains('rv') && t.classList.contains('in')) { t.classList.remove('rv', 'in'); t.style.removeProperty('--d'); }
+    });
     body.classList.add(this.shown ? 'swap' : 'intro');
     this.shown = true;
     if (this.tab === 'home') this.renderHome(body, n);
     if (this.tab === 'examples') this.renderExamples(body);
     if (this.tab === 'library') this.renderLibrary(body);
     if (this.tab === 'about') renderAbout(this.app, body);
-    const scroller = this.root.querySelector('.home-scroll');
-    const head = this.root.querySelector('.home-head');
     scroller.scrollTop = 0;
-    scroller.addEventListener('scroll', () => head.classList.toggle('scrolled', scroller.scrollTop > 4), { passive: true });
+    this.reveal(body);
+  }
+
+  /**
+   * Scroll-in animation: cards below the fold rise and fade in as they scroll
+   * into view (transform + opacity only, so it stays on the compositor).
+   */
+  reveal(body) {
+    this.io?.disconnect();
+    const scroller = this.scroller;
+    if (!scroller || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const intro = body.classList.contains('intro');
+    const items = [...body.querySelectorAll('.ex-item, .lib-item')];
+    if (this.tab === 'home' || this.tab === 'about') items.push(...body.children);
+    const top = scroller.getBoundingClientRect().top, bottom = top + scroller.clientHeight;
+    const later = [];
+    let k = 0;
+    for (const el of items) {
+      const r = el.getBoundingClientRect();
+      if (r.top < bottom && r.bottom > top) {
+        if (intro && el.parentElement === body) continue; // already rising in with the page
+        el.classList.add('rv');
+        el.style.setProperty('--d', `${Math.min(k++ * 0.05, 0.3)}s`);
+        requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('in')));
+      } else {
+        el.classList.add('rv');
+        el.style.animation = 'none';
+        later.push(el);
+      }
+    }
+    this.io = new IntersectionObserver((entries) => {
+      let j = 0;
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        e.target.style.setProperty('--d', `${Math.min(j++ * 0.06, 0.24)}s`);
+        e.target.classList.add('in');
+        this.io.unobserve(e.target);
+      }
+    }, { root: scroller, rootMargin: '0px 0px -4% 0px', threshold: 0.06 });
+    later.forEach((el) => this.io.observe(el));
   }
 
   renderHome(body, n) {
@@ -187,23 +239,71 @@ export class HomeScreen {
     body.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => this.app.openSaved(b.dataset.open)));
   }
 
+  /**
+   * Example thumbnails are drawn lazily: only when a card comes near the screen,
+   * one per idle slot, and never while the list is moving, so scrolling stays smooth.
+   * Drawn thumbnails are cached for the session.
+   */
   drawThumbs(body) {
     const cvs = [...body.querySelectorAll('canvas[data-thumb-ex]')];
-    let i = 0;
-    const next = () => {
-      if (i >= cvs.length) return;
-      const cv = cvs[i++];
+    const place = (cv) => {
       const ex = EXAMPLES.find((e) => e.id === cv.dataset.thumbEx);
-      if (ex) {
-        const url = this.app.exampleThumb(ex);
-        const img = new Image();
-        img.className = 'thumb';
-        img.src = url;
-        cv.replaceWith(img);
-      }
-      requestAnimationFrame(next);
+      if (!ex || !cv.isConnected) return;
+      const img = new Image();
+      img.className = 'thumb';
+      img.decoding = 'async';
+      img.alt = '';
+      img.src = this.app.exampleThumb(ex);
+      cv.replaceWith(img);
     };
-    requestAnimationFrame(next);
+    this.thumbIO?.disconnect();
+    const queue = this.thumbQueue = []; // a new page replaces the old queue (its canvases are gone)
+    this.placeThumb = place;
+    const io = this.thumbIO = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { io.unobserve(e.target); queue.push(e.target); }
+      this.pumpThumbs();
+    }, { rootMargin: '300px' }) : null;
+    for (const cv of cvs) {
+      if (this.app.hasExampleThumb(cv.dataset.thumbEx)) place(cv); // cached: instant
+      else if (io) io.observe(cv); else queue.push(cv);
+    }
+    if (!io) this.pumpThumbs();
+    this.warmThumbs();
+  }
+
+  /** Run fn when the page is idle and has not scrolled for a moment. */
+  whenCalm(fn) {
+    const go = () => {
+      if (performance.now() - (this.lastScroll || 0) < 160) { setTimeout(() => this.whenCalm(fn), 120); return; }
+      fn();
+    };
+    if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 400 }); else setTimeout(go, 30);
+  }
+
+  pumpThumbs() {
+    if (this.pumping) return;
+    this.pumping = true;
+    const step = () => {
+      const cv = this.thumbQueue.shift();
+      if (!cv) { this.pumping = false; return; }
+      this.placeThumb(cv);
+      this.whenCalm(step);
+    };
+    this.whenCalm(step);
+  }
+
+  /** Pre-draw the remaining example thumbnails in the background, one at a time. */
+  warmThumbs() {
+    if (this.warming) return;
+    this.warming = true;
+    const todo = EXAMPLES.filter((e) => !this.app.hasExampleThumb(e.id));
+    const step = () => {
+      const ex = todo.shift();
+      if (!ex) { this.warming = false; return; }
+      this.app.exampleThumb(ex);
+      this.whenCalm(step);
+    };
+    setTimeout(() => this.whenCalm(step), 900);
   }
 }
 

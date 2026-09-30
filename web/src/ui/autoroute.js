@@ -177,3 +177,217 @@ export function autoRoute(doc, a, b, opts = {}) {
   out.push(pts[pts.length - 1]);
   return out;
 }
+
+// ------------------------------------------------------------------------
+// Predictable wiring. Wires should look like a person drew them: straight
+// runs and one or two bends, following the finger while drawing and keeping
+// their shape when a part is moved. The search-based router above is only a
+// last resort for a route that would otherwise cut through a part or make a
+// false connection, and then only if it is not a long detour.
+
+const snapG = (v) => Math.round(v / GRID) * GRID;
+/** Drop repeated and collinear points (a shape with a zero-length leg is the same route). */
+function simplifyPts(pts) {
+  const out = [];
+  for (const p of pts) { const q = out[out.length - 1]; if (!q || q[0] !== p[0] || q[1] !== p[1]) out.push([p[0], p[1]]); }
+  for (let i = out.length - 2; i >= 1; i--) {
+    const [a, b, c] = [out[i - 1], out[i], out[i + 1]];
+    if ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) === 0) out.splice(i, 1);
+  }
+  return out;
+}
+const horiz = (d) => d === 0 || d === 2;
+
+/** The route a draughtsman would use: leave and enter each terminal along its lead. */
+export function naturalRoute(a, b, ea = -1, eb = -1, hFirst = true) {
+  if (a[0] === b[0] || a[1] === b[1]) return [a, b];
+  if (ea >= 0 && eb >= 0) {
+    if (horiz(ea) && horiz(eb)) { const mx = snapG((a[0] + b[0]) / 2); return [a, [mx, a[1]], [mx, b[1]], b]; }
+    if (!horiz(ea) && !horiz(eb)) { const my = snapG((a[1] + b[1]) / 2); return [a, [a[0], my], [b[0], my], b]; }
+    return horiz(ea) ? [a, [b[0], a[1]], b] : [a, [a[0], b[1]], b];
+  }
+  if (ea >= 0) return horiz(ea) ? [a, [b[0], a[1]], b] : [a, [a[0], b[1]], b];
+  if (eb >= 0) return horiz(eb) ? [a, [a[0], b[1]], b] : [a, [b[0], a[1]], b];
+  return hFirst ? [a, [b[0], a[1]], b] : [a, [a[0], b[1]], b];
+}
+
+/**
+ * Stretch an existing wire so its ends sit on na / nb while keeping its shape:
+ * only the segment next to a moved end slides along with it. Returns null for a
+ * straight two-point wire (it has no shape to keep).
+ */
+export function stretchWire(pts, na, nb) {
+  const n = pts.length;
+  if (n < 3) return null;
+  const p = pts.map((q) => [q[0], q[1]]);
+  const a0 = p[0], b0 = p[n - 1];
+  if (na[0] !== a0[0] || na[1] !== a0[1]) {
+    const h = p[0][1] === p[1][1];
+    p[0] = [na[0], na[1]];
+    if (h) p[1][1] = na[1]; else p[1][0] = na[0];
+  }
+  if (nb[0] !== b0[0] || nb[1] !== b0[1]) {
+    const h = p[n - 1][1] === p[n - 2][1];
+    p[n - 1] = [nb[0], nb[1]];
+    if (h) p[n - 2][1] = nb[1]; else p[n - 2][0] = nb[0];
+  }
+  return p;
+}
+
+/** Obstacle picture of the document, shared by the cost checks of one routing decision. */
+export function wireContext(doc, skipWires = new Set()) {
+  const G = GRID;
+  const bodies = doc.elements.map((e) => e.worldBox());
+  const posts = new Set();
+  for (const e of doc.elements) for (const p of e.getPosts()) posts.add(key(p[0], p[1]));
+  const ends = new Set(), nodes = new Set(), edges = new Set(), segs = [];
+  for (const w of doc.wires) {
+    if (skipWires.has(w)) continue;
+    for (const p of w.pts) ends.add(key(p[0], p[1]));
+    for (let k = 1; k < w.pts.length; k++) {
+      const [p, q] = [w.pts[k - 1], w.pts[k]];
+      segs.push([p, q]);
+      if (p[0] !== q[0] && p[1] !== q[1]) continue;
+      const sx = Math.sign(q[0] - p[0]), sy = Math.sign(q[1] - p[1]);
+      const m = Math.round(Math.max(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1])) / G);
+      for (let s = 0; s <= m; s++) {
+        const x = p[0] + sx * s * G, y = p[1] + sy * s * G;
+        nodes.add(key(x, y));
+        if (s < m) edges.add(key(Math.min(x, x + sx * G), Math.min(y, y + sy * G)) + (sx ? 'h' : 'v'));
+      }
+    }
+  }
+  return { bodies, posts, ends, nodes, edges, segs };
+}
+
+/**
+ * How bad a wire route is: 0 = clean. Cutting through a part costs per half
+ * grid step; touching a terminal or another wire's end, bending on another
+ * wire or running along one (all of which would create a connection the user
+ * did not draw) costs a lot. Crossing another wire is fine.
+ */
+export function routeCost(ctx, pts) {
+  const G = GRID, HG = G / 2;
+  let cost = 0;
+  const last = pts.length - 1;
+  const inBody = (x, y) => ctx.bodies.some(([x1, y1, x2, y2]) => x > x1 + 0.5 && x < x2 - 0.5 && y > y1 + 0.5 && y < y2 - 0.5);
+  for (let k = 1; k <= last; k++) {
+    const [p, q] = [pts[k - 1], pts[k]];
+    const len = Math.max(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1]));
+    const m = Math.max(1, Math.round(len / HG));
+    for (let s = 0; s <= m; s++) {
+      if ((k === 1 && s === 0) || (k === last && s === m)) continue; // the wire's own ends
+      if (s === 0) continue; // counted as the previous segment's last sample
+      const x = p[0] + ((q[0] - p[0]) * s) / m, y = p[1] + ((q[1] - p[1]) * s) / m;
+      if (inBody(x, y)) cost += 10;
+      if (x % G === 0 && y % G === 0) {
+        const kk = key(x, y);
+        if (ctx.posts.has(kk) || ctx.ends.has(kk)) cost += 60;
+      }
+      if (s < m && (p[0] === q[0] || p[1] === q[1])) {
+        const x2 = p[0] + ((q[0] - p[0]) * (s + 1)) / m, y2 = p[1] + ((q[1] - p[1]) * (s + 1)) / m;
+        const gx = Math.floor(Math.min(x, x2) / G) * G, gy = Math.floor(Math.min(y, y2) / G) * G;
+        if (ctx.edges.has(key(gx, gy) + (p[1] === q[1] ? 'h' : 'v'))) cost += 30;
+      }
+    }
+    if (k < last && ctx.nodes.has(key(q[0], q[1]))) cost += 60; // a corner on another wire joins it
+  }
+  return cost;
+}
+
+const wireLen = (pts) => pts.slice(1).reduce((a, q, i) => a + Math.abs(q[0] - pts[i][0]) + Math.abs(q[1] - pts[i][1]), 0);
+
+/** Number of times an orthogonal route crosses other wires. */
+function crossings(ctx, pts) {
+  let n = 0;
+  for (let k = 1; k < pts.length; k++) {
+    const [p, q] = [pts[k - 1], pts[k]];
+    if (p[0] !== q[0] && p[1] !== q[1]) continue;
+    for (const [r, t] of ctx.segs) {
+      if (r[0] !== t[0] && r[1] !== t[1]) continue;
+      const hA = p[1] === q[1], hB = r[1] === t[1];
+      if (hA === hB) continue;
+      const [h1, h2, v1, v2] = hA ? [p, q, r, t] : [r, t, p, q];
+      const x = v1[0], y = h1[1];
+      if (x > Math.min(h1[0], h2[0]) && x < Math.max(h1[0], h2[0]) && y > Math.min(v1[1], v2[1]) && y < Math.max(v1[1], v2[1])) n++;
+    }
+  }
+  return n;
+}
+
+/** Combined score: hard problems dominate, then looks. Lower is better. */
+export function routeScore(doc, ctx, pts) { return routeCost(ctx, pts) * 100 + looksCost(doc, pts, ctx); }
+
+/** Heading index (into DIRS) of the segment p→q, or -1. */
+function heading(p, q) {
+  if (q[0] > p[0]) return 0; if (q[1] > p[1]) return 1; if (q[0] < p[0]) return 2; if (q[1] < p[1]) return 3;
+  return -1;
+}
+
+/**
+ * Soft (looks) cost: bends, extra length over the direct Manhattan distance,
+ * and leaving / entering a terminal sideways (entering sideways beats a long
+ * loop around the part, going back through it is a hard cost anyway).
+ */
+function looksCost(doc, pts, ctx) {
+  const n = pts.length, a = pts[0], b = pts[n - 1];
+  let c = 0.5 * Math.max(0, n - 2);
+  if (ctx) c += 0.8 * crossings(ctx, pts);
+  for (let k = 1; k < n; k++) if (pts[k][0] !== pts[k - 1][0] && pts[k][1] !== pts[k - 1][1]) c += 6; // slanted
+  c += (0.5 * (wireLen(pts) - Math.abs(a[0] - b[0]) - Math.abs(a[1] - b[1]))) / GRID;
+  const ea = exitAt(doc, a), eb = exitAt(doc, b);
+  if (ea >= 0 && heading(a, pts[1]) !== ea) c += 1.5;
+  if (eb >= 0 && heading(b, pts[n - 2]) !== eb) c += 1.5;
+  return c;
+}
+
+/** Simple one- and two-bend shapes between a and b, the preferred one first. */
+export function simpleRoutes(a, b, ea = -1, eb = -1, hFirst = true) {
+  const G = GRID, out = [];
+  const L = (h) => (a[0] === b[0] || a[1] === b[1] ? [a, b] : h ? [a, [b[0], a[1]], b] : [a, [a[0], b[1]], b]);
+  out.push(L(hFirst), naturalRoute(a, b, ea, eb, hFirst), L(!hFirst));
+  if (a[0] !== b[0] && a[1] !== b[1]) {
+    const mx = snapG((a[0] + b[0]) / 2), my = snapG((a[1] + b[1]) / 2);
+    const sx = Math.sign(b[0] - a[0]), sy = Math.sign(b[1] - a[1]);
+    // the middle leg of a Z: halfway first, then every other column / row in between
+    // (several wires moving side by side each need their own)
+    const cols = [mx], rows = [my];
+    for (let x = a[0] + sx * G; x !== b[0] && cols.length < 40; x += sx * G) cols.push(x);
+    for (let y = a[1] + sy * G; y !== b[1] && rows.length < 40; y += sy * G) rows.push(y);
+    for (const x of new Set(cols)) out.push([a, [x, a[1]], [x, b[1]], b]);
+    for (const y of new Set(rows)) out.push([a, [a[0], y], [b[0], y], b]);
+    out.push([a, b]); // last resort: a straight slanted wire beats a false connection
+  }
+  return out;
+}
+
+/**
+ * Pick a route among simple candidates (earlier ones win ties). A candidate that
+ * cuts through a part or makes a false connection always loses to a clean one;
+ * among clean ones the shape that follows the terminals' leads with few bends
+ * wins. The search router is only used when every simple shape is bad, and only
+ * if it is not a long detour.
+ */
+export function pickRoute(doc, candidates, opts = {}) {
+  const ctx = wireContext(doc, opts.skipWires);
+  let best = null, bestHard = Infinity, bestScore = Infinity;
+  for (const raw of candidates) {
+    if (!raw || raw.length < 2) continue;
+    const c = simplifyPts(raw);
+    const hard = routeCost(ctx, c);
+    const score = hard * 100 + looksCost(doc, c, ctx);
+    if (score < bestScore - 1e-9) { best = c; bestHard = hard; bestScore = score; }
+  }
+  if (!best) return null;
+  if (bestHard === 0 || opts.noSearch) return best;
+  const a = best[0], b = best[best.length - 1];
+  const manhattan = Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
+  for (const o of [{ exitA: -1, exitB: -1 }, {}]) { // sideways entry allowed first: it avoids loops
+    const smart = autoRoute(doc, a, b, { skipWires: opts.skipWires, ...o });
+    if (!smart || wireLen(smart) > Math.max(manhattan * 1.6, manhattan + 8 * GRID)) continue;
+    const hard = routeCost(ctx, smart);
+    if (hard < bestHard) { best = smart; bestHard = hard; }
+    if (hard === 0) break;
+  }
+  return best;
+}

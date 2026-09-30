@@ -3,7 +3,7 @@
 import { Simulator } from '../engine/sim.js';
 import { fmtSI } from '../engine/units.js';
 import { GRID, Element } from '../elements/index.js';
-import { CircuitDoc, snap, route, simplify, makeElement } from './doc.js';
+import { CircuitDoc, Wire, snap, route, simplify, makeElement } from './doc.js';
 import { Renderer, WireGraph } from './render.js';
 import { THEMES } from './theme.js';
 import { icon } from './icons.js';
@@ -14,7 +14,7 @@ import { Analysis } from './analysis.js';
 import { Multimeter } from './meter.js';
 import { store } from './store.js';
 import { RmsTracker, acFrequency } from './rms.js';
-import { autoRoute } from './autoroute.js';
+import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore } from './autoroute.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const same = (a, b) => a[0] === b[0] && a[1] === b[1];
@@ -606,52 +606,124 @@ export class Editor {
     this.checkpoint();
     for (const e of this.selection) {
       const old = e.getPosts();
+      this.splitAtJunctions();
+      const fixed = new Set(this.doc.elements.filter((x) => x !== e).flatMap((x) => x.getPosts()).map((p) => p[0] + ',' + p[1]));
+      const bridges = old.filter((p) => fixed.has(p[0] + ',' + p[1])).map((p) => new Wire([p, p]));
+      this.doc.wires.push(...bridges);
       fn(e);
-      this.followWires(new Map([[e, old]]));
+      this.tidyWires(this.followWires(new Map([[e, old]])));
+      this.doc.wires = this.doc.wires.filter((w) => !bridges.includes(w) || !same(w.pts[0], w.pts[w.pts.length - 1]));
     }
     this.topologyChanged();
     this.haptic(6);
   }
 
-  /** Move wire endpoints that were attached to old post positions onto the new posts. */
+  /**
+   * Move wire endpoints that were attached to old post positions onto the new posts.
+   * Wires keep the shape they were drawn with: only the segment next to a moved
+   * end slides with it (a straight wire becomes the natural one- or two-bend
+   * route). Returns the wires that changed, so the caller can tidy them.
+   */
   followWires(oldPostsByEl, movedWires = new Set()) {
     const moves = [];
     for (const [e, old] of oldPostsByEl) {
       const now = e.getPosts();
       old.forEach((p, i) => { if (!same(p, now[i])) moves.push([p, now[i]]); });
     }
-    if (!moves.length) return;
+    const changed = [];
+    if (!moves.length) return changed;
     for (const w of this.doc.wires) {
       if (movedWires.has(w)) continue;
       const a = w.pts[0], b = w.pts[w.pts.length - 1];
-      const ma = moves.find(([p]) => same(p, a)), mb = moves.find(([p]) => same(p, b));
+      // a zero-length bridge wire keeps its far end on the part that stays put
+      const ma = moves.find(([p]) => same(p, a)), mb = same(a, b) ? null : moves.find(([p]) => same(p, b));
       if (!ma && !mb) continue;
+      changed.push(w);
       const na = ma ? ma[1] : a, nb = mb ? mb[1] : b;
       if (ma && mb && na[0] - a[0] === nb[0] - b[0] && na[1] - a[1] === nb[1] - b[1]) {
         const dx = na[0] - a[0], dy = na[1] - a[1];
         w.pts = w.pts.map(([x, y]) => [x + dx, y + dy]);
         continue;
       }
-      // re-route cleanly around parts and other wires; fall back to a plain L
-      const smart = autoRoute(this.doc, na, nb, { skipWires: new Set([w]) });
-      if (smart) { w.pts = simplify(smart); if (w.pts.length >= 2) continue; }
-      // keep the orientation of the segment at the fixed end
-      if (!ma) {
-        const h = w.pts.length > 1 ? w.pts[1][1] === a[1] : true;
-        w.pts = simplify(route(na, nb, h));
-      } else if (!mb) {
-        const n = w.pts.length;
-        const h = n > 1 ? w.pts[n - 2][1] === b[1] : true;
-        w.pts = simplify(route(nb, na, h)).reverse();
-      } else {
-        w.pts = simplify(route(na, nb, true));
-      }
+      // a straight wire has no shape to keep: use the cleanest simple shape (cheap, no search while dragging)
+      const kept = stretchWire(w.pts, na, nb)
+        || pickRoute(this.doc, simpleRoutes(na, nb, exitAt(this.doc, na), exitAt(this.doc, nb), a[1] === b[1]), { skipWires: new Set([w]), noSearch: true });
+      w.pts = simplify(kept || [na, nb]);
       if (w.pts.length < 2) w.pts = [na, nb];
     }
     for (const p of this.doc.probes) {
       if (p.kind !== 'node' || !p.pos) continue;
       const m = moves.find(([q]) => same(q, p.pos));
       if (m) p.pos = [...m[1]];
+    }
+    return changed;
+  }
+
+  /**
+   * Make every connection sit at a wire end: split wires wherever a terminal or
+   * another wire's end touches them part-way along. Electrically nothing changes,
+   * but a wire that is later re-shaped can then no longer drop a junction that
+   * something else was hanging on.
+   */
+  splitAtJunctions(exclude) {
+    const pts = [];
+    for (const e of this.doc.elements) pts.push(...e.getPosts());
+    for (const w of this.doc.wires) pts.push(w.pts[0], w.pts[w.pts.length - 1]);
+    this.splitWiresAt(pts, exclude);
+  }
+
+  /** Split wires at the given points where they pass through them (not at an end), so each point becomes a wire end. */
+  splitWiresAt(points, exclude = new Set()) {
+    for (const w of [...this.doc.wires]) {
+      if (exclude.has(w)) continue;
+      let pts = w.pts;
+      const pieces = [];
+      for (;;) {
+        let cut = -1, at = null;
+        for (let k = 1; k < pts.length && cut < 0; k++) {
+          const [a, b] = [pts[k - 1], pts[k]];
+          let bd = Infinity; // the junction nearest the start of the segment comes first
+          for (const p of points) {
+            if (same(p, pts[0]) || same(p, pts[pts.length - 1]) || same(p, a)) continue;
+            if (!same(p, b) && !onSeg(p, a, b)) continue;
+            const d = Math.abs(p[0] - a[0]) + Math.abs(p[1] - a[1]);
+            if (d < bd) { bd = d; cut = k; at = [p[0], p[1]]; }
+          }
+        }
+        if (cut < 0) break;
+        pieces.push(simplify([...pts.slice(0, cut), at]));
+        pts = simplify([at, ...pts.slice(same(at, pts[cut]) ? cut + 1 : cut)]);
+      }
+      if (!pieces.length) continue;
+      w.pts = pieces[0];
+      for (const q of [...pieces.slice(1), pts]) if (q.length >= 2) this.doc.addWire(q);
+    }
+  }
+
+  /**
+   * Re-shape wires that now cut through a part or touch something they should
+   * not. First each wire is fixed against the untouched rest of the circuit,
+   * then again against each other, so two wires that moved together do not
+   * push each other into a bad spot.
+   */
+  tidyWires(wires) {
+    const list = wires.filter((w) => this.doc.wires.includes(w));
+    const all = new Set(list);
+    for (const pass of [0, 1, 2]) {
+      for (const w of list) {
+        const skip = pass === 0 ? all : new Set([w]);
+        const ctx = wireContext(this.doc, skip);
+        const bad = routeCost(ctx, w.pts) > 0;
+        const a = w.pts[0], b = w.pts[w.pts.length - 1];
+        const ea = exitAt(this.doc, a), eb = exitAt(this.doc, b);
+        const r = pickRoute(this.doc, [w.pts, ...simpleRoutes(a, b, ea, eb, a[1] === w.pts[1][1])], { skipWires: skip, noSearch: !bad });
+        if (!r) continue;
+        // a clean stretched wire keeps its shape unless a simple one is clearly neater (e.g. a loop that is no longer needed)
+        if (bad || routeScore(this.doc, ctx, r) < routeScore(this.doc, ctx, w.pts) - 0.75) {
+          const t = simplify(r);
+          if (t.length >= 2) w.pts = t;
+        }
+      }
     }
   }
 
@@ -1115,9 +1187,17 @@ export class Editor {
       g.type = 'move';
       let els, wires;
       if (h.kind === 'element' && this.selection.has(h.el)) { els = [...this.selection]; wires = [...this.selWires]; } else if (h.kind === 'element') { this.select(h.el); els = [h.el]; wires = []; } else { els = [...this.selection]; wires = this.selWires.has(h.wire) ? [...this.selWires] : [h.wire]; }
+      g.undoSnap = this.snapshot();
+      // a terminal sitting in the middle of a wire (a T-junction) must drag a wire end
+      // with it, or the part would be torn off the wire
+      this.splitAtJunctions(new Set(wires));
       g.els = els.map((e) => ({ e, x: e.x, y: e.y, posts: e.getPosts() }));
       g.wires = wires.map((w) => ({ w, pts: w.pts.map((p) => [...p]) }));
       g.snapshot = this.snapshot();
+      // terminals touching a part that stays put: bridge them with a wire once the move starts
+      const moving = new Set(els);
+      const fixed = new Set(this.doc.elements.filter((e) => !moving.has(e)).flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
+      g.bridges = els.flatMap((e) => e.getPosts()).filter((p) => fixed.has(p[0] + ',' + p[1])).map((p) => ({ p: [...p], w: new Wire([p, p]) }));
       g.dx = 0; g.dy = 0;
       return;
     }
@@ -1168,7 +1248,10 @@ export class Editor {
         // routing is only redone when the snapped end point changes
         if (!g.routedTo || !same(g.routedTo, end)) {
           g.routedTo = end;
-          g.smart = same(end, g.start) ? null : autoRoute(this.doc, g.start, end);
+          const h = g.hFirst ?? true;
+          // follow the finger: the first leg goes the way the drag started; other
+          // simple shapes (and, last, the search router) only when that one is bad
+          g.smart = same(end, g.start) ? null : pickRoute(this.doc, simpleRoutes(g.start, end, exitAt(this.doc, g.start), exitAt(this.doc, end), h));
         }
         this.preview = simplify(g.smart || route(g.start, end, g.hFirst ?? true));
         if (this.preview.length < 2) this.preview = [g.start, end];
@@ -1185,7 +1268,8 @@ export class Editor {
         for (const o of g.els) { o.e.x = o.x + dx; o.e.y = o.y + dy; }
         const moved = new Set();
         for (const o of g.wires) { o.w.pts = o.pts.map(([x, y]) => [x + dx, y + dy]); moved.add(o.w); }
-        this.followWires(new Map(g.els.map((o) => [o.e, o.posts])), moved);
+        for (const b of g.bridges || []) { b.w.pts = [[...b.p], [...b.p]]; if (!this.doc.wires.includes(b.w)) this.doc.wires.push(b.w); }
+        g.follow = this.followWires(new Map(g.els.map((o) => [o.e, o.posts])), moved);
         this.graph = new WireGraph(this.doc);
         this.dirtyDraw = true;
         break;
@@ -1219,8 +1303,11 @@ export class Editor {
         break;
       }
       case 'move':
+        // a bridge wire whose part came back to where it was is not needed
+        for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
         if (g.moved) {
-          this.undoStack.push(g.snapshot); this.redoStack = []; this.updateToolbar();
+          this.tidyWires(g.follow || []);
+          this.undoStack.push(g.undoSnap || g.snapshot); this.redoStack = []; this.updateToolbar();
           this.topologyChanged();
         }
         break;

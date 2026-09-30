@@ -146,6 +146,8 @@ class App {
     return cv.toDataURL('image/jpeg', 0.78);
   }
 
+  hasExampleThumb(id) { return this.thumbCache.has(id + this.settings.theme); }
+
   exampleThumb(ex) {
     const k = ex.id + this.settings.theme;
     if (!this.thumbCache.has(k)) this.thumbCache.set(k, this.thumbnail(buildExample(ex), 320, 200));

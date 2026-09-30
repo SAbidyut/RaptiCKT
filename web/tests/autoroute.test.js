@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CircuitDoc, makeElement } from '../src/ui/doc.js';
-import { autoRoute, exitDir } from '../src/ui/autoroute.js';
+import { autoRoute, exitDir, exitAt, stretchWire, simpleRoutes, pickRoute, wireContext, routeCost } from '../src/ui/autoroute.js';
 
 const G = 20;
 function doc(parts, wires = []) {
@@ -60,4 +60,40 @@ test('route does not run along or bend on another wire, nor touch other terminal
   for (const c of r.slice(1, -1)) assert.ok(c[1] !== 3 * G, 'bends on the other wire');
   const posts = d.elements.flatMap((e) => e.getPosts()).map((p) => p.join(','));
   for (const c of r.slice(1, -1)) assert.ok(!posts.includes(c.join(',')));
+});
+
+test('a moved end stretches the wire without changing its shape', () => {
+  const pts = [[0, 0], [60, 0], [60, 80], [120, 80]];
+  assert.deepEqual(stretchWire(pts, [0, 20], [120, 80]), [[0, 20], [60, 20], [60, 80], [120, 80]]);
+  assert.deepEqual(stretchWire(pts, [0, 0], [160, 100]), [[0, 0], [60, 0], [60, 100], [160, 100]]);
+  assert.equal(stretchWire([[0, 0], [40, 0]], [0, 20], [40, 0]), null);
+});
+
+test('simple routes follow the terminals and never make a false connection', () => {
+  // two resistors side by side at different heights: a Z that leaves and enters along the leads
+  const d = doc([['resistor', 0, 0], ['resistor', 10, 3]]);
+  const a = d.elements[0].getPosts()[1], b = d.elements[1].getPosts()[0];
+  const r = pickRoute(d, simpleRoutes(a, b, exitAt(d, a), exitAt(d, b)));
+  assert.equal(r.length, 4, JSON.stringify(r));
+  assert.equal(r[1][1], a[1]); assert.equal(r[2][1], b[1]); // horizontal out, horizontal in
+  // a third part sits right on the direct path: the chosen route must not touch its terminals
+  const d2 = doc([['resistor', 0, 0], ['resistor', 10, 3], ['resistor', 5, 1, 1]]);
+  const ctx = wireContext(d2);
+  const r2 = pickRoute(d2, simpleRoutes(a, b, exitAt(d2, a), exitAt(d2, b)));
+  assert.equal(routeCost(ctx, r2), 0, JSON.stringify(r2));
+});
+
+test('a bus of parallel wires shifted together gets no false junctions', () => {
+  const d = doc([]);
+  const wires = [0, 1, 2, 3].map((k) => d.addWire([[0, k * G], [4 * G, k * G]]));
+  // the right ends all move 3 right and 1 down
+  for (const w of wires) w.pts = [w.pts[0], [7 * G, w.pts[1][1] + G]];
+  for (let pass = 0; pass < 3; pass++) {
+    for (const w of wires) {
+      const skip = new Set(pass === 0 ? wires : [w]);
+      const a = w.pts[0], b = w.pts[w.pts.length - 1];
+      w.pts = pickRoute(d, [w.pts, ...simpleRoutes(a, b)], { skipWires: skip });
+    }
+  }
+  for (const w of wires) assert.equal(routeCost(wireContext(d, new Set([w])), w.pts), 0, JSON.stringify(wires.map((x) => x.pts)));
 });
