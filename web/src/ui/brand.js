@@ -5,7 +5,6 @@ export const APP = {
   tagline: 'Resonance Automation',
   subtitle: 'Circuit Simulator',
   slogan: 'Design. Simulate. Resonate.',
-  bangla: 'ইলেকট্রনিক্স শিখুন · সিমুলেট করুন · উদ্ভাবন করুন',
   version: '1.0.0',
 };
 

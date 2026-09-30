@@ -45,6 +45,8 @@ export class HomeScreen {
     this.root.querySelector('[data-h=settings]').addEventListener('click', () => this.app.openSettings());
     this.root.querySelectorAll('.bottom-nav button').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.tab; this.render(); }));
     const body = this.root.querySelector('.home-body');
+    body.classList.add(this.shown ? 'swap' : 'intro');
+    this.shown = true;
     if (this.tab === 'home') this.renderHome(body, n);
     if (this.tab === 'examples') this.renderExamples(body);
     if (this.tab === 'library') this.renderLibrary(body);
@@ -94,8 +96,7 @@ export class HomeScreen {
         <div><b>${RAPTI.full}</b><span>Industrial automation & electrical training · ${esc(RAPTI.city)}</span></div>
         ${icon('back', 18, 'flipx')}
       </section>
-      <p class="bangla">${APP.bangla}</p>
-      <p class="bangla-foot">${esc(APP.slogan)} · rapti.net</p>`;
+      <p class="home-foot">${esc(APP.slogan)} · rapti.net</p>`;
     this.bindCards(body);
     body.querySelectorAll('[data-feat]').forEach((b) => b.addEventListener('click', () => {
       if (b.dataset.feat === 'sensor') { this.tab = 'examples'; this.render(); } else this.app.newCircuit();
@@ -247,7 +248,6 @@ export function renderAbout(app, body) {
       <h3>${icon('info', 18)} Accuracy notes</h3>
       <p class="small">Results follow the documented device models and SPICE-default tolerances (RELTOL 1e-3, VNTOL 1 µV, GMIN 1e-12) and have been verified against analytic solutions. Behavioural blocks (logic, 555, regulators, sensors) are idealised models — always validate critical designs with datasheets and lab measurements. Use <em>Analysis → SPICE netlist</em> to cross-check in ngspice/LTspice.</p>
     </section>
-    <p class="bangla">${APP.bangla}</p>
     <p class="copyright">© ${new Date().getFullYear()} ${RAPTI.full} · rapti.net</p>`;
   body.querySelectorAll('[data-u]').forEach((b) => b.addEventListener('click', () => app.bridge.openUrl(b.dataset.u)));
 }

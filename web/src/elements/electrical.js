@@ -370,7 +370,7 @@ export class CeilingFan extends TwoTerm {
     if (s.mode === 'dc') return;
     const vr = this.rms.push(this.voltageDiff(s), s.dt) / this.p.v;
     const target = vr < 0.35 ? 0 : this.p.rpm * Math.min(1.05, Math.pow((vr - 0.35) / 0.65, 0.6));
-    this.speed += (target - this.speed) * Math.min(1, s.dt / 2.5);
+    this.speed += (target - this.speed) * Math.min(1, s.dt / 0.3); // quick spin-up, so it settles at mains simulation speeds
     this.ang += (this.speed / 60) * TAU * s.dt;
   }
   stampAC(ac) { const [R, L] = this.rl0(); this.rl.ac(ac, this.nodes[0], this.nodes[1], this.branches[0], R, L); }

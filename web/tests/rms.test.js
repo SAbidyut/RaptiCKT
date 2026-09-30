@@ -56,3 +56,13 @@ test('a smoothed DC node reads its average, not an AC value', () => {
   assert.equal(r.ac, false);
   assert.ok(Math.abs(r.v - 10) < 0.05, 'dc ' + r.v);
 });
+
+test('AC voltmeter (True RMS mode) settles within one cycle in an AC circuit', () => {
+  const { sim, els } = build([['mains', [1, 0]], ['resistor', [1, 0], { r: 1000 }], ['acvolt', [1, 0]]]);
+  sim.acPeriod = 1 / 50;
+  for (let k = 0; k < 0.03 / 2e-5; k++) assert.ok(sim.step(2e-5), sim.error);
+  const vm = els[2];
+  assert.equal(vm.p.mode, 'rms');
+  const v = vm.display(vm.v);
+  assert.ok(Math.abs(v - 230) < 3, 'acvolt after 1.5 cycles ' + v);
+});

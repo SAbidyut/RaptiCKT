@@ -15,9 +15,9 @@ export class Meter extends TwoTerm {
     const a = Math.min(1, s.dt / Math.max(this.p.tau ?? 0.1, s.dt));
     this.acc += (x - this.acc) * a;
     this.acc2 += (x * x - this.acc2) * a;
-    // Auto mode in an AC circuit: exact RMS over the last supply cycle
+    // Auto and RMS modes in an AC circuit: exact RMS over the last supply cycle
     this.acPeriod = s.acPeriod || 0;
-    if (this.p.mode === 'auto' && this.acPeriod > 0) this.windowAdd(x * x * s.dt, x * s.dt, s.dt, this.acPeriod);
+    if ((this.p.mode === 'auto' || this.p.mode === 'rms') && this.acPeriod > 0) this.windowAdd(x * x * s.dt, x * s.dt, s.dt, this.acPeriod);
   }
   windowAdd(q, l, dt, T) {
     let w = this.win;
@@ -46,7 +46,12 @@ export class Meter extends TwoTerm {
   display(x) {
     switch (this.p.mode) {
       case 'avg': return this.acc;
-      case 'rms': return Math.sqrt(Math.max(0, this.acc2));
+      case 'rms': {
+        // settles within one supply cycle, like the live labels; moving average otherwise
+        const w = this.win;
+        if (this.acPeriod > 0 && w && w.span >= w.T * 0.999) return Math.sqrt(Math.max(0, w.sum) / w.span);
+        return Math.sqrt(Math.max(0, this.acc2));
+      }
       case 'auto': {
         if (!(this.acPeriod > 0)) return x;
         const a = this.autoReading();

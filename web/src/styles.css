@@ -86,26 +86,28 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 button:disabled { opacity: 0.35; pointer-events: none; }
 
 /* ------------------------------------------------------------- home */
-.home-scroll { flex: 1; overflow-y: auto; padding-bottom: calc(104px + var(--safe-b)); -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
+.home-scroll { flex: 1; overflow-y: auto; padding-bottom: calc(104px + var(--safe-b)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 /* solid header: scrolled content never shows through the title */
 .home-head { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; padding: calc(10px + var(--safe-t)) 16px 10px;
-  background: var(--bg); border-bottom: 1px solid transparent; transition: border-color 0.25s, box-shadow 0.25s; }
-.home-head.scrolled { border-bottom-color: var(--border); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28); }
-:root[data-theme='light'] .home-head.scrolled { box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }
+  background: var(--bg); border-bottom: 1px solid transparent; }
+.home-head.scrolled { border-bottom-color: var(--border); }
 .home-head .brand svg { flex: none; }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand b { display: block; font-size: 21px; font-weight: 800; letter-spacing: 0.3px; line-height: 1.1; }
 .brand small { color: var(--muted); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
 .home-body { padding: 6px 16px 20px; max-width: 980px; margin: 0 auto; }
 /* page switch + staggered entrance */
-.home-body > * { animation: homeIn 0.45s cubic-bezier(.2, .8, .2, 1) both; }
-.home-body > :nth-child(2) { animation-delay: 0.04s; } .home-body > :nth-child(3) { animation-delay: 0.08s; }
-.home-body > :nth-child(4) { animation-delay: 0.12s; } .home-body > :nth-child(5) { animation-delay: 0.16s; }
-.home-body > :nth-child(6) { animation-delay: 0.2s; } .home-body > :nth-child(n+7) { animation-delay: 0.24s; }
+/* first appearance only: sections rise in once; switching tabs just fades */
+.home-body.intro > * { animation: homeIn 0.45s cubic-bezier(.2, .8, .2, 1) both; }
+.home-body.intro > :nth-child(2) { animation-delay: 0.04s; } .home-body.intro > :nth-child(3) { animation-delay: 0.08s; }
+.home-body.intro > :nth-child(4) { animation-delay: 0.12s; } .home-body.intro > :nth-child(5) { animation-delay: 0.16s; }
+.home-body.intro > :nth-child(6) { animation-delay: 0.2s; } .home-body.intro > :nth-child(n+7) { animation-delay: 0.24s; }
+.home-body.swap { animation: tabFade 0.18s ease both; }
+@keyframes tabFade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes homeIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 /* the home page rises in as the splash fades out */
-:root:not(.app-ready) .home-body > * { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) { .home-body > * { animation: none; } }
+:root:not(.app-ready) .home-body.intro > * { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .home-body > *, .home-body.swap { animation: none; } }
 .hero { position: relative; overflow: hidden; border-radius: 24px; padding: 26px 20px 20px; color: #fff;
   background: radial-gradient(circle at 85% 10%, rgba(139, 92, 246, 0.55), transparent 55%), radial-gradient(circle at 10% 100%, rgba(34, 211, 238, 0.4), transparent 55%), linear-gradient(135deg, #0d1b3d, #1a1450);
   box-shadow: var(--shadow); border: 1px solid rgba(255, 255, 255, 0.08); }
@@ -117,7 +119,8 @@ button:disabled { opacity: 0.35; pointer-events: none; }
 .hero-stats span { font-size: 11.5px; color: rgba(226, 236, 255, 0.7); text-transform: uppercase; letter-spacing: 1px; }
 .hero-wave { position: absolute; right: -40px; top: 18px; width: 300px; height: 120px; opacity: 0.35;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 120'%3E%3Cpath d='M0 60 C25 0 50 0 75 60 S125 120 150 60 S200 0 225 60 S275 120 300 60' fill='none' stroke='%2322d3ee' stroke-width='3'/%3E%3Cpath d='M0 60 C25 20 50 20 75 60 S125 100 150 60 S200 20 225 60 S275 100 300 60' fill='none' stroke='%23a78bfa' stroke-width='2'/%3E%3C/svg%3E") no-repeat center/contain;
-  animation: drift 8s ease-in-out infinite alternate; }
+  animation: drift 8s ease-in-out infinite alternate; will-change: transform; }
+.hero { contain: paint; }
 @keyframes drift { to { transform: translateX(-40px); } }
 .resume { width: 100%; display: flex; align-items: center; gap: 12px; margin: 14px 0 0; padding: 14px 16px; border-radius: var(--r); text-align: left;
   background: var(--surface); border: 1px solid var(--border); }
@@ -133,7 +136,7 @@ button:disabled { opacity: 0.35; pointer-events: none; }
 .feat b { display: block; font-size: 13px; }
 .feat span { display: block; color: var(--muted); font-size: 11.5px; line-height: 1.3; }
 .sec-title { display: flex; justify-content: space-between; align-items: center; margin: 22px 2px 10px; font-size: 16px; }
-.card-row { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 8px; scroll-snap-type: x mandatory; }
+.card-row { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 8px; scroll-snap-type: x proximity; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
 .card-row::-webkit-scrollbar { display: none; }
 .card { flex: none; width: 168px; text-align: left; scroll-snap-align: start; transition: transform 0.15s; }
 .card:active, .ex-item:active, .lib-item:active, .resume:active, .rapti-banner:active { transform: scale(0.97); }
@@ -148,11 +151,7 @@ img.thumb { animation: thumbIn 0.35s ease both; }
 .rapti-banner div { flex: 1; }
 .rapti-banner b { display: block; font-size: 13.5px; }
 .rapti-banner span { color: var(--muted); font-size: 12px; }
-/* Bengali text: a Bengali font, no letter-spacing (it breaks conjuncts) and room for the vowel signs */
-.bangla { text-align: center; color: var(--text2); font-family: 'Noto Sans Bengali', 'Hind Siliguri', 'Kalpurush', 'SolaimanLipi', var(--font);
-  font-size: 14.5px; line-height: 1.9; letter-spacing: 0; margin: 24px 0 8px; padding: 10px 14px; border-radius: 14px;
-  background: var(--surface); border: 1px solid var(--border); }
-.bangla-foot { text-align: center; color: var(--muted); font-size: 11.5px; margin: 6px 0 0; }
+.home-foot { text-align: center; color: var(--muted); font-size: 12px; margin: 22px 0 4px; letter-spacing: .3px; }
 .page-title { margin: 6px 2px 2px; font-size: 24px; }
 .page-sub { margin: 0 2px 14px; color: var(--muted); font-size: 13.5px; }
 .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; }

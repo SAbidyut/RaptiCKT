@@ -475,14 +475,16 @@ export class Renderer {
       segs.push([Math.min(a[0], b[0]) - 2, Math.min(a[1], b[1]) - 2, Math.max(a[0], b[0]) + 2, Math.max(a[1], b[1]) + 2]);
     }
     const boxes = doc.elements.map((e) => e.worldBox());
+    const placed = []; // labels already positioned, so two labels never share a spot
     const hit = (r, own) => {
       let a = 0;
-      const add = (o) => {
+      const add = (o, wgt = 1) => {
         const w = Math.min(r[2], o[2]) - Math.max(r[0], o[0]), h = Math.min(r[3], o[3]) - Math.max(r[1], o[1]);
-        if (w > 0 && h > 0) a += w * h;
+        if (w > 0 && h > 0) a += w * h * wgt;
       };
       for (const o of segs) add(o);
       boxes.forEach((o, i) => { if (i !== own) add(o); });
+      for (const o of placed) add(o, 3);
       return a;
     };
     doc.elements.forEach((e, i) => {
@@ -500,6 +502,8 @@ export class Renderer {
         if (sc < bestScore) { bestScore = sc; best = sd; }
       });
       if (best && (best[0] !== sx || best[1] !== sy)) e.chosenSide = best;
+      const r = e.labelRect(txt);
+      if (r) placed.push(r);
     });
   }
 
@@ -568,11 +572,12 @@ export class Renderer {
   liveLayout(st, sim) {
     const doc = st.doc;
     let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0);
-    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '');
+    // value-label text and side matter too: turning a knob changes the label's length
+    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + e.valueLabel() + (e.chosenSide ? e.chosenSide.join(':') : '');
     for (const p of st.probes || []) if (p.pos) sig += '|p' + p.pos[0] + ',' + p.pos[1];
     if (this._live && this._live.sim === sim && this._live.sig === sig) return this._live;
 
-    const VW = 50, VH = 12, AW = 56; // text extents for layout (widest typical reading)
+    const VW = 58, VH = 13, AW = 66; // text extents for layout (widest typical reading, e.g. "→ 188.5 mA~")
     const obs = [];
     const box = (r, pad = 0, py = pad) => obs.push([r[0] - pad, r[1] - py, r[2] + pad, r[3] + py]);
     const overlap = (r) => {

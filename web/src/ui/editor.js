@@ -14,6 +14,7 @@ import { Analysis } from './analysis.js';
 import { Multimeter } from './meter.js';
 import { store } from './store.js';
 import { RmsTracker, acFrequency } from './rms.js';
+import { autoRoute } from './autoroute.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const same = (a, b) => a[0] === b[0] && a[1] === b[1];
@@ -631,6 +632,9 @@ export class Editor {
         w.pts = w.pts.map(([x, y]) => [x + dx, y + dy]);
         continue;
       }
+      // re-route cleanly around parts and other wires; fall back to a plain L
+      const smart = autoRoute(this.doc, na, nb, { skipWires: new Set([w]) });
+      if (smart) { w.pts = simplify(smart); if (w.pts.length >= 2) continue; }
       // keep the orientation of the segment at the fixed end
       if (!ma) {
         const h = w.pts.length > 1 ? w.pts[1][1] === a[1] : true;
@@ -1161,7 +1165,12 @@ export class Editor {
       case 'wire': {
         const end = this.magnet(wx, wy, g.start);
         if (g.hFirst === undefined && (Math.abs(end[0] - g.start[0]) > 0 || Math.abs(end[1] - g.start[1]) > 0)) g.hFirst = Math.abs(wx - g.start[0]) >= Math.abs(wy - g.start[1]);
-        this.preview = simplify(route(g.start, end, g.hFirst ?? true));
+        // routing is only redone when the snapped end point changes
+        if (!g.routedTo || !same(g.routedTo, end)) {
+          g.routedTo = end;
+          g.smart = same(end, g.start) ? null : autoRoute(this.doc, g.start, end);
+        }
+        this.preview = simplify(g.smart || route(g.start, end, g.hFirst ?? true));
         if (this.preview.length < 2) this.preview = [g.start, end];
         this.hoverPost = end;
         break;
