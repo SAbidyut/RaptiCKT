@@ -89,6 +89,7 @@ check('value label above the dial', pos);
 const lin = await page.evaluate(() => { const ed = app.editor; ed.addComponent('pot'); const e = [...ed.selection][0]; e.p.pos = 37.4; ed.select(null); ed.select(e); return { decade: document.querySelector('.knob').classList.contains('decade'), key: e.knobProp().key }; });
 await page.tap('.knob-btn[data-k="+"]'); await sleep(100);
 const pv = await page.evaluate(() => [...app.editor.selection][0].p.pos);
-check('stepped knob snaps to whole percent (+ → 38)', !lin.decade && pv === 38, JSON.stringify({ ...lin, pv }));
+const pd = await page.evaluate(() => { app.editor.knob.step(1); return [...app.editor.selection][0].p.pos; });
+check('percent knob: + fine-tunes (37.4 → 37.5), the dial snaps to whole percent (→ 38)', !lin.decade && pv === 37.5 && pd === 38, JSON.stringify({ ...lin, pv, pd }));
 console.log(errs.length ? errs : 'no page errors', fails ? `${fails} FAILED` : 'all passed');
 await browser.close(); server.close();
