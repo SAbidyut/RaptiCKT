@@ -382,7 +382,8 @@ export class Editor {
     for (const p of this.doc.probes) this.probePos(p);
     return {
       doc: this.doc, sim: this.sim, running: this.running, theme: this.theme, settings: this.settings,
-      selection: this.selection, selWires: this.selWires, graph: this.graph, t, preview: this.preview,
+      // while a selection box is dragged, what it would select is shown as selected
+      selection: this.marqueePick ? this.marqueePick.els : this.selection, selWires: this.marqueePick ? this.marqueePick.wires : this.selWires, graph: this.graph, t, preview: this.preview,
       probes: this.doc.probes, hoverPost: this.hoverPost, marquee: this.marquee, meterProbes: this.meter.open ? this.meterProbes : null,
       vScale: this.vScale, iScale: this.iScale, iMin: this.iScale * 1e-3 + 1e-12, errorEl: this.errorEl, rms: this.running ? this.rms : null,
     };
@@ -515,7 +516,7 @@ export class Editor {
     this.multi = on;
     if (!on && this.selection.size + this.selWires.size > 1) this.select(null);
     this.updateToolbar();
-    if (on) this.toast('Select mode: drag to box-select, tap to add/remove');
+    if (on) this.toast('Select: drag → right = window (parts fully inside) · drag ← left = crossing (parts it touches) · tap to add/remove');
   }
 
   // ------------------------------------------------------------- editing
@@ -1195,12 +1196,32 @@ export class Editor {
     }
   }
 
+  /**
+   * AutoCAD-style box selection. Dragged left → right it is a *window*: only
+   * parts and wires lying completely inside are picked. Dragged right → left it
+   * is a *crossing* box: everything it touches is picked as well.
+   */
+  pickInBox(box) {
+    const [x1, y1, x2, y2] = box, R = this.renderer;
+    const crossing = x2 < x1;
+    const [a, b] = R.toWorld(Math.min(x1, x2), Math.min(y1, y2)), [c, d] = R.toWorld(Math.max(x1, x2), Math.max(y1, y2));
+    const inside = (x, y) => x >= a && x <= c && y >= b && y <= d;
+    const els = new Set(this.doc.elements.filter((e) => {
+      const [p, q, r, s] = e.worldBox();
+      return crossing ? p <= c && r >= a && q <= d && s >= b : p >= a && q >= b && r <= c && s <= d;
+    }));
+    const wires = new Set(this.doc.wires.filter((w) => (crossing
+      ? w.pts.some((pt, i) => i > 0 && segHitsBox(w.pts[i - 1], pt, a, b, c, d))
+      : w.pts.every(([x, y]) => inside(x, y)))));
+    return { els, wires, crossing };
+  }
+
   cancelGesture() {
     clearTimeout(this.lpT);
     const g = this.gesture;
     if (g && g.pressed) { g.pressed.onRelease(); this.pressChanged(g.pressed); }
     if (g && g.type === 'move' && g.moved) this.topologyChanged();
-    this.preview = null; this.marquee = null; this.drag = false;
+    this.preview = null; this.marquee = null; this.marqueePick = null; this.drag = false;
     this.gesture = null;
   }
 
@@ -1332,6 +1353,7 @@ export class Editor {
       }
       case 'marquee':
         this.marquee = [g.sx, g.sy, sx, sy];
+        this.marqueePick = this.pickInBox(this.marquee);
         this.dirtyDraw = true;
         break;
       default:
@@ -1368,18 +1390,17 @@ export class Editor {
         }
         break;
       case 'marquee': {
-        const [x1, y1, x2, y2] = this.marquee || [0, 0, 0, 0];
-        const R = this.renderer;
-        const [a, b] = R.toWorld(Math.min(x1, x2), Math.min(y1, y2)), [c, d] = R.toWorld(Math.max(x1, x2), Math.max(y1, y2));
+        const pick = this.pickInBox(this.marquee || [0, 0, 0, 0]);
+        this.marqueePick = null;
         if (!this.multi) this.setMulti(true);
-        this.selection = new Set(this.doc.elements.filter((e) => { const [p, q, r, s] = e.worldBox(); return p >= a && q >= b && r <= c && s <= d; }));
-        this.selWires = new Set(this.doc.wires.filter((w) => w.pts.every(([x, y]) => x >= a && x <= c && y >= b && y <= d)));
+        this.selection = pick.els; this.selWires = pick.wires;
         this.afterSelect();
+        if (pick.els.size + pick.wires.size) this.toast(`${pick.crossing ? 'Crossing' : 'Window'}: ${pick.els.size} part${pick.els.size === 1 ? '' : 's'}${pick.wires.size ? `, ${pick.wires.size} wire${pick.wires.size === 1 ? '' : 's'}` : ''} selected`);
         break;
       }
       default:
     }
-    this.preview = null; this.marquee = null; this.hoverPost = null; this.drag = false;
+    this.preview = null; this.marquee = null; this.marqueePick = null; this.hoverPost = null; this.drag = false;
     this.gesture = null;
     this.dirtyDraw = true;
   }
@@ -1420,3 +1441,15 @@ function onSeg(p, a, b) {
   return Math.hypot(c[0] - p[0], c[1] - p[1]) < 0.5;
 }
 function area(e) { const [a, b, c, d] = e.worldBox(); return (c - a) * (d - b); }
+
+/** Does segment p–q touch the box [a, b]–[c, d]? (Liang–Barsky clipping) */
+function segHitsBox(p, q, a, b, c, d) {
+  let t0 = 0, t1 = 1;
+  const dx = q[0] - p[0], dy = q[1] - p[1];
+  for (const [pp, qq] of [[-dx, p[0] - a], [dx, c - p[0]], [-dy, p[1] - b], [dy, d - p[1]]]) {
+    if (pp === 0) { if (qq < 0) return false; continue; }
+    const r = qq / pp;
+    if (pp < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; }
+  }
+  return true;
+}

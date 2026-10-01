@@ -381,12 +381,22 @@ export class Renderer {
 
     // marquee
     if (st.marquee) {
-      const [x1, y1, x2, y2] = st.marquee;
+      // AutoCAD colours: window (dragged to the right) solid blue, crossing (to the left) dashed green
+      const [x1, y1, x2, y2] = st.marquee, crossing = x2 < x1;
+      const rx = Math.min(x1, x2), ry = Math.min(y1, y2), rw = Math.abs(x2 - x1), rh = Math.abs(y2 - y1);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.fillStyle = 'rgba(34,211,238,0.08)'; ctx.strokeStyle = th.accent; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
-      ctx.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
-      ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      ctx.fillStyle = crossing ? 'rgba(34,197,94,0.13)' : 'rgba(59,130,246,0.14)';
+      ctx.strokeStyle = crossing ? '#22c55e' : '#3b82f6'; ctx.lineWidth = 1.5;
+      ctx.setLineDash(crossing ? [6, 4] : []);
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeRect(rx, ry, rw, rh);
       ctx.setLineDash([]);
+      if (rw > 70 && rh > 26) {
+        ctx.font = '600 11px Inter, system-ui, sans-serif';
+        ctx.fillStyle = crossing ? '#4ade80' : '#60a5fa';
+        ctx.textBaseline = 'top'; ctx.textAlign = crossing ? 'right' : 'left';
+        ctx.fillText(crossing ? 'Crossing' : 'Window', crossing ? rx + rw - 6 : rx + 6, ry + 5);
+      }
     }
   }
 
