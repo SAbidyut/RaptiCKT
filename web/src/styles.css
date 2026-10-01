@@ -82,6 +82,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .btn.big { height: 50px; padding: 0 20px; font-size: 15px; border-radius: 14px; }
 .btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.sheet-note { margin: 0 4px 12px; color: var(--text2); font-size: 14px; line-height: 1.45; }
 .link { color: var(--accent); font-size: 13px; font-weight: 600; }
 button:disabled { opacity: 0.35; pointer-events: none; }
 

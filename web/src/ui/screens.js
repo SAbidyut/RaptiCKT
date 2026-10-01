@@ -201,7 +201,7 @@ export class HomeScreen {
     body.innerHTML = `
       <h2 class="page-title">My Circuits</h2>
       <p class="page-sub">Saved on this device. Export to share them or keep a backup.</p>
-      <div class="btn-row"><button class="btn primary" data-h="new">${icon('plus', 18)} New</button><button class="btn" data-h="open">${icon('upload', 18)} Import</button><button class="btn" data-h="backup">${icon('download', 18)} Backup all</button></div>
+      <div class="btn-row"><button class="btn primary" data-h="new">${icon('plus', 18)} New</button><button class="btn" data-h="open">${icon('upload', 18)} Import</button><button class="btn" data-h="backup">${icon('download', 18)} Backup all</button>${lib.length ? `<button class="btn danger" data-h="delall">${icon('trash', 18)} Delete all</button>` : ''}</div>
       ${lib.length ? `<div class="lib-list">${lib.map((c) => `
         <div class="lib-item" data-id="${c.id}">
           ${c.thumb ? `<img class="thumb" src="${c.thumb}" alt="">` : '<div class="thumb"></div>'}
@@ -211,12 +211,33 @@ export class HomeScreen {
     body.querySelector('[data-h=new]').addEventListener('click', () => this.app.newCircuit());
     body.querySelector('[data-h=open]').addEventListener('click', () => this.app.importFile());
     body.querySelector('[data-h=backup]').addEventListener('click', () => this.app.backupAll());
+    body.querySelector('[data-h=delall]')?.addEventListener('click', () => this.deleteAllMenu());
     body.querySelectorAll('.lib-item').forEach((it) => {
       const id = it.dataset.id;
       it.addEventListener('click', (ev) => {
         if (ev.target.closest('[data-act=menu]')) { this.itemMenu(id); return; }
         this.app.openSaved(id);
       });
+    });
+  }
+
+  /** Delete every saved circuit, after asking (with a chance to back them up first). */
+  deleteAllMenu() {
+    const n = store.circuits().length;
+    if (!n) return;
+    this.app.showSheet('Delete all circuits?', `
+      <p class="sheet-note">All ${n} saved circuit${n > 1 ? 's' : ''} will be removed from this phone. This cannot be undone.</p>
+      <div class="sheet-actions">
+        <button data-x="backup">${icon('download', 18)} Backup all first</button>
+        <button data-x="del" class="danger">${icon('trash', 18)} Delete all ${n}</button>
+        <button data-x="cancel">${icon('x', 18)} Cancel</button>
+      </div>`, (root, close) => {
+      root.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', () => {
+        const x = b.dataset.x;
+        if (x === 'backup') { this.app.backupAll(); return; } // stay open: delete after saving
+        close();
+        if (x === 'del') { store.deleteAllCircuits(); this.app.bridge.vibrate(20); this.render(); }
+      }));
     });
   }
 

@@ -47,6 +47,7 @@ export const store = {
     return write(K.circuits, list.slice(0, 200));
   },
   deleteCircuit(id) { write(K.circuits, this.circuits().filter((c) => c.id !== id)); },
+  deleteAllCircuits() { write(K.circuits, []); },
   getCircuit(id) { return this.circuits().find((c) => c.id === id); },
   recent() { return read(K.recent, ['resistor', 'capacitor', 'dcv', 'ground', 'led', 'npn', 'switch', 'opamp']); },
   pushRecent(type) {
