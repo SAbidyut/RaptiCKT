@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { allTypes } from '../src/elements/index.js';
 import { EXAMPLES } from '../src/ui/examples.js';
-import { CHAPTERS, libraryData, libraryCount, exampleData, manualMarkdown, CATEGORY_NOTES, UI_TEXT } from '../src/ui/manual-content.js';
+import { CHAPTERS, SUMMARY, chapterParts, libraryData, libraryCount, exampleData, manualMarkdown, CATEGORY_NOTES, UI_TEXT } from '../src/ui/manual-content.js';
 import { CATEGORIES } from '../src/elements/index.js';
 
 const strings = (v, out = []) => {
@@ -117,4 +117,23 @@ test('markdown export contains all chapters in both languages', () => {
     for (const cat of libraryData()) for (const it of cat.items) assert.ok(md.includes(`**${it.title.replace(/\|/g, '\\|')}**`), `${lang}: ${it.title}`);
     for (const e of EXAMPLES) assert.ok(md.includes(`**${e.title}**`), `${lang}: ${e.title}`);
   }
+});
+
+test('every chapter has a one-line summary in both languages', () => {
+  for (const c of CHAPTERS) assert.ok(SUMMARY[c.id]?.en && SUMMARY[c.id]?.bn, `${c.id}: summary`);
+  assert.deepEqual(Object.keys(SUMMARY).sort(), CHAPTERS.map((c) => c.id).sort(), 'no summary for a chapter that does not exist');
+});
+
+test('long chapters split into sections, short ones stay on one page', () => {
+  let split = 0;
+  for (const c of CHAPTERS) {
+    const { intro, sections } = chapterParts(c);
+    if (sections.length) {
+      split++;
+      assert.ok(sections.length >= 2);
+      for (const s of sections) assert.ok(s.title.en && s.title.bn && s.blocks.length, `${c.id}: empty section ${s.title.en}`);
+      assert.equal(intro.length + sections.reduce((n, s) => n + s.blocks.length + 1, 0), c.blocks.length, `${c.id}: no block lost`);
+    } else assert.equal(intro.length, c.blocks.length);
+  }
+  assert.ok(split >= 8, 'most chapters are split into sections');
 });

@@ -1,20 +1,23 @@
-// The in-app user manual: contents, search, English / বাংলা, and the live component library.
+// The in-app user manual. It opens on a contents page; every chapter opens as its own page,
+// long chapters are split into sections that open one level deeper, and the component
+// library and examples open category by category. English / বাংলা, with search.
 
 import { icon } from './icons.js';
 import { iosScroll } from './scroller.js';
 import { CATEGORIES } from '../elements/index.js';
 import { APP } from './brand.js';
 import {
-  CHAPTERS, LANGS, UI_TEXT, digits, expandRefs, libraryData, exampleData,
+  CHAPTERS, LANGS, UI_TEXT, SUMMARY, digits, expandRefs, libraryData, exampleData, chapterParts,
 } from './manual-content.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const plain = (s) => String(s).replace(/\*\*|`|\{\{ch:[a-z]+\}\}/g, '');
+const chev = () => icon('back', 18, 'flipx man-chev');
 
 /** Inline markup: **bold**, `code`, and {{ch:id}} links to another chapter. */
 function inline(s, lang) {
   const html = esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
-  return expandRefs(html, lang, (id, label) => `<a class="man-ref" data-go="${id}">${label}</a>`);
+  return expandRefs(html, lang, (id, label) => `<a class="man-ref" data-nav="ch:${id}">${label}</a>`);
 }
 
 const catIcon = (id) => CATEGORIES.find((c) => c.id === id)?.icon || 'chip';
@@ -22,45 +25,78 @@ const catIcon = (id) => CATEGORIES.find((c) => c.id === id)?.icon || 'chip';
 function blockHtml(b, lang) {
   const i = lang === 'bn' ? 1 : 0;
   switch (b.t) {
-    case 'p': return `<p class="man-b" data-s="${esc(plain(b[lang]).toLowerCase())}">${inline(b[lang], lang)}</p>`;
-    case 'h': return `<h3 class="man-b man-sub" data-s="${esc(plain(b[lang]).toLowerCase())}">${inline(b[lang], lang)}</h3>`;
-    case 'steps': return `<ol class="man-b man-steps">${b[lang].map((x) => `<li data-s="${esc(plain(x).toLowerCase())}">${inline(x, lang)}</li>`).join('')}</ol>`;
-    case 'ul': return `<ul class="man-b man-list">${b[lang].map((x) => `<li data-s="${esc(plain(x).toLowerCase())}">${inline(x, lang)}</li>`).join('')}</ul>`;
-    case 'tip': return `<div class="man-b man-note tip" data-s="${esc(plain(b[lang]).toLowerCase())}">${icon('bolt', 18)}<div>${inline(b[lang], lang)}</div></div>`;
-    case 'warn': return `<div class="man-b man-note warn" data-s="${esc(plain(b[lang]).toLowerCase())}">${icon('info', 18)}<div>${inline(b[lang], lang)}</div></div>`;
+    case 'p': return `<p class="man-b">${inline(b[lang], lang)}</p>`;
+    case 'steps': return `<ol class="man-b man-steps">${b[lang].map((x) => `<li>${inline(x, lang)}</li>`).join('')}</ol>`;
+    case 'ul': return `<ul class="man-b man-list">${b[lang].map((x) => `<li>${inline(x, lang)}</li>`).join('')}</ul>`;
+    case 'tip': return `<div class="man-b man-note tip">${icon('bolt', 18)}<div>${inline(b[lang], lang)}</div></div>`;
+    case 'warn': return `<div class="man-b man-note warn">${icon('info', 18)}<div>${inline(b[lang], lang)}</div></div>`;
     case 'table': {
       const cols = b.head.length;
-      return `<div class="man-b man-tablewrap"><table class="man-table c${cols}"><thead><tr>${b.head.map((h) => `<th>${inline(h[i], lang)}</th>`).join('')}</tr></thead><tbody>${b.rows.map((r) => `<tr data-s="${esc(r.map((c) => plain(c[i])).join(' ').toLowerCase())}">${r.map((c) => `<td>${inline(c[i], lang)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+      return `<div class="man-b man-tablewrap"><table class="man-table c${cols}"><thead><tr>${b.head.map((h) => `<th>${inline(h[i], lang)}</th>`).join('')}</tr></thead><tbody>${b.rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c[i], lang)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
     }
     default: return '';
   }
 }
 
-function libraryHtml(lang) {
-  return `<p class="man-b man-small" data-s="">${esc(UI_TEXT.note[lang])}</p>` + libraryData().map((cat) => `
-    <details class="man-cat">
-      <summary>${icon(catIcon(cat.id), 18)}<b>${esc(cat.id)}</b><em>${cat.items.length}</em></summary>
-      ${cat.note ? `<p class="man-b" data-s="${esc(plain(cat.note[lang]).toLowerCase())}">${inline(cat.note[lang], lang)}</p>` : ''}
-      <div class="man-items">${cat.items.map((it) => `
-        <div class="man-item" data-s="${esc((it.title + ' ' + it.desc + ' ' + cat.id + ' ' + it.props.join(' ')).toLowerCase())}">
-          <b>${esc(it.title)}</b>
-          <p>${esc(it.desc)}</p>
-          ${it.props.length ? `<small><span>${esc(UI_TEXT.props[lang])}:</span> ${esc(it.props.join(' · '))}</small>` : ''}
-        </div>`).join('')}</div>
-    </details>`).join('');
+// text of a block, for searching
+function blockText(b, lang) {
+  const i = lang === 'bn' ? 1 : 0;
+  if (b.t === 'table') return b.rows.map((r) => r.map((c) => plain(c[i])).join(' ')).join(' ');
+  if (Array.isArray(b[lang])) return b[lang].map(plain).join(' ');
+  return plain(b[lang] || '');
 }
 
-function examplesHtml(lang) {
-  return exampleData().map((cat) => `
-    <details class="man-cat" open>
-      <summary>${icon('book', 18)}<b>${esc(cat.id)}</b><em>${cat.items.length}</em></summary>
-      <div class="man-items">${cat.items.map((it) => `
-        <div class="man-item" data-s="${esc((it.title + ' ' + it.desc + ' ' + cat.id).toLowerCase())}">
-          <b>${esc(it.title)}</b>
-          <p>${esc(it.desc)}</p>
-          <button class="btn sm" data-ex="${esc(it.id)}">${icon('play', 14)} ${esc(UI_TEXT.tryIt[lang])}</button>
-        </div>`).join('')}</div>
-    </details>`).join('');
+const card = (nav, lead, title, sub, extra = '') => `
+  <button class="man-card" data-nav="${esc(nav)}">${lead}<div><b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</div>${extra}${chev()}</button>`;
+
+/** Pages of a chapter: [{ id, title, count?, icon?, html(lang) }], after the intro text. */
+function sectionsOf(ch) {
+  if (ch.generated === 'library') {
+    return libraryData().map((cat) => ({
+      id: cat.id, title: { en: cat.id, bn: cat.id }, count: cat.items.length, icon: catIcon(cat.id), generated: true,
+      html: (lang) => `${cat.note ? `<p class="man-b">${inline(cat.note[lang], lang)}</p>` : ''}
+        <div class="man-items">${cat.items.map((it) => `
+          <div class="man-item"><b>${esc(it.title)}</b><p>${esc(it.desc)}</p>
+          ${it.props.length ? `<small><span>${esc(UI_TEXT.props[lang])}:</span> ${esc(it.props.join(' · '))}</small>` : ''}</div>`).join('')}</div>
+        <p class="man-small">${esc(UI_TEXT.note[lang])}</p>`,
+    }));
+  }
+  if (ch.generated === 'examples') {
+    return exampleData().map((cat) => ({
+      id: cat.id, title: { en: cat.id, bn: cat.id }, count: cat.items.length, icon: 'book', generated: true,
+      html: (lang) => `<div class="man-items">${cat.items.map((it) => `
+        <div class="man-item"><b>${esc(it.title)}</b><p>${esc(it.desc)}</p>
+        <button class="btn sm" data-ex="${esc(it.id)}">${icon('play', 14)} ${esc(UI_TEXT.tryIt[lang])}</button></div>`).join('')}</div>`,
+    }));
+  }
+  const { sections } = chapterParts(ch);
+  return sections.map((s, i) => ({ id: String(i), title: s.title, html: (lang) => s.blocks.map((b) => blockHtml(b, lang)).join('') }));
+}
+
+/** Everything searchable, built once per language. */
+function buildIndex(lang) {
+  const out = [];
+  CHAPTERS.forEach((ch, n) => {
+    const { intro } = chapterParts(ch);
+    out.push({ nav: `ch:${ch.id}`, label: ch.title[lang], sub: `${lang === 'bn' ? 'অধ্যায়' : 'Chapter'} ${digits(n + 1, lang)}`, text: `${ch.title[lang]} ${SUMMARY[ch.id][lang]} ${intro.map((b) => blockText(b, lang)).join(' ')}` });
+    if (ch.generated === 'library') {
+      libraryData().forEach((cat) => cat.items.forEach((it) => out.push({ nav: `sec:${ch.id}/${cat.id}`, label: it.title, sub: cat.id, text: `${it.title} ${it.desc} ${cat.id} ${it.props.join(' ')}`, snip: it.desc })));
+    } else if (ch.generated === 'examples') {
+      exampleData().forEach((cat) => cat.items.forEach((it) => out.push({ nav: `sec:${ch.id}/${cat.id}`, label: it.title, sub: cat.id, text: `${it.title} ${it.desc} ${cat.id}`, snip: it.desc })));
+    } else {
+      const parts = chapterParts(ch);
+      parts.sections.forEach((s, i) => out.push({ nav: `sec:${ch.id}/${i}`, label: s.title[lang], sub: ch.title[lang], text: `${s.title[lang]} ${s.blocks.map((b) => blockText(b, lang)).join(' ')}` }));
+    }
+  });
+  return out.map((e) => ({ ...e, low: e.text.toLowerCase() }));
+}
+
+function snippet(e, q) {
+  const text = e.snip || e.text;
+  const at = text.toLowerCase().indexOf(q);
+  if (at < 0) return text.slice(0, 90);
+  const from = Math.max(0, at - 30);
+  return (from ? '… ' : '') + text.slice(from, from + 100) + (from + 100 < text.length ? ' …' : '');
 }
 
 export class ManualScreen {
@@ -68,6 +104,17 @@ export class ManualScreen {
     this.app = app;
     this.root = root;
     this.query = '';
+    this.stack = [{ nav: 'index', y: 0 }];
+    this.indexCache = {};
+    // one handler for every link and button on every page
+    root.addEventListener('click', (ev) => {
+      const n = ev.target.closest('[data-nav]');
+      if (n) { this.go(n.dataset.nav); return; }
+      const s = ev.target.closest('[data-swap]');
+      if (s) { this.swap(s.dataset.swap); return; }
+      const ex = ev.target.closest('[data-ex]');
+      if (ex) this.app.openExampleFromManual(ex.dataset.ex);
+    });
   }
 
   get lang() {
@@ -76,116 +123,148 @@ export class ManualScreen {
     return /^bn\b/i.test(navigator.language || '') ? 'bn' : 'en';
   }
 
-  /** Build the screen. `goto` is a chapter id to scroll to once it is on screen. */
-  render(goto) {
+  get here() { return this.stack[this.stack.length - 1]; }
+
+  /** Open the manual on its contents page, or straight at a chapter. */
+  open(chapterId) {
+    this.stack = [{ nav: 'index', y: 0 }];
+    if (chapterId && CHAPTERS.some((c) => c.id === chapterId)) this.stack.push({ nav: `ch:${chapterId}`, y: 0 });
+    this.paint();
+  }
+
+  /** Android Back / the arrow: one level up. Returns false when already on the contents page. */
+  back() {
+    if (this.stack.length <= 1) return false;
+    this.stack.pop();
+    this.paint(this.here.y);
+    return true;
+  }
+
+  go(nav) {
+    this.here.y = this.scrollApi?.y || 0;
+    // a link to a page that is already below us returns to it instead of piling up
+    const at = this.stack.findIndex((s) => s.nav === nav);
+    if (at >= 0) this.stack.length = at + 1; else this.stack.push({ nav, y: 0 });
+    this.paint(at >= 0 ? this.here.y : 0);
+  }
+
+  /** Replace the current page by a neighbour (previous / next) without growing the stack. */
+  swap(nav) { this.stack[this.stack.length - 1] = { nav, y: 0 }; this.paint(0); }
+
+  // ------------------------------------------------------------------ pages
+  resolve(nav) {
     const lang = this.lang;
-    const other = LANGS.find(([k]) => k !== lang);
+    const [kind, rest = ''] = nav.split(':');
+    if (kind === 'ch') {
+      const n = CHAPTERS.findIndex((c) => c.id === rest);
+      return n >= 0 ? this.chapterPage(n, lang) : this.indexPage(lang);
+    }
+    if (kind === 'sec') {
+      const [cid, sid] = rest.split('/');
+      const n = CHAPTERS.findIndex((c) => c.id === cid);
+      if (n >= 0) {
+        const secs = sectionsOf(CHAPTERS[n]), i = secs.findIndex((s) => s.id === sid);
+        if (i >= 0) return this.sectionPage(n, secs, i, lang);
+      }
+    }
+    return this.indexPage(lang);
+  }
+
+  indexPage(lang) {
+    return {
+      index: true,
+      title: UI_TEXT.title[lang], sub: `${APP.name} ${APP.version}`,
+      html: this.query ? this.resultsHtml(lang) : `
+        <section class="man-hero"><h2>${esc(UI_TEXT.title[lang])}</h2><p>${esc(UI_TEXT.tagline[lang])}</p></section>
+        <div class="man-menu">${CHAPTERS.map((c, n) => card(`ch:${c.id}`, `<span class="n">${digits(n + 1, lang)}</span>${icon(c.icon, 20)}`, c.title[lang], SUMMARY[c.id][lang])).join('')}</div>
+        <p class="copyright">© ${new Date().getFullYear()} RAPTI · rapti.net</p>`,
+    };
+  }
+
+  chapterPage(n, lang) {
+    const ch = CHAPTERS[n], { intro } = chapterParts(ch), secs = sectionsOf(ch);
+    const prev = CHAPTERS[n - 1], next = CHAPTERS[n + 1];
+    return {
+      title: ch.title[lang], sub: `${UI_TEXT.title[lang]} · ${digits(n + 1, lang)} / ${digits(CHAPTERS.length, lang)}`,
+      html: `
+        <h2 class="man-h"><span class="n">${digits(n + 1, lang)}</span>${icon(ch.icon, 22)}<span>${esc(ch.title[lang])}</span></h2>
+        ${intro.map((b) => blockHtml(b, lang)).join('')}
+        ${secs.length ? `<div class="man-menu">${secs.map((s) => card(`sec:${ch.id}/${s.id}`, icon(s.icon || 'layers', 20), s.title[lang], s.count ? `${digits(s.count, lang)} ${ch.generated === 'library' ? UI_TEXT.parts[lang] : UI_TEXT.examplesCount[lang]}` : '')).join('')}</div>` : ''}
+        <div class="man-pager">
+          ${prev ? `<button data-swap="ch:${prev.id}">${icon('back', 18)}<span><small>${esc(UI_TEXT.prev[lang])}</small>${esc(prev.title[lang])}</span></button>` : '<i></i>'}
+          ${next ? `<button data-swap="ch:${next.id}" class="r"><span><small>${esc(UI_TEXT.next[lang])}</small>${esc(next.title[lang])}</span>${icon('back', 18, 'flipx')}</button>` : '<i></i>'}
+        </div>`,
+    };
+  }
+
+  sectionPage(n, secs, i, lang) {
+    const ch = CHAPTERS[n], s = secs[i], prev = secs[i - 1], next = secs[i + 1];
+    return {
+      title: s.title[lang], sub: ch.title[lang],
+      html: `
+        <h2 class="man-h">${s.icon ? icon(s.icon, 22) : `<span class="n">${digits(i + 1, lang)}</span>`}<span>${esc(s.title[lang])}${s.count ? ` <em>${digits(s.count, lang)}</em>` : ''}</span></h2>
+        ${s.html(lang)}
+        <div class="man-pager">
+          ${prev ? `<button data-swap="sec:${ch.id}/${prev.id}">${icon('back', 18)}<span><small>${esc(UI_TEXT.prev[lang])}</small>${esc(prev.title[lang])}</span></button>` : '<i></i>'}
+          ${next ? `<button data-swap="sec:${ch.id}/${next.id}" class="r"><span><small>${esc(UI_TEXT.next[lang])}</small>${esc(next.title[lang])}</span>${icon('back', 18, 'flipx')}</button>` : '<i></i>'}
+        </div>`,
+    };
+  }
+
+  resultsHtml(lang) {
+    const q = this.query;
+    const idx = this.indexCache[lang] || (this.indexCache[lang] = buildIndex(lang));
+    const hits = idx.filter((e) => e.low.includes(q));
+    if (!hits.length) return `<p class="man-empty">${esc(UI_TEXT.noResult[lang])}</p>`;
+    // chapter and section pages first, then individual components and examples
+    hits.sort((a, b) => (a.snip ? 1 : 0) - (b.snip ? 1 : 0));
+    return `<div class="man-menu">${hits.slice(0, 80).map((e) => `
+      <button class="man-card res" data-nav="${esc(e.nav)}"><div><b>${esc(e.label)}</b><small>${esc(e.sub)}</small><span>${esc(snippet(e, q))}</span></div>${chev()}</button>`).join('')}</div>
+      ${hits.length > 80 ? `<p class="man-small">+ ${hits.length - 80}…</p>` : ''}`;
+  }
+
+  // ----------------------------------------------------------------- paint
+  paint(restoreY = 0) {
+    const lang = this.lang, other = LANGS.find(([k]) => k !== lang), page = this.resolve(this.here.nav);
     this.root.setAttribute('lang', lang);
     this.root.innerHTML = `
       <header class="topbar plain">
         <button class="icon-btn" data-x="back" title="Back">${icon('back', 22)}</button>
-        <div class="title"><b>${esc(UI_TEXT.title[lang])}</b><small>${esc(APP.name)} ${esc(APP.version)}</small></div>
-        <button class="icon-btn" data-x="top" title="${esc(UI_TEXT.contents[lang])}">${icon('grid', 21)}</button>
-        <button class="btn sm man-lang" data-x="lang" title="${esc(other[1])}">${esc(other[1])}</button>
+        <div class="title"><b>${esc(page.title)}</b><small>${esc(page.sub)}</small></div>
+        ${page.index ? '' : `<button class="icon-btn" data-x="home" title="${esc(UI_TEXT.contents[lang])}">${icon('grid', 21)}</button>`}
+        <button class="btn sm man-lang" data-x="lang">${esc(other[1])}</button>
       </header>
-      <div class="man-search">${icon('search', 18)}<input type="search" placeholder="${esc(UI_TEXT.search[lang])}" value="${esc(this.query)}" enterkeyhint="search"></div>
-      <div class="man-scroll"><div class="man-inner">
-        <section class="man-hero">
-          <h2>${esc(UI_TEXT.title[lang])}</h2>
-          <p>${esc(UI_TEXT.tagline[lang])}</p>
-        </section>
-        <nav class="man-toc" aria-label="${esc(UI_TEXT.contents[lang])}">
-          ${CHAPTERS.map((c, n) => `<button data-go="${c.id}"><span class="n">${digits(n + 1, lang)}</span>${icon(c.icon, 17)}<span class="t">${esc(c.title[lang])}</span></button>`).join('')}
-        </nav>
-        ${CHAPTERS.map((c, n) => `
-        <section class="man-ch" id="man-${c.id}" data-ch="${c.id}">
-          <h2 class="man-h" data-s="${esc(c.title[lang].toLowerCase())}"><span class="n">${digits(n + 1, lang)}</span>${icon(c.icon, 22)}<span>${esc(c.title[lang])}</span></h2>
-          ${c.blocks.map((b) => blockHtml(b, lang)).join('')}
-          ${c.generated === 'library' ? libraryHtml(lang) : ''}
-          ${c.generated === 'examples' ? examplesHtml(lang) : ''}
-        </section>`).join('')}
-        <p class="man-empty" hidden>${esc(UI_TEXT.noResult[lang])}</p>
-        <p class="copyright">© ${new Date().getFullYear()} RAPTI · rapti.net</p>
-      </div></div>`;
+      ${page.index ? `<div class="man-search">${icon('search', 18)}<input type="search" placeholder="${esc(UI_TEXT.search[lang])}" value="${esc(this.query)}" enterkeyhint="search"></div>` : ''}
+      <div class="man-scroll"><div class="man-inner man-view ${this.stack.length > 1 ? 'deep' : ''}">${page.html}</div></div>`;
+    this.bind(page, other);
+    this.scrollApi?.scrollTo?.(restoreY, false);
+  }
 
-    const scroller = this.root.querySelector('.man-scroll');
-    const inner = this.root.querySelector('.man-inner');
-    this.scroller = scroller;
+  bind(page, other) {
+    const scroller = this.root.querySelector('.man-scroll'), inner = this.root.querySelector('.man-inner');
     this.scrollApi = iosScroll(scroller, inner);
-
-    this.root.querySelector('[data-x=back]').addEventListener('click', () => this.app.closeManual());
-    this.root.querySelector('[data-x=top]').addEventListener('click', () => { this.setQuery(''); this.jumpTop(); });
+    this.root.querySelector('[data-x=back]').addEventListener('click', () => { if (!this.back()) this.app.closeManual(); });
+    this.root.querySelector('[data-x=home]')?.addEventListener('click', () => { this.stack = [{ nav: 'index', y: 0 }]; this.paint(); });
     this.root.querySelector('[data-x=lang]').addEventListener('click', () => {
+      this.here.y = this.scrollApi?.y || 0;
       this.app.settings.manualLang = other[0];
       this.app.saveSettings();
-      this.render();
+      this.paint(this.here.y);
     });
     const input = this.root.querySelector('.man-search input');
-    let t = 0;
-    input.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => this.setQuery(input.value), 140); });
-    this.root.addEventListener('click', (ev) => {
-      const g = ev.target.closest('[data-go]');
-      if (g && this.root.contains(g)) { this.setQuery(''); this.goTo(g.dataset.go); return; }
-      const ex = ev.target.closest('[data-ex]');
-      if (ex && this.root.contains(ex)) this.app.openExampleFromManual(ex.dataset.ex);
-    });
-    // a <details> opening or closing changes the page height
-    this.root.querySelectorAll('details').forEach((d) => d.addEventListener('toggle', () => this.scrollApi?.refresh?.()));
-
-    if (this.query) this.applyQuery();
-    if (goto) requestAnimationFrame(() => requestAnimationFrame(() => this.goTo(goto, false)));
-  }
-
-  jumpTop() { this.scrollApi?.scrollTo(0, true); }
-
-  goTo(id, animate = true) {
-    const sec = this.root.querySelector(`#man-${id}`);
-    if (!sec || !this.scrollApi) return;
-    // layout position, not the on-screen one (the page is moved by a transform while scrolling)
-    let y = -8;
-    for (let n = sec; n && n !== this.scroller; n = n.offsetParent) y += n.offsetTop;
-    this.scrollApi.scrollTo(Math.max(0, y), animate);
-  }
-
-  setQuery(q) {
-    q = q.trim().toLowerCase();
-    if (q === this.query) return;
-    this.query = q;
-    const input = this.root.querySelector('.man-search input');
-    if (input && input.value.trim().toLowerCase() !== q) input.value = q;
-    this.applyQuery();
-  }
-
-  /** Show only what matches; with no query everything is shown again. */
-  applyQuery() {
-    const q = this.query, root = this.root;
-    root.classList.toggle('searching', !!q);
-    const matches = (el) => !q || (el.dataset.s || '').includes(q);
-    for (const el of root.querySelectorAll('[data-s]:not(.man-h)')) el.hidden = !matches(el);
-    // block containers: a list or table stays if any row matches
-    for (const el of root.querySelectorAll('ol.man-b, ul.man-b, .man-tablewrap')) {
-      el.hidden = !!q && !el.querySelector('[data-s]:not([hidden])');
+    if (input) {
+      let t = 0;
+      input.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          this.query = input.value.trim().toLowerCase();
+          // only the list below changes, so the keyboard stays up
+          const pg = this.indexPage(this.lang);
+          inner.innerHTML = pg.html;
+          this.scrollApi?.refresh?.();
+          this.scrollApi?.scrollTo(0, false);
+        }, 140);
+      });
     }
-    // the plain note under the library title has no text to match
-    for (const el of root.querySelectorAll('.man-small')) el.hidden = !!q;
-    let any = false;
-    for (const sec of root.querySelectorAll('.man-ch')) {
-      const hit = !q || sec.querySelector('.man-b:not([hidden]), .man-item:not([hidden])');
-      // a chapter whose title matches shows its whole text
-      const titleHit = q && matches(sec.querySelector('.man-h'));
-      if (titleHit) sec.querySelectorAll('[hidden]').forEach((el) => { if (!el.classList.contains('man-small')) el.hidden = false; });
-      sec.hidden = !hit && !titleHit;
-      if (!sec.hidden) any = true;
-    }
-    for (const d of root.querySelectorAll('details')) {
-      const has = !q || d.querySelector('.man-item:not([hidden]), .man-b:not([hidden])');
-      d.hidden = !has;
-      if (q && has) d.open = true;
-    }
-    root.querySelector('.man-toc').hidden = !!q;
-    root.querySelector('.man-hero').hidden = !!q;
-    root.querySelector('.man-empty').hidden = !q || any;
-    this.scrollApi?.scrollTo(0, false);
-    this.scrollApi?.refresh?.();
   }
 }

@@ -33,6 +33,9 @@ export const UI_TEXT = {
     bn: 'কম্পোনেন্টের বর্ণনা অ্যাপের ভেতরে যেমন আছে, তেমনই ইংরেজিতে দেওয়া হলো।',
   },
   parts: { en: 'components', bn: 'টি কম্পোনেন্ট' },
+  examplesCount: { en: 'examples', bn: 'টি উদাহরণ' },
+  prev: { en: 'Previous', bn: 'আগের' },
+  next: { en: 'Next', bn: 'পরের' },
   version: { en: 'Version', bn: 'ভার্সন' },
   tagline: {
     en: 'Everything in the app, explained step by step.',
@@ -943,6 +946,42 @@ export const CATEGORY_NOTES = {
     bn: 'যে মিটার সার্কিটেই থাকে: ভোল্টমিটার, অ্যামমিটার (AC-তে RMS-এর জন্য **Auto**), ওহমমিটার, ওয়াটমিটার, পাওয়ার-ফ্যাক্টর, VAR, kWh, ফ্রিকোয়েন্সি, ফেজ, dB, পিক, LCR, মেগার ও মুভিং-কয়েল মিটার। **Test point** ও **Label** স্কিমাটিকে জায়গা চিহ্নিত ও নাম দেয়।',
   },
 };
+
+// One-line description of each chapter, shown on the manual's contents page.
+export const SUMMARY = {
+  welcome: { en: 'What the app does and who it is for', bn: 'অ্যাপ কী করে ও কাদের জন্য' },
+  quickstart: { en: 'Build and run your first circuit in 2 minutes', bn: '২ মিনিটে প্রথম সার্কিট বানান ও চালান' },
+  screens: { en: 'The main pages and how to move between them', bn: 'মূল পেজগুলো ও এক পেজ থেকে অন্য পেজে যাওয়া' },
+  editor: { en: 'Top bar, toolbar, board and gestures', bn: 'টপ বার, টুলবার, বোর্ড ও জেসচার' },
+  adding: { en: 'Find components and place them on the board', bn: 'কম্পোনেন্ট খুঁজে বোর্ডে বসানো' },
+  editing: { en: 'Select, move, rotate, copy, undo', bn: 'সিলেক্ট, সরানো, ঘোরানো, কপি, Undo' },
+  wiring: { en: 'Draw wires, junctions and ground', bn: 'তার আঁকা, জংশন ও গ্রাউন্ড' },
+  values: { en: 'Type values, sliders and the knob', bn: 'মান টাইপ করা, স্লাইডার ও নব' },
+  running: { en: 'Run, pause, speed, live colours, errors', bn: 'Run, Pause, গতি, লাইভ রং, এরর' },
+  scope: { en: '6 channels, FFT and XY views', bn: '৬ চ্যানেল, FFT ও XY ভিউ' },
+  meter: { en: 'Voltage, current, resistance and power', bn: 'ভোল্টেজ, কারেন্ট, রেজিস্ট্যান্স ও পাওয়ার' },
+  analysis: { en: 'AC sweep, DC sweep, operating point, SPICE', bn: 'AC sweep, DC sweep, operating point, SPICE' },
+  saving: { en: 'Autosave, files, sharing and backup', bn: 'অটোসেভ, ফাইল, শেয়ার ও ব্যাকআপ' },
+  settings: { en: 'Every setting explained', bn: 'প্রতিটি সেটিং ব্যাখ্যাসহ' },
+  library: { en: 'All components, category by category', bn: 'ক্যাটাগরি ধরে ধরে সব কম্পোনেন্ট' },
+  examples: { en: 'Ready-made circuits to learn from', bn: 'শেখার জন্য তৈরি সার্কিট' },
+  formulas: { en: 'Formulas, unit prefixes and colours', bn: 'সূত্র, একক প্রিফিক্স ও রং' },
+  troubleshooting: { en: 'Fixes for common problems, FAQ', bn: 'সাধারণ সমস্যার সমাধান, প্রশ্নোত্তর' },
+  about: { en: 'RAPTI courses and contact', bn: 'RAPTI-র কোর্স ও যোগাযোগ' },
+};
+
+/**
+ * A chapter split into pages: the text before its first sub-heading, then one
+ * section per sub-heading. A chapter with fewer than two sections stays on one page.
+ */
+export function chapterParts(c) {
+  const intro = [], sections = [];
+  for (const b of c.blocks) {
+    if (b.t === 'h') sections.push({ title: { en: b.en, bn: b.bn }, blocks: [] });
+    else (sections.length ? sections[sections.length - 1].blocks : intro).push(b);
+  }
+  return sections.length >= 2 ? { intro, sections } : { intro: c.blocks, sections: [] };
+}
 
 // ---------------------------------------------------------------- chapter references
 const BN_DIGITS = '০১২৩৪৫৬৭৮৯';

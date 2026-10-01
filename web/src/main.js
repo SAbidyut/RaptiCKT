@@ -132,7 +132,7 @@ class App {
   /** Open the user manual (optionally at a chapter). Back returns to wherever it was opened from. */
   openManual(chapter) {
     if (this.current !== 'manual') this.manualFrom = this.current;
-    this.manual.render(chapter);
+    this.manual.open(chapter);
     this.show('manual');
   }
   closeManual() {
@@ -154,7 +154,7 @@ class App {
 
   back() {
     if (this.el.querySelector('.modal.open')) { this.closeSheet(); return true; }
-    if (this.current === 'manual') { this.closeManual(); return true; }
+    if (this.current === 'manual') { if (!this.manual.back()) this.closeManual(); return true; }
     if (this.current === 'settings') { this.closeSettings(); return true; }
     if (this.current === 'editor') { if (!this.editor.back()) this.goHome(); return true; }
     if (this.current === 'home' && this.home.tab !== 'home') { this.home.tab = 'home'; this.home.render(); return true; }
