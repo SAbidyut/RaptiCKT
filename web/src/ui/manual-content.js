@@ -844,7 +844,8 @@ export const CHAPTERS = [
       P(`**${RAPTI.full}** (RAPTI) was established in ${RAPTI.founded}. ${RAPTI.mission} ${RAPTI.about}`,
         `**${RAPTI.full}** (RAPTI) ${RAPTI.founded} সালে প্রতিষ্ঠিত। লক্ষ্য: অটোমেশন শিল্পের জন্য দক্ষ জনশক্তি তৈরি করা। অভিজ্ঞ ও দক্ষ ইঞ্জিনিয়ারদের তৈরি কোর্সে শিক্ষার্থীরা এমন জ্ঞান ও দক্ষতা অর্জন করে যা চাকরির বাজারে সত্যিই দরকার।`),
       H('Courses', 'কোর্স'),
-      L(RAPTI.courses, RAPTI.courses),
+      L(RAPTI.courseList.map((c) => `${c.name} — ${c.months}`), RAPTI.courseList.map((c) => `${c.name} — ${c.months}`)),
+      P('Tap a course on the **About** page to see what it covers and how long it takes.', '**About** পেজে কোনো কোর্সে ট্যাপ করলে সেটি কী নিয়ে এবং কতদিনের তা দেখা যায়।'),
       H('Contact', 'যোগাযোগ'),
       L([
         `Website: ${RAPTI.website.replace('https://', '')}`,

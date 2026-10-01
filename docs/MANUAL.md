@@ -1248,13 +1248,17 @@ The engine follows SPICE methods and has been checked against textbook answers (
 
 #### Courses
 
-- Industrial Automation (PLC)
-- Industrial Electrical Control
-- General Electrical
-- House Wiring
-- Computer Office Application
-- Web Design & Development
-- App Development
+- Industrial Automation (PLC) — 3 Months
+- Industrial Electrical Control — 3 Months
+- General Electrician — 3 Months
+- House Wiring — 3 Months
+- CC Camera — 15 Days
+- Computer Office Application — 3 Months
+- Graphic Design & Multimedia — 3 Months
+- Web Design & Development — 3 Months
+- App Development — 3 Months
+
+Tap a course on the **About** page to see what it covers and how long it takes.
 
 #### Contact
 

@@ -135,6 +135,14 @@ await page.evaluate(() => { app.home.tab = 'home'; app.home.render(); }); await 
 await page.click('[data-h=manual]'); await page.waitForTimeout(400);
 ok('Home banner opens the manual', await screen() === 'manual');
 
+// About: tapping a course opens a small popup with what it is and how long it takes
+await page.evaluate(() => app.goHome && app.closeManual());
+await page.evaluate(() => { app.show('home'); app.home.tab = 'about'; app.home.render(); }); await page.waitForTimeout(600);
+ok('About lists the 9 courses as buttons', await page.locator('[data-course]').count() === 9);
+await page.locator('[data-course]').nth(4).evaluate((e) => e.click()); await page.waitForTimeout(400);
+const pop = await page.locator('.modal.open .course-pop').textContent();
+ok('popup says what the course is and its duration', pop.includes('What is this course about?') && pop.includes('surveillance') && pop.includes('15 Days'));
+await shot('10-course-popup');
 let fails = 0;
 for (const [name, v] of checks) { if (!v) fails++; console.log(v ? 'ok  ' : 'FAIL', name); }
 console.log(errs.length ? errs : 'no page errors', fails ? `${fails} FAILED` : 'all passed');

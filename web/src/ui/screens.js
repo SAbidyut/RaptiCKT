@@ -380,7 +380,8 @@ export function renderAbout(app, body) {
       <p class="lead">${esc(RAPTI.mission)}</p>
       <p>${esc(RAPTI.about)}</p>
       <h4>Courses</h4>
-      <div class="course-chips">${RAPTI.courses.map((c) => `<span>${esc(c)}</span>`).join('')}</div>
+      <p class="small course-hint">Tap a course to see what it covers and how long it takes.</p>
+      <div class="course-chips">${RAPTI.courseList.map((c, i) => `<button data-course="${i}">${esc(c.name)}</button>`).join('')}</div>
       <h4>Contact</h4>
       <div class="contact">
         <button data-u="${RAPTI.website}">${icon('globe', 18)}<div><b>Website</b><span>rapti.net</span></div></button>
@@ -397,6 +398,18 @@ export function renderAbout(app, body) {
     </section>
     <p class="copyright">© ${new Date().getFullYear()} ${RAPTI.full} · rapti.net</p>`;
   body.querySelectorAll('[data-u]').forEach((b) => b.addEventListener('click', () => app.bridge.openUrl(b.dataset.u)));
+  body.querySelectorAll('[data-course]').forEach((b) => b.addEventListener('click', () => {
+    const c = RAPTI.courseList[+b.dataset.course];
+    app.showSheet(esc(c.name), `
+      <div class="course-pop">
+        <span class="tag">${esc(c.cat)}</span>
+        <h5>What is this course about?</h5>
+        <p>${esc(c.about)}</p>
+        <h5>Duration</h5>
+        <p class="dur">${icon('clock', 18)} <b>${esc(c.months)}</b></p>
+        <div class="sheet-actions"><button data-x="site">${icon('globe', 18)} Syllabus, fee & admission on rapti.net</button></div>
+      </div>`, (root) => root.querySelector('[data-x=site]').addEventListener('click', () => app.bridge.openUrl(RAPTI.coursesUrl)));
+  }));
 }
 
 // ---------------------------------------------------------------- settings

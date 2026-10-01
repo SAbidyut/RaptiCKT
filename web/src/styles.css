@@ -201,7 +201,15 @@ img.thumb { animation: thumbIn 0.35s ease both; }
 .about-list li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--text2); }
 .about-list .ic { color: var(--accent); }
 .course-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.course-chips span { padding: 6px 10px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); font-size: 12.5px; }
+.course-chips button { padding: 7px 11px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); font-size: 12.5px; color: var(--text); text-align: left; }
+.course-chips button:active { background: var(--surface3); border-color: var(--accent); }
+.about-card p.course-hint { margin: 0 0 8px; color: var(--muted); }
+.course-pop { padding: 0 4px 6px; }
+.course-pop h5 { margin: 14px 0 4px; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+.course-pop p { margin: 0; font-size: 14.5px; line-height: 1.5; color: var(--text2); }
+.course-pop .dur { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.course-pop .dur .ic { color: var(--accent); }
+.course-pop .sheet-actions { margin-top: 16px; }
 .contact { display: grid; gap: 8px; }
 .contact button { display: flex; align-items: center; gap: 12px; text-align: left; padding: 11px 12px; border-radius: 12px; background: var(--surface2); border: 1px solid var(--border); }
 .contact .ic { color: var(--accent); }
