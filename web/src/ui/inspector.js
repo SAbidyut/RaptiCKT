@@ -352,15 +352,24 @@ export class Knob {
    * 0.5 → 0.6), two from 10 up (12 V → 13 V, 230 V → 240 V). − / + move a tenth
    * of that; whole-number quantities (counts, β…) always move by whole numbers.
    */
-  linSteps() {
+  /**
+   * Steps follow the value as it is shown (with its m / k prefix): 1–99 of a
+   * unit move one at a time, 100–999 ten at a time — 5 V → 6 V, 230 V → 240 V,
+   * 10 mA → 11 mA. Going down from 100 (or 1 k) uses the smaller step, so the
+   * dial gives 100 → 99 and not 100 → 90.
+   */
+  linSteps(n = 1) {
     const p = this.prop, v = this.el.p[p.key];
     if (p.step) return { coarse: p.step, fine: p.step };
     const whole = !p.unit && Number.isInteger(p.def) && Number.isInteger(v);
-    if (whole) { const c = Math.abs(v) >= 100 ? Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 1) : 1; return { coarse: c, fine: 1 }; }
+    if (whole) { const a = Math.abs(v) - (n < 0 ? 1 : 0); const c = a >= 100 ? Math.pow(10, Math.floor(Math.log10(a)) - 1) : 1; return { coarse: c, fine: 1 }; }
     if (['%', '°', '°C', '%RH', 'dB SPL'].includes(p.unit)) return { coarse: 1, fine: 0.1 };
-    const mag = Math.abs(v) > 1e-12 ? Math.abs(v) : Math.abs(p.def) || 1;
+    let mag = Math.abs(v) > 1e-12 ? Math.abs(v) : Math.abs(p.def) || 1;
+    // (but 1 V, 1 mA … keep their own step: 1 V → 0 V, not 1 V → 990 mV)
+    if (n < 0 && ((Math.floor(Math.log10(mag) + 1e-9) % 3) + 3) % 3) mag *= 1 - 1e-6;
     const e = Math.floor(Math.log10(mag) + 1e-9);
-    const coarse = Math.pow(10, mag >= 10 ? e - 1 : e);
+    const shown = mag / Math.pow(10, 3 * Math.floor(e / 3)); // 1 … 999 after the prefix
+    const coarse = Math.pow(10, shown >= 10 ? e - 1 : e);
     return { coarse, fine: coarse / 10 };
   }
   apply(v) {
@@ -383,7 +392,7 @@ export class Knob {
       if (m > 9) { m = 1; e += 1; } else if (m < 1) { m = 9; e -= 1; }
       if (this.apply(+(m * Math.pow(10, e)).toPrecision(6))) this.angle += (n * 40 * Math.PI) / 180; // keeps turning the same way: 9 → 1 goes forward
     } else {
-      this.linMove(v, n, this.linSteps().coarse);
+      this.linMove(v, n, this.linSteps(n).coarse);
     }
     this.update();
   }
@@ -397,7 +406,7 @@ export class Knob {
       m = Math.round(m * 10 + n) / 10;
       if (m >= 10) { m /= 10; e += 1; } else if (m < 1) { m *= 10; e -= 1; }
       this.apply(+(m * Math.pow(10, e)).toPrecision(6));
-    } else this.linMove(v, n, this.linSteps().fine);
+    } else this.linMove(v, n, this.linSteps(n).fine);
   }
 
   /** Move a linear value to the next multiple of st in direction n (9.5 → 10, not 11). */

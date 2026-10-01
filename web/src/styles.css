@@ -507,3 +507,119 @@ input.toggle:checked::after { transform: translateX(18px); }
 .ios-bar { position: absolute; top: 0; right: 3px; width: 3px; border-radius: 3px; background: rgba(140, 150, 170, 0.55);
   opacity: 0; pointer-events: none; z-index: 6; transition: opacity 0.35s ease; will-change: transform, opacity; }
 :root[data-theme='light'] .ios-bar { background: rgba(60, 70, 90, 0.4); }
+
+/* ------------------------------------------------- small phones */
+/* nothing may be wider than the screen */
+.ex-list { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
+.popover { max-width: calc(100% - 20px); }
+.menu { max-width: calc(100% - 16px); }
+.set-row > div { flex: 1; min-width: 0; }
+.set-row select { flex: none; max-width: 55%; }
+.bottom-nav button span { white-space: nowrap; }
+/* a centred toast is as wide as its text (up to 86 %), not squeezed into the right half */
+.toast { width: max-content; text-align: center; }
+
+/* narrow phones (360 px and similar) */
+@media (max-width: 380px) {
+  .home-head { padding-left: 14px; padding-right: 10px; }
+  .home-body { padding-left: 14px; padding-right: 14px; }
+  .brand b { font-size: 19px; }
+  .brand small { font-size: 9.5px; letter-spacing: 1.4px; }
+  .hero { padding: 22px 16px 18px; border-radius: 20px; }
+  .hero p { font-size: 13.5px; }
+  .hero .btn { padding-left: 14px; padding-right: 14px; }
+  .hero-stats { gap: 14px; }
+  .hero-stats b { font-size: 19px; }
+  .hero-stats span { font-size: 10px; letter-spacing: 0.6px; }
+  .page-title { font-size: 22px; }
+  .ex-item .thumb { width: 100px; }
+  .ex-item b { font-size: 13.5px; }
+  .card { width: 152px; }
+  .bottom-nav { padding-left: 4px; padding-right: 4px; }
+  .bottom-nav button { padding: 4px 8px; font-size: 11px; }
+  .about-hero h2 { font-size: 26px; }
+  .about-tag { font-size: 10.5px; letter-spacing: 1px; }
+  .about-card { padding: 14px 12px; }
+  .set-scroll { padding-left: 12px; padding-right: 12px; }
+  .set-row { padding: 10px 12px; gap: 10px; }
+  /* editor */
+  .topbar .icon-btn { width: 36px; }
+  .toolbar { padding: 5px 6px; }
+  .tb.run { min-width: 52px; }
+  .fab { right: 12px; width: 54px; height: 54px; border-radius: 18px; }
+  .quickbar { left: 8px; right: 74px; height: 56px; padding: 0 2px; }
+  .quickbar > button { width: 34px; }
+  .quickbar .qb-main { padding: 0 4px; gap: 4px; min-width: 48px; }
+  .quickbar .qb-main b { font-size: 13px; }
+  .quickbar .qb-read { font-size: 10.5px; }
+  .knob { right: 8px; bottom: calc(84px + var(--safe-b)); }
+  .knob-label { min-width: 96px; padding: 4px 8px; }
+  .pal-inner { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; padding: 4px 10px 0; }
+  .pal-item img { width: 46px; height: 46px; }
+  .pal-tabs button { height: 32px; padding: 0 10px; font-size: 12.5px; }
+  .insp-head { padding: 4px 8px 6px 12px; }
+  .insp-actions button { min-width: 52px; }
+  .insp-body { padding: 4px 12px 14px; }
+  .num-in input { width: 96px; }
+  .meter-card { width: 200px; }
+  .scope-meas { font-size: 9.5px; max-width: calc(100% - 96px); }
+  .toast { padding: 8px 12px; font-size: 13px; }
+  .dmm-val { font-size: 22px; }
+}
+
+/* very narrow phones (320 px) */
+@media (max-width: 340px) {
+  .brand svg { width: 38px; height: 38px; }
+  .brand b { font-size: 17px; }
+  .brand small { font-size: 8.5px; letter-spacing: 1px; }
+  .hero h1 { font-size: 21px; }
+  .hero p { font-size: 13px; }
+  .hero-stats { gap: 10px; }
+  .hero-stats b { font-size: 17px; }
+  .hero-stats span { font-size: 9px; letter-spacing: 0.3px; }
+  .bottom-nav button { padding: 4px 5px; font-size: 10.5px; }
+  .ex-item { gap: 10px; padding: 8px; }
+  .ex-item .thumb { width: 86px; }
+  .ex-item p { font-size: 12px; }
+  .feat-grid { gap: 8px; }
+  .topbar { padding-left: 2px; padding-right: 2px; }
+  .topbar .icon-btn { width: 33px; }
+  .topbar .title { padding: 0 4px; }
+  .topbar .title b { font-size: 15px; }
+  .tb { min-width: 41px; padding: 5px 4px; font-size: 9px; }
+  .tb.run { min-width: 48px; }
+  .toolbar .sep { margin: 0 2px; }
+  .fab { right: 10px; width: 50px; height: 50px; border-radius: 16px; }
+  .quickbar { left: 6px; right: 66px; height: 54px; }
+  .quickbar > button { width: 31px; }
+  .knob { right: 4px; }
+  .knob-row { gap: 4px; }
+  .knob-btn { width: 32px; height: 32px; }
+  .pal-inner { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
+  .pal-item img { width: 42px; height: 42px; }
+  .pal-item span { font-size: 10.5px; }
+  .insp-ico { width: 38px; height: 38px; }
+  .insp-title b { font-size: 15px; }
+  .insp-read { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+  .num-in input { width: 84px; }
+  .sheet-actions button { padding: 11px 8px; font-size: 14px; }
+}
+
+/* short screens: smaller knob, bars and panels so the board keeps some room */
+@media (max-height: 680px) {
+  .topbar { height: calc(48px + var(--safe-t)); }
+  .tb { padding-top: 3px; padding-bottom: 3px; }
+  .knob { transform: scale(0.86); transform-origin: 100% 100%; bottom: calc(80px + var(--safe-b)); }
+  .knob.open { animation: none; }
+  .editor.with-scope .scope-panel { min-height: 130px; height: 28vh; }
+  .palette { height: min(60%, 420px); }
+  .sheet, .inspector { max-height: 78%; }
+  .hero { padding-top: 18px; }
+  .hero h1 { margin-bottom: 6px; }
+  .hero p { margin-bottom: 14px; }
+  .hero-stats { margin-top: 14px; }
+}
+@media (max-height: 600px) {
+  .knob { transform: scale(0.78); bottom: calc(76px + var(--safe-b)); }
+  .modal-card { max-height: 92vh; }
+}

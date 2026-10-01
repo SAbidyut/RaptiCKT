@@ -560,8 +560,30 @@ export class Editor {
     this.topologyChanged();
     this.haptic(10);
     // keep every part in view above the menu: zoom out (never in) and centre when they no longer fit
-    if (palH) this.fitAbove(visH);
+    if (palH) this.fitAbove(visH); else this.clearOfKnob(e);
     this.toast(palH ? `${e.name} added` : `${e.constructor.title} added — drag to move, drag a terminal to wire`);
+  }
+
+  /** On small screens the value knob can sit on top of a new part: slide the board up a little. */
+  clearOfKnob(e) {
+    const host = this.knob?.host;
+    if (!host || !host.classList.contains('open')) return;
+    const R = this.renderer, cv = R.canvas || this.root.querySelector('canvas.board');
+    if (!cv) return;
+    const k = host.getBoundingClientRect(), c = cv.getBoundingClientRect();
+    const [a, b, cc, d] = e.worldBox();
+    const [x0, y0] = R.toScreen(a, b), [x1, y1] = R.toScreen(cc, d);
+    const kx0 = k.left - c.left - 8, ky0 = k.top - c.top - 8;
+    if (x1 < kx0 || y1 < ky0) return; // already clear
+    const dy = Math.min(y1 - ky0, Math.max(0, y0 - 60)); // never above the top bar's room
+    if (dy <= 0) return;
+    const from = R.oy, t0 = performance.now();
+    const step = (now) => {
+      const t = Math.min(1, (now - t0) / 220), q = 1 - Math.pow(1 - t, 3);
+      R.oy = from - dy * q; this.dirtyDraw = true;
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   /** Fit all parts into the board area above the open component menu if any are outside it. */
