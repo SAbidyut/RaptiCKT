@@ -1,5 +1,6 @@
 // RaptiCKT application shell.
 
+import { motion } from './ui/motion.js';
 import { CATEGORIES } from './elements/index.js';
 import { Editor } from './ui/editor.js';
 import { HomeScreen, renderSettings } from './ui/screens.js';
@@ -17,6 +18,10 @@ class App {
     // Android pads the WebView for system bars natively; don't add CSS safe-area insets on top.
     if (bridge.isAndroid()) document.documentElement.classList.add('android');
     this.settings = store.settings();
+    // smooth or simple motion, decided before anything is drawn
+    motion.init(this.settings.animations, bridge.version());
+    motion.probe();
+    motion.onChange(() => { if (this.current === 'home') this.home.render(); });
     this.el = document.getElementById('app');
     this.el.innerHTML = `
       <section class="screen home"></section>

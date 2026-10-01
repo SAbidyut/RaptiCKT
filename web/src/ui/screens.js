@@ -8,6 +8,7 @@ import { allTypes, CATEGORIES } from '../elements/index.js';
 import { THEMES } from './theme.js';
 import { fmtSI, parseSI } from '../engine/units.js';
 import { iosScroll } from './scroller.js';
+import { motion } from './motion.js';
 
 // 01617-345534 style, as printed by RAPTI
 const fmtPhone = (p) => p.replace(/^\+880/, '0').replace(/^(\d{5})(\d+)$/, '$1-$2');
@@ -78,7 +79,7 @@ export class HomeScreen {
   reveal(body) {
     this.io?.disconnect();
     const scroller = this.scroller;
-    if (!scroller || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!scroller || !motion.smooth || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const intro = body.classList.contains('intro');
     const items = [...body.querySelectorAll('.ex-item, .lib-item')];
     if (this.tab === 'home' || this.tab === 'about') items.push(...body.children);
@@ -370,6 +371,7 @@ export function renderSettings(app, root) {
       ${row('Current animation', tog('currentDots'), 'Moving dots show current flow')}
       ${row('Animation speed', sel('dotSpeed', [[0.5, 'Slow'], [1, 'Normal'], [2, 'Fast'], [4, 'Very fast']]))}
       ${row('Capacitor charge', tog('showCharge'), '± signs on capacitor plates')}
+      ${row('Animations', sel('animations', [['auto', 'Auto (by phone speed)'], ['on', 'Smooth (always)'], ['off', 'Off (simple, fastest)']]), `Now: ${motion.smooth ? 'smooth' : 'simple'} — ${esc(motion.reason)}`)}
       ${row('Value labels', tog('showValues'))}
       ${row('Component names', tog('showNames'))}
       ${row('Live node voltages', tog('liveVolts'), 'Voltage of every net written on its wire')}
@@ -410,6 +412,7 @@ export function renderSettings(app, root) {
     s[k] = v;
     app.saveSettings();
     if (k === 'theme') app.applyTheme();
+    if (k === 'animations') { if (v === 'auto') motion.reset(); motion.decide(v); renderSettings(app, root); }
   }));
   root.querySelector('[data-x=backup]').addEventListener('click', () => app.backupAll());
   root.querySelector('[data-x=restore]').addEventListener('click', () => app.importFile());

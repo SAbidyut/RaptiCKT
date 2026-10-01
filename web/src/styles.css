@@ -475,8 +475,18 @@ input.toggle:checked::after { transform: translateX(18px); }
 /* clip, not hidden: a hidden box is still a scroll container and would swallow sideways swipes on inner rows */
 .ios-scroll { position: relative; min-height: 0; overflow: hidden !important; overscroll-behavior: none; }
 @supports (overflow: clip) { .ios-scroll { overflow: clip !important; } }
-/* rows inside the page are moved by scroller.js too (no native sideways pan, no snapping fights) */
-.ios-content .card-row, .ios-content .chips { touch-action: pan-y; scroll-snap-type: none; }
+/* sideways rows: a track inside the row is moved by scroller.js (and card rows snap to a card) */
+.h-row { overflow: hidden !important; touch-action: pan-y; scroll-snap-type: none; }
+@supports (overflow: clip) { .h-row { overflow: clip !important; } }
+.h-track { display: flex; gap: inherit; width: max-content; flex: none; will-change: transform; backface-visibility: hidden; }
+
+/* simple motion (slow phones, or Animations: Off): the platform's own scrolling, no decoration */
+.native-scroll { overflow-y: auto !important; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+:root.lite .rv { opacity: 1 !important; transform: none !important; transition: none !important; }
+:root.lite .home-body.intro > *, :root.lite .home-body.swap, :root.lite img.thumb, :root.lite .hero-wave,
+:root.lite .splash svg, :root.lite .splash h1, :root.lite .splash p, :root.lite .splash .logo-dot { animation: none !important; }
+:root.lite *, :root.lite *::before, :root.lite *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
+:root.lite .card-row { scroll-snap-type: x proximity; }
 .ios-content { will-change: transform; backface-visibility: hidden; }
 .ios-bar { position: absolute; top: 0; right: 3px; width: 3px; border-radius: 3px; background: rgba(140, 150, 170, 0.55);
   opacity: 0; pointer-events: none; z-index: 6; transition: opacity 0.35s ease; will-change: transform, opacity; }

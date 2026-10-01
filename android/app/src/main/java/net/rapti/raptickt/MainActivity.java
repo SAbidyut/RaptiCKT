@@ -2,6 +2,7 @@ package net.rapti.raptickt;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -257,6 +258,26 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------- bridge
     private final class Bridge {
+        /** Hardware facts the web app uses to pick smooth or simple animations. */
+        @JavascriptInterface
+        public String deviceInfo() {
+            JSONObject o = new JSONObject();
+            try {
+                ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+                ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+                am.getMemoryInfo(mi);
+                o.put("ramMB", mi.totalMem / (1024 * 1024));
+                o.put("lowRam", am.isLowRamDevice());
+                o.put("cores", Runtime.getRuntime().availableProcessors());
+                o.put("sdk", Build.VERSION.SDK_INT);
+                o.put("perfClass", Build.VERSION.SDK_INT >= 31 ? Build.VERSION.MEDIA_PERFORMANCE_CLASS : 0);
+                o.put("hz", (double) getWindowManager().getDefaultDisplay().getRefreshRate());
+            } catch (Exception ignored) {
+                // whatever was collected so far is still useful
+            }
+            return o.toString();
+        }
+
         @JavascriptInterface
         public String appVersion() {
             try {

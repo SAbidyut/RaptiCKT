@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS = {
   gmin: 1e-12,
   maxIter: 60,
   autoStart: true,
+  animations: 'auto',
 };
 
 function read(k, def) {
