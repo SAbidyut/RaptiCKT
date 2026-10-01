@@ -513,10 +513,16 @@ export class Editor {
   }
 
   setMulti(on) {
+    const changed = on !== this.multi;
     this.multi = on;
     if (!on && this.selection.size + this.selWires.size > 1) this.select(null);
     this.updateToolbar();
-    if (on) this.toast('Select: drag → right = window (parts fully inside) · drag ← left = crossing (parts it touches) · tap to add/remove');
+    // the how-to is shown once; after that only a short confirmation
+    if (!changed) return;
+    if (on && !store.flag('selectHelp')) {
+      store.setFlag('selectHelp');
+      this.toast('Select: drag → right = window (parts fully inside) · drag ← left = crossing (parts it touches) · tap to add/remove');
+    } else this.toast(on ? 'Select on' : 'Select off');
   }
 
   // ------------------------------------------------------------- editing
