@@ -253,14 +253,15 @@ export class Inspector {
 }
 
 // --------------------------------------------------------------------- knob
-const KNOB_SIZE = 136; // px, matches .knob-dial in styles.css
+const KNOB_SIZE = 104; // px, matches .knob-dial in styles.css
 
 /**
  * Value knob next to the selected part.
  *
  * Decade dial (log quantities: Ω, F, H, Hz…): the digits 1–9 sit round the
  * ring; turning steps 1 → 2 → … → 9 → 10 → 20 … with a detent per digit,
- * tapping a digit picks it, and − / + move a whole decade (÷10 / ×10).
+ * tapping a digit picks it, and − / + fine-tune by 0.1 of a digit (4.7 kΩ,
+ * 1.5 µF…), rolling over into the next decade below 1.0 / above 9.9.
  * Stepped knob (linear quantities: %, °, V…): turning snaps to whole steps,
  * − / + move one step. The label with the value sits above the dial.
  */
@@ -368,7 +369,7 @@ export class Knob {
     const v = this.el.p[this.prop.key];
     if (this.mode === 'decade') {
       let [m, e] = this.parts(v);
-      m = Math.round(m) + n;
+      m = n > 0 ? Math.floor(m + 1e-9) + n : Math.ceil(m - 1e-9) + n; // 4.7 → 5 up, → 4 down
       if (m > 9) { m = 1; e += 1; } else if (m < 1) { m = 9; e -= 1; }
       if (this.apply(+(m * Math.pow(10, e)).toPrecision(6))) this.angle += (n * 40 * Math.PI) / 180; // keeps turning the same way: 9 → 1 goes forward
     } else {
@@ -379,12 +380,16 @@ export class Knob {
     this.update();
   }
 
-  /** − / + buttons: a decade on the dial, one step on a linear knob. */
+  /** − / + buttons: 0.1 of a digit on the dial (fractions like 4.7), one step on a linear knob. */
   bump(n) {
     if (!this.el) return;
     const v = this.el.p[this.prop.key];
-    if (this.mode === 'decade') this.apply(+(v * Math.pow(10, n)).toPrecision(6));
-    else this.step(n);
+    if (this.mode === 'decade') {
+      let [m, e] = this.parts(v);
+      m = Math.round(m * 10 + n) / 10;
+      if (m >= 10) { m /= 10; e += 1; } else if (m < 1) { m *= 10; e -= 1; }
+      this.apply(+(m * Math.pow(10, e)).toPrecision(6));
+    } else this.step(n);
   }
 
   pickDigit(d) {
@@ -401,7 +406,8 @@ export class Knob {
       // the pointer turns the short way to the digit from wherever it is, so the
       // dial never spins back round (9 → 1 is one step forward, not eight back)
       const full = 2 * Math.PI;
-      let diff = (this.digitAngle(d) - this.angle) % full;
+      const m = this.parts(this.el.p[this.prop.key])[0]; // fractional: 4.7 points between 4 and 5
+      let diff = (this.digitAngle(Math.min(9.99, Math.max(1, m))) - this.angle) % full;
       if (diff > Math.PI) diff -= full; else if (diff < -Math.PI) diff += full;
       this.angle += diff;
       this.cap.style.transform = `rotate(${this.angle}rad)`;

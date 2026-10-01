@@ -55,9 +55,10 @@ const k = async () => page.evaluate(() => ({ v: app.editor.selection.values().ne
 let s = await k();
 check('decade dial for resistance', s.decade && s.on === '1', JSON.stringify(s));
 await page.tap('.knob-btn[data-k="+"]'); await sleep(150);
-s = await k(); check('+ → ×10 (10 kΩ)', Math.abs(s.v - 10000) < 1e-6, JSON.stringify(s));
-await page.tap('.knob-btn[data-k="-"]'); await page.tap('.knob-btn[data-k="-"]'); await sleep(150);
-s = await k(); check('− − → 100 Ω', Math.abs(s.v - 100) < 1e-9, JSON.stringify(s));
+s = await k(); check('+ → 1.1 kΩ (fine step)', Math.abs(s.v - 1100) < 1e-6, JSON.stringify(s));
+for (let i = 0; i < 3; i++) { await page.tap('.knob-btn[data-k="-"]'); await sleep(60); }
+s = await k(); check('− − − → 890 Ω (1.0 k rolls to 900, then 890)', Math.abs(s.v - 890) < 1e-6, JSON.stringify(s));
+await page.evaluate(() => { const e = [...app.editor.selection][0]; app.editor.setParam(e, 'r', 100); app.editor.knob.update(); });
 // tap the digit 4
 const d4 = await page.evaluate(() => { const r = document.querySelector('.knob-digits span[data-d="4"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
 await page.touchscreen.tap(d4[0], d4[1]); await sleep(200);
