@@ -76,6 +76,7 @@ const P = {
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
   table: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
   sweep: '<path d="M3 3v18h18"/><path d="M6 18c4 0 5-12 14-12"/>',
+  manual: '<path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/><path d="M8 8h7M8 12h7M8 16h4"/>',
 };
 
 export function icon(name, size = 22, cls = '') {

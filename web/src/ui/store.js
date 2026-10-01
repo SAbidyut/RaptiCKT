@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS = {
   maxIter: 60,
   autoStart: true,
   animations: 'auto',
+  manualLang: 'auto', // manual language: 'auto' (phone language), 'en' or 'bn'
 };
 
 function read(k, def) {

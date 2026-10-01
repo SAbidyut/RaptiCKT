@@ -42,11 +42,14 @@ export class HomeScreen {
         <div class="home-body"></div>
       </div>
       <nav class="bottom-nav">
-        ${[['home', 'bolt', 'Home'], ['examples', 'book', 'Examples'], ['library', 'folder', 'My Circuits'], ['about', 'info', 'About']].map(([t, ic, l]) => `<button data-tab="${t}" class="${this.tab === t ? 'on' : ''}">${icon(ic, 22)}<span>${l}</span></button>`).join('')}
+        ${[['home', 'bolt', 'Home'], ['examples', 'book', 'Examples'], ['library', 'folder', 'My Circuits'], ['manual', 'manual', 'Manual'], ['about', 'info', 'About']].map(([t, ic, l]) => `<button data-tab="${t}" class="${this.tab === t ? 'on' : ''}">${icon(ic, 22)}<span>${l}</span></button>`).join('')}
       </nav>`;
     this.root.querySelector('[data-h=settings]').addEventListener('click', () => this.app.openSettings());
     this.root.querySelector('[data-h=brand]').addEventListener('click', () => this.openInstitute());
-    this.root.querySelectorAll('.bottom-nav button').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.tab; this.render(); }));
+    this.root.querySelectorAll('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.tab === 'manual') { this.app.openManual(); return; } // opens its own screen
+      this.tab = b.dataset.tab; this.render();
+    }));
     const body = this.root.querySelector('.home-body');
     const scroller = this.root.querySelector('.home-scroll');
     const head = this.root.querySelector('.home-head');
@@ -147,6 +150,7 @@ export class HomeScreen {
       </section>
       ${auto && auto.elements && auto.elements.length ? `
       <button class="resume" data-h="resume">${icon('play', 18)}<div><b>Continue where you left off</b><span>${esc(auto.name)} · ${auto.elements.length} components</span></div>${icon('back', 18, 'flipx')}</button>` : ''}
+      <button class="resume manual-link" data-h="manual">${icon('manual', 18)}<div><b>User manual</b><span>Step-by-step guide · English & বাংলা</span></div>${icon('back', 18, 'flipx')}</button>
       <section class="feat-grid">
         ${[
           ['scope', 'Oscilloscope', 'Multichannel, FFT & XY'],
@@ -174,6 +178,7 @@ export class HomeScreen {
     body.querySelector('[data-h=new]').addEventListener('click', () => this.app.newCircuit());
     body.querySelector('[data-h=open]').addEventListener('click', () => this.app.importFile());
     body.querySelector('[data-h=resume]')?.addEventListener('click', () => this.app.resume());
+    body.querySelector('[data-h=manual]')?.addEventListener('click', () => this.app.openManual());
     body.querySelector('[data-h=about]').addEventListener('click', () => this.openInstitute());
     body.querySelectorAll('[data-tab2]').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.tab2; this.render(); }));
     this.drawThumbs(body);
@@ -401,6 +406,8 @@ export function renderSettings(app, root) {
   root.innerHTML = `
     <header class="topbar plain"><button class="icon-btn" data-x="back">${icon('back', 22)}</button><div class="title"><b>Settings</b></div></header>
     <div class="set-scroll">
+      <h4>Help</h4>
+      <div class="btn-row pad"><button class="btn" data-x="manual">${icon('manual', 18)} User manual</button></div>
       <h4>Appearance</h4>
       ${row('Theme', sel('theme', Object.entries(THEMES).map(([k, t]) => [k, t.name])))}
       ${row('Grid', sel('grid', [['lines', 'Lines'], ['dots', 'Dots'], ['none', 'None']]))}
@@ -451,6 +458,7 @@ export function renderSettings(app, root) {
     if (k === 'theme') app.applyTheme();
     if (k === 'animations') { if (v === 'auto') motion.reset(); motion.decide(v); renderSettings(app, root); }
   }));
+  root.querySelector('[data-x=manual]').addEventListener('click', () => app.openManual());
   root.querySelector('[data-x=backup]').addEventListener('click', () => app.backupAll());
   root.querySelector('[data-x=restore]').addEventListener('click', () => app.importFile());
   root.querySelector('[data-x=reset]').addEventListener('click', () => {

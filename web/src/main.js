@@ -4,6 +4,7 @@ import { motion } from './ui/motion.js';
 import { CATEGORIES } from './elements/index.js';
 import { Editor } from './ui/editor.js';
 import { HomeScreen, renderSettings } from './ui/screens.js';
+import { ManualScreen } from './ui/manual.js';
 import { CircuitDoc } from './ui/doc.js';
 import { EXAMPLES, buildExample } from './ui/examples.js';
 import { store, bridge } from './ui/store.js';
@@ -27,10 +28,12 @@ class App {
       <section class="screen home"></section>
       <section class="screen editor"></section>
       <section class="screen settings"></section>
+      <section class="screen manual"></section>
       <div class="modal"><div class="modal-card"><div class="modal-head"><b></b><button class="icon-btn" data-close>${icon('x', 20)}</button></div><div class="modal-body"></div></div></div>
       <div class="splash">${LOGO_SVG(120, 'sp')}<h1>Rapti<span>CKT</span></h1><p>${APP.tagline}</p><div class="splash-bar"><i></i></div></div>`;
     this.home = new HomeScreen(this, this.el.querySelector('.screen.home'));
     this.editor = new Editor(this, this.el.querySelector('.screen.editor'));
+    this.manual = new ManualScreen(this, this.el.querySelector('.screen.manual'));
     this.thumbCache = new Map();
     this.applyTheme();
     this.el.querySelector('.modal [data-close]').addEventListener('click', () => this.closeSheet());
@@ -126,8 +129,32 @@ class App {
     if (this.current === 'editor') { this.editor.onResize(); this.editor.rebuildNow(true); }
   }
 
+  /** Open the user manual (optionally at a chapter). Back returns to wherever it was opened from. */
+  openManual(chapter) {
+    if (this.current !== 'manual') this.manualFrom = this.current;
+    this.manual.render(chapter);
+    this.show('manual');
+  }
+  closeManual() {
+    const from = this.manualFrom || 'home';
+    this.show(from);
+    if (from === 'editor') { this.editor.onResize(); this.editor.dirtyDraw = true; }
+  }
+  /** "Open this example" inside the manual: keep the circuit being edited, then open the example. */
+  openExampleFromManual(id) {
+    if (this.manualFrom === 'editor') {
+      const doc = this.editor.doc;
+      this.editor.close();
+      if (doc.elements.length && !doc.isExample) this.saveToLibrary(doc, true);
+      if (doc.elements.length) store.autosave(doc.toJSON());
+    }
+    this.manualFrom = 'home';
+    this.openExample(id);
+  }
+
   back() {
     if (this.el.querySelector('.modal.open')) { this.closeSheet(); return true; }
+    if (this.current === 'manual') { this.closeManual(); return true; }
     if (this.current === 'settings') { this.closeSettings(); return true; }
     if (this.current === 'editor') { if (!this.editor.back()) this.goHome(); return true; }
     if (this.current === 'home' && this.home.tab !== 'home') { this.home.tab = 'home'; this.home.render(); return true; }

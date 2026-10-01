@@ -50,6 +50,12 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Undo/redo and multi-select
 - 29 explained examples (including tube light, staircase wiring, house wiring, dimmer, power-factor correction and a DOL motor starter), save/export/import `.rckt` files, PNG export, 3 themes, and an About section with RAPTI information.
 
+## User manual
+
+A complete, step-by-step manual is built into the app, in **English and বাংলা**: open it from the **Manual** tab on Home, from **Settings**, or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 335 components and 29 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
+
+The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md) (English) and [docs/MANUAL.bn.md](docs/MANUAL.bn.md) (বাংলা). They are generated from `web/src/ui/manual-content.js` with `cd web && npm run manual`; re-run it after editing the manual. `web/tests/manual-content.test.js` fails if a component, example, setting or menu item is added to the app without being covered by the manual.
+
 ## Simulation engine (web/src/engine)
 
 - Modified Nodal Analysis with dense LU and partial pivoting, plus iterative refinement for badly scaled matrices.
@@ -76,7 +82,8 @@ web/        Simulator app (vanilla JS + Canvas, bundled with esbuild)
   src/elements  component models + symbols
   src/ui        editor, scope, inspector, palette, analyses, screens
   tests         node:test suites + Playwright screenshot/interaction scripts
-  tools         marketing asset generator
+  tools         marketing asset generator, manual → Markdown exporter
+docs/       User manual (English + Bangla Markdown)
 android/    Native Android shell (WebView + Java bridge: files, share, haptics)
 marketing/  Play Store icon, feature graphic, screenshots, bilingual listing
 ```

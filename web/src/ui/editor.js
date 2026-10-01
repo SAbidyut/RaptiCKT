@@ -981,7 +981,7 @@ export class Editor {
       ['save', 'save', 'Save to My Circuits'], ['copy', 'saveas', 'Save as copy'], ['edit', 'info', 'Circuit name & notes'],
       ['download', 'export', 'Export file (.rckt)'], ['upload', 'import', 'Open file…'], ['share', 'share', 'Share circuit'],
       ['code', 'netlist', 'SPICE netlist'], ['camera', 'shot', 'Export image (PNG)'], ['table', 'op', 'Operating point'],
-      ['sliders', 'settings', 'Settings'], ['help', 'help', 'Help & gestures'], ['trash', 'clear', 'Clear circuit'],
+      ['sliders', 'settings', 'Settings'], ['manual', 'manual', 'User manual'], ['help', 'help', 'Help & gestures'], ['trash', 'clear', 'Clear circuit'],
     ];
     m.innerHTML = items.map(([ic, a, t]) => `<button data-m="${a}">${icon(ic, 18)}<span>${t}</span></button>`).join('');
     m.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { this.closeMenu(); this.menuAction(b.dataset.m); }));
@@ -1007,6 +1007,7 @@ export class Editor {
       case 'op': this.analysis.open('op'); break;
       case 'shot': app.bridge.saveFile(this.doc.name.replace(/\W+/g, '_') + '.png', 'image/png', this.screenshot(), true); break;
       case 'settings': app.openSettings(); break;
+      case 'manual': app.openManual(); break;
       case 'help': this.showTips(true); break;
       case 'clear':
         if (confirm('Remove all components and wires?')) {
@@ -1056,7 +1057,10 @@ export class Editor {
         <li>${icon('gauge', 18)}<span><b>Turn the knob</b> of a selected part to change its value while the circuit runs.</span></li>
         <li>${icon('scope', 18)}<span><b>Scope</b>: select a wire or part and tap Scope to probe it. Use FFT and XY views in the scope toolbar.</span></li>
         <li>${icon('bode', 18)}<span><b>Analysis</b>: Bode plots, DC sweeps, operating point and SPICE netlist export for research-grade work.</span></li>
-      </ul>`);
+      </ul>
+      <div class="sheet-actions"><button data-x="manual">${icon('manual', 18)} Open the full user manual</button></div>`, (root, close) => {
+      root.querySelector('[data-x=manual]').addEventListener('click', () => { close(); this.app.openManual(); });
+    });
   }
 
   overlayOpen(n) { this.overlays.add(n); }
