@@ -346,12 +346,22 @@ export class Knob {
   parts(v) { let e = Math.floor(Math.log10(v) + 1e-9), m = v / Math.pow(10, e); if (Math.round(m) >= 10) { e += 1; m /= 10; } return [m, e]; }
   digit() { const v = this.el.p[this.prop.key]; return v > 0 ? Math.min(9, Math.max(1, Math.round(this.parts(v)[0]))) : 1; }
   digitAngle(d) { return ((d - 0.5) * 40 * Math.PI) / 180; }
-  linStep() {
-    const p = this.prop, lo = p.min ?? -Infinity, hi = p.max ?? Infinity, v = Math.abs(this.el.p[p.key]) || 1;
-    if (p.step) return p.step;
-    const span = Number.isFinite(hi - lo) ? hi - lo : v * 4;
-    if (p.unit === '%' || p.unit === '°' || p.unit === '°C' || span >= 20) return Math.max(1, Math.pow(10, Math.floor(Math.log10(span)) - 2));
-    return Math.pow(10, Math.floor(Math.log10(span)) - 2);
+  /**
+   * Steps of a linear knob, from the size of the value itself (not the allowed
+   * range, which can be ±10 kV): one significant digit below 10 (5 V → 6 V,
+   * 0.5 → 0.6), two from 10 up (12 V → 13 V, 230 V → 240 V). − / + move a tenth
+   * of that; whole-number quantities (counts, β…) always move by whole numbers.
+   */
+  linSteps() {
+    const p = this.prop, v = this.el.p[p.key];
+    if (p.step) return { coarse: p.step, fine: p.step };
+    const whole = !p.unit && Number.isInteger(p.def) && Number.isInteger(v);
+    if (whole) { const c = Math.abs(v) >= 100 ? Math.pow(10, Math.floor(Math.log10(Math.abs(v))) - 1) : 1; return { coarse: c, fine: 1 }; }
+    if (['%', '°', '°C', '%RH', 'dB SPL'].includes(p.unit)) return { coarse: 1, fine: 0.1 };
+    const mag = Math.abs(v) > 1e-12 ? Math.abs(v) : Math.abs(p.def) || 1;
+    const e = Math.floor(Math.log10(mag) + 1e-9);
+    const coarse = Math.pow(10, mag >= 10 ? e - 1 : e);
+    return { coarse, fine: coarse / 10 };
   }
   apply(v) {
     const p = this.prop, lo = p.min ?? -Infinity, hi = p.max ?? Infinity;
@@ -373,9 +383,7 @@ export class Knob {
       if (m > 9) { m = 1; e += 1; } else if (m < 1) { m = 9; e -= 1; }
       if (this.apply(+(m * Math.pow(10, e)).toPrecision(6))) this.angle += (n * 40 * Math.PI) / 180; // keeps turning the same way: 9 → 1 goes forward
     } else {
-      const st = this.linStep();
-      const next = (Math.round(v / st) + n) * st;
-      if (this.apply(+next.toPrecision(10))) this.angle += n * (Math.PI / 12);
+      this.linMove(v, n, this.linSteps().coarse);
     }
     this.update();
   }
@@ -389,7 +397,14 @@ export class Knob {
       m = Math.round(m * 10 + n) / 10;
       if (m >= 10) { m /= 10; e += 1; } else if (m < 1) { m *= 10; e -= 1; }
       this.apply(+(m * Math.pow(10, e)).toPrecision(6));
-    } else this.step(n);
+    } else this.linMove(v, n, this.linSteps().fine);
+  }
+
+  /** Move a linear value to the next multiple of st in direction n (9.5 → 10, not 11). */
+  linMove(v, n, st) {
+    const k = n > 0 ? Math.floor(v / st + 1e-9) + n : Math.ceil(v / st - 1e-9) + n;
+    if (this.apply(+(k * st).toPrecision(10))) this.angle += n * (Math.PI / 12);
+    this.update();
   }
 
   pickDigit(d) {
