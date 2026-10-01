@@ -102,14 +102,25 @@ The full list is in the chapter **Examples**.
 
 #### My Circuits
 
-All circuits you built, newest first, saved on this phone (up to 200). Tap a circuit to open it. Tap the **⋮** button on a card for:
+Your saved **projects** (circuits), kept on this phone and sorted into **folders** like files on a computer. Tap a project to open it; tap a folder to go inside. The path at the top (**My Circuits › Folder › Sub-folder**) shows where you are: tap any name in it to jump up. The Android **Back** button also goes up one folder.
 
-- **Open**, **Rename**, **Duplicate** (makes "name (copy)").
-- **Export file**: saves a `.rckt` file.
-- **Share**: sends the circuit through WhatsApp, Messenger, email, etc.
-- **Delete**: removes that circuit after confirmation.
+- **New project**: asks for a name, then opens an empty board. The project is saved **in the folder you are viewing**.
+- **New folder**: makes a folder here. Folders can hold projects and other folders, as deep as you like.
+- **Import**: opens a `.rckt` file or a backup; it is added to the folder you are viewing.
+- **Backup all**: one file with every project **and your folders**. Restoring it brings the folders back too.
+- **Select**: see below.
 
-Buttons on top of the page: **New**, **Import**, **Backup all** (one file with every circuit) and **Delete all** (asks first and offers a backup before deleting).
+Tap the **⋮** button on a project for **Open**, **Rename**, **Move to folder…**, **Duplicate**, **Export file**, **Share** and **Delete**. On a folder it offers **Open**, **Rename**, **Move to…** and **Delete folder**.
+
+#### Select, move and delete many at once
+
+1. Tap **Select**. Round tick boxes appear.
+2. Tap projects and folders to tick them. **All** ticks everything in the current folder (it then reads **None**).
+3. **Move**: choose the destination (**My Circuits** at the top, or any folder, or **New folder…**). A folder cannot be moved into itself.
+4. **Delete**: asks first and shows how many projects and folders will go, including projects inside the folders you picked. **Backup all first** lets you save everything before deleting.
+5. Tap **✕** (or Back) to leave Select mode.
+
+> **Warning:** Deleting a folder also deletes every project inside it.
 
 #### About
 
@@ -500,7 +511,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 
 #### Backup and restore
 
-- **Backup all** (My Circuits page or Settings → Backup circuits) saves **every** circuit in one file named `RaptiCKT_backup_<date>.json`.
+- **Backup all** (My Circuits page or Settings → Backup circuits) saves **every** project and folder in one file named `RaptiCKT_backup_<date>.json`.
 - To restore, tap **Import** or **Restore backup** and choose that file. The circuits are added back to My Circuits.
 - Keep a backup before you change phones, clear app data or uninstall the app. **Uninstalling the app deletes your saved circuits.**
 

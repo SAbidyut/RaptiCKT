@@ -84,9 +84,10 @@ class App {
     requestAnimationFrame(() => this.editor.open(doc, opts));
   }
 
-  newCircuit() {
-    const d = new CircuitDoc('Untitled circuit');
+  newCircuit(folder = null, name = 'Untitled circuit') {
+    const d = new CircuitDoc(name);
     d.id = this.uid();
+    d.folder = folder;
     this.openEditor(d);
   }
 
@@ -105,6 +106,7 @@ class App {
     try {
       const d = CircuitDoc.fromJSON(c.data);
       d.id = c.id;
+      d.folder = c.folder || null;
       this.openEditor(d);
     } catch (e) { alert('Could not open circuit: ' + e.message); }
   }
@@ -115,6 +117,7 @@ class App {
     const d = CircuitDoc.fromJSON(a);
     const match = store.circuits().find((c) => c.name === d.name && JSON.stringify(c.data.elements) === JSON.stringify(a.elements));
     d.id = match ? match.id : this.uid();
+    d.folder = match ? match.folder || null : null;
     this.openEditor(d);
   }
 
@@ -157,6 +160,7 @@ class App {
     if (this.current === 'manual') { if (!this.manual.back()) this.closeManual(); return true; }
     if (this.current === 'settings') { this.closeSettings(); return true; }
     if (this.current === 'editor') { if (!this.editor.back()) this.goHome(); return true; }
+    if (this.current === 'home' && this.home.tab === 'library' && this.home.upOne()) return true; // leave select mode, then folders
     if (this.current === 'home' && this.home.tab !== 'home') { this.home.tab = 'home'; this.home.render(); return true; }
     return false;
   }
@@ -189,7 +193,7 @@ class App {
   saveToLibrary(doc, silent) {
     if (!doc.id) doc.id = this.uid();
     const ok = store.saveCircuit({
-      id: doc.id, name: doc.name, updated: Date.now(), count: doc.elements.length,
+      id: doc.id, folder: doc.folder ?? store.getCircuit(doc.id)?.folder ?? null, name: doc.name, updated: Date.now(), count: doc.elements.length,
       thumb: this.thumbnail(doc), data: doc.toJSON(),
     });
     if (!ok && !silent) alert('Storage is full – export some circuits and delete old ones.');
@@ -197,7 +201,9 @@ class App {
   }
 
   backupAll() {
-    const data = { app: 'RaptiCKT', backup: true, version: APP.version, date: new Date().toISOString(), circuits: store.circuits().map((c) => c.data) };
+    const list = store.circuits();
+    // folders and where each circuit sits are saved too (older backups simply have no `folders`)
+    const data = { app: 'RaptiCKT', backup: true, version: APP.version, date: new Date().toISOString(), circuits: list.map((c) => c.data), folders: store.folders(), placement: list.map((c) => c.folder || null) };
     this.bridge.saveFile(`RaptiCKT_backup_${new Date().toISOString().slice(0, 10)}.json`, 'application/json', JSON.stringify(data));
   }
 
@@ -213,8 +219,13 @@ class App {
     try { o = JSON.parse(text); } catch { alert('This file is not a RaptiCKT circuit.'); return; }
     if (o.backup && Array.isArray(o.circuits)) {
       let n = 0;
-      for (const c of o.circuits) {
-        try { const d = CircuitDoc.fromJSON(c); d.id = this.uid(); this.saveToLibrary(d, true); n++; } catch { /* skip */ }
+      // recreate the folders first (new ids, so a restore never overwrites what is already there)
+      const map = new Map();
+      const olds = Array.isArray(o.folders) ? o.folders : [];
+      for (const f of olds) map.set(f.id, this.uid());
+      for (const f of olds) store.addFolder(map.get(f.id), String(f.name || 'Folder'), map.get(f.parent) || null);
+      for (const [i, c] of o.circuits.entries()) {
+        try { const d = CircuitDoc.fromJSON(c); d.id = this.uid(); d.folder = (o.placement && map.get(o.placement[i])) || null; this.saveToLibrary(d, true); n++; } catch { /* skip */ }
       }
       alert(`Restored ${n} circuit${n === 1 ? '' : 's'}.`);
       if (this.current === 'home') this.home.render();
@@ -224,6 +235,7 @@ class App {
     const d = CircuitDoc.fromJSON(o);
     if (!o.name && name) d.name = name.replace(/\.(rckt|json)$/i, '');
     d.id = this.uid();
+    d.folder = this.current === 'home' && this.home.tab === 'library' ? this.home.folder : null; // imported into the folder being viewed
     this.saveToLibrary(d, true);
     if (this.current === 'editor') this.editor.close();
     this.openEditor(d);

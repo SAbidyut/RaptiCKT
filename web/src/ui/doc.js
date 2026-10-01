@@ -45,6 +45,7 @@ export class CircuitDoc {
     this.simSettings = {};
     this.id = null;
     this.description = '';
+    this.folder = null; // My Circuits folder id (not part of the saved file)
   }
 
   add(e) { this.elements.push(e); return e; }
@@ -111,7 +112,7 @@ export class CircuitDoc {
     return d;
   }
 
-  clone() { const c = CircuitDoc.fromJSON(JSON.parse(JSON.stringify(this.toJSON()))); c.id = this.id; return c; }
+  clone() { const c = CircuitDoc.fromJSON(JSON.parse(JSON.stringify(this.toJSON()))); c.id = this.id; c.folder = this.folder; return c; }
 }
 
 /** Serialise a selection (elements + wires) for copy/paste. */

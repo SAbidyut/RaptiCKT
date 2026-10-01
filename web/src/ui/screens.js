@@ -32,6 +32,8 @@ export class HomeScreen {
     this.root = root;
     this.tab = 'home';
     this.cat = 'All';
+    this.folder = null; // My Circuits: folder being viewed (null = top level)
+    this.sel = null;    // My Circuits: Set of selected 'f:id' / 'c:id' while in select mode
   }
 
   render() {
@@ -51,7 +53,7 @@ export class HomeScreen {
     this.root.querySelector('[data-h=brand]').addEventListener('click', () => this.openInstitute());
     this.root.querySelectorAll('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
       if (b.dataset.tab === 'manual') { this.app.openManual(); return; } // opens its own screen
-      this.tab = b.dataset.tab; this.render();
+      this.tab = b.dataset.tab; this.sel = null; this.render();
     }));
     const body = this.root.querySelector('.home-body');
     const scroller = this.root.querySelector('.home-scroll');
@@ -204,47 +206,214 @@ export class HomeScreen {
     this.drawThumbs(body);
   }
 
+  // ------------------------------------------------- My Circuits: folders and projects
+  /** Folder trail from the top down to the folder being viewed. */
+  trail() {
+    const all = store.folders(), out = [];
+    for (let id = this.folder; id; ) { const f = all.find((x) => x.id === id); if (!f) break; out.unshift(f); id = f.parent; }
+    return out;
+  }
+
+  /** Back button: leave select mode first, then go up one folder. Returns false at the top. */
+  upOne() {
+    if (this.sel) { this.sel = null; this.render(); return true; }
+    if (this.folder) {
+      const f = store.folders().find((x) => x.id === this.folder);
+      this.folder = f ? f.parent || null : null;
+      this.render();
+      return true;
+    }
+    return false;
+  }
+
+  /** The shown folder may have been deleted (or never existed after a restore): fall back to the top. */
+  checkFolder() { if (this.folder && !store.folders().some((f) => f.id === this.folder)) this.folder = null; }
+
   renderLibrary(body) {
-    const lib = store.circuits();
+    this.checkFolder();
+    const folders = store.folders().filter((f) => (f.parent || null) === this.folder);
+    const circuits = store.circuits().filter((c) => (c.folder || null) === this.folder);
+    const all = store.circuits(), allF = store.folders();
+    const inFolder = (fid) => { const ids = new Set(store.folderTree(fid)); return all.filter((c) => ids.has(c.folder)).length; };
+    const sel = this.sel, here = this.trail();
+    const keyOf = (t, id) => `${t}:${id}`;
+    const nSel = sel ? sel.size : 0;
+    const total = folders.length + circuits.length;
     body.innerHTML = `
       <h2 class="page-title">My Circuits</h2>
-      <p class="page-sub">Saved on this device. Export to share them or keep a backup.</p>
-      <div class="btn-row"><button class="btn primary" data-h="new">${icon('plus', 18)} New</button><button class="btn" data-h="open">${icon('upload', 18)} Import</button><button class="btn" data-h="backup">${icon('download', 18)} Backup all</button>${lib.length ? `<button class="btn danger" data-h="delall">${icon('trash', 18)} Delete all</button>` : ''}</div>
-      ${lib.length ? `<div class="lib-list">${lib.map((c) => `
-        <div class="lib-item" data-id="${c.id}">
+      <nav class="crumbs">
+        ${here.length ? `<button data-f="">${icon('folder', 15)} My Circuits</button>` : `<span>${icon('folder', 15)} My Circuits</span>`}
+        ${here.map((f, i) => `<i>›</i>${i < here.length - 1 ? `<button data-f="${f.id}">${esc(f.name)}</button>` : `<span>${esc(f.name)}</span>`}`).join('')}
+      </nav>
+      <p class="page-sub">${here.length ? `${folders.length} folder${folders.length === 1 ? '' : 's'}, ${circuits.length} project${circuits.length === 1 ? '' : 's'} here.` : 'Saved on this device. Make folders to keep your projects tidy.'}</p>
+      ${sel ? `
+      <div class="btn-row sel-bar">
+        <b class="sel-count">${nSel} selected</b>
+        <button class="btn sm" data-h="selall">${icon('check', 16)} ${nSel === total && total ? 'None' : 'All'}</button>
+        <button class="btn sm" data-h="move" ${nSel ? '' : 'disabled'}>${icon('folder', 16)} Move</button>
+        <button class="btn sm danger" data-h="delsel" ${nSel ? '' : 'disabled'}>${icon('trash', 16)} Delete</button>
+        <button class="btn sm" data-h="selx">${icon('x', 16)}</button>
+      </div>` : `
+      <div class="btn-row">
+        <button class="btn primary" data-h="new">${icon('plus', 18)} New project</button>
+        <button class="btn" data-h="newf">${icon('folder', 18)} New folder</button>
+        <button class="btn" data-h="open">${icon('upload', 18)} Import</button>
+        <button class="btn" data-h="backup">${icon('download', 18)} Backup all</button>
+        ${total ? `<button class="btn" data-h="select">${icon('select', 18)} Select</button>` : ''}
+      </div>`}
+      ${total ? `<div class="lib-list">
+        ${folders.map((f) => {
+          const n = inFolder(f.id), sub = allF.filter((x) => x.parent === f.id).length;
+          return `<div class="lib-item folder ${sel?.has(keyOf('f', f.id)) ? 'sel' : ''}" data-k="${keyOf('f', f.id)}">
+            <div class="thumb folder-ico">${icon('folder', 34)}</div>
+            <div class="lib-meta"><b>${esc(f.name)}</b><span>${sub ? `${sub} folder${sub === 1 ? '' : 's'}, ` : ''}${n} project${n === 1 ? '' : 's'}</span></div>
+            ${sel ? `<span class="sel-box">${icon('check', 16)}</span>` : `<button class="icon-btn" data-act="menu">${icon('more', 20)}</button>`}
+          </div>`;
+        }).join('')}
+        ${circuits.map((c) => `
+        <div class="lib-item ${sel?.has(keyOf('c', c.id)) ? 'sel' : ''}" data-k="${keyOf('c', c.id)}">
           ${c.thumb ? `<img class="thumb" src="${c.thumb}" alt="">` : '<div class="thumb"></div>'}
           <div class="lib-meta"><b>${esc(c.name)}</b><span>${c.count || 0} components · ${ago(c.updated)}</span></div>
-          <button class="icon-btn" data-act="menu">${icon('more', 20)}</button>
-        </div>`).join('')}</div>` : `<div class="empty">${icon('folder', 40)}<b>No saved circuits yet</b><span>Circuits you build are saved here automatically.</span></div>`}`;
-    body.querySelector('[data-h=new]').addEventListener('click', () => this.app.newCircuit());
-    body.querySelector('[data-h=open]').addEventListener('click', () => this.app.importFile());
-    body.querySelector('[data-h=backup]').addEventListener('click', () => this.app.backupAll());
-    body.querySelector('[data-h=delall]')?.addEventListener('click', () => this.deleteAllMenu());
+          ${sel ? `<span class="sel-box">${icon('check', 16)}</span>` : `<button class="icon-btn" data-act="menu">${icon('more', 20)}</button>`}
+        </div>`).join('')}
+      </div>` : `<div class="empty">${icon('folder', 40)}<b>${here.length ? 'This folder is empty' : 'No saved projects yet'}</b><span>${here.length ? 'Tap New project or New folder to add something here.' : 'Projects you build are saved here automatically.'}</span></div>`}`;
+
+    const on = (sel2, fn) => body.querySelector(sel2)?.addEventListener('click', fn);
+    on('[data-h=new]', () => this.newProject());
+    on('[data-h=newf]', () => this.newFolder());
+    on('[data-h=open]', () => this.app.importFile());
+    on('[data-h=backup]', () => this.app.backupAll());
+    on('[data-h=select]', () => { this.sel = new Set(); this.render(); });
+    on('[data-h=selx]', () => { this.sel = null; this.render(); });
+    on('[data-h=selall]', () => {
+      const keys = [...folders.map((f) => keyOf('f', f.id)), ...circuits.map((c) => keyOf('c', c.id))];
+      this.sel = nSel === keys.length ? new Set() : new Set(keys);
+      this.render();
+    });
+    on('[data-h=move]', () => this.moveSheet([...this.sel]));
+    on('[data-h=delsel]', () => this.deleteSheet([...this.sel]));
+    body.querySelectorAll('[data-f]').forEach((b) => b.addEventListener('click', () => { this.folder = b.dataset.f || null; this.sel = null; this.render(); }));
     body.querySelectorAll('.lib-item').forEach((it) => {
-      const id = it.dataset.id;
+      const key = it.dataset.k, [t, id] = [key[0], key.slice(2)];
       it.addEventListener('click', (ev) => {
-        if (ev.target.closest('[data-act=menu]')) { this.itemMenu(id); return; }
-        this.app.openSaved(id);
+        if (this.sel) {
+          this.sel.has(key) ? this.sel.delete(key) : this.sel.add(key);
+          // only this row and the bar change, so the list keeps its scroll position
+          it.classList.toggle('sel', this.sel.has(key));
+          const n = this.sel.size;
+          body.querySelector('.sel-count').textContent = `${n} selected`;
+          body.querySelectorAll('[data-h=move], [data-h=delsel]').forEach((x) => { x.disabled = !n; });
+          body.querySelector('[data-h=selall]').lastChild.textContent = ` ${n === total ? 'None' : 'All'}`;
+          return;
+        }
+        if (ev.target.closest('[data-act=menu]')) { t === 'f' ? this.folderMenu(id) : this.itemMenu(id); return; }
+        if (t === 'f') { this.folder = id; this.render(); } else this.app.openSaved(id);
       });
     });
   }
 
-  /** Delete every saved circuit, after asking (with a chance to back them up first). */
-  deleteAllMenu() {
-    const n = store.circuits().length;
-    if (!n) return;
-    this.app.showSheet('Delete all circuits?', `
-      <p class="sheet-note">All ${n} saved circuit${n > 1 ? 's' : ''} will be removed from this phone. This cannot be undone.</p>
+  newProject() {
+    const n = prompt('Project name', 'Untitled project');
+    if (n === null) return;
+    this.app.newCircuit(this.folder, n.trim().slice(0, 80) || 'Untitled project');
+  }
+
+  newFolder() {
+    const n = prompt('Folder name', 'New folder');
+    if (n === null || !n.trim()) return;
+    store.addFolder(this.app.uid(), n.trim().slice(0, 60), this.folder);
+    this.render();
+  }
+
+  folderMenu(id) {
+    const f = store.folders().find((x) => x.id === id);
+    if (!f) return;
+    this.app.showSheet(esc(f.name), `
+      <div class="sheet-actions">
+        <button data-x="open">${icon('folder', 18)} Open</button>
+        <button data-x="rename">${icon('edit', 18)} Rename</button>
+        <button data-x="move">${icon('upload', 18)} Move to…</button>
+        <button data-x="del" class="danger">${icon('trash', 18)} Delete folder</button>
+      </div>`, (root, close) => {
+      root.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', () => {
+        const x = b.dataset.x;
+        close();
+        if (x === 'open') { this.folder = id; this.render(); }
+        if (x === 'rename') { const n = prompt('Rename folder', f.name); if (n && n.trim()) { store.renameFolder(id, n.trim().slice(0, 60)); this.render(); } }
+        if (x === 'move') this.moveSheet([`f:${id}`]);
+        if (x === 'del') this.deleteSheet([`f:${id}`]);
+      }));
+    });
+  }
+
+  /** Choose where the selected folders / projects go. A folder cannot go into itself or into its own subfolders. */
+  moveSheet(keys) {
+    const fids = keys.filter((k) => k[0] === 'f').map((k) => k.slice(2)), cids = keys.filter((k) => k[0] === 'c').map((k) => k.slice(2));
+    if (!keys.length) return;
+    const barred = new Set(fids.flatMap((id) => store.folderTree(id)));
+    const all = store.folders();
+    const rows = [];
+    const walk = (parent, depth) => {
+      for (const f of all.filter((x) => (x.parent || null) === parent).sort((a, b) => a.name.localeCompare(b.name))) {
+        if (barred.has(f.id)) continue;
+        rows.push([f.id, f.name, depth]);
+        walk(f.id, depth + 1);
+      }
+    };
+    walk(null, 1);
+    const what = `${keys.length} item${keys.length === 1 ? '' : 's'}`;
+    this.app.showSheet(`Move ${what} to…`, `
+      <div class="sheet-actions move-list">
+        <button data-to="" class="${this.folder ? '' : 'here'}">${icon('home', 18)} My Circuits <small>top level</small></button>
+        ${rows.map(([id, name, d]) => `<button data-to="${id}" style="padding-left:${10 + d * 18}px" class="${this.folder === id ? 'here' : ''}">${icon('folder', 18)} ${esc(name)}</button>`).join('')}
+        <button data-to="__new" class="accent">${icon('plus', 18)} New folder…</button>
+      </div>`, (root, close) => {
+      root.querySelectorAll('[data-to]').forEach((b) => b.addEventListener('click', () => {
+        let to = b.dataset.to || null;
+        if (to === '__new') {
+          const n = prompt('Folder name', 'New folder');
+          if (!n || !n.trim()) return;
+          to = this.app.uid();
+          store.addFolder(to, n.trim().slice(0, 60), this.folder);
+        }
+        close();
+        if (cids.length) store.moveCircuits(cids, to);
+        if (fids.length) store.moveFolders(fids, to);
+        this.sel = null;
+        this.app.bridge.vibrate(12);
+        this.render();
+      }));
+    });
+  }
+
+  /** Delete the selected folders / projects after asking (with a chance to back everything up first). */
+  deleteSheet(keys) {
+    const fids = keys.filter((k) => k[0] === 'f').map((k) => k.slice(2)), cids = keys.filter((k) => k[0] === 'c').map((k) => k.slice(2));
+    if (!keys.length) return;
+    const gone = new Set(fids.flatMap((id) => store.folderTree(id)));
+    const inside = store.circuits().filter((c) => gone.has(c.folder) && !cids.includes(c.id)).length;
+    const nProj = cids.length + inside, nFold = gone.size;
+    const parts = [];
+    if (nProj) parts.push(`${nProj} project${nProj === 1 ? '' : 's'}`);
+    if (nFold) parts.push(`${nFold} folder${nFold === 1 ? '' : 's'}`);
+    this.app.showSheet('Delete selected?', `
+      <p class="sheet-note">${parts.join(' and ')} will be removed from this phone${inside ? ` (including ${inside} project${inside === 1 ? '' : 's'} inside the selected folders)` : ''}. This cannot be undone.</p>
       <div class="sheet-actions">
         <button data-x="backup">${icon('download', 18)} Backup all first</button>
-        <button data-x="del" class="danger">${icon('trash', 18)} Delete all ${n}</button>
+        <button data-x="del" class="danger">${icon('trash', 18)} Delete</button>
         <button data-x="cancel">${icon('x', 18)} Cancel</button>
       </div>`, (root, close) => {
       root.querySelectorAll('[data-x]').forEach((b) => b.addEventListener('click', () => {
         const x = b.dataset.x;
         if (x === 'backup') { this.app.backupAll(); return; } // stay open: delete after saving
         close();
-        if (x === 'del') { store.deleteAllCircuits(); this.app.bridge.vibrate(20); this.render(); }
+        if (x === 'del') {
+          if (cids.length) store.deleteCircuits(cids);
+          if (fids.length) store.deleteFolders(fids);
+          this.sel = null;
+          this.app.bridge.vibrate(20);
+          this.render();
+        }
       }));
     });
   }
@@ -256,6 +425,7 @@ export class HomeScreen {
       <div class="sheet-actions">
         <button data-x="open">${icon('play', 18)} Open</button>
         <button data-x="rename">${icon('edit', 18)} Rename</button>
+        <button data-x="move">${icon('folder', 18)} Move to folder…</button>
         <button data-x="dup">${icon('copy', 18)} Duplicate</button>
         <button data-x="export">${icon('download', 18)} Export file</button>
         <button data-x="share">${icon('share', 18)} Share</button>
@@ -265,6 +435,7 @@ export class HomeScreen {
         const x = b.dataset.x;
         close();
         if (x === 'open') this.app.openSaved(id);
+        if (x === 'move') this.moveSheet([`c:${id}`]);
         if (x === 'rename') { const n = prompt('Rename circuit', c.name); if (n && n.trim()) { c.name = n.trim(); c.data.name = c.name; store.saveCircuit(c); this.render(); } }
         if (x === 'dup') { const d = JSON.parse(JSON.stringify(c)); d.id = this.app.uid(); d.name += ' (copy)'; d.data.name = d.name; d.updated = Date.now(); store.saveCircuit(d); this.render(); }
         if (x === 'export') this.app.bridge.saveFile(c.name.replace(/[^\w\- ]+/g, '_') + '.rckt', 'application/json', JSON.stringify(c.data, null, 1));

@@ -713,3 +713,21 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .man-item:first-child { border-top: 0; }
 .man-view > .man-h:first-child { margin-top: 18px; }
 .manual .bottom-nav { position: static; flex: none; }
+
+/* ---------------------------------------------------- My Circuits: folders and selection */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 2px 6px; font-size: 13px; color: var(--muted); }
+.crumbs button, .crumbs span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 4px; border-radius: 8px; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumbs button { color: var(--accent); font-weight: 600; }
+.crumbs span { color: var(--text); font-weight: 600; }
+.crumbs i { font-style: normal; opacity: .6; }
+.lib-item.folder .thumb.folder-ico { display: grid; place-items: center; background: linear-gradient(135deg, rgba(34, 211, 238, 0.14), rgba(139, 92, 246, 0.16)); color: var(--accent); }
+.sel-bar { align-items: center; position: sticky; top: 0; z-index: 3; padding: 8px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border2); }
+.sel-bar .sel-count { flex: 1; min-width: 80px; font-size: 14px; }
+.btn:disabled { opacity: .4; pointer-events: none; }
+.sel-box { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--border2); color: transparent; margin-right: 6px; transition: background .15s, border-color .15s; }
+.lib-item.sel { border-color: var(--accent); background: rgba(34, 211, 238, 0.07); }
+.lib-item.sel .sel-box { background: var(--accent); border-color: var(--accent); color: #04121a; }
+.move-list { max-height: 55vh; overflow-y: auto; }
+.move-list button small { margin-left: auto; color: var(--muted); font-size: 12px; }
+.move-list button.here { background: rgba(34, 211, 238, 0.1); color: var(--accent); }
+.move-list button.accent { color: var(--accent); }

@@ -1,7 +1,7 @@
 // Persistent storage (localStorage) for settings and saved circuits, plus the
 // native Android bridge with browser fallbacks.
 
-const K = { settings: 'raptickt.settings.v1', circuits: 'raptickt.circuits.v1', recent: 'raptickt.recent.v1', autosave: 'raptickt.autosave.v1', flags: 'raptickt.flags.v1' };
+const K = { settings: 'raptickt.settings.v1', circuits: 'raptickt.circuits.v1', recent: 'raptickt.recent.v1', autosave: 'raptickt.autosave.v1', flags: 'raptickt.flags.v1', folders: 'raptickt.folders.v1' };
 
 export const DEFAULT_SETTINGS = {
   theme: 'dark',
@@ -48,7 +48,30 @@ export const store = {
     return write(K.circuits, list.slice(0, 200));
   },
   deleteCircuit(id) { write(K.circuits, this.circuits().filter((c) => c.id !== id)); },
-  deleteAllCircuits() { write(K.circuits, []); },
+  deleteAllCircuits() { write(K.circuits, []); write(K.folders, []); },
+  deleteCircuits(ids) { const s = new Set(ids); write(K.circuits, this.circuits().filter((c) => !s.has(c.id))); },
+
+  // ---- folders (My Circuits): [{ id, name, parent }]; a circuit's `folder` is a folder id or null (top level)
+  folders() { return read(K.folders, []); },
+  saveFolders(list) { return write(K.folders, list); },
+  addFolder(id, name, parent = null) { const f = { id, name, parent, created: Date.now() }; this.saveFolders([...this.folders(), f]); return f; },
+  renameFolder(id, name) { this.saveFolders(this.folders().map((f) => (f.id === id ? { ...f, name } : f))); },
+  /** ids of a folder and every folder inside it */
+  folderTree(id) {
+    const all = this.folders(), out = [id];
+    for (let i = 0; i < out.length; i++) for (const f of all) if (f.parent === out[i] && !out.includes(f.id)) out.push(f.id);
+    return out;
+  },
+  /** Delete folders with everything inside them. Returns how many projects went with them. */
+  deleteFolders(ids) {
+    const gone = new Set(ids.flatMap((id) => this.folderTree(id)));
+    const inside = this.circuits().filter((c) => gone.has(c.folder));
+    this.saveFolders(this.folders().filter((f) => !gone.has(f.id)));
+    write(K.circuits, this.circuits().filter((c) => !gone.has(c.folder)));
+    return inside.length;
+  },
+  moveCircuits(ids, folder) { const s = new Set(ids); write(K.circuits, this.circuits().map((c) => (s.has(c.id) ? { ...c, folder: folder || null } : c))); },
+  moveFolders(ids, parent) { const s = new Set(ids); this.saveFolders(this.folders().map((f) => (s.has(f.id) ? { ...f, parent: parent || null } : f))); },
   getCircuit(id) { return this.circuits().find((c) => c.id === id); },
   recent() { return read(K.recent, ['resistor', 'capacitor', 'dcv', 'ground', 'led', 'npn', 'switch', 'opamp']); },
   pushRecent(type) {
