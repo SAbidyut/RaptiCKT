@@ -291,24 +291,24 @@ input.toggle:checked::after { transform: translateX(18px); }
 /* knob */
 .knob { position: absolute; right: 14px; bottom: calc(90px + var(--safe-b)); display: none; flex-direction: column; align-items: center; gap: 6px; z-index: 8; }
 .knob.open { display: flex; animation: rise 0.25s; }
-.knob-dial { position: relative; width: 104px; height: 104px; border-radius: 50%; touch-action: none; cursor: grab;
+.knob-dial { position: relative; width: 136px; height: 136px; border-radius: 50%; touch-action: none; cursor: grab;
   background: radial-gradient(circle at 50% 35%, #2a3658, #111a2e 70%); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55), inset 0 2px 2px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(148, 178, 230, 0.18); }
 .knob.active .knob-dial { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.45), 0 0 30px rgba(34, 211, 238, 0.35), inset 0 2px 2px rgba(255, 255, 255, 0.1); }
-.knob-ticks i { position: absolute; left: 50%; top: 4px; width: 2px; height: 7px; margin-left: -1px; background: rgba(148, 178, 230, 0.35); transform-origin: 1px 48px; border-radius: 2px; }
-.knob-cap { position: absolute; inset: 18px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3b4a72, #1a2440 75%); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15); }
+.knob-ticks i { position: absolute; left: 50%; top: 4px; width: 2px; height: 7px; margin-left: -1px; background: rgba(148, 178, 230, 0.35); transform-origin: 1px 64px; border-radius: 2px; }
+.knob-cap { position: absolute; inset: 22px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3b4a72, #1a2440 75%); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15); }
 .knob-cap i { position: absolute; left: 50%; top: 7px; width: 5px; height: 16px; margin-left: -2.5px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 .knob-label { text-align: center; padding: 5px 10px; border-radius: 12px; background: var(--glass); border: 1px solid var(--border); min-width: 110px; }
 .knob-row { display: flex; align-items: center; gap: 6px; }
-.knob-btn { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); border: 1px solid var(--border);
+.knob-btn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); border: 1px solid var(--border);
   color: var(--text); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); transition: transform 0.12s; }
 .knob-btn:active { transform: scale(0.9); background: rgba(34, 211, 238, 0.18); }
 .knob-digits { position: absolute; inset: 0; display: none; }
-.knob-digits span { position: absolute; transform: translate(-50%, -50%); font: 600 12px var(--font); color: var(--muted); padding: 3px 5px; border-radius: 8px; }
-.knob-digits span.on { color: var(--accent); font-size: 14px; text-shadow: 0 0 10px rgba(34, 211, 238, 0.6); }
+.knob-digits span { position: absolute; transform: translate(-50%, -50%); font: 600 14px var(--font); color: var(--muted); padding: 3px 5px; border-radius: 8px; }
+.knob-digits span.on { color: var(--accent); font-size: 17px; text-shadow: 0 0 10px rgba(34, 211, 238, 0.6); }
 .knob.decade .knob-digits { display: block; }
 .knob.decade .knob-ticks { display: none; }
-.knob.decade .knob-cap { inset: 27px; }
-.knob.decade .knob-cap i { top: 4px; height: 12px; }
+.knob.decade .knob-cap { inset: 35px; }
+.knob.decade .knob-cap i { top: 5px; height: 15px; }
 .knob-cap { transition: transform 0.12s ease-out; }
 .knob-label span { display: block; font-size: 10.5px; color: var(--muted); }
 .knob-label b { font: 600 13.5px var(--mono); color: var(--accent); }

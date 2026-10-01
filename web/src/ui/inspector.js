@@ -253,6 +253,8 @@ export class Inspector {
 }
 
 // --------------------------------------------------------------------- knob
+const KNOB_SIZE = 136; // px, matches .knob-dial in styles.css
+
 /**
  * Value knob next to the selected part.
  *
@@ -281,8 +283,8 @@ export class Knob {
     this.ticks.innerHTML = Array.from({ length: 24 }, (_, i) => `<i style="transform:rotate(${i * 15}deg)"></i>`).join('');
     // digits 1…9 clockwise, 1 just right of the top
     this.digits.innerHTML = Array.from({ length: 9 }, (_, k) => {
-      const a = ((k + 0.5) * 40 - 90) * (Math.PI / 180), r = 39;
-      return `<span data-d="${k + 1}" style="left:${(52 + r * Math.cos(a)).toFixed(1)}px;top:${(52 + r * Math.sin(a)).toFixed(1)}px">${k + 1}</span>`;
+      const a = ((k + 0.5) * 40 - 90) * (Math.PI / 180), c = KNOB_SIZE / 2, r = KNOB_SIZE * 0.385;
+      return `<span data-d="${k + 1}" style="left:${(c + r * Math.cos(a)).toFixed(1)}px;top:${(c + r * Math.sin(a)).toFixed(1)}px">${k + 1}</span>`;
     }).join('');
     this.angle = 0;
     let last = null, acc = 0, moved = 0;
@@ -368,7 +370,7 @@ export class Knob {
       let [m, e] = this.parts(v);
       m = Math.round(m) + n;
       if (m > 9) { m = 1; e += 1; } else if (m < 1) { m = 9; e -= 1; }
-      if (this.apply(+(m * Math.pow(10, e)).toPrecision(6))) this.angle += (n * 40 * Math.PI) / 180;
+      if (this.apply(+(m * Math.pow(10, e)).toPrecision(6))) this.angle += (n * 40 * Math.PI) / 180; // keeps turning the same way: 9 → 1 goes forward
     } else {
       const st = this.linStep();
       const next = (Math.round(v / st) + n) * st;
@@ -388,7 +390,7 @@ export class Knob {
   pickDigit(d) {
     this.ed.checkpoint();
     const [, e] = this.parts(this.el.p[this.prop.key]);
-    if (this.apply(+(d * Math.pow(10, e)).toPrecision(6))) this.angle = this.digitAngle(d);
+    this.apply(+(d * Math.pow(10, e)).toPrecision(6));
     this.update();
   }
 
@@ -396,7 +398,13 @@ export class Knob {
     if (!this.el) return;
     if (this.mode === 'decade') {
       const d = this.digit();
-      this.cap.style.transform = `rotate(${this.digitAngle(d)}rad)`;
+      // the pointer turns the short way to the digit from wherever it is, so the
+      // dial never spins back round (9 → 1 is one step forward, not eight back)
+      const full = 2 * Math.PI;
+      let diff = (this.digitAngle(d) - this.angle) % full;
+      if (diff > Math.PI) diff -= full; else if (diff < -Math.PI) diff += full;
+      this.angle += diff;
+      this.cap.style.transform = `rotate(${this.angle}rad)`;
       this.digits.querySelectorAll('span').forEach((s) => s.classList.toggle('on', +s.dataset.d === d));
     } else this.cap.style.transform = `rotate(${this.angle}rad)`;
     this.val.textContent = fmtSI(this.el.p[this.prop.key], this.prop.unit || '', 4);

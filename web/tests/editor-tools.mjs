@@ -66,11 +66,20 @@ s = await k(); check('tap digit 4 → 400 Ω', Math.abs(s.v - 400) < 1e-9 && s.o
 const dial = await page.evaluate(() => { const r = document.querySelector('.knob-dial').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2, r.width / 2 - 8]; });
 const cdp = await ctx.newCDPSession(page);
 const at = (deg) => [dial[0] + dial[2] * Math.cos((deg - 90) * Math.PI / 180), dial[1] + dial[2] * Math.sin((deg - 90) * Math.PI / 180)];
+const ang0 = await page.evaluate(() => app.editor.knob.angle);
 let p0 = at(160);
 await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: p0[0], y: p0[1] }] });
 for (let a = 165; a <= 160 + 245; a += 5) { const p = at(a); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: p[0], y: p[1] }] }); await sleep(8); }
 await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await sleep(200);
 s = await k(); check('turn 6 detents: 400 Ω → 1 kΩ (through 900 Ω)', Math.abs(s.v - 1000) < 1e-9, JSON.stringify(s));
+const turned = (await page.evaluate(() => app.editor.knob.angle) - ang0) * 180 / Math.PI;
+check('pointer kept turning forward past 9 → 1 (+240°, no spin back)', Math.abs(turned - 240) < 0.5, `turned ${turned.toFixed(1)}°`);
+// tapping digit 9 from 1 takes the short way (one step back, −40°)
+const a1 = await page.evaluate(() => app.editor.knob.angle);
+const d9 = await page.evaluate(() => { const r = document.querySelector('.knob-digits span[data-d="9"]').getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+await page.touchscreen.tap(d9[0], d9[1]); await sleep(200);
+const back = (await page.evaluate(() => app.editor.knob.angle) - a1) * 180 / Math.PI;
+check('tap 9 from 1: short way round (−40°)', Math.abs(back + 40) < 0.5, `moved ${back.toFixed(1)}°`);
 await page.screenshot({ path: path.join(out, 'knob.png') });
 // label sits above the dial
 const pos = await page.evaluate(() => { const l = document.querySelector('.knob-label').getBoundingClientRect(), d = document.querySelector('.knob-dial').getBoundingClientRect(); return l.bottom <= d.top; });
