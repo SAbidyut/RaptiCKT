@@ -114,15 +114,24 @@ await page.evaluate(() => document.querySelector('.man-item [data-ex=led]').clic
 ok('example opens in the editor', await screen() === 'editor' && await page.evaluate(() => app.editor.doc.name) === 'LED with switch');
 const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('raptickt.circuits.v1') || '[]').find((c) => c.name === 'Keep me'));
 ok('circuit that was being edited was saved first', saved && saved.count === 3);
-// Settings link
-await page.evaluate(() => app.goHome()); await page.waitForTimeout(400);
-await page.click('[data-h=settings]'); await page.waitForTimeout(400);
-await page.click('[data-x=manual]'); await page.waitForTimeout(400);
-ok('Settings → User manual', await screen() === 'manual');
+// the bottom menu stays visible while reading, and its tabs leave the manual
+await page.evaluate(() => app.goHome());
+await page.click('[data-tab=manual]'); await page.waitForTimeout(500);
+ok('bottom menu is visible inside the manual', await page.locator('.screen.manual .bottom-nav button').count() === 5 && await page.locator('.screen.manual .bottom-nav').isVisible());
+await nav('ch:scope');
+ok('...and on chapter pages', await page.locator('.screen.manual .bottom-nav').isVisible());
+await page.click('.screen.manual [data-tab=examples]'); await page.waitForTimeout(500);
+ok('a tab in the manual menu opens that Home page', await screen() === 'home' && await page.locator('.page-title').textContent() === 'Examples');
+ok('no manual menu when opened from the editor', await page.evaluate(() => { app.newCircuit(); return true; }));
+await page.waitForTimeout(800); await page.evaluate(() => app.closeSheet());
+await page.evaluate(() => app.openManual()); await page.waitForTimeout(400);
+ok('editor-launched manual has no bottom menu', await page.locator('.screen.manual .bottom-nav').count() === 0);
 await page.evaluate(() => window.raptiBack()); await page.waitForTimeout(300);
-ok('Back from the manual returns to Settings', await screen() === 'settings');
+await page.evaluate(() => app.goHome()); await page.waitForTimeout(400);
+ok('Settings has no manual section', await (async () => { await page.click('[data-h=settings]'); await page.waitForTimeout(400); return (await page.locator('.screen.settings [data-x=manual]').count()) === 0; })());
 await page.evaluate(() => window.raptiBack()); await page.waitForTimeout(300);
 // banner on Home
+await page.evaluate(() => { app.home.tab = 'home'; app.home.render(); }); await page.waitForTimeout(500);
 await page.click('[data-h=manual]'); await page.waitForTimeout(400);
 ok('Home banner opens the manual', await screen() === 'manual');
 

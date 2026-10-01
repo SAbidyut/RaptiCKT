@@ -52,7 +52,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## User manual
 
-A complete, step-by-step manual is built into the app, in **English and বাংলা**: open it from the **Manual** tab on Home, from **Settings**, or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 335 components and 29 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
+A complete, step-by-step manual is built into the app, in **English and বাংলা**: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 335 components and 29 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
 
 The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md) (English) and [docs/MANUAL.bn.md](docs/MANUAL.bn.md) (বাংলা). They are generated from `web/src/ui/manual-content.js` with `cd web && npm run manual`; re-run it after editing the manual. `web/tests/manual-content.test.js` fails if a component, example, setting or menu item is added to the app without being covered by the manual.
 

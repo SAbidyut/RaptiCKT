@@ -704,3 +704,4 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .man-items { margin: 0 0 6px; }
 .man-item:first-child { border-top: 0; }
 .man-view > .man-h:first-child { margin-top: 18px; }
+.manual .bottom-nav { position: static; flex: none; }

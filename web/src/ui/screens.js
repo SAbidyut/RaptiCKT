@@ -23,6 +23,9 @@ function ago(ts) {
 }
 
 // -------------------------------------------------------------------- home
+/** The Home bottom bar; the manual screen shows the same one so the menu never disappears. */
+export const NAV_TABS = [['home', 'bolt', 'Home'], ['examples', 'book', 'Examples'], ['library', 'folder', 'My Circuits'], ['manual', 'manual', 'Manual'], ['about', 'info', 'About']];
+
 export class HomeScreen {
   constructor(app, root) {
     this.app = app;
@@ -42,7 +45,7 @@ export class HomeScreen {
         <div class="home-body"></div>
       </div>
       <nav class="bottom-nav">
-        ${[['home', 'bolt', 'Home'], ['examples', 'book', 'Examples'], ['library', 'folder', 'My Circuits'], ['manual', 'manual', 'Manual'], ['about', 'info', 'About']].map(([t, ic, l]) => `<button data-tab="${t}" class="${this.tab === t ? 'on' : ''}">${icon(ic, 22)}<span>${l}</span></button>`).join('')}
+        ${NAV_TABS.map(([t, ic, l]) => `<button data-tab="${t}" class="${this.tab === t ? 'on' : ''}">${icon(ic, 22)}<span>${l}</span></button>`).join('')}
       </nav>`;
     this.root.querySelector('[data-h=settings]').addEventListener('click', () => this.app.openSettings());
     this.root.querySelector('[data-h=brand]').addEventListener('click', () => this.openInstitute());
@@ -406,8 +409,6 @@ export function renderSettings(app, root) {
   root.innerHTML = `
     <header class="topbar plain"><button class="icon-btn" data-x="back">${icon('back', 22)}</button><div class="title"><b>Settings</b></div></header>
     <div class="set-scroll">
-      <h4>Help</h4>
-      <div class="btn-row pad"><button class="btn" data-x="manual">${icon('manual', 18)} User manual</button></div>
       <h4>Appearance</h4>
       ${row('Theme', sel('theme', Object.entries(THEMES).map(([k, t]) => [k, t.name])))}
       ${row('Grid', sel('grid', [['lines', 'Lines'], ['dots', 'Dots'], ['none', 'None']]))}
@@ -458,7 +459,6 @@ export function renderSettings(app, root) {
     if (k === 'theme') app.applyTheme();
     if (k === 'animations') { if (v === 'auto') motion.reset(); motion.decide(v); renderSettings(app, root); }
   }));
-  root.querySelector('[data-x=manual]').addEventListener('click', () => app.openManual());
   root.querySelector('[data-x=backup]').addEventListener('click', () => app.backupAll());
   root.querySelector('[data-x=restore]').addEventListener('click', () => app.importFile());
   root.querySelector('[data-x=reset]').addEventListener('click', () => {

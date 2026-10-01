@@ -6,6 +6,7 @@ import { icon } from './icons.js';
 import { iosScroll } from './scroller.js';
 import { CATEGORIES } from '../elements/index.js';
 import { APP } from './brand.js';
+import { NAV_TABS } from './screens.js';
 import {
   CHAPTERS, LANGS, UI_TEXT, SUMMARY, digits, expandRefs, libraryData, exampleData, chapterParts,
 } from './manual-content.js';
@@ -235,7 +236,8 @@ export class ManualScreen {
         <button class="btn sm man-lang" data-x="lang">${esc(other[1])}</button>
       </header>
       ${page.index ? `<div class="man-search">${icon('search', 18)}<input type="search" placeholder="${esc(UI_TEXT.search[lang])}" value="${esc(this.query)}" enterkeyhint="search"></div>` : ''}
-      <div class="man-scroll"><div class="man-inner man-view ${this.stack.length > 1 ? 'deep' : ''}">${page.html}</div></div>`;
+      <div class="man-scroll"><div class="man-inner man-view ${this.stack.length > 1 ? 'deep' : ''}">${page.html}</div></div>
+      ${this.app.manualFrom === 'home' ? `<nav class="bottom-nav">${NAV_TABS.map(([t, ic, l]) => `<button data-tab="${t}" class="${t === 'manual' ? 'on' : ''}">${icon(ic, 22)}<span>${l}</span></button>`).join('')}</nav>` : ''}`;
     this.bind(page, other);
     this.scrollApi?.scrollTo?.(restoreY, false);
   }
@@ -244,6 +246,12 @@ export class ManualScreen {
     const scroller = this.root.querySelector('.man-scroll'), inner = this.root.querySelector('.man-inner');
     this.scrollApi = iosScroll(scroller, inner);
     this.root.querySelector('[data-x=back]').addEventListener('click', () => { if (!this.back()) this.app.closeManual(); });
+    this.root.querySelectorAll('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.tab === 'manual') { this.stack = [{ nav: 'index', y: 0 }]; this.query = ''; this.paint(); return; }
+      this.app.home.tab = b.dataset.tab;
+      this.app.closeManual();
+      this.app.home.render();
+    }));
     this.root.querySelector('[data-x=home]')?.addEventListener('click', () => { this.stack = [{ nav: 'index', y: 0 }]; this.paint(); });
     this.root.querySelector('[data-x=lang]').addEventListener('click', () => {
       this.here.y = this.scrollApi?.y || 0;
