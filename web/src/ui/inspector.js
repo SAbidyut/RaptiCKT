@@ -64,6 +64,7 @@ export class Inspector {
         <img src="${this.icon(C)}" alt="">
         <div><b>${esc(e.name)} <small>${esc(C.title)}</small></b><span class="qb-read"></span></div>
       </button>
+      ${this.ed.constructor.isPolar(e) ? `<button data-q="reverse" title="Reverse polarity">${icon('polarity', 19)}</button>` : ''}
       <button data-q="rotate" title="Rotate">${icon('rotate', 19)}</button>
       ${canScope ? `<button data-q="scope" title="Add to oscilloscope">${icon('scope', 19)}</button>` : ''}
       <button data-q="edit" title="Edit properties">${icon('sliders', 19)}</button>
@@ -72,6 +73,7 @@ export class Inspector {
       const a = b.dataset.q;
       if (a === 'edit') this.openSheet();
       if (a === 'rotate') this.ed.rotateSelection();
+      if (a === 'reverse') this.ed.reversePolarity();
       if (a === 'del') this.ed.deleteSelection();
       if (a === 'scope') this.ed.addProbe({ kind: posts >= 2 ? 'volt' : 'cur', el: this.el.id });
     }));
@@ -251,19 +253,39 @@ export class Inspector {
 }
 
 // --------------------------------------------------------------------- knob
+/**
+ * Value knob next to the selected part.
+ *
+ * Decade dial (log quantities: Ω, F, H, Hz…): the digits 1–9 sit round the
+ * ring; turning steps 1 → 2 → … → 9 → 10 → 20 … with a detent per digit,
+ * tapping a digit picks it, and − / + move a whole decade (÷10 / ×10).
+ * Stepped knob (linear quantities: %, °, V…): turning snaps to whole steps,
+ * − / + move one step. The label with the value sits above the dial.
+ */
 export class Knob {
   constructor(editor, host) {
     this.ed = editor;
     this.host = host;
-    host.innerHTML = `<div class="knob-dial"><div class="knob-ticks"></div><div class="knob-cap"><i></i></div></div><div class="knob-label"><span></span><b></b></div>`;
+    host.innerHTML = `<div class="knob-label"><span></span><b></b></div>
+      <div class="knob-row">
+        <button class="knob-btn" data-k="-" title="Smaller">${icon('minus', 18)}</button>
+        <div class="knob-dial"><div class="knob-ticks"></div><div class="knob-digits"></div><div class="knob-cap"><i></i></div></div>
+        <button class="knob-btn" data-k="+" title="Larger">${icon('plus', 18)}</button>
+      </div>`;
     this.dial = host.querySelector('.knob-dial');
     this.cap = host.querySelector('.knob-cap');
     this.lab = host.querySelector('.knob-label span');
     this.val = host.querySelector('.knob-label b');
-    const ticks = host.querySelector('.knob-ticks');
-    ticks.innerHTML = Array.from({ length: 24 }, (_, i) => `<i style="transform:rotate(${i * 15}deg)"></i>`).join('');
+    this.ticks = host.querySelector('.knob-ticks');
+    this.digits = host.querySelector('.knob-digits');
+    this.ticks.innerHTML = Array.from({ length: 24 }, (_, i) => `<i style="transform:rotate(${i * 15}deg)"></i>`).join('');
+    // digits 1…9 clockwise, 1 just right of the top
+    this.digits.innerHTML = Array.from({ length: 9 }, (_, k) => {
+      const a = ((k + 0.5) * 40 - 90) * (Math.PI / 180), r = 39;
+      return `<span data-d="${k + 1}" style="left:${(52 + r * Math.cos(a)).toFixed(1)}px;top:${(52 + r * Math.sin(a)).toFixed(1)}px">${k + 1}</span>`;
+    }).join('');
     this.angle = 0;
-    let last = null, acc = 0;
+    let last = null, acc = 0, moved = 0;
     const ang = (ev) => {
       const r = this.dial.getBoundingClientRect();
       return Math.atan2(ev.clientY - (r.top + r.height / 2), ev.clientX - (r.left + r.width / 2));
@@ -271,7 +293,7 @@ export class Knob {
     this.dial.addEventListener('pointerdown', (ev) => {
       ev.preventDefault(); ev.stopPropagation();
       this.dial.setPointerCapture(ev.pointerId);
-      last = ang(ev); acc = 0;
+      last = ang(ev); acc = 0; moved = 0;
       this.ed.checkpoint();
       this.host.classList.add('active');
     });
@@ -281,45 +303,102 @@ export class Knob {
       let d = a - last;
       if (d > Math.PI) d -= 2 * Math.PI;
       if (d < -Math.PI) d += 2 * Math.PI;
-      last = a;
-      this.turn(d);
+      last = a; moved += Math.abs(d);
       acc += d;
-      if (Math.abs(acc) > Math.PI / 12) { acc = 0; this.ed.haptic(4); }
+      const step = this.mode === 'decade' ? (40 * Math.PI) / 180 : Math.PI / 12; // one detent
+      while (acc >= step) { acc -= step; this.step(1); }
+      while (acc <= -step) { acc += step; this.step(-1); }
     });
-    const up = () => { last = null; this.host.classList.remove('active'); };
+    const up = (ev) => {
+      if (last === null) return;
+      last = null; this.host.classList.remove('active');
+      // a tap (no turning) on a digit picks it
+      if (this.mode === 'decade' && moved < 0.12) {
+        const t = document.elementFromPoint(ev.clientX, ev.clientY);
+        const d = t && t.dataset && t.dataset.d;
+        if (d) this.pickDigit(+d);
+      }
+    };
     this.dial.addEventListener('pointerup', up);
-    this.dial.addEventListener('pointercancel', up);
-    this.dial.addEventListener('wheel', (ev) => { ev.preventDefault(); this.turn(ev.deltaY < 0 ? 0.12 : -0.12); }, { passive: false });
+    this.dial.addEventListener('pointercancel', () => { last = null; this.host.classList.remove('active'); });
+    this.dial.addEventListener('wheel', (ev) => { ev.preventDefault(); this.ed.checkpoint(); this.step(ev.deltaY < 0 ? 1 : -1); }, { passive: false });
+    host.querySelectorAll('.knob-btn').forEach((b) => {
+      b.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); this.ed.checkpoint(); this.bump(b.dataset.k === '+' ? 1 : -1); });
+    });
   }
 
   show(el, prop) {
     this.el = el; this.prop = prop;
+    this.mode = prop.log && (prop.min ?? 0) >= 0 && el.p[prop.key] > 0 ? 'decade' : 'linear';
+    this.host.classList.toggle('decade', this.mode === 'decade');
     this.lab.textContent = prop.label;
+    this.angle = this.mode === 'decade' ? this.digitAngle(this.digit()) : this.angle;
     this.update();
     this.host.classList.add('open');
   }
   hide() { this.host.classList.remove('open'); this.el = null; }
 
-  turn(d) {
-    const p = this.prop, e = this.el;
-    if (!e) return;
-    let v = e.p[p.key];
-    const lo = p.min ?? -Infinity, hi = p.max ?? Infinity;
-    if (p.log && v > 0) v = v * Math.pow(10, d / (2 * Math.PI));
-    else {
-      const span = Number.isFinite(hi - lo) ? (hi - lo) : Math.max(1, Math.abs(v) * 2);
-      const perTurn = p.unit === '%' ? 50 : p.unit === '°C' ? 50 : Math.min(span / 4, Math.max(1, Math.abs(v)) * 2);
-      v = v + (d / (2 * Math.PI)) * perTurn;
-    }
+  // ---- decade dial helpers
+  parts(v) { let e = Math.floor(Math.log10(v) + 1e-9), m = v / Math.pow(10, e); if (Math.round(m) >= 10) { e += 1; m /= 10; } return [m, e]; }
+  digit() { const v = this.el.p[this.prop.key]; return v > 0 ? Math.min(9, Math.max(1, Math.round(this.parts(v)[0]))) : 1; }
+  digitAngle(d) { return ((d - 0.5) * 40 * Math.PI) / 180; }
+  linStep() {
+    const p = this.prop, lo = p.min ?? -Infinity, hi = p.max ?? Infinity, v = Math.abs(this.el.p[p.key]) || 1;
+    if (p.step) return p.step;
+    const span = Number.isFinite(hi - lo) ? hi - lo : v * 4;
+    if (p.unit === '%' || p.unit === '°' || p.unit === '°C' || span >= 20) return Math.max(1, Math.pow(10, Math.floor(Math.log10(span)) - 2));
+    return Math.pow(10, Math.floor(Math.log10(span)) - 2);
+  }
+  apply(v) {
+    const p = this.prop, lo = p.min ?? -Infinity, hi = p.max ?? Infinity;
     v = Math.min(hi, Math.max(lo, v));
-    this.angle += d;
-    this.ed.setParam(e, p.key, niceRound(v), true);
+    if (v === this.el.p[p.key]) return false;
+    this.ed.setParam(this.el, p.key, v, true);
+    this.ed.haptic(4);
+    this.update();
+    return true;
+  }
+
+  /** One detent of the dial. */
+  step(n) {
+    if (!this.el) return;
+    const v = this.el.p[this.prop.key];
+    if (this.mode === 'decade') {
+      let [m, e] = this.parts(v);
+      m = Math.round(m) + n;
+      if (m > 9) { m = 1; e += 1; } else if (m < 1) { m = 9; e -= 1; }
+      if (this.apply(+(m * Math.pow(10, e)).toPrecision(6))) this.angle += (n * 40 * Math.PI) / 180;
+    } else {
+      const st = this.linStep();
+      const next = (Math.round(v / st) + n) * st;
+      if (this.apply(+next.toPrecision(10))) this.angle += n * (Math.PI / 12);
+    }
+    this.update();
+  }
+
+  /** − / + buttons: a decade on the dial, one step on a linear knob. */
+  bump(n) {
+    if (!this.el) return;
+    const v = this.el.p[this.prop.key];
+    if (this.mode === 'decade') this.apply(+(v * Math.pow(10, n)).toPrecision(6));
+    else this.step(n);
+  }
+
+  pickDigit(d) {
+    this.ed.checkpoint();
+    const [, e] = this.parts(this.el.p[this.prop.key]);
+    if (this.apply(+(d * Math.pow(10, e)).toPrecision(6))) this.angle = this.digitAngle(d);
     this.update();
   }
 
   update() {
     if (!this.el) return;
-    this.cap.style.transform = `rotate(${this.angle}rad)`;
+    if (this.mode === 'decade') {
+      const d = this.digit();
+      this.cap.style.transform = `rotate(${this.digitAngle(d)}rad)`;
+      this.digits.querySelectorAll('span').forEach((s) => s.classList.toggle('on', +s.dataset.d === d));
+    } else this.cap.style.transform = `rotate(${this.angle}rad)`;
     this.val.textContent = fmtSI(this.el.p[this.prop.key], this.prop.unit || '', 4);
   }
 }

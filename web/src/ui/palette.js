@@ -23,7 +23,7 @@ export class Palette {
 
   open() {
     this.host.innerHTML = `
-      <div class="sheet-grip" data-close></div>
+      <div class="sheet-grip"></div>
       <div class="pal-head">
         <b>Add component</b>
         <div class="search">${icon('search', 18)}<input type="search" placeholder="Search components…" value=""></div>
@@ -83,9 +83,10 @@ export class Palette {
       ? items.map((C) => `<button class="pal-item" data-type="${C.type}"><img src="${this.iconUrl(C)}" alt=""><span>${C.title}</span></button>`).join('')
       : '<p class="muted pad">No components match your search.</p>';
     grid.querySelectorAll('.pal-item').forEach((b) => b.addEventListener('click', () => {
+      // the menu stays open so several parts can be added in a row; only ✕ closes it
       store.pushRecent(b.dataset.type);
-      this.close();
       this.ed.addComponent(b.dataset.type);
+      b.classList.remove('added'); void b.offsetWidth; b.classList.add('added');
     }));
   }
 }

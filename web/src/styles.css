@@ -298,6 +298,18 @@ input.toggle:checked::after { transform: translateX(18px); }
 .knob-cap { position: absolute; inset: 18px; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #3b4a72, #1a2440 75%); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15); }
 .knob-cap i { position: absolute; left: 50%; top: 7px; width: 5px; height: 16px; margin-left: -2.5px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
 .knob-label { text-align: center; padding: 5px 10px; border-radius: 12px; background: var(--glass); border: 1px solid var(--border); min-width: 110px; }
+.knob-row { display: flex; align-items: center; gap: 6px; }
+.knob-btn { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); border: 1px solid var(--border);
+  color: var(--text); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); transition: transform 0.12s; }
+.knob-btn:active { transform: scale(0.9); background: rgba(34, 211, 238, 0.18); }
+.knob-digits { position: absolute; inset: 0; display: none; }
+.knob-digits span { position: absolute; transform: translate(-50%, -50%); font: 600 12px var(--font); color: var(--muted); padding: 3px 5px; border-radius: 8px; }
+.knob-digits span.on { color: var(--accent); font-size: 14px; text-shadow: 0 0 10px rgba(34, 211, 238, 0.6); }
+.knob.decade .knob-digits { display: block; }
+.knob.decade .knob-ticks { display: none; }
+.knob.decade .knob-cap { inset: 27px; }
+.knob.decade .knob-cap i { top: 4px; height: 12px; }
+.knob-cap { transition: transform 0.12s ease-out; }
 .knob-label span { display: block; font-size: 10.5px; color: var(--muted); }
 .knob-label b { font: 600 13.5px var(--mono); color: var(--accent); }
 
@@ -322,7 +334,10 @@ input.toggle:checked::after { transform: translateX(18px); }
 .sheet.open { transform: translate3d(0, 0, 0); visibility: visible; }
 .sheet:not(.open) { transition: transform 0.26s cubic-bezier(.4, 0, 1, 1), visibility 0s 0.26s; }
 .scrim { position: absolute; inset: 0; z-index: 24; background: rgba(2, 6, 16, 0.45); opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
-.editor.pal-open .scrim, .editor.sheet-open .scrim { opacity: 1; pointer-events: auto; }
+.editor.sheet-open .scrim { opacity: 1; pointer-events: auto; }
+/* the component menu leaves the board visible and usable: parts can be added one after another */
+.pal-item.added { animation: palAdded 0.45s ease; }
+@keyframes palAdded { 0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.7); } 100% { box-shadow: 0 0 0 10px rgba(34, 211, 238, 0); } }
 .sheet-grip { width: 42px; height: 5px; border-radius: 3px; background: var(--border2); margin: 8px auto 2px; flex: none; cursor: pointer; }
 .inspector { max-height: 70%; }
 .insp-scroll { overflow-y: auto; overscroll-behavior: contain; }
@@ -351,7 +366,7 @@ input.toggle:checked::after { transform: translateX(18px); }
 .insp-desc { color: var(--muted); font-size: 12.5px; margin: 12px 0 0; }
 
 /* palette */
-.palette { height: min(64%, 560px); max-height: none; }
+.palette { height: min(56%, 500px); max-height: none; }
 .pal-loading { grid-column: 1 / -1; height: 200px; }
 .pal-head { display: flex; align-items: center; gap: 10px; padding: 2px 10px 8px 16px; }
 .pal-head > b { font-size: 16px; white-space: nowrap; }

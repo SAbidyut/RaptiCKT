@@ -16,6 +16,8 @@ import { store } from './store.js';
 import { RmsTracker, acFrequency } from './rms.js';
 import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore } from './autoroute.js';
 
+// two-terminal parts outside the Sources / Batteries / Diodes / Meters categories that still have a polarity
+const POLAR_TYPES = new Set(['ecap', 'tantalum', 'supercap', 'photodiode', 'solar', 'pvmodule', 'thermocouple', 'led', 'irled', 'laser', 'piezosens', 'tacho', 'ph', 'varactor', 'lm4040', 'buzzer', 'piezobuzz', 'motor', 'dcgen', 'dcsep', 'dcshunt', 'dcseries', 'dualpsu', 'benchpsu']);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const same = (a, b) => a[0] === b[0] && a[1] === b[1];
 let probeSeq = 1;
@@ -38,7 +40,7 @@ export class Editor {
     this.renderer = new Renderer(this.canvas);
     this.scope = new Scope(this, this.q('.scope-panel'));
     this.inspector = new Inspector(this, this.q('.inspector'), this.q('.quickbar'));
-    this.q('.scrim').addEventListener('click', () => { this.palette.close(); this.inspector.closeSheet(); });
+    this.q('.scrim').addEventListener('click', () => this.inspector.closeSheet());
     this.knob = new Knob(this, this.q('.knob'));
     this.palette = new Palette(this, this.q('.palette'));
     this.analysis = new Analysis(this, this.q('.analysis'));
@@ -521,7 +523,10 @@ export class Editor {
   newDoc(name) { return new CircuitDoc(name); }
 
   addComponent(type) {
-    const [cx, cy] = this.renderer.toWorld(this.renderer.cw / 2, this.renderer.ch * 0.42);
+    // place it in the part of the board that is visible (above the open component menu)
+    const palH = this.palette.isOpen ? this.palette.host.offsetHeight : 0;
+    const visH = Math.max(120, this.renderer.ch - palH);
+    const [cx, cy] = this.renderer.toWorld(this.renderer.cw / 2, palH ? visH * 0.55 : this.renderer.ch * 0.42);
     const e = makeElement(type, snap(cx), snap(cy));
     if (!e) return;
     const boxes = this.doc.elements.map((o) => o.worldBox());
@@ -547,7 +552,30 @@ export class Editor {
     this.select(e);
     this.topologyChanged();
     this.haptic(10);
-    this.toast(`${e.constructor.title} added — drag to move, drag a terminal to wire`);
+    // keep every part in view above the menu: zoom out (never in) and centre when they no longer fit
+    if (palH) this.fitAbove(visH);
+    this.toast(palH ? `${e.name} added` : `${e.constructor.title} added — drag to move, drag a terminal to wire`);
+  }
+
+  /** Fit all parts into the board area above the open component menu if any are outside it. */
+  fitAbove(visH) {
+    const R = this.renderer, b = this.doc.bounds();
+    if (!b) return;
+    const m = 18, top = 58, x0 = m, x1 = R.cw - m, y0 = top, y1 = visH - m;
+    const [sx0, sy0] = R.toScreen(b[0], b[1]), [sx1, sy1] = R.toScreen(b[2], b[3]);
+    if (sx0 >= x0 && sx1 <= x1 && sy0 >= y0 && sy1 <= y1) return;
+    const bw = Math.max(1, b[2] - b[0]), bh = Math.max(1, b[3] - b[1]);
+    const sc = Math.max(0.45, Math.min(R.scale, (x1 - x0) / bw, (y1 - y0) / bh));
+    const to = { scale: sc, ox: (x0 + x1) / 2 - ((b[0] + b[2]) / 2) * sc, oy: (y0 + y1) / 2 - ((b[1] + b[3]) / 2) * sc };
+    // a short glide rather than a jump
+    const from = { scale: R.scale, ox: R.ox, oy: R.oy }, t0 = performance.now();
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / 220), e = 1 - Math.pow(1 - k, 3);
+      R.scale = from.scale + (to.scale - from.scale) * e; R.ox = from.ox + (to.ox - from.ox) * e; R.oy = from.oy + (to.oy - from.oy) * e;
+      this.dirtyDraw = true;
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   setParam(el, key, val, live = false) {
@@ -599,6 +627,34 @@ export class Editor {
   }
 
   rotateSelection() { this.transformSelection((e) => { e.rot = (e.rot + 1) & 3; }); }
+
+  /** Parts whose two terminals are not interchangeable (+/−, anode/cathode…). */
+  static isPolar(e) {
+    if (!e || e.localPosts().length !== 2) return false;
+    const C = e.constructor;
+    if (C.polar !== undefined) return C.polar;
+    if (['Sources', 'Batteries', 'Diodes', 'Meters'].includes(C.category)) return true;
+    return POLAR_TYPES.has(C.type);
+  }
+
+  /**
+   * Reverse a polarised part in place: it turns half a turn about its centre so
+   * its terminals swap, while the wires stay where they are.
+   */
+  reversePolarity() {
+    const els = [...this.selection].filter((e) => Editor.isPolar(e));
+    if (!els.length) return;
+    this.checkpoint();
+    for (const e of els) {
+      const before = e.getPosts().map((p) => p.join(',')).sort().join('|');
+      e.rot = (e.rot + 2) & 3;
+      const after = e.getPosts().map((p) => p.join(',')).sort().join('|');
+      if (after !== before) e.rot = (e.rot + 2) & 3; // terminals not symmetric about the centre: leave it
+    }
+    this.topologyChanged();
+    this.haptic(8);
+    this.toast(els.length === 1 ? `${els[0].name}: polarity reversed` : 'Polarity reversed');
+  }
   flipSelection() { this.transformSelection((e) => { e.flip = !e.flip; }); }
 
   transformSelection(fn) {
@@ -1346,7 +1402,6 @@ export class Editor {
     if (h.kind === 'wire') { this.selectWire(h.wire, { add: this.multi }); return; }
     if (h.kind === 'none') {
       if (this.selection.size || this.selWires.size) this.select(null);
-      if (this.palette.isOpen) this.palette.close();
     }
   }
 
