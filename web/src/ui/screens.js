@@ -7,7 +7,7 @@ import { store, DEFAULT_SETTINGS } from './store.js';
 import { allTypes, CATEGORIES } from '../elements/index.js';
 import { THEMES } from './theme.js';
 import { fmtSI, parseSI } from '../engine/units.js';
-import { elastic } from './overscroll.js';
+import { iosScroll } from './scroller.js';
 
 // 01617-345534 style, as printed by RAPTI
 const fmtPhone = (p) => p.replace(/^\+880/, '0').replace(/^(\d{5})(\d+)$/, '$1-$2');
@@ -51,11 +51,11 @@ export class HomeScreen {
     this.scroller = scroller;
     this.lastScroll = 0;
     let scrolled = false;
-    scroller.addEventListener('scroll', () => {
+    const onScroll = (y) => {
       this.lastScroll = performance.now();
-      const s2 = scroller.scrollTop > 4;
+      const s2 = y > 4;
       if (s2 !== scrolled) { scrolled = s2; head.classList.toggle('scrolled', s2); }
-    }, { passive: true });
+    };
     // once the reveal of a card has finished, drop its classes so press feedback works as usual
     body.addEventListener('transitionend', (ev) => {
       const t = ev.target;
@@ -67,8 +67,7 @@ export class HomeScreen {
     if (this.tab === 'examples') this.renderExamples(body);
     if (this.tab === 'library') this.renderLibrary(body);
     if (this.tab === 'about') renderAbout(this.app, body);
-    scroller.scrollTop = 0;
-    elastic(scroller, body); // the page stretches and springs back at either end
+    this.scrollApi = iosScroll(scroller, body, { onScroll });
     this.reveal(body);
   }
 
@@ -396,7 +395,11 @@ export function renderSettings(app, root) {
       </div>
       <p class="copyright">RaptiCKT ${APP.version} · ${RAPTI.full}</p>
     </div>`;
-  elastic(root.querySelector('.set-scroll'));
+  const sc = root.querySelector('.set-scroll'), inner = document.createElement('div');
+  inner.className = 'set-inner';
+  inner.append(...sc.childNodes);
+  sc.append(inner);
+  iosScroll(sc, inner);
   root.querySelector('[data-x=back]').addEventListener('click', () => app.closeSettings());
   root.querySelectorAll('[data-k]').forEach((inp) => inp.addEventListener('change', () => {
     const k = inp.dataset.k;

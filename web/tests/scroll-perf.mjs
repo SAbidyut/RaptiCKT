@@ -7,7 +7,7 @@ const server = http.createServer((req, res) => { const f = path.join(root, req.u
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 412, height: 892 }, deviceScaleFactor: 2.6, isMobile: true, hasTouch: true });
 const page = await ctx.newPage();
-await page.goto(`http://127.0.0.1:${server.address().port}/`); await page.waitForTimeout(1500);
+await page.goto(`http://127.0.0.1:${server.address().port}/`); await page.waitForTimeout(2300);
 const cdp = await ctx.newCDPSession(page);
 await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 }); // a mid-range phone
 await page.evaluate(() => {
@@ -15,9 +15,13 @@ await page.evaluate(() => {
   window.__fr = []; let last = performance.now(); const tick = (t) => { window.__fr.push(t - last); last = t; requestAnimationFrame(tick); }; requestAnimationFrame(tick);
   app.home.tab = 'examples'; app.home.cat = 'All'; app.home.render();
 });
-// fling-scroll the list with touch
+// fling the list with touch, several times, including into the end
+const T = (type, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: 200, y }] });
 for (let k = 0; k < 6; k++) {
-  await cdp.send('Input.synthesizeScrollGesture', { x: 200, y: 600, yDistance: -700, speed: 1400, gestureSourceType: 'touch' });
+  await T('touchStart', 760);
+  for (let i = 1; i <= 6; i++) { await new Promise((r) => setTimeout(r, 14)); await T('touchMove', 760 - i * 80); }
+  await T('touchEnd');
+  await new Promise((r) => setTimeout(r, 900));
 }
 const r = await page.evaluate(() => { const f = window.__fr.slice(3); f.sort((a, b) => a - b); return { longtasks: window.__lt, frames: f.length, p50: f[Math.floor(f.length * 0.5)].toFixed(1), p95: f[Math.floor(f.length * 0.95)].toFixed(1), max: f[f.length - 1].toFixed(1), janky: f.filter((x) => x > 34).length }; });
 console.log(JSON.stringify(r));

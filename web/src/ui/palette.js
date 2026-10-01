@@ -4,7 +4,7 @@ import { CATEGORIES, getType, allTypes } from '../elements/index.js';
 import { Renderer } from './render.js';
 import { icon } from './icons.js';
 import { store } from './store.js';
-import { elastic } from './overscroll.js';
+import { iosScroll } from './scroller.js';
 
 export class Palette {
   constructor(editor, host) {
@@ -32,7 +32,7 @@ export class Palette {
       <div class="pal-tabs">
         ${['Recent', ...CATEGORIES.map((c) => c.id)].map((t) => `<button data-t="${t}" class="${t === this.tab ? 'on' : ''}">${icon(t === 'Recent' ? 'clock' : CATEGORIES.find((c) => c.id === t).icon, 16)}<span>${t}</span></button>`).join('')}
       </div>
-      <div class="pal-grid"></div>`;
+      <div class="pal-grid"><div class="pal-inner"></div></div>`;
     this.host.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => this.close()));
     this.host.querySelectorAll('.pal-tabs button').forEach((b) => b.addEventListener('click', () => {
       this.tab = b.dataset.t; this.query = '';
@@ -43,8 +43,8 @@ export class Palette {
     const inp = this.host.querySelector('input');
     inp.addEventListener('input', () => { this.query = inp.value.trim().toLowerCase(); this.fill(); });
     // slide in first, then build the grid on the next frame so the animation never stutters
-    this.host.querySelector('.pal-grid').innerHTML = '<div class="pal-loading"></div>';
-    elastic(this.host.querySelector('.pal-grid'));
+    this.host.querySelector('.pal-inner').innerHTML = '<div class="pal-loading"></div>';
+    this.scroll = iosScroll(this.host.querySelector('.pal-grid'), this.host.querySelector('.pal-inner'));
     this.host.classList.add('open');
     this.ed.root.classList.add('pal-open');
     this.ed.overlayOpen('palette');
@@ -76,7 +76,8 @@ export class Palette {
   }
 
   fill() {
-    const grid = this.host.querySelector('.pal-grid');
+    const grid = this.host.querySelector('.pal-inner');
+    this.scroll?.scrollTo(0, false);
     const items = this.items();
     grid.innerHTML = items.length
       ? items.map((C) => `<button class="pal-item" data-type="${C.type}"><img src="${this.iconUrl(C)}" alt=""><span>${C.title}</span></button>`).join('')
