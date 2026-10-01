@@ -8,3 +8,5 @@ android/local.properties
 .idea/
 *.iml
 .DS_Store
+web/shots/
+web/shots-small/
