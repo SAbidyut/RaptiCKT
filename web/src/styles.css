@@ -86,13 +86,14 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 button:disabled { opacity: 0.35; pointer-events: none; }
 
 /* ------------------------------------------------------------- home */
-.home-scroll { flex: 1; overflow: hidden; padding-bottom: calc(104px + var(--safe-b)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.home-scroll { position: relative; flex: 1; overflow: hidden; padding-bottom: calc(104px + var(--safe-b)); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 /* solid header: scrolled content never shows through the title */
 .home-head { position: sticky; top: 0; z-index: 5; transform: translateZ(0); display: flex; align-items: center; justify-content: space-between; padding: calc(10px + var(--safe-t)) 16px 10px;
   background: var(--bg); border-bottom: 1px solid transparent; }
 .home-head.scrolled { border-bottom-color: var(--border); }
 .home-head .brand svg { flex: none; }
-.brand { display: flex; align-items: center; gap: 10px; }
+.brand { display: flex; align-items: center; gap: 10px; text-align: left; padding: 0; border-radius: 14px; cursor: pointer; transition: transform 0.15s; }
+.brand:active { transform: scale(0.96); }
 .brand b { display: block; font-size: 21px; font-weight: 800; letter-spacing: 0.3px; line-height: 1.1; }
 .brand small { color: var(--muted); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
 .home-body { padding: 6px 16px 20px; max-width: 980px; margin: 0 auto; }

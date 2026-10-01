@@ -148,7 +148,7 @@ function nativeScroll(viewport, content, opts) {
   const api = {
     get y() { return viewport.scrollTop; },
     get max() { return viewport.scrollHeight - viewport.clientHeight; },
-    scrollTo(to) { viewport.scrollTop = to; },
+    scrollTo(to) { viewport.scrollTop = to; }, // simple mode: jump, no animation
     refresh() {},
     destroy() { viewport.removeEventListener('scroll', onScroll); viewport.classList.remove('native-scroll'); viewport._ios = null; },
   };

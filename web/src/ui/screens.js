@@ -36,7 +36,7 @@ export class HomeScreen {
     this.root.innerHTML = `
       <div class="home-scroll">
         <header class="home-head">
-          <div class="brand">${LOGO_SVG(44, 'hl')}<div><b>Rapti<span>CKT</span></b><small>${APP.tagline}</small></div></div>
+          <button class="brand" data-h="brand" title="About RAPTI">${LOGO_SVG(44, 'hl')}<div><b>Rapti<span>CKT</span></b><small>${APP.tagline}</small></div></button>
           <button class="icon-btn" data-h="settings" title="Settings">${icon('sliders', 22)}</button>
         </header>
         <div class="home-body"></div>
@@ -45,6 +45,7 @@ export class HomeScreen {
         ${[['home', 'bolt', 'Home'], ['examples', 'book', 'Examples'], ['library', 'folder', 'My Circuits'], ['about', 'info', 'About']].map(([t, ic, l]) => `<button data-tab="${t}" class="${this.tab === t ? 'on' : ''}">${icon(ic, 22)}<span>${l}</span></button>`).join('')}
       </nav>`;
     this.root.querySelector('[data-h=settings]').addEventListener('click', () => this.app.openSettings());
+    this.root.querySelector('[data-h=brand]').addEventListener('click', () => this.openInstitute());
     this.root.querySelectorAll('.bottom-nav button').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.tab; this.render(); }));
     const body = this.root.querySelector('.home-body');
     const scroller = this.root.querySelector('.home-scroll');
@@ -70,6 +71,21 @@ export class HomeScreen {
     if (this.tab === 'about') renderAbout(this.app, body);
     this.scrollApi = iosScroll(scroller, body, { onScroll });
     this.reveal(body);
+  }
+
+  /** Open About and bring the RAPTI institute introduction into view. */
+  openInstitute() {
+    if (this.tab !== 'about') { this.tab = 'about'; this.render(); }
+    const go = () => {
+      const card = this.root.querySelector('.about-card.rapti'), sc = this.scroller, api = this.scrollApi;
+      if (!card || !sc || !api) return;
+      const head = this.root.querySelector('.home-head')?.offsetHeight || 0;
+      // layout position (not the on-screen one, which an entrance animation may still be shifting)
+      let y = -head - 12;
+      for (let n = card; n && n !== sc; n = n.offsetParent) y += n.offsetTop;
+      api.scrollTo(Math.max(0, y), true);
+    };
+    requestAnimationFrame(() => requestAnimationFrame(go)); // after the page has laid out
   }
 
   /**
@@ -158,7 +174,7 @@ export class HomeScreen {
     body.querySelector('[data-h=new]').addEventListener('click', () => this.app.newCircuit());
     body.querySelector('[data-h=open]').addEventListener('click', () => this.app.importFile());
     body.querySelector('[data-h=resume]')?.addEventListener('click', () => this.app.resume());
-    body.querySelector('[data-h=about]').addEventListener('click', () => { this.tab = 'about'; this.render(); });
+    body.querySelector('[data-h=about]').addEventListener('click', () => this.openInstitute());
     body.querySelectorAll('[data-tab2]').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.tab2; this.render(); }));
     this.drawThumbs(body);
   }
