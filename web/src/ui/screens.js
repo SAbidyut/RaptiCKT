@@ -7,6 +7,7 @@ import { store, DEFAULT_SETTINGS } from './store.js';
 import { allTypes, CATEGORIES } from '../elements/index.js';
 import { THEMES } from './theme.js';
 import { fmtSI, parseSI } from '../engine/units.js';
+import { elastic } from './overscroll.js';
 
 // 01617-345534 style, as printed by RAPTI
 const fmtPhone = (p) => p.replace(/^\+880/, '0').replace(/^(\d{5})(\d+)$/, '$1-$2');
@@ -67,6 +68,7 @@ export class HomeScreen {
     if (this.tab === 'library') this.renderLibrary(body);
     if (this.tab === 'about') renderAbout(this.app, body);
     scroller.scrollTop = 0;
+    elastic(scroller, body); // the page stretches and springs back at either end
     this.reveal(body);
   }
 
@@ -394,6 +396,7 @@ export function renderSettings(app, root) {
       </div>
       <p class="copyright">RaptiCKT ${APP.version} · ${RAPTI.full}</p>
     </div>`;
+  elastic(root.querySelector('.set-scroll'));
   root.querySelector('[data-x=back]').addEventListener('click', () => app.closeSettings());
   root.querySelectorAll('[data-k]').forEach((inp) => inp.addEventListener('change', () => {
     const k = inp.dataset.k;

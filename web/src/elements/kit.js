@@ -449,8 +449,9 @@ export function withChip(Base) {
         const o2 = { size: 7, color: g.muted };
         if (sd === 'L') g.text(lab, -bw + 0.22 * G, y, { ...o2, align: 'left' });
         else if (sd === 'R') g.text(lab, bw - 0.22 * G, y, { ...o2, align: 'right' });
-        else if (sd === 'T') g.text(lab, x, top + 0.42 * G, { ...o2, follow: false });
-        else g.text(lab, x, bot - 0.42 * G, { ...o2, follow: false });
+        // top / bottom pin names turn with the chip like the side ones, so they stay inside it
+        else if (sd === 'T') g.text(lab, x, top + 0.42 * G, { ...o2, follow: true });
+        else g.text(lab, x, bot - 0.42 * G, { ...o2, follow: true });
       });
     }
   };

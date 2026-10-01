@@ -115,7 +115,7 @@ export class AnalogSwitch extends withChip(Element) {
   readings(s) { return [['State', this.on ? 'Closed' : 'Open', ''], ['Current', this.i, 'A'], ['V(A–B)', s.v(this.nodes[0]) - s.v(this.nodes[2]), 'V']]; }
   draw(g) {
     this.drawChip(g, '4066');
-    g.line(-0.6 * G, 0.1 * G, this.on ? 0.6 * G : 0.45 * G, this.on ? 0.1 * G : -0.35 * G, this.on ? g.hi : g.body, g.lw);
+    g.line(-0.6 * G, 0.25 * G, this.on ? 0.6 * G : 0.45 * G, this.on ? 0.25 * G : -0.15 * G, this.on ? g.hi : g.body, g.lw);
   }
 }
 register(AnalogSwitch);

@@ -21,7 +21,9 @@ class Chip extends withChip(Digital) {
   draw(g) {
     this.drawChip(g, this.constructor.chip || '');
     const t = this.shown();
-    if (t !== '') g.upright(() => g.text(String(t), 0, 0, { size: 12, color: g.text1, bold: true, mono: true }), 0, this.geom().bot - 0.75 * G);
+    // sideways the chip is narrow across this spot: sit further in and never exceed the width
+    const side = g.rot & 1, gm = this.geom();
+    if (t !== '') g.upright(() => g.text(String(t), 0, 0, { size: 12, color: g.text1, bold: true, mono: true, maxW: side ? 1.9 * G : 2 * gm.bw - 6 }), 0, gm.bot - (side ? 1.05 : 0.75) * G);
     if (g.running) {
       const { posts, bw } = this.geom();
       this.outputs().forEach((pi, k) => {

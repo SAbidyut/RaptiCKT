@@ -4,6 +4,7 @@ import { CATEGORIES, getType, allTypes } from '../elements/index.js';
 import { Renderer } from './render.js';
 import { icon } from './icons.js';
 import { store } from './store.js';
+import { elastic } from './overscroll.js';
 
 export class Palette {
   constructor(editor, host) {
@@ -43,6 +44,7 @@ export class Palette {
     inp.addEventListener('input', () => { this.query = inp.value.trim().toLowerCase(); this.fill(); });
     // slide in first, then build the grid on the next frame so the animation never stutters
     this.host.querySelector('.pal-grid').innerHTML = '<div class="pal-loading"></div>';
+    elastic(this.host.querySelector('.pal-grid'));
     this.host.classList.add('open');
     this.ed.root.classList.add('pal-open');
     this.ed.overlayOpen('palette');

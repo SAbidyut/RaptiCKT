@@ -711,7 +711,8 @@ class RatedLoad extends TwoTerm {
   localBox() { return [-2 * G, -0.75 * G, 2 * G, 0.75 * G]; }
   draw(g) {
     g.box(-G, -0.55 * G, G, 0.55 * G, { stroke: g.grad(-G, 0, G, 0, g.pv(0), g.pv(1)), width: g.lw, fill: g.fill, r: 2 });
-    g.upright(() => g.text(this.constructor.kind === 'R' ? 'R' : this.constructor.kind === 'RL' ? 'R+jX' : 'R−jX', 0, 0.5, { size: 7.5, color: g.accent, bold: true }));
+    // text runs along the body, so it also fits when the load stands upright
+    g.text(this.constructor.kind === 'R' ? 'R' : this.constructor.kind === 'RL' ? 'R+jX' : 'R−jX', 0, 0.5, { size: 7.5, color: g.accent, bold: true, follow: true, maxW: 1.8 * G });
   }
 }
 
@@ -890,7 +891,7 @@ export class PiLine extends Element {
   draw(g) {
     g.line(-2 * G, 0, -1.2 * G, 0, g.vc(g.pv(0)), g.lw);
     g.box(-1.2 * G, -0.35 * G, 1.2 * G, 0.35 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill });
-    g.upright(() => g.text('R+jX', 0, 0.5, { size: 7, color: g.accent, bold: true }));
+    g.text('R+jX', 0, 0.5, { size: 7, color: g.accent, bold: true, follow: true, maxW: 2.2 * G });
     g.line(1.2 * G, 0, 2 * G, 0, g.vc(g.pv(1)), g.lw);
     for (const sx of [-1, 1]) {
       const x = sx * 1.6 * G;

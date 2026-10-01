@@ -393,7 +393,7 @@ export class PHProbe extends SourceSensor {
   draw(g) {
     g.box(-G, -0.35 * G, 0.6 * G, 0.35 * G, { stroke: g.body, width: g.lw * 0.8, fill: g.fill, r: 3 });
     g.circle(0.8 * G, 0, 0.3 * G, { stroke: g.body, width: g.lw * 0.8, fill: 'rgba(96,165,250,0.3)' });
-    g.upright(() => g.text('pH', -0.2 * G, 0, { size: 7, color: g.accent, bold: true }));
+    g.text('pH', -0.2 * G, 0.5, { size: 7, color: g.accent, bold: true, follow: true });
   }
 }
 register(PHProbe);

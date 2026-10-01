@@ -214,7 +214,7 @@ export class DarlingtonNPN extends Composite {
     r1.p.r = 8000; r2.p.r = 120;
   }
   localPosts() { return [[-2 * G, 0], [G, -2 * G], [G, 2 * G]]; }
-  localBox() { return [-2 * G, -2 * G, G * 1.4, 2 * G]; }
+  localBox() { return [-2 * G, -2 * G, G * 1.65, 2 * G]; } // the round body reaches 1.6 G
   leads() { return [[0, -2 * G, 0, -G * 0.45, 0], [1, G, -2 * G, G, -G * 0.95], [2, G, 2 * G, G, G * 0.95]]; }
   labelSide() { return [1, 0]; }
   valueLabel() { return this.constructor.pol > 0 ? 'TIP120' : 'TIP125'; }
@@ -262,7 +262,7 @@ export class IGBT extends Composite {
     Object.assign(q.p, { bf: this.p.bf, is: 1e-12, br: 0.5, va: 0, cje: 0, cjc: 0, model: 'custom' });
   }
   localPosts() { return [[-2 * G, 0], [G, -2 * G], [G, 2 * G]]; }
-  localBox() { return [-2 * G, -2 * G, G * 1.4, 2 * G]; }
+  localBox() { return [-2 * G, -2 * G, G * 1.65, 2 * G]; } // the round body reaches 1.6 G
   leads() { return [[0, -2 * G, 0, -G * 0.55, 0], [1, G, -2 * G, G, -G * 0.6], [2, G, 2 * G, G, G * 0.6]]; }
   labelSide() { return [1, 0]; }
   valueLabel() { return ''; }
@@ -290,7 +290,8 @@ export class DepletionNMOS extends NMOS {
   valueLabel() { return `Vth ${fmtShort(this.p.vt, 'V')}`; }
   draw(g) {
     super.draw(g);
-    g.line(-0.1 * G, -0.75 * G, -0.1 * G, 0.75 * G, g.body, g.lw * 1.3);
+    // depletion type: the channel is one solid bar (normally on) instead of three segments
+    g.line(-0.25 * G, -0.75 * G, -0.25 * G, 0.75 * G, g.body, g.lw * 1.3);
   }
 }
 register(DepletionNMOS);
@@ -309,7 +310,7 @@ export class UJT extends Element {
   nonlinear = true;
   constructor(x, y) { super(x, y); this.postCurrents = [0, 0, 0]; this.j = new Junction(1e-12, 1.2); this.on = false; }
   localPosts() { return [[-2 * G, 0], [G, -2 * G], [G, 2 * G]]; }
-  localBox() { return [-2 * G, -2 * G, G * 1.4, 2 * G]; }
+  localBox() { return [-2 * G, -2 * G, G * 1.65, 2 * G]; } // the round body reaches 1.6 G
   leads() { return [[0, -2 * G, 0, -0.3 * G, 0.3 * G], [1, G, -2 * G, G, -G * 0.8], [2, G, 2 * G, G, G * 0.8]]; }
   labelSide() { return [1, 0]; }
   internalNodeCount() { return 1; }

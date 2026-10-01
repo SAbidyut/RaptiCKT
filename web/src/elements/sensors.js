@@ -476,9 +476,10 @@ export class PIRSensor extends ThreePinSensor {
   readings(s) { return [['Output', this.active ? 'HIGH' : 'LOW', ''], ['Vout', s.v(this.nodes[1]) - s.v(this.nodes[2]), 'V']]; }
   draw(g) {
     this.drawBox(g, 'PIR');
-    g.ctx.beginPath(); g.ctx.arc(-0.5 * G, 0.45 * G, 0.4 * G, Math.PI, 0);
+    // the lens sits beside the title (not under it), which also keeps it clear when the part is turned
+    g.ctx.beginPath(); g.ctx.arc(-1.25 * G, 0.45 * G, 0.4 * G, Math.PI, 0);
     g.ctx.fillStyle = this.active ? 'rgba(255,90,90,0.85)' : 'rgba(255,255,255,0.35)'; g.ctx.fill();
-    if (this.active) g.glow(-0.5 * G, 0.3 * G, G, '255,90,90', 0.4);
+    if (this.active) g.glow(-1.25 * G, 0.3 * G, G, '255,90,90', 0.4);
   }
 }
 register(PIRSensor);

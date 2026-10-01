@@ -79,7 +79,9 @@ export class VBlock extends Element {
     const gl = this.glyph();
     g.upright(() => g.text(gl, 0, 0.5, { size: gl.length > 4 ? 7.5 : gl.length > 2 ? 9 : 12, color: g.accent, bold: true, mono: gl.length > 4 }));
     const names = this.constructor.inLabels;
-    if (names) this.localPosts().slice(0, this.nIn()).forEach(([, y], i) => g.text(names[i], -0.95 * G, y, { size: 7, color: g.muted, align: 'left' }));
+    // pin names just inside the left edge, pulled toward the middle so they clear the corners
+    const ys = this.localPosts().slice(0, this.nIn()).map(([, y]) => y), lim = Math.max(0, (y2 - y1) / 2 - 0.55 * G);
+    if (names) ys.forEach((y, i) => g.text(names[i], -0.98 * G, Math.max(-lim, Math.min(lim, y)), { size: 7, color: g.muted, align: 'left' }));
   }
 }
 

@@ -106,10 +106,12 @@ class Breaker extends Element {
       else g.circle(0.45 * G, y, 2.4, { fill: c1 });
       if (on) g.line(-0.45 * G, y, 0.45 * G, y, c0, g.lw * 1.1);
       else g.line(-0.45 * G, y, 0.3 * G, y - 0.45 * G, g.body, g.lw * 1.1);
-      if (this.constructor.ocp) g.poly([[-0.1 * G, y + 0.25 * G], [0.1 * G, y + 0.25 * G], [0.1 * G, y + 0.4 * G]], { stroke: g.muted, width: g.lw * 0.5 });
     });
-    if (n > 1) g.line(0, y1 + 0.3 * G, 0, y2 - 0.3 * G, g.muted, g.lw * 0.5);
-    if (this.constructor.rcd) g.upright(() => g.text('Δ', 0, 0, { size: 9, color: g.accent, bold: true }), 0, y2 - 0.5 * G);
+    // mechanical link joining the poles: dashed, like the IEC symbol
+    const ys = this.localPosts().slice(0, n).map(([, y]) => y);
+    if (n > 1) g.poly([[0, Math.min(...ys)], [0, Math.max(...ys)]], { stroke: g.muted, width: g.lw * 0.5, dash: [3, 3] });
+    // residual-current mark in the free corner below the last pole, clear of the link
+    if (this.constructor.rcd) g.upright(() => g.text('Δ', 0, 0, { size: 8.5, color: g.accent, bold: true }), -0.5 * G, y2 - 0.5 * G);
     if (this.tripped) g.glow(0, 0, 1.4 * G, '255,70,70', 0.45);
     g.circle(0.6 * G, y1 + 0.45 * G, 3, { fill: this.tripped ? '#ef4444' : on ? g.hi : g.lo });
   }
@@ -241,7 +243,7 @@ export class MOV extends TwoTerm {
     const grad = g.grad(-G, 0, G, 0, g.pv(0), g.pv(1));
     g.box(-G, -0.35 * G, G, 0.35 * G, { stroke: grad, width: g.lw, fill: g.fill, r: 2 });
     g.poly([[-0.9 * G, 0.6 * G], [-0.6 * G, 0.6 * G], [0.6 * G, -0.6 * G]], { stroke: g.body, width: g.lw * 0.7 });
-    g.upright(() => g.text('U', 0, 0.5, { size: 8, color: g.muted, bold: true }));
+    g.upright(() => g.text('U', 0, 0.5, { size: 7.5, color: g.muted, bold: true }), -0.55 * G, 0); // beside the slash, not on it
     if (g.running && Math.abs(this.i) > 1e-3) g.glow(0, 0, G * 1.2, '255,170,60', Math.min(0.8, Math.abs(this.i) / 10));
   }
 }
@@ -436,7 +438,9 @@ export class IDMTRelay extends Element {
   }
   draw(g) {
     g.box(-1.2 * G, -1.7 * G, 1.2 * G, 1.7 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });
-    g.upright(() => { g.text('I>', 0, -0.2 * G, { size: 10, color: g.accent, bold: true }); g.text('51', 0, 0.55 * G, { size: 7, color: g.muted }); });
+    // text in the band between the coil arc and the trip contact, whichever way the relay is turned
+    const dx = g.rot & 1 ? 0 : -0.1 * G;
+    g.upright(() => { g.text('I>', dx, -0.2 * G, { size: 10, color: g.accent, bold: true }); g.text('51', dx, 0.32 * G, { size: 7, color: g.muted }); });
     const ctx = g.ctx;
     ctx.beginPath(); ctx.arc(-1.2 * G, 0, 0.45 * G, -Math.PI / 2, Math.PI / 2); ctx.strokeStyle = g.body; ctx.lineWidth = g.lw * 0.7; ctx.stroke();
     g.line(1.2 * G, -G, 0.8 * G, -G, g.body, g.lw * 0.8);

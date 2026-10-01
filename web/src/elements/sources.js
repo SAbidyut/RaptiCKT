@@ -346,7 +346,8 @@ class Controlled extends Element {
       g.text('+', G * 0.9, -G * 0.28, { size: 10, color: g.pos, bold: true });
       g.text('−', G * 0.9, G * 0.3, { size: 10, color: g.neg, bold: true });
     }
-    g.text(sym, -G * 0.2, 0, { size: 10, color: g.muted, bold: true });
+    // centred in the gap between the dashed sense line and the diamond, never wider than it
+    g.text(sym, -G * 0.5, 0, { size: 8.5, color: g.muted, bold: true, maxW: G * 1.2 });
   }
 }
 

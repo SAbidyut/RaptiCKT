@@ -245,8 +245,9 @@ export class ThreePhaseTransformer extends WindingDevice {
       g.circle(0.45 * G, 0, 0.95 * G, { stroke: g.body, width: g.lw * 0.8 });
       sym(-0.6 * G, gr.pri); sym(0.6 * G, gr.sec);
     });
-    ['A', 'B', 'C'].forEach((t, i) => g.text(t, -1.7 * G, (i - 1) * 2 * G - 0.4 * G, { size: 7, color: g.muted }));
-    ['a', 'b', 'c', 'n'].forEach((t, i) => g.text(t, 1.7 * G, (i - 2) * G - 0.4 * G, { size: 7, color: g.muted }));
+    // terminal letters sit level with their lead, just inside the box edge
+    ['A', 'B', 'C'].forEach((t, i) => g.text(t, -1.72 * G, (i - 1) * 2 * G, { size: 7, color: g.muted }));
+    ['a', 'b', 'c', 'n'].forEach((t, i) => g.text(t, 1.72 * G, (i - 2) * G, { size: 7, color: g.muted }));
   }
 }
 register(ThreePhaseTransformer);

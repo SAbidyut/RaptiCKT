@@ -615,8 +615,8 @@ export class Changeover extends MultiSwitch {
       const ty = k === 1 ? (c ? -2 : -3) * G : k === 3 ? (c ? 3 : 2) * G : y;
       g.line(-1.1 * G, y, k === 2 ? 0.2 * G : 1.1 * G, k === 2 ? y : ty, g.vc(g.pv(c)), g.lw);
     }
-    g.text('MAINS', -0.35 * G, -3 * G, { size: 6.5, color: g.muted });
-    g.text('GEN', -0.35 * G, 3 * G, { size: 6.5, color: g.muted });
+    g.text('MAINS', -0.35 * G, -2.55 * G, { size: 6.5, color: g.muted, maxW: 1.6 * G });
+    g.text('GEN', -0.35 * G, 2.55 * G, { size: 6.5, color: g.muted, maxW: 1.6 * G });
   }
 }
 register(Changeover);

@@ -231,7 +231,7 @@ export class NPN extends Element {
     this.cbe = new CapState(); this.cbc = new CapState();
   }
   localPosts() { return [[-2 * G, 0], [G, -2 * G], [G, 2 * G]]; }
-  localBox() { return [-2 * G, -2 * G, G * 1.4, 2 * G]; }
+  localBox() { return [-2 * G, -2 * G, G * 1.65, 2 * G]; } // the round body reaches 1.6 G
   leads() { return [[0, -2 * G, 0, -G * 0.45, 0], [1, G, -2 * G, G, -G * 0.95], [2, G, 2 * G, G, G * 0.95]]; }
   labelSide() { return [1, 0]; }
   valueLabel() { return this.p.model === 'custom' ? `β=${this.p.bf}` : this.p.model; }
@@ -377,7 +377,7 @@ export class NMOS extends Element {
     this.jbd = new Junction(1e-12, 1);
   }
   localPosts() { return [[-2 * G, 0], [G, -2 * G], [G, 2 * G]]; }
-  localBox() { return [-2 * G, -2 * G, G * 1.4, 2 * G]; }
+  localBox() { return [-2 * G, -2 * G, G * 1.65, 2 * G]; } // the round body reaches 1.6 G
   leads() { return [[0, -2 * G, 0, -G * 0.55, 0], [1, G, -2 * G, G, -G * 0.6], [2, G, 2 * G, G, G * 0.6]]; }
   labelSide() { return [1, 0]; }
   valueLabel() { return this.p.model === 'custom' ? '' : this.p.model; }
@@ -529,7 +529,7 @@ export class NJFET extends Element {
     this.jgs = new Junction(1e-14, 1); this.jgd = new Junction(1e-14, 1);
   }
   localPosts() { return [[-2 * G, 0], [G, -2 * G], [G, 2 * G]]; }
-  localBox() { return [-2 * G, -2 * G, G * 1.4, 2 * G]; }
+  localBox() { return [-2 * G, -2 * G, G * 1.65, 2 * G]; } // the round body reaches 1.6 G
   leads() { return [[0, -2 * G, 0, -G * 0.3, 0], [1, G, -2 * G, G, -G * 0.55], [2, G, 2 * G, G, G * 0.55]]; }
   labelSide() { return [1, 0]; }
   reset() { this.jgs.vd = 0; this.jgd.vd = 0; this.postCurrents = [0, 0, 0]; this.sm = null; this.vgsOld = 0; this.vdsOld = 0; }
