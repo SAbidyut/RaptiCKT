@@ -20,11 +20,14 @@ const vis = (sel) => page.locator(sel).filter({ visible: true }).count();
 // --- from Home
 // pages scroll with a transform, so taps are sent straight to the element
 const tap = (loc) => loc.first().evaluate((e) => e.click()).then(() => page.waitForTimeout(450));
-const nav = (id) => tap(page.locator(`[data-nav="${id}"]`));
-const title = () => page.locator('.screen.manual .topbar .title b').textContent();
+// the manual lives in the Home page's Manual tab, or (opened from the editor) on its own screen
+const scope = () => page.evaluate(() => (app.current === 'home' ? '.screen.home' : '.screen.manual'));
+const nav = async (id) => tap(page.locator(`${await scope()} [data-nav="${id}"]`));
+const title = () => page.evaluate(() => (app.current === 'home' ? document.querySelector('.home-body .man-bar .t b') : document.querySelector('.screen.manual .topbar .title b'))?.textContent);
 const back = () => page.evaluate(() => window.raptiBack()).then(() => page.waitForTimeout(400));
 await page.click('[data-tab=manual]'); await page.waitForTimeout(500);
-ok('Manual tab opens the manual screen', await screen() === 'manual');
+ok('Manual tab opens the manual inside Home', await screen() === 'home' && await page.locator('.home-body .man-bar').count() === 1);
+ok('the RaptiCKT header and bottom menu stay', await page.locator('.screen.home .home-head .brand').isVisible() && await page.locator('.screen.home .bottom-nav [data-tab=manual].on').count() === 1);
 ok('contents page lists 19 chapters', await page.locator('.man-card[data-nav^="ch:"]').count() === 19);
 ok('contents page is short (no chapter text on it)', await page.locator('.man-inner .man-b').count() === 0);
 ok('default language English', await title() === 'User Manual');
@@ -43,7 +46,7 @@ ok('Next moves to the next section', await page.locator('.man-inner .man-h').cou
 await back();
 ok('Back goes up to the chapter', await title() === 'Oscilloscope');
 await back();
-ok('Back goes up to the contents', await title() === 'User Manual' && await screen() === 'manual');
+ok('Back goes up to the contents', await title() === 'User Manual' && await screen() === 'home');
 // pager between chapters
 await nav('ch:welcome');
 await tap(page.locator('[data-swap="ch:quickstart"]'));
@@ -87,7 +90,7 @@ await page.fill('.man-search input', ''); await page.waitForTimeout(300);
 await shot('8-bn-contents');
 await page.click('[data-x=lang]'); await page.waitForTimeout(400);
 await back();
-ok('Back from the contents leaves the manual', await screen() === 'home');
+ok('Back from the contents goes to the Home tab', await screen() === 'home' && await page.evaluate(() => app.home.tab) === 'home');
 
 // --- from the editor: the circuit being edited is kept
 await page.click('[data-h=new]'); await page.waitForTimeout(900);
@@ -117,11 +120,14 @@ ok('circuit that was being edited was saved first', saved && saved.count === 3);
 // the bottom menu stays visible while reading, and its tabs leave the manual
 await page.evaluate(() => app.goHome());
 await page.click('[data-tab=manual]'); await page.waitForTimeout(500);
-ok('bottom menu is visible inside the manual', await page.locator('.screen.manual .bottom-nav button').count() === 5 && await page.locator('.screen.manual .bottom-nav').isVisible());
 await nav('ch:scope');
-ok('...and on chapter pages', await page.locator('.screen.manual .bottom-nav').isVisible());
-await page.click('.screen.manual [data-tab=examples]'); await page.waitForTimeout(500);
-ok('a tab in the manual menu opens that Home page', await screen() === 'home' && await page.locator('.page-title').textContent() === 'Examples');
+ok('header and bottom menu visible on chapter pages', await page.locator('.screen.home .bottom-nav').isVisible() && await page.locator('.screen.home .home-head .brand').isVisible());
+await page.click('.screen.home [data-tab=examples]'); await page.waitForTimeout(500);
+ok('another tab leaves the manual', await screen() === 'home' && await page.locator('.page-title').textContent() === 'Examples');
+await page.click('.screen.home [data-tab=manual]'); await page.waitForTimeout(500);
+ok('coming back to Manual keeps the page you were on', await title() === 'Oscilloscope');
+await page.click('.screen.home [data-tab=manual]'); await page.waitForTimeout(500);
+ok('tapping Manual again returns to the contents', await title() === 'User Manual');
 ok('no manual menu when opened from the editor', await page.evaluate(() => { app.newCircuit(); return true; }));
 await page.waitForTimeout(800); await page.evaluate(() => app.closeSheet());
 await page.evaluate(() => app.openManual()); await page.waitForTimeout(400);
@@ -133,7 +139,7 @@ await page.evaluate(() => window.raptiBack()); await page.waitForTimeout(300);
 // banner on Home
 await page.evaluate(() => { app.home.tab = 'home'; app.home.render(); }); await page.waitForTimeout(500);
 await page.click('[data-h=manual]'); await page.waitForTimeout(400);
-ok('Home banner opens the manual', await screen() === 'manual');
+ok('Home banner opens the Manual tab', await screen() === 'home' && await page.evaluate(() => app.home.tab) === 'manual');
 
 // About: tapping a course opens a small popup with what it is and how long it takes
 await page.evaluate(() => app.goHome && app.closeManual());

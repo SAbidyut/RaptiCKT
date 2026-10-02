@@ -378,6 +378,12 @@ export class Renderer {
       g.circle(e[0], e[1], r * 1.6, { fill: th.accent });
     }
     if (st.hoverPost) g.circle(st.hoverPost[0], st.hoverPost[1], 9 / this.scale + 3, { stroke: th.accent, width: 1.5 });
+    // first terminal of a tap-tap wire: a filled dot with a pulsing ring
+    if (st.wireFrom) {
+      const [x, y] = st.wireFrom, k = 0.5 + 0.5 * Math.sin((st.t || 0) * 6);
+      g.circle(x, y, r * 1.8, { fill: th.accent });
+      g.circle(x, y, (10 + 6 * k) / this.scale + 3, { stroke: th.accent, width: 2 });
+    }
 
     // marquee
     if (st.marquee) {

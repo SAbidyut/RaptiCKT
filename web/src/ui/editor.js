@@ -135,6 +135,7 @@ export class Editor {
     this.undoStack = []; this.redoStack = [];
     this.running = false; this.paused = false;
     this.meterProbes = null;
+    this.wireFrom = null;
     this.renderer.maxDpr = undefined;
     this.q('.doc-name').textContent = doc.name;
     this.q('.doc-sub').textContent = doc.description ? doc.description.slice(0, 60) : `${doc.elements.length} components`;
@@ -340,7 +341,7 @@ export class Editor {
       this.updateSound();
     }
     this.frameCount = (this.frameCount || 0) + 1;
-    if (live || this.dirtyDraw || this.drag) {
+    if (live || this.dirtyDraw || this.drag || this.wireFrom) {
       const t0 = performance.now();
       this.renderer.draw(this.drawState(ts / 1000));
       this.drawMs = 0.8 * (this.drawMs || 0) + 0.2 * (performance.now() - t0);
@@ -384,7 +385,7 @@ export class Editor {
       doc: this.doc, sim: this.sim, running: this.running, theme: this.theme, settings: this.settings,
       // while a selection box is dragged, what it would select is shown as selected
       selection: this.marqueePick ? this.marqueePick.els : this.selection, selWires: this.marqueePick ? this.marqueePick.wires : this.selWires, graph: this.graph, t, preview: this.preview,
-      probes: this.doc.probes, hoverPost: this.hoverPost, marquee: this.marquee, meterProbes: this.meter.open ? this.meterProbes : null,
+      probes: this.doc.probes, hoverPost: this.hoverPost, wireFrom: this.wireFrom, marquee: this.marquee, meterProbes: this.meter.open ? this.meterProbes : null,
       vScale: this.vScale, iScale: this.iScale, iMin: this.iScale * 1e-3 + 1e-12, errorEl: this.errorEl, rms: this.running ? this.rms : null,
     };
   }
@@ -412,7 +413,7 @@ export class Editor {
   updateHint() {
     const h = this.q('.hint');
     if (!this.doc.elements.length) {
-      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Drag from a terminal to draw a wire. Press <b>Run</b> to simulate.</span></div>`;
+      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Tap two terminals (or drag from one) to draw a wire. Press <b>Run</b> to simulate.</span></div>`;
       h.classList.add('show');
     } else h.classList.remove('show');
   }
@@ -1051,7 +1052,7 @@ export class Editor {
     this.app.showSheet('How to use the editor', `
       <ul class="tips">
         <li>${icon('plus', 18)}<span><b>Add parts</b> with the + button. Search 330+ components by name.</span></li>
-        <li>${icon('wire', 18)}<span><b>Draw wires</b> by dragging from any terminal (small circle) to another terminal or wire.</span></li>
+        <li>${icon('wire', 18)}<span><b>Draw wires</b>: tap a terminal (small circle), then tap another terminal or wire — the wire is routed for you. You can also drag from a terminal.</span></li>
         <li>${icon('hand', 18)}<span><b>Move</b> parts by dragging them – connected wires follow. Pinch to zoom, drag empty space to pan.</span></li>
         <li>${icon('play', 18)}<span><b>Run</b> to simulate: wires glow with voltage, yellow dots show current. Tap switches and buttons to operate them live.</span></li>
         <li>${icon('gauge', 18)}<span><b>Turn the knob</b> of a selected part to change its value while the circuit runs.</span></li>
@@ -1068,6 +1069,7 @@ export class Editor {
 
   /** Android back button. returns true if handled */
   back() {
+    if (this.cancelTapWire()) return true;
     if (this.q('.speed-pop').classList.contains('open')) { this.q('.speed-pop').classList.remove('open'); return true; }
     if (this.q('.more-menu').classList.contains('open')) { this.closeMenu(); return true; }
     if (this.analysis.isOpen) { this.analysis.close(); return true; }
@@ -1286,6 +1288,7 @@ export class Editor {
   startDrag(g) {
     const h = g.hit;
     this.drag = true;
+    if (h.kind !== 'none') this.cancelTapWire(true); // panning keeps a pending tap-wire; other drags replace it
     if (h.kind === 'pin') { g.type = 'pin'; return; }
     if (h.kind === 'post' || (h.kind === 'wire' && !this.multi)) {
       g.type = 'wire';
@@ -1440,6 +1443,9 @@ export class Editor {
   tap(g) {
     const h = g.hit;
     this.lastTapWorld = g.w;
+    // EveryCircuit-style wiring: tap a terminal, then tap another terminal (or a wire) to connect them
+    if (!this.multi && this.wireFrom) { this.finishTapWire(h, g.w); return; }
+    if (!this.multi && h.kind === 'post') { this.startTapWire(h.pos); return; }
     if (h.kind === 'element') {
       const e = h.el;
       if (this.multi) { this.select(e, { add: true }); return; }
@@ -1459,6 +1465,43 @@ export class Editor {
   }
 
   checkpointQuiet() { this.scheduleAutosave(); }
+
+  /** First tap of a tap-tap wire: remember the terminal and mark it on the board. */
+  startTapWire(pos) {
+    this.wireFrom = [...pos];
+    if (this.selection.size || this.selWires.size) this.select(null);
+    this.haptic(8);
+    this.dirtyDraw = true;
+    this.toast('Now tap another terminal to connect · tap empty space to cancel');
+  }
+
+  cancelTapWire(quiet) {
+    if (!this.wireFrom) return false;
+    this.wireFrom = null;
+    this.dirtyDraw = true;
+    if (!quiet) this.toast('Wire cancelled');
+    return true;
+  }
+
+  /** Second tap: a terminal, a point on a wire, or a part (its nearest terminal). Empty space cancels. */
+  finishTapWire(h, w) {
+    const a = this.wireFrom;
+    let b = null;
+    if (h.kind === 'post') b = [...h.pos];
+    else if (h.kind === 'wire') b = [snap(h.pos[0]), snap(h.pos[1])];
+    else if (h.kind === 'element') b = this.magnet(w[0], w[1], a);
+    if (!b || same(a, b)) { this.cancelTapWire(); return; }
+    const hFirst = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
+    const smart = pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
+    let pts = simplify(smart || route(a, b, hFirst));
+    if (pts.length < 2) pts = [a, b];
+    this.checkpoint();
+    this.doc.addWire(pts);
+    this.wireFrom = null;
+    this.topologyChanged();
+    this.haptic(12);
+    this.toast('Wire connected');
+  }
 }
 
 function closestOnSeg(x, y, a, b) {

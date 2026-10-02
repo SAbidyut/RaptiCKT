@@ -6,7 +6,6 @@ import { icon } from './icons.js';
 import { iosScroll } from './scroller.js';
 import { CATEGORIES } from '../elements/index.js';
 import { APP } from './brand.js';
-import { NAV_TABS } from './screens.js';
 import {
   CHAPTERS, LANGS, UI_TEXT, SUMMARY, digits, expandRefs, libraryData, exampleData, chapterParts,
 } from './manual-content.js';
@@ -105,10 +104,17 @@ export class ManualScreen {
     this.app = app;
     this.root = root;
     this.query = '';
-    this.stack = [{ nav: 'index', y: 0 }];
+    // the Manual tab and the editor's manual screen each remember their own page
+    this.stacks = { tab: [{ nav: 'index', y: 0 }], screen: [{ nav: 'index', y: 0 }] };
     this.indexCache = {};
-    // one handler for every link and button on every page
-    root.addEventListener('click', (ev) => {
+    this.mode = 'screen'; // 'tab': inside the Home page (its header and bottom bar stay); 'screen': over the editor
+    this.delegate(root);
+  }
+
+  /** One click handler for every link and button on every page shown in `el`. */
+  delegate(el) {
+    el.addEventListener('click', (ev) => {
+      if ((el === this.root) !== (this.mode === 'screen')) return;
       const n = ev.target.closest('[data-nav]');
       if (n) { this.go(n.dataset.nav); return; }
       const s = ev.target.closest('[data-swap]');
@@ -118,16 +124,36 @@ export class ManualScreen {
     });
   }
 
+  /** The scroller that moves the manual's pages. */
+  sc() { return this.mode === 'tab' ? this.home?.scrollApi : this.scrollApi; }
+
+  /** Show the manual as the Home page's Manual tab (called from HomeScreen.render). */
+  mountTab(body, home) {
+    this.mode = 'tab';
+    this.home = home;
+    this.body = body;
+    body.classList.add('manual', 'man-tab');
+    this.delegate(body);
+    this.paint(this.here.y || 0);
+  }
+
+  /** Back to the contents page (tapping the Manual tab again). */
+  reset() { this.stack = [{ nav: 'index', y: 0 }]; this.query = ''; }
+
   get lang() {
     const l = this.app.settings.manualLang;
     if (l === 'en' || l === 'bn') return l;
     return /^bn\b/i.test(navigator.language || '') ? 'bn' : 'en';
   }
 
+  get stack() { return this.stacks[this.mode]; }
+  set stack(v) { this.stacks[this.mode] = v; }
+
   get here() { return this.stack[this.stack.length - 1]; }
 
   /** Open the manual on its contents page, or straight at a chapter. */
   open(chapterId) {
+    this.mode = 'screen';
     this.stack = [{ nav: 'index', y: 0 }];
     if (chapterId && CHAPTERS.some((c) => c.id === chapterId)) this.stack.push({ nav: `ch:${chapterId}`, y: 0 });
     this.paint();
@@ -142,7 +168,7 @@ export class ManualScreen {
   }
 
   go(nav) {
-    this.here.y = this.scrollApi?.y || 0;
+    this.here.y = this.sc()?.y || 0;
     // a link to a page that is already below us returns to it instead of piling up
     const at = this.stack.findIndex((s) => s.nav === nav);
     if (at >= 0) this.stack.length = at + 1; else this.stack.push({ nav, y: 0 });
@@ -225,8 +251,30 @@ export class ManualScreen {
   }
 
   // ----------------------------------------------------------------- paint
+  bar(page, lang, other) {
+    return `
+        <div class="man-bar">
+          ${this.stack.length > 1 ? `<button class="icon-btn" data-x="back" title="Back">${icon('back', 22)}</button>` : ''}
+          <div class="t"><b>${esc(page.title)}</b><small>${esc(page.sub)}</small></div>
+          ${page.index ? '' : `<button class="icon-btn" data-x="home" title="${esc(UI_TEXT.contents[lang])}">${icon('grid', 21)}</button>`}
+          <button class="btn sm man-lang" data-x="lang">${esc(other[1])}</button>
+        </div>`;
+  }
+
   paint(restoreY = 0) {
     const lang = this.lang, other = LANGS.find(([k]) => k !== lang), page = this.resolve(this.here.nav);
+    const search = page.index ? `<div class="man-search">${icon('search', 18)}<input type="search" placeholder="${esc(UI_TEXT.search[lang])}" value="${esc(this.query)}" enterkeyhint="search"></div>` : '';
+    const inner = `<div class="man-inner man-view ${this.stack.length > 1 ? 'deep' : ''}">${page.html}</div>`;
+    if (this.mode === 'tab') {
+      // inside Home: the RaptiCKT header and the bottom bar stay; only the page below them changes
+      const body = this.body;
+      body.setAttribute('lang', lang);
+      body.innerHTML = this.bar(page, lang, other) + search + inner;
+      this.bind(body, other);
+      const api = this.sc();
+      if (api) { api.refresh?.(); api.scrollTo(restoreY, false); }
+      return;
+    }
     this.root.setAttribute('lang', lang);
     this.root.innerHTML = `
       <header class="topbar plain">
@@ -235,31 +283,23 @@ export class ManualScreen {
         ${page.index ? '' : `<button class="icon-btn" data-x="home" title="${esc(UI_TEXT.contents[lang])}">${icon('grid', 21)}</button>`}
         <button class="btn sm man-lang" data-x="lang">${esc(other[1])}</button>
       </header>
-      ${page.index ? `<div class="man-search">${icon('search', 18)}<input type="search" placeholder="${esc(UI_TEXT.search[lang])}" value="${esc(this.query)}" enterkeyhint="search"></div>` : ''}
-      <div class="man-scroll"><div class="man-inner man-view ${this.stack.length > 1 ? 'deep' : ''}">${page.html}</div></div>
-      ${this.app.manualFrom === 'home' ? `<nav class="bottom-nav">${NAV_TABS.map(([t, ic, l]) => `<button data-tab="${t}" class="${t === 'manual' ? 'on' : ''}">${icon(ic, 22)}<span>${l}</span></button>`).join('')}</nav>` : ''}`;
-    this.bind(page, other);
+      ${search}
+      <div class="man-scroll">${inner}</div>`;
+    this.scrollApi = iosScroll(this.root.querySelector('.man-scroll'), this.root.querySelector('.man-inner'));
+    this.bind(this.root, other);
     this.scrollApi?.scrollTo?.(restoreY, false);
   }
 
-  bind(page, other) {
-    const scroller = this.root.querySelector('.man-scroll'), inner = this.root.querySelector('.man-inner');
-    this.scrollApi = iosScroll(scroller, inner);
-    this.root.querySelector('[data-x=back]').addEventListener('click', () => { if (!this.back()) this.app.closeManual(); });
-    this.root.querySelectorAll('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
-      if (b.dataset.tab === 'manual') { this.stack = [{ nav: 'index', y: 0 }]; this.query = ''; this.paint(); return; }
-      this.app.home.tab = b.dataset.tab;
-      this.app.closeManual();
-      this.app.home.render();
-    }));
-    this.root.querySelector('[data-x=home]')?.addEventListener('click', () => { this.stack = [{ nav: 'index', y: 0 }]; this.paint(); });
-    this.root.querySelector('[data-x=lang]').addEventListener('click', () => {
-      this.here.y = this.scrollApi?.y || 0;
+  bind(host, other) {
+    host.querySelector('[data-x=back]')?.addEventListener('click', () => { if (!this.back()) this.app.closeManual(); });
+    host.querySelector('[data-x=home]')?.addEventListener('click', () => { this.stack = [{ nav: 'index', y: 0 }]; this.paint(); });
+    host.querySelector('[data-x=lang]').addEventListener('click', () => {
+      this.here.y = this.sc()?.y || 0;
       this.app.settings.manualLang = other[0];
       this.app.saveSettings();
       this.paint(this.here.y);
     });
-    const input = this.root.querySelector('.man-search input');
+    const input = host.querySelector('.man-search input');
     if (input) {
       let t = 0;
       input.addEventListener('input', () => {
@@ -267,10 +307,9 @@ export class ManualScreen {
         t = setTimeout(() => {
           this.query = input.value.trim().toLowerCase();
           // only the list below changes, so the keyboard stays up
-          const pg = this.indexPage(this.lang);
-          inner.innerHTML = pg.html;
-          this.scrollApi?.refresh?.();
-          this.scrollApi?.scrollTo(0, false);
+          host.querySelector('.man-inner').innerHTML = this.indexPage(this.lang).html;
+          this.sc()?.refresh?.();
+          this.sc()?.scrollTo(0, false);
         }, 140);
       });
     }

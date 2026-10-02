@@ -145,7 +145,7 @@ class App {
   }
   /** "Open this example" inside the manual: keep the circuit being edited, then open the example. */
   openExampleFromManual(id) {
-    if (this.manualFrom === 'editor') {
+    if (this.current === 'manual' && this.manualFrom === 'editor') {
       const doc = this.editor.doc;
       this.editor.close();
       if (doc.elements.length && !doc.isExample) this.saveToLibrary(doc, true);
@@ -160,7 +160,8 @@ class App {
     if (this.current === 'manual') { if (!this.manual.back()) this.closeManual(); return true; }
     if (this.current === 'settings') { this.closeSettings(); return true; }
     if (this.current === 'editor') { if (!this.editor.back()) this.goHome(); return true; }
-    if (this.current === 'home' && this.home.tab === 'library' && this.home.upOne()) return true; // leave select mode, then folders
+    if (this.current === 'home' && this.home.tab === 'library' && this.home.upOne()) return true;
+    if (this.current === 'home' && this.home.tab === 'manual' && this.manual.back()) return true; // up one manual page // leave select mode, then folders
     if (this.current === 'home' && this.home.tab !== 'home') { this.home.tab = 'home'; this.home.render(); return true; }
     return false;
   }

@@ -68,7 +68,7 @@ Let us build the "hello world" of electronics: a battery, a resistor and an LED.
 2. Tap the round **+** button (bottom right). The component menu opens.
 3. Type `dc` in the search box and tap **DC Voltage**. A battery symbol appears on the board. Then search `resistor` and tap **Resistor**, then search `led` and tap **LED**, then search `ground` and tap **Ground**. The menu stays open so you can add several parts in a row. Tap **✕** to close it.
 4. Drag the parts with your finger to arrange them in a row. Pinch with two fingers to zoom, drag on empty space to move the board.
-5. **Draw the wires.** Every part has small circles at its ends: these are the **terminals**. Put your finger on a terminal and drag to a terminal of the next part, then lift. A wire is drawn. Connect: battery **+** → resistor → LED anode (the flat-triangle side) → LED cathode → ground, and battery **−** → ground.
+5. **Draw the wires.** Every part has small circles at its ends: these are the **terminals**. Tap one terminal, then tap a terminal of the next part: the wire is drawn and routed for you (or drag from one terminal to the other). Connect: battery **+** → resistor → LED anode (the flat-triangle side) → LED cathode → ground, and battery **−** → ground.
 6. Tap the battery and use the **knob** that appears (or open its properties) to set the voltage to **9 V**. Tap the resistor and set it to **470 Ω**. You can type values like `470`, `4.7k`, `10u`.
 7. Press **Run** in the toolbar. The wires turn green, yellow dots flow, and the LED lights up. The current (about 15 mA) is written next to the resistor.
 8. Select the wire between the resistor and the LED and tap **Scope**. The oscilloscope opens and draws that voltage.
@@ -175,7 +175,8 @@ The editor is where you build and run circuits. From top to bottom:
 | Tap a part | Selects it. On a switch or button, it also operates it. |
 | Hold a part (half a second) | Opens its properties. |
 | Drag a part | Moves it. Wires stay attached and follow. |
-| Drag from a terminal | Draws a wire. |
+| Tap a terminal, then another | Draws a wire between them (EveryCircuit style). |
+| Drag from a terminal | Also draws a wire. |
 | Drag empty space | Pans the board. |
 | Pinch with two fingers | Zooms in and out. |
 | Hold empty space, then drag | Draws a selection box. |
@@ -266,9 +267,18 @@ Every change (adding, moving, wiring, changing a value, deleting) can be undone.
 
 ## 7. Wiring
 
-#### Draw a wire
+#### Draw a wire: tap, tap
 
-1. Put your finger on a **terminal** (the small circle at the end of a part).
+The quickest way, as in EveryCircuit: tap two terminals and the app draws the wire for you.
+
+1. **Tap a terminal** (the small circle at the end of a part). It lights up with a pulsing ring.
+2. **Tap another terminal.** A neat right-angled wire is drawn between them, going round parts where it can.
+3. You can also tap **a point on an existing wire** (to branch from it) or **the body of a part** (the wire goes to its nearest terminal).
+4. Changed your mind? Tap **empty space** or the same terminal again, or press **Back**, to cancel.
+
+#### Draw a wire by dragging
+
+1. Put your finger on a **terminal**.
 2. Drag. A preview wire follows your finger and bends neatly with right angles. It avoids parts when it can.
 3. Lift your finger on another terminal. The wire snaps to it. If you lift over the body of a part, the wire attaches to that part's nearest terminal.
 

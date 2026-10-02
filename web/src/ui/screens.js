@@ -52,7 +52,7 @@ export class HomeScreen {
     this.root.querySelector('[data-h=settings]').addEventListener('click', () => this.app.openSettings());
     this.root.querySelector('[data-h=brand]').addEventListener('click', () => this.openInstitute());
     this.root.querySelectorAll('.bottom-nav button').forEach((b) => b.addEventListener('click', () => {
-      if (b.dataset.tab === 'manual') { this.app.openManual(); return; } // opens its own screen
+      if (b.dataset.tab === 'manual' && this.tab === 'manual') this.app.manual.reset(); // tapping it again: back to the contents
       this.tab = b.dataset.tab; this.sel = null; this.render();
     }));
     const body = this.root.querySelector('.home-body');
@@ -77,6 +77,7 @@ export class HomeScreen {
     if (this.tab === 'examples') this.renderExamples(body);
     if (this.tab === 'library') this.renderLibrary(body);
     if (this.tab === 'about') renderAbout(this.app, body);
+    if (this.tab === 'manual') this.app.manual.mountTab(body, this);
     this.scrollApi = iosScroll(scroller, body, { onScroll });
     this.reveal(body);
   }
@@ -183,7 +184,7 @@ export class HomeScreen {
     body.querySelector('[data-h=new]').addEventListener('click', () => this.app.newCircuit());
     body.querySelector('[data-h=open]').addEventListener('click', () => this.app.importFile());
     body.querySelector('[data-h=resume]')?.addEventListener('click', () => this.app.resume());
-    body.querySelector('[data-h=manual]')?.addEventListener('click', () => this.app.openManual());
+    body.querySelector('[data-h=manual]')?.addEventListener('click', () => { this.tab = 'manual'; this.render(); });
     body.querySelector('[data-h=about]').addEventListener('click', () => this.openInstitute());
     body.querySelectorAll('[data-tab2]').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.tab2; this.render(); }));
     this.drawThumbs(body);
