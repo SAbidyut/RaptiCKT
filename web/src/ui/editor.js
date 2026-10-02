@@ -413,7 +413,7 @@ export class Editor {
   updateHint() {
     const h = this.q('.hint');
     if (!this.doc.elements.length) {
-      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Tap two terminals (or drag from one) to draw a wire. Press <b>Run</b> to simulate.</span></div>`;
+      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Tap two terminals to draw a wire. Press <b>Run</b> to simulate.</span></div>`;
       h.classList.add('show');
     } else h.classList.remove('show');
   }
@@ -562,7 +562,7 @@ export class Editor {
     this.haptic(10);
     // keep every part in view above the menu: zoom out (never in) and centre when they no longer fit
     if (palH) this.fitAbove(visH); else this.clearOfKnob(e);
-    this.toast(palH ? `${e.name} added` : `${e.constructor.title} added — drag to move, drag a terminal to wire`);
+    this.toast(palH ? `${e.name} added` : `${e.constructor.title} added — drag to move, tap two terminals to wire`);
   }
 
   /** On small screens the value knob can sit on top of a new part: slide the board up a little. */
@@ -1052,7 +1052,7 @@ export class Editor {
     this.app.showSheet('How to use the editor', `
       <ul class="tips">
         <li>${icon('plus', 18)}<span><b>Add parts</b> with the + button. Search 330+ components by name.</span></li>
-        <li>${icon('wire', 18)}<span><b>Draw wires</b>: tap a terminal (small circle), then tap another terminal or wire — the wire is routed for you. You can also drag from a terminal.</span></li>
+        <li>${icon('wire', 18)}<span><b>Draw wires</b>: tap a terminal (small circle), then tap another terminal or wire — the wire is routed for you.</span></li>
         <li>${icon('hand', 18)}<span><b>Move</b> parts by dragging them – connected wires follow. Pinch to zoom, drag empty space to pan.</span></li>
         <li>${icon('play', 18)}<span><b>Run</b> to simulate: wires glow with voltage, yellow dots show current. Tap switches and buttons to operate them live.</span></li>
         <li>${icon('gauge', 18)}<span><b>Turn the knob</b> of a selected part to change its value while the circuit runs.</span></li>
@@ -1288,13 +1288,10 @@ export class Editor {
   startDrag(g) {
     const h = g.hit;
     this.drag = true;
-    if (h.kind !== 'none') this.cancelTapWire(true); // panning keeps a pending tap-wire; other drags replace it
+    if (h.kind !== 'none') this.cancelTapWire(); // panning keeps a pending tap-wire; other drags replace it
     if (h.kind === 'pin') { g.type = 'pin'; return; }
-    if (h.kind === 'post' || (h.kind === 'wire' && !this.multi)) {
-      g.type = 'wire';
-      g.start = h.kind === 'post' ? [...h.pos] : [snap(h.pos[0]), snap(h.pos[1])];
-      return;
-    }
+    // wires are drawn by tapping two terminals; dragging a terminal moves its part, dragging a wire pans
+    if (h.kind === 'post' && h.el) { h.kind = 'element'; }
     if (h.kind === 'element' || (h.kind === 'wire' && this.multi)) {
       g.type = 'move';
       let els, wires;
@@ -1313,7 +1310,7 @@ export class Editor {
       g.dx = 0; g.dy = 0;
       return;
     }
-    g.type = this.multi ? 'marquee' : 'pan';
+    g.type = this.multi && h.kind === 'none' ? 'marquee' : 'pan';
     if (g.type === 'marquee') this.marquee = [g.sx, g.sy, g.sx, g.sy];
     g.ox = this.renderer.ox; g.oy = this.renderer.oy;
   }
@@ -1354,22 +1351,6 @@ export class Editor {
         this.meter.zCache = null;
         this.dirtyDraw = true;
         break;
-      case 'wire': {
-        const end = this.magnet(wx, wy, g.start);
-        if (g.hFirst === undefined && (Math.abs(end[0] - g.start[0]) > 0 || Math.abs(end[1] - g.start[1]) > 0)) g.hFirst = Math.abs(wx - g.start[0]) >= Math.abs(wy - g.start[1]);
-        // routing is only redone when the snapped end point changes
-        if (!g.routedTo || !same(g.routedTo, end)) {
-          g.routedTo = end;
-          const h = g.hFirst ?? true;
-          // follow the finger: the first leg goes the way the drag started; other
-          // simple shapes (and, last, the search router) only when that one is bad
-          g.smart = same(end, g.start) ? null : pickRoute(this.doc, simpleRoutes(g.start, end, exitAt(this.doc, g.start), exitAt(this.doc, end), h));
-        }
-        this.preview = simplify(g.smart || route(g.start, end, g.hFirst ?? true));
-        if (this.preview.length < 2) this.preview = [g.start, end];
-        this.hoverPost = end;
-        break;
-      }
       case 'move': {
         const dx = snap(wx - g.w[0]), dy = snap(wy - g.w[1]);
         if (dx === g.dx && dy === g.dy) break;
@@ -1405,16 +1386,6 @@ export class Editor {
     if (cancelled) { this.cancelGesture(); return; }
     switch (g.type) {
       case 'pending': this.tap(g); break;
-      case 'wire': {
-        const pts = this.preview;
-        if (pts && pts.length >= 2 && !same(pts[0], pts[pts.length - 1])) {
-          this.checkpoint();
-          this.doc.addWire(pts);
-          this.topologyChanged();
-          this.haptic(8);
-        }
-        break;
-      }
       case 'move':
         // a bridge wire whose part came back to where it was is not needed
         for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
@@ -1472,14 +1443,14 @@ export class Editor {
     if (this.selection.size || this.selWires.size) this.select(null);
     this.haptic(8);
     this.dirtyDraw = true;
-    this.toast('Now tap another terminal to connect · tap empty space to cancel');
+    // the how-to is shown once; after that the pulsing ring says enough
+    if (!store.flag('tapWireHelp')) { store.setFlag('tapWireHelp'); this.toast('Now tap another terminal to connect · tap empty space to cancel'); }
   }
 
-  cancelTapWire(quiet) {
+  cancelTapWire() {
     if (!this.wireFrom) return false;
     this.wireFrom = null;
     this.dirtyDraw = true;
-    if (!quiet) this.toast('Wire cancelled');
     return true;
   }
 
@@ -1500,7 +1471,6 @@ export class Editor {
     this.wireFrom = null;
     this.topologyChanged();
     this.haptic(12);
-    this.toast('Wire connected');
   }
 }
 

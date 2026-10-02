@@ -30,6 +30,7 @@ const wires = () => page.evaluate(() => app.editor.doc.wires.length);
 const connected = () => page.evaluate(() => { const ed = app.editor; ed.rebuildNow(true); const s = ed.sim, A = ed.doc.elements[0].getPosts()[1], B = ed.doc.elements[1].getPosts()[0]; return s.pointNode(A[0], A[1]) === s.pointNode(B[0], B[1]); });
 
 await tapAt(await at([0, 1]));
+ok('first time: a hint says what to do next', (await page.locator('.screen.editor .toast').textContent()).includes('tap another terminal'));
 ok('first tap on a terminal starts a wire', await page.evaluate(() => !!app.editor.wireFrom) && await wires() === 0);
 await page.screenshot({ path: process.argv[2] || '/dev/null' }).catch(() => {});
 await tapAt(await at([1, 0]));
@@ -61,9 +62,10 @@ ok('Undo removes a tap-drawn wire', await wires() === 1);
 // tapping a part still selects it
 await tapAt(body);
 ok('tapping a part body still selects it', await page.evaluate(() => app.editor.selected() === app.editor.doc.elements[1]));
-// dragging from a terminal still draws a wire
+// dragging from a terminal no longer draws a wire: it moves the part
 const p0 = await at([0, 0]);
 await page.evaluate(() => app.editor.select(null));
+const before = await page.evaluate(() => [app.editor.doc.elements[0].x, app.editor.doc.elements[0].y]);
 const drag = async ([x1, y1], [x2, y2]) => {
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x1, y: y1 }] });
@@ -71,8 +73,14 @@ const drag = async ([x1, y1], [x2, y2]) => {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitForTimeout(250);
 };
-await drag(p0, await at([1, 1]));
-ok('dragging from a terminal still draws a wire', await wires() === 2);
+await drag(p0, [p0[0], p0[1] + 80]);
+const after = await page.evaluate(() => [app.editor.doc.elements[0].x, app.editor.doc.elements[0].y]);
+ok('dragging from a terminal does not draw a wire', await wires() === 1);
+ok('...it moves the part instead', after[1] !== before[1]);
+// the how-to toast is shown only the first time
+const toastAfter = async () => { await tapAt(await at([0, 0])); const t = await page.evaluate(() => document.querySelector('.screen.editor .toast').classList.contains('show') && document.querySelector('.screen.editor .toast').textContent); await page.evaluate(() => app.editor.cancelTapWire()); return t; };
+await page.waitForTimeout(2500);
+ok('the "tap another terminal" hint is not repeated', !(String(await toastAfter()).includes('tap another terminal')));
 let fails = 0;
 for (const [n, v] of checks) { if (!v) fails++; console.log(v ? 'ok  ' : 'FAIL', n); }
 console.log(errs.length ? errs : 'no page errors', fails ? `${fails} FAILED` : 'all passed');
