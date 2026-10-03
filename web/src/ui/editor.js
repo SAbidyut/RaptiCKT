@@ -135,6 +135,7 @@ export class Editor {
     this.undoStack = []; this.redoStack = [];
     this.running = false; this.paused = false;
     this.meterProbes = null;
+    this.wireFrom = null;
     this.renderer.maxDpr = undefined;
     this.q('.doc-name').textContent = doc.name;
     this.q('.doc-sub').textContent = doc.description ? doc.description.slice(0, 60) : `${doc.elements.length} components`;
@@ -229,7 +230,8 @@ export class Editor {
     const ss = this.doc.simSettings;
     let dt = this.speed / 2400;
     if (this.fmax > 0) dt = Math.min(dt, 1 / (this.fmax * 200));
-    dt = Math.min(dt, this.settings.maxStep || 1e-4);
+    // a circuit may allow a longer step than the global cap (slow digital clocks): ss.maxStep
+    dt = Math.min(dt, ss.maxStep || this.settings.maxStep || 1e-4);
     if (ss.dt) dt = ss.dt;
     this.dt = Math.max(1e-12, dt);
   }
@@ -340,7 +342,7 @@ export class Editor {
       this.updateSound();
     }
     this.frameCount = (this.frameCount || 0) + 1;
-    if (live || this.dirtyDraw || this.drag) {
+    if (live || this.dirtyDraw || this.drag || this.wireFrom) {
       const t0 = performance.now();
       this.renderer.draw(this.drawState(ts / 1000));
       this.drawMs = 0.8 * (this.drawMs || 0) + 0.2 * (performance.now() - t0);
@@ -384,7 +386,7 @@ export class Editor {
       doc: this.doc, sim: this.sim, running: this.running, theme: this.theme, settings: this.settings,
       // while a selection box is dragged, what it would select is shown as selected
       selection: this.marqueePick ? this.marqueePick.els : this.selection, selWires: this.marqueePick ? this.marqueePick.wires : this.selWires, graph: this.graph, t, preview: this.preview,
-      probes: this.doc.probes, hoverPost: this.hoverPost, marquee: this.marquee, meterProbes: this.meter.open ? this.meterProbes : null,
+      probes: this.doc.probes, hoverPost: this.hoverPost, wireFrom: this.wireFrom, marquee: this.marquee, meterProbes: this.meter.open ? this.meterProbes : null,
       vScale: this.vScale, iScale: this.iScale, iMin: this.iScale * 1e-3 + 1e-12, errorEl: this.errorEl, rms: this.running ? this.rms : null,
     };
   }
@@ -412,7 +414,7 @@ export class Editor {
   updateHint() {
     const h = this.q('.hint');
     if (!this.doc.elements.length) {
-      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Drag from a terminal to draw a wire. Press <b>Run</b> to simulate.</span></div>`;
+      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Tap two terminals to draw a wire. Press <b>Run</b> to simulate.</span></div>`;
       h.classList.add('show');
     } else h.classList.remove('show');
   }
@@ -561,7 +563,7 @@ export class Editor {
     this.haptic(10);
     // keep every part in view above the menu: zoom out (never in) and centre when they no longer fit
     if (palH) this.fitAbove(visH); else this.clearOfKnob(e);
-    this.toast(palH ? `${e.name} added` : `${e.constructor.title} added — drag to move, drag a terminal to wire`);
+    this.toast(palH ? `${e.name} added` : `${e.constructor.title} added — drag to move, tap two terminals to wire`);
   }
 
   /** On small screens the value knob can sit on top of a new part: slide the board up a little. */
@@ -611,7 +613,7 @@ export class Editor {
     if (!live) this.checkpoint();
     el.p[key] = val;
     el.onParamChange(key);
-    if (this.sim) this.sim.dirty = true;
+    if (this.sim) this.sim.discontinuity();
     const def = el.propDef(key);
     if (def && def.structural) this.topologyChanged();
     if (key === 'freq' || key === 'wave') this.computeTiming();
@@ -731,8 +733,16 @@ export class Editor {
         continue;
       }
       // a straight wire has no shape to keep: use the cleanest simple shape (cheap, no search while dragging)
-      const kept = stretchWire(w.pts, na, nb)
-        || pickRoute(this.doc, simpleRoutes(na, nb, exitAt(this.doc, na), exitAt(this.doc, nb), a[1] === b[1]), { skipWires: new Set([w]), noSearch: true });
+      const simple = () => pickRoute(this.doc, simpleRoutes(na, nb, exitAt(this.doc, na), exitAt(this.doc, nb), a[1] === b[1]), { skipWires: new Set([w]), noSearch: true });
+      let kept = stretchWire(w.pts, na, nb);
+      if (kept) {
+        // the kept shape may now run over another terminal — even the moved part's own other pin
+        // (a RAM cell's Q wire through its Q̄) — and short them: then take the cleanest simple shape
+        const ctx = wireContext(this.doc, new Set([w])), joins = (pts) => routeCost(ctx, simplify(pts), true);
+        const bad = joins(kept);
+        if (bad > 0) { const alt = simple(); if (alt && joins(alt) < bad) kept = alt; }
+      }
+      kept = kept || simple();
       w.pts = simplify(kept || [na, nb]);
       if (w.pts.length < 2) w.pts = [na, nb];
     }
@@ -893,7 +903,8 @@ export class Editor {
       e.nodes.forEach((n, i) => {
         if (n > 0 && !names[n]) {
           const pins = e.pinNames ? e.pinNames() : null;
-          names[n] = e.name + (pins ? '.' + pins[i] : e.nodes.length > 1 ? (i === 0 ? '+' : i === 1 ? '−' : '.' + (i + 1)) : '');
+          // + / − only make sense for two-terminal parts; other unnamed pins are numbered
+          names[n] = e.name + (pins ? '.' + pins[i] : e.nodes.length === 2 ? (i === 0 ? '+' : '−') : e.nodes.length > 2 ? '.' + (i + 1) : '');
         }
       });
     }
@@ -981,7 +992,7 @@ export class Editor {
       ['save', 'save', 'Save to My Circuits'], ['copy', 'saveas', 'Save as copy'], ['edit', 'info', 'Circuit name & notes'],
       ['download', 'export', 'Export file (.rckt)'], ['upload', 'import', 'Open file…'], ['share', 'share', 'Share circuit'],
       ['code', 'netlist', 'SPICE netlist'], ['camera', 'shot', 'Export image (PNG)'], ['table', 'op', 'Operating point'],
-      ['sliders', 'settings', 'Settings'], ['help', 'help', 'Help & gestures'], ['trash', 'clear', 'Clear circuit'],
+      ['sliders', 'settings', 'Settings'], ['manual', 'manual', 'User manual'], ['help', 'help', 'Help & gestures'], ['trash', 'clear', 'Clear circuit'],
     ];
     m.innerHTML = items.map(([ic, a, t]) => `<button data-m="${a}">${icon(ic, 18)}<span>${t}</span></button>`).join('');
     m.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { this.closeMenu(); this.menuAction(b.dataset.m); }));
@@ -1007,6 +1018,7 @@ export class Editor {
       case 'op': this.analysis.open('op'); break;
       case 'shot': app.bridge.saveFile(this.doc.name.replace(/\W+/g, '_') + '.png', 'image/png', this.screenshot(), true); break;
       case 'settings': app.openSettings(); break;
+      case 'manual': app.openManual(); break;
       case 'help': this.showTips(true); break;
       case 'clear':
         if (confirm('Remove all components and wires?')) {
@@ -1050,13 +1062,16 @@ export class Editor {
     this.app.showSheet('How to use the editor', `
       <ul class="tips">
         <li>${icon('plus', 18)}<span><b>Add parts</b> with the + button. Search 330+ components by name.</span></li>
-        <li>${icon('wire', 18)}<span><b>Draw wires</b> by dragging from any terminal (small circle) to another terminal or wire.</span></li>
+        <li>${icon('wire', 18)}<span><b>Draw wires</b>: tap a terminal (small circle), then tap another terminal or wire — the wire is routed for you.</span></li>
         <li>${icon('hand', 18)}<span><b>Move</b> parts by dragging them – connected wires follow. Pinch to zoom, drag empty space to pan.</span></li>
         <li>${icon('play', 18)}<span><b>Run</b> to simulate: wires glow with voltage, yellow dots show current. Tap switches and buttons to operate them live.</span></li>
         <li>${icon('gauge', 18)}<span><b>Turn the knob</b> of a selected part to change its value while the circuit runs.</span></li>
         <li>${icon('scope', 18)}<span><b>Scope</b>: select a wire or part and tap Scope to probe it. Use FFT and XY views in the scope toolbar.</span></li>
         <li>${icon('bode', 18)}<span><b>Analysis</b>: Bode plots, DC sweeps, operating point and SPICE netlist export for research-grade work.</span></li>
-      </ul>`);
+      </ul>
+      <div class="sheet-actions"><button data-x="manual">${icon('manual', 18)} Open the full user manual</button></div>`, (root, close) => {
+      root.querySelector('[data-x=manual]').addEventListener('click', () => { close(); this.app.openManual(); });
+    });
   }
 
   overlayOpen(n) { this.overlays.add(n); }
@@ -1064,6 +1079,7 @@ export class Editor {
 
   /** Android back button. returns true if handled */
   back() {
+    if (this.cancelTapWire()) return true;
     if (this.q('.speed-pop').classList.contains('open')) { this.q('.speed-pop').classList.remove('open'); return true; }
     if (this.q('.more-menu').classList.contains('open')) { this.closeMenu(); return true; }
     if (this.analysis.isOpen) { this.analysis.close(); return true; }
@@ -1203,7 +1219,7 @@ export class Editor {
   }
 
   pressChanged(el) {
-    if (this.sim) this.sim.dirty = true;
+    if (this.sim) this.sim.discontinuity(); // a switch moved: damp the step, or cut inductors ring
     this.haptic(10);
     this.dirtyDraw = true;
     this.inspector.updateReadings();
@@ -1282,12 +1298,10 @@ export class Editor {
   startDrag(g) {
     const h = g.hit;
     this.drag = true;
+    if (h.kind !== 'none') this.cancelTapWire(); // panning keeps a pending tap-wire; other drags replace it
     if (h.kind === 'pin') { g.type = 'pin'; return; }
-    if (h.kind === 'post' || (h.kind === 'wire' && !this.multi)) {
-      g.type = 'wire';
-      g.start = h.kind === 'post' ? [...h.pos] : [snap(h.pos[0]), snap(h.pos[1])];
-      return;
-    }
+    // wires are drawn by tapping two terminals; dragging a terminal moves its part, dragging a wire pans
+    if (h.kind === 'post' && h.el) { h.kind = 'element'; }
     if (h.kind === 'element' || (h.kind === 'wire' && this.multi)) {
       g.type = 'move';
       let els, wires;
@@ -1306,7 +1320,7 @@ export class Editor {
       g.dx = 0; g.dy = 0;
       return;
     }
-    g.type = this.multi ? 'marquee' : 'pan';
+    g.type = this.multi && h.kind === 'none' ? 'marquee' : 'pan';
     if (g.type === 'marquee') this.marquee = [g.sx, g.sy, g.sx, g.sy];
     g.ox = this.renderer.ox; g.oy = this.renderer.oy;
   }
@@ -1347,22 +1361,6 @@ export class Editor {
         this.meter.zCache = null;
         this.dirtyDraw = true;
         break;
-      case 'wire': {
-        const end = this.magnet(wx, wy, g.start);
-        if (g.hFirst === undefined && (Math.abs(end[0] - g.start[0]) > 0 || Math.abs(end[1] - g.start[1]) > 0)) g.hFirst = Math.abs(wx - g.start[0]) >= Math.abs(wy - g.start[1]);
-        // routing is only redone when the snapped end point changes
-        if (!g.routedTo || !same(g.routedTo, end)) {
-          g.routedTo = end;
-          const h = g.hFirst ?? true;
-          // follow the finger: the first leg goes the way the drag started; other
-          // simple shapes (and, last, the search router) only when that one is bad
-          g.smart = same(end, g.start) ? null : pickRoute(this.doc, simpleRoutes(g.start, end, exitAt(this.doc, g.start), exitAt(this.doc, end), h));
-        }
-        this.preview = simplify(g.smart || route(g.start, end, g.hFirst ?? true));
-        if (this.preview.length < 2) this.preview = [g.start, end];
-        this.hoverPost = end;
-        break;
-      }
       case 'move': {
         const dx = snap(wx - g.w[0]), dy = snap(wy - g.w[1]);
         if (dx === g.dx && dy === g.dy) break;
@@ -1398,16 +1396,6 @@ export class Editor {
     if (cancelled) { this.cancelGesture(); return; }
     switch (g.type) {
       case 'pending': this.tap(g); break;
-      case 'wire': {
-        const pts = this.preview;
-        if (pts && pts.length >= 2 && !same(pts[0], pts[pts.length - 1])) {
-          this.checkpoint();
-          this.doc.addWire(pts);
-          this.topologyChanged();
-          this.haptic(8);
-        }
-        break;
-      }
       case 'move':
         // a bridge wire whose part came back to where it was is not needed
         for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
@@ -1436,6 +1424,9 @@ export class Editor {
   tap(g) {
     const h = g.hit;
     this.lastTapWorld = g.w;
+    // EveryCircuit-style wiring: tap a terminal, then tap another terminal (or a wire) to connect them
+    if (!this.multi && this.wireFrom) { this.finishTapWire(h, g.w); return; }
+    if (!this.multi && h.kind === 'post') { this.startTapWire(h.pos); return; }
     if (h.kind === 'element') {
       const e = h.el;
       if (this.multi) { this.select(e, { add: true }); return; }
@@ -1455,6 +1446,42 @@ export class Editor {
   }
 
   checkpointQuiet() { this.scheduleAutosave(); }
+
+  /** First tap of a tap-tap wire: remember the terminal and mark it on the board. */
+  startTapWire(pos) {
+    this.wireFrom = [...pos];
+    if (this.selection.size || this.selWires.size) this.select(null);
+    this.haptic(8);
+    this.dirtyDraw = true;
+    // the how-to is shown once; after that the pulsing ring says enough
+    if (!store.flag('tapWireHelp')) { store.setFlag('tapWireHelp'); this.toast('Now tap another terminal to connect · tap empty space to cancel'); }
+  }
+
+  cancelTapWire() {
+    if (!this.wireFrom) return false;
+    this.wireFrom = null;
+    this.dirtyDraw = true;
+    return true;
+  }
+
+  /** Second tap: a terminal, a point on a wire, or a part (its nearest terminal). Empty space cancels. */
+  finishTapWire(h, w) {
+    const a = this.wireFrom;
+    let b = null;
+    if (h.kind === 'post') b = [...h.pos];
+    else if (h.kind === 'wire') b = [snap(h.pos[0]), snap(h.pos[1])];
+    else if (h.kind === 'element') b = this.magnet(w[0], w[1], a);
+    if (!b || same(a, b)) { this.cancelTapWire(); return; }
+    const hFirst = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
+    const smart = pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
+    let pts = simplify(smart || route(a, b, hFirst));
+    if (pts.length < 2) pts = [a, b];
+    this.checkpoint();
+    this.doc.addWire(pts);
+    this.wireFrom = null;
+    this.topologyChanged();
+    this.haptic(12);
+  }
 }
 
 function closestOnSeg(x, y, a, b) {

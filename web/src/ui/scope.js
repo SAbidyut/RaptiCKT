@@ -163,6 +163,10 @@ export class Scope {
       if (!st) return;
       // symmetric-ish auto scale per channel with nice numbers
       let lo = st.mn, hi = st.mx;
+      // a steady level with µV of solver noise (e.g. a regulator's 5 V) must look flat, as on a
+      // real scope at a sensible V/div – not blown up to full height like the ripple it removes
+      const minSpan = Math.max(Math.abs(lo), Math.abs(hi)) * 1e-3;
+      if (hi - lo < minSpan) { const m = (hi + lo) / 2; lo = m - minSpan / 2; hi = m + minSpan / 2; }
       if (hi - lo < 1e-12) { lo -= Math.max(1e-3, Math.abs(lo) * 0.1); hi += Math.max(1e-3, Math.abs(hi) * 0.1); }
       const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
       if (lo > 0 && lo < (hi - lo) * 0.6) lo = 0;

@@ -229,3 +229,17 @@ test('singular circuit reports an error', () => {
   s.start();
   assert.ok(s.error || s.fatal);
 });
+
+test('a capacitor held by an ideal source does not ring after a step (trapezoidal damping)', () => {
+  // 5 V → 10 V step into 100 µF straight across the source: the trapezoidal rule alone leaves
+  // the capacitor current flipping sign every step for ever; the engine must damp it
+  const src = mk('dcv', [1, 0], { amp: 5 }), C = mk('capacitor', [1, 0], { c: 100e-6 });
+  const s = sim([src, mk('resistor', [1, 0], { r: 100 }), C]);
+  assert.ok(s.start());
+  for (let i = 0; i < 50; i++) s.step(2e-5);
+  src.p.amp = 10; s.dirty = true; // a change the engine is not told about
+  for (let i = 0; i < 60; i++) s.step(2e-5);
+  const tail = [];
+  for (let i = 0; i < 20; i++) { s.step(2e-5); tail.push(C.i); }
+  assert.ok(Math.max(...tail.map(Math.abs)) < 1e-3, 'capacitor current still ' + Math.max(...tail.map(Math.abs)));
+});
