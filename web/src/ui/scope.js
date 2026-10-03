@@ -6,17 +6,65 @@ import { icon } from './icons.js';
 export const CH_COLORS = ['#facc15', '#22d3ee', '#f472b6', '#4ade80', '#fb923c', '#a78bfa'];
 const N = 4096;
 
+const PRE = 0.1; // triggered view: share of the screen before the trigger point
+const DIV_X = 10, DIV_Y = 8;
+const HEAD = 40; // chip / button band above the graticule
+const GUT_L = 22, GUT_R = 6; // left gutter holds the channel reference markers
+const ROW = 14; // line height of the readout table (matches the CSS)
+const FONT = '10px JetBrains Mono, ui-monospace, monospace';
+
+/** smallest 1-2-5 step that is ≥ x */
+function nice125(x) {
+  if (!(x > 0) || !Number.isFinite(x)) return 1;
+  const e = Math.pow(10, Math.floor(Math.log10(x))), m = x / e;
+  return (m <= 1.0001 ? 1 : m <= 2.0001 ? 2 : m <= 5.0001 ? 5 : 10) * e;
+}
+
+/**
+ * A real-scope scale for [lo, hi] over `divs` divisions: a 1-2-5 value per
+ * division and a centre on a whole division, so grid lines fall on round values.
+ */
+function niceScale(lo, hi, divs, unit) {
+  const level = Math.max(Math.abs(lo), Math.abs(hi));
+  if (hi - lo < Math.max(level * 2e-3, 1e-12)) { // steady level: show it against ground, as at a sensible V/div
+    if (level < 1e-6) return { d: unit === 'A' ? 1e-3 : 1, c: 0 }; // nothing there (solver dust): a plain default range
+    const d = nice125(level / (divs * 0.8));
+    return { d, c: Math.sign(lo + hi) * Math.min(3, Math.floor(divs / 2) - 1) * d }; // ground one division above the bottom (below the top if negative)
+  }
+  const d = nice125((hi - lo) / (divs * 0.8));
+  return { d, c: Math.round((hi + lo) / 2 / d) * d };
+}
+
+/** the next 1-2-5 step up (dir 1) or down (dir −1) from x */
+function step125(x, dir) {
+  const n = nice125(x * 0.999);
+  if (dir > 0) return nice125(n * 1.001);
+  const e = Math.pow(10, Math.floor(Math.log10(n) + 1e-9)), m = Math.round(n / e);
+  return (m === 1 ? 0.5 : m === 2 ? 1 : 2) * e;
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const TRIG_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h6l6-12h6"/><path d="M9.5 10.5L12 8l2.5 2.5" stroke-width="1.6"/></svg>';
+
 export class Scope {
   constructor(editor, host) {
     this.ed = editor;
     this.host = host;
-    this.channels = []; // {probe, buf: Float64Array, color}
+    this.channels = []; // {probe, buf: Float64Array, sc: {d, c}}
     this.tbuf = new Float64Array(N);
     this.head = 0; this.count = 0;
     this.window = 0.1;
     this.lastT = -Infinity;
     this.mode = 'time';
     this.frozen = false;
+    this.trigOn = true; // trigger on CH1 rising edges so periodic signals stand still
+    this.cursor = null; // x (CSS px) of the touch read-out cursor
     this.build();
   }
 
@@ -27,7 +75,8 @@ export class Scope {
         <div class="scope-tools">
           <button class="icon-btn sm" data-a="zin" title="Zoom in time">${icon('plus', 18)}</button>
           <button class="icon-btn sm" data-a="zout" title="Zoom out time"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
-          <button class="icon-btn sm" data-a="mode" title="Time / FFT / XY">${icon('fft', 18)}</button>
+          <button class="icon-btn sm on" data-a="trig" title="Trigger on CH1 (steady picture)">${TRIG_SVG}</button>
+          <button class="scope-mode" data-a="mode" title="Time / FFT / XY">TIME</button>
           <button class="icon-btn sm" data-a="freeze" title="Freeze">${icon('pause', 16)}</button>
           <button class="icon-btn sm" data-a="csv" title="Export CSV">${icon('download', 18)}</button>
         </div>
@@ -43,46 +92,64 @@ export class Scope {
     this.host.querySelector('.scope-tools').addEventListener('click', (ev) => {
       const b = ev.target.closest('button'); if (!b) return;
       const a = b.dataset.a;
-      if (a === 'zin') this.window = Math.max(1e-9, this.window / 2);
-      if (a === 'zout') this.window = Math.min(1e4, this.window * 2);
+      if (a === 'zin') { this.window = Math.max(1e-8, step125(this.window / DIV_X, -1) * DIV_X); this.userWindow = true; }
+      if (a === 'zout') { this.window = Math.min(1e4, step125(this.window / DIV_X, 1) * DIV_X); this.userWindow = true; }
+      if (a === 'trig') {
+        this.trigOn = !this.trigOn; b.classList.toggle('on', this.trigOn);
+        this.ed.toast(this.trigOn ? 'Trigger on: CH1 rising edge holds the picture still' : 'Trigger off: free-running (roll)');
+      }
       if (a === 'mode') {
         this.mode = this.mode === 'time' ? 'fft' : this.mode === 'fft' ? (this.channels.length >= 2 ? 'xy' : 'time') : 'time';
+        b.textContent = this.mode.toUpperCase();
         this.ed.toast(this.mode === 'fft' ? 'Spectrum (FFT) view' : this.mode === 'xy' ? 'XY view: CH1 → X, CH2 → Y' : 'Time view');
       }
-      if (a === 'freeze') { this.frozen = !this.frozen; b.innerHTML = icon(this.frozen ? 'play' : 'pause', 16); }
+      if (a === 'freeze') { this.frozen = !this.frozen; b.innerHTML = icon(this.frozen ? 'play' : 'pause', 16); b.classList.toggle('on', this.frozen); }
       if (a === 'csv') this.exportCSV();
-      this.userWindow = true;
       this.draw();
     });
-    // pinch / drag on scope to change timebase
-    let pts = new Map(), d0 = 0, w0 = 0;
-    this.cv.addEventListener('pointerdown', (e) => { pts.set(e.pointerId, e.clientX); this.cv.setPointerCapture(e.pointerId); if (pts.size === 2) { const v = [...pts.values()]; d0 = Math.abs(v[0] - v[1]); w0 = this.window; } });
+    // one finger: read-out cursor; two fingers: pinch the timebase
+    const pts = new Map();
+    let d0 = 0, w0 = 0;
+    const cssX = (e) => e.clientX - this.cv.getBoundingClientRect().left;
+    this.cv.addEventListener('pointerdown', (e) => {
+      pts.set(e.pointerId, e.clientX);
+      try { this.cv.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+      if (pts.size === 2) { const v = [...pts.values()]; d0 = Math.abs(v[0] - v[1]); w0 = this.window; this.cursor = null; } else if (pts.size === 1) this.cursor = cssX(e);
+      this.draw();
+    });
     this.cv.addEventListener('pointermove', (e) => {
       if (!pts.has(e.pointerId)) return;
       pts.set(e.pointerId, e.clientX);
-      if (pts.size === 2) { const v = [...pts.values()]; const d = Math.abs(v[0] - v[1]); if (d0 > 10 && d > 10) { this.window = Math.min(1e4, Math.max(1e-9, (w0 * d0) / d)); this.userWindow = true; } }
+      if (pts.size === 2) { const v = [...pts.values()]; const d = Math.abs(v[0] - v[1]); if (d0 > 10 && d > 10) { this.window = Math.min(1e4, Math.max(1e-9, (w0 * d0) / d)); this.userWindow = true; } } else if (pts.size === 1 && this.cursor !== null) this.cursor = cssX(e);
+      this.draw();
     });
-    const up = (e) => pts.delete(e.pointerId);
+    const up = (e) => {
+      if (pts.size === 2 && this.userWindow) this.window = nice125(this.window / DIV_X * 0.999) * DIV_X; // a pinch settles on a 1-2-5 time/div
+      pts.delete(e.pointerId);
+      if (!pts.size) { this.cursor = null; this.draw(); }
+    };
     this.cv.addEventListener('pointerup', up); this.cv.addEventListener('pointercancel', up);
-    this.cv.addEventListener('wheel', (e) => { e.preventDefault(); this.window *= e.deltaY > 0 ? 1.25 : 0.8; this.userWindow = true; }, { passive: false });
+    this.cv.addEventListener('wheel', (e) => { e.preventDefault(); this.window = Math.min(1e4, Math.max(1e-8, step125(this.window / DIV_X, e.deltaY > 0 ? 1 : -1) * DIV_X)); this.userWindow = true; this.draw(); }, { passive: false });
   }
 
-  setAutoWindow(w) { if (!this.userWindow) this.window = w; }
+  setAutoWindow(w) { if (!this.userWindow) this.window = nice125(w / DIV_X) * DIV_X; } // a real-scope 1-2-5 time/div
 
   setProbes(probes) {
     const old = new Map(this.channels.map((c) => [c.probe.id, c]));
     this.channels = probes.map((p) => old.get(p.id) || { probe: p, buf: new Float64Array(N) });
     this.channels.forEach((c) => { c.probe = probes.find((p) => p.id === c.probe.id); });
+    if (this.mode === 'xy' && this.channels.length < 2) { this.mode = 'time'; this.host.querySelector('[data-a=mode]').textContent = 'TIME'; }
     this.renderChips();
   }
 
   renderChips() {
-    this.chipsEl.innerHTML = this.channels.map((c, i) => `<button class="chip" data-i="${i}" style="--c:${c.probe.color}"><i></i>${c.probe.label}<span>${icon('x', 12)}</span></button>`).join('');
+    this.chipsEl.innerHTML = this.channels.map((c, i) => `<button class="chip" data-i="${i}" style="--c:${c.probe.color}"><i>${i + 1}</i>${esc(c.probe.label)}<span>${icon('x', 12)}</span></button>`).join('');
     this.chipsEl.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => this.ed.removeProbe(this.channels[+b.dataset.i].probe)));
     this.emptyEl.style.display = this.channels.length ? 'none' : '';
+    this.lastMeas = null;
   }
 
-  reset() { this.head = 0; this.count = 0; this.lastT = -Infinity; for (const c of this.channels) c.buf.fill(0); }
+  reset() { this.head = 0; this.count = 0; this.lastT = -Infinity; for (const c of this.channels) { c.buf.fill(0); c.sc = null; } }
 
   sample(sim) {
     if (this.frozen || !this.channels.length) return;
@@ -96,17 +163,19 @@ export class Scope {
     this.count = Math.min(N, this.count + 1);
   }
 
-  /** iterate samples within [t0, t1] oldest → newest */
-  *visible(t0) {
+  /** buffer indices with t0 ≤ t ≤ t1, oldest → newest */
+  visible(t0, t1 = Infinity) {
+    const out = [];
     for (let k = this.count; k >= 1; k--) {
-      const idx = (this.head - k + N) % N;
-      if (this.tbuf[idx] >= t0) yield idx;
+      const idx = (this.head - k + N) % N, t = this.tbuf[idx];
+      if (t >= t0 && t <= t1) out.push(idx);
     }
+    return out;
   }
 
   resize() {
     const r = this.cv.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.cv.width = Math.max(1, Math.round(r.width * dpr));
     this.cv.height = Math.max(1, Math.round(r.height * dpr));
     this.w = r.width; this.h = r.height; this.dpr = dpr;
@@ -129,155 +198,370 @@ export class Scope {
     return { mn, mx, avg, rms, freq, pp: mx - mn };
   }
 
+  /**
+   * Latest rising crossing of CH1 through the middle of its swing that still
+   * leaves a full screen after it, like a scope in auto-trigger mode. Only used
+   * for signals that repeat within the screen; anything else rolls.
+   */
+  findTrigger(tNow) {
+    const c = this.channels[0], W = this.window;
+    const idxs = this.visible(tNow - 4 * W);
+    if (idxs.length < 16) return null;
+    let mn = Infinity, mx = -Infinity;
+    // level from the last screen only, so a start-up transient does not skew it
+    for (const i of idxs) if (this.tbuf[i] >= tNow - W) { const v = c.buf[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    const pp = mx - mn;
+    if (!(pp > 1e-12) || pp < Math.max(Math.abs(mn), Math.abs(mx)) * 1e-3) return null; // flat
+    const lvl = (mn + mx) / 2, hy = pp * 0.08;
+    let armed = false, pt = 0, pv = 0, prev = -1;
+    const xs = [];
+    for (const i of idxs) {
+      const t = this.tbuf[i], v = c.buf[i];
+      if (v < lvl - hy) armed = true;
+      else if (armed && v >= lvl && prev >= 0) { xs.push(pv < lvl ? pt + ((lvl - pv) / (v - pv)) * (t - pt) : t); armed = false; }
+      pt = t; pv = v; prev = i;
+    }
+    const lim = tNow - W * (1 - PRE);
+    let k = xs.length - 1;
+    while (k >= 0 && xs[k] > lim) k--;
+    if (k < 1 || xs[k] - xs[k - 1] > 1.5 * W) return null;
+    return { t: xs[k], level: lvl };
+  }
+
+  /** per-channel scale with hysteresis, so the picture does not jump about while it runs */
+  autoScale(c, st) {
+    const want = niceScale(st.mn, st.mx, DIV_Y, c.probe.unit), sc = c.sc, now = performance.now();
+    if (!sc) { c.sc = want; return want; }
+    const eps = sc.d * 0.02, fits = st.mn >= sc.c - 4 * sc.d - eps && st.mx <= sc.c + 4 * sc.d + eps;
+    if (!fits) { c.sc = want; c.refitT = 0; return want; }
+    if (Math.abs(want.d - sc.d) > sc.d * 0.01 || Math.abs(want.c - sc.c) > sc.d * 0.01) { // a better fit (smaller signal, settled level): follow it once that has lasted a moment
+      if (!c.refitT) c.refitT = now;
+      else if (now - c.refitT > 450) { c.sc = want; c.refitT = 0; }
+    } else c.refitT = 0;
+    return c.sc;
+  }
+
+  /** [left, top, right, bottom] of the graticule in CSS px */
+  plotRect() {
+    const W = this.w, H = this.h;
+    const rows = !this.channels.length ? 0 : this.mode === 'xy' ? 1 : this.channels.length + 1;
+    const meas = rows ? rows * ROW + 9 : 0;
+    const bot = Math.min(H - 6, Math.max(HEAD + 90, H - meas - 6));
+    return [GUT_L, HEAD, W - GUT_R, bot];
+  }
+
+  /** the screen: bezel, CRT-style face, 10 × 8 divisions with fine ticks on the centre axes */
+  drawGraticule(L, T, R, B, divX = DIV_X, divY = DIV_Y) {
+    const { ctx } = this;
+    const W = this.w, H = this.h;
+    ctx.fillStyle = '#04070d';
+    ctx.fillRect(0, 0, W, H);
+    const g = ctx.createRadialGradient((L + R) / 2, (T + B) / 2, 0, (L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 1.6);
+    g.addColorStop(0, '#0c1628'); g.addColorStop(1, '#060b15');
+    ctx.fillStyle = g;
+    ctx.fillRect(L, T, R - L, B - T);
+    const dx = (R - L) / divX, dy = (B - T) / divY;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(120,165,230,0.11)';
+    ctx.beginPath();
+    for (let i = 1; i < divX; i++) { const x = Math.round(L + i * dx) + 0.5; ctx.moveTo(x, T); ctx.lineTo(x, B); }
+    for (let j = 1; j < divY; j++) { const y = Math.round(T + j * dy) + 0.5; ctx.moveTo(L, y); ctx.lineTo(R, y); }
+    ctx.stroke();
+    // centre axes with a tick every fifth of a division
+    const cx = Math.round(L + (divX / 2) * dx) + 0.5, cy = Math.round(T + (divY / 2) * dy) + 0.5;
+    ctx.strokeStyle = 'rgba(140,180,240,0.26)';
+    ctx.beginPath();
+    ctx.moveTo(cx, T); ctx.lineTo(cx, B); ctx.moveTo(L, cy); ctx.lineTo(R, cy);
+    for (let i = 1; i < divX * 5; i++) { if (i % 5 === 0) continue; const x = Math.round(L + (i * dx) / 5) + 0.5; ctx.moveTo(x, cy - 3); ctx.lineTo(x, cy + 3); }
+    for (let j = 1; j < divY * 5; j++) { if (j % 5 === 0) continue; const y = Math.round(T + (j * dy) / 5) + 0.5; ctx.moveTo(cx - 3, y); ctx.lineTo(cx + 3, y); }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(140,180,240,0.30)';
+    ctx.strokeRect(Math.round(L) + 0.5, Math.round(T) + 0.5, Math.round(R - L) - 1, Math.round(B - T) - 1);
+  }
+
+  /** a trace with a soft phosphor glow under a crisp core */
+  glowStroke(col, width = 1.8) {
+    const { ctx } = this;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.14; ctx.lineWidth = width + 5; ctx.stroke();
+    ctx.globalAlpha = 0.28; ctx.lineWidth = width + 2; ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1; ctx.lineWidth = width; ctx.stroke();
+  }
+
+  /** small label on a dark plate so it stays legible over traces */
+  plate(txt, x, y, col, align = 'left') {
+    const { ctx } = this;
+    const w = ctx.measureText(txt).width, x0 = align === 'right' ? x - w : x;
+    ctx.fillStyle = 'rgba(4,7,13,0.78)';
+    roundRect(ctx, x0 - 4, y - 10, w + 8, 14, 4); ctx.fill();
+    ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.fillText(txt, x0, y);
+  }
+
   draw() {
     const { ctx } = this;
     if (!this.w) this.resize();
-    const W = this.w, H = this.h, dpr = this.dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const th = this.ed.theme;
-    ctx.fillStyle = th.bg === '#f6f8fc' ? '#eef2f9' : '#070b14';
-    ctx.fillRect(0, 0, W, H);
-    // grid
-    ctx.strokeStyle = 'rgba(120,160,220,0.13)'; ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 1; i < 10; i++) { const x = Math.round((W * i) / 10) + 0.5; ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-    for (let j = 1; j < 8; j++) { const y = Math.round((H * j) / 8) + 0.5; ctx.moveTo(0, y); ctx.lineTo(W, y); }
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(120,160,220,0.28)';
-    ctx.beginPath(); ctx.moveTo(0, Math.round(H / 2) + 0.5); ctx.lineTo(W, Math.round(H / 2) + 0.5); ctx.stroke();
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.font = FONT; ctx.textBaseline = 'alphabetic';
+    if (this.mode === 'xy' && this.channels.length >= 2) return this.drawXY();
+    if (this.mode === 'fft') return this.drawFFT();
+    const [L, T, R, B] = this.plotRect();
+    this.drawGraticule(L, T, R, B);
+    this.plots = null;
     if (!this.channels.length || !this.count) { this.setMeas(''); return; }
 
+    const Wt = this.window, pw = R - L, ph = B - T;
     const tNow = this.tbuf[(this.head - 1 + N) % N];
-    const t0 = tNow - this.window;
-    const idxs = [...this.visible(t0)];
-    ctx.font = '10px JetBrains Mono, ui-monospace, monospace';
-    if (this.mode === 'fft') return this.drawFFT(idxs);
-    if (this.mode === 'xy' && this.channels.length >= 2) return this.drawXY(idxs);
-
-    const meas = [];
-    // plot area keeps clear of the chip/button header and the measurement lines
-    const [top, bot] = this.plotArea(), ph = bot - top;
-    const scaleLabels = [];
+    const trig = this.trigOn ? this.findTrigger(tNow) : null;
+    const t0 = trig ? trig.t - Wt * PRE : tNow - Wt, t1 = t0 + Wt;
+    const idxs = this.visible(t0, t1);
+    if (!idxs.length) { this.setMeas(''); return; }
+    const kx = pw / Wt;
+    const plots = [], rows = [];
+    ctx.save();
+    ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
     this.channels.forEach((c, ci) => {
       const st = this.stats(c, idxs);
       if (!st) return;
-      // symmetric-ish auto scale per channel with nice numbers
-      let lo = st.mn, hi = st.mx;
-      // a steady level with µV of solver noise (e.g. a regulator's 5 V) must look flat, as on a
-      // real scope at a sensible V/div – not blown up to full height like the ripple it removes
-      const minSpan = Math.max(Math.abs(lo), Math.abs(hi)) * 1e-3;
-      if (hi - lo < minSpan) { const m = (hi + lo) / 2; lo = m - minSpan / 2; hi = m + minSpan / 2; }
-      if (hi - lo < 1e-12) { lo -= Math.max(1e-3, Math.abs(lo) * 0.1); hi += Math.max(1e-3, Math.abs(hi) * 0.1); }
-      const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
-      if (lo > 0 && lo < (hi - lo) * 0.6) lo = 0;
-      if (hi < 0 && -hi < (hi - lo) * 0.6) hi = 0;
-      const col = c.probe.color;
+      const { d, c: mid } = this.autoScale(c, st);
+      const lo = mid - 4 * d, ky = ph / (8 * d), col = c.probe.color;
+      const yOf = (v) => B - (v - lo) * ky;
       // min/max decimation: at most two vertices per pixel column keeps the path short
       ctx.beginPath();
-      const ky = ph / (hi - lo), kx = W / this.window;
-      let col0 = -1, mn = 0, mx = 0, started = false;
+      let col0 = null, mn = 0, mx = 0, started = false;
       const flush = () => {
-        if (col0 < 0) return;
-        const ymn = bot - (mn - lo) * ky, ymx = bot - (mx - lo) * ky;
+        if (col0 === null) return;
+        const ymn = yOf(mn), ymx = yOf(mx);
         if (!started) { ctx.moveTo(col0, ymn); started = true; } else ctx.lineTo(col0, ymn);
         if (ymx !== ymn) ctx.lineTo(col0, ymx);
       };
       for (const i of idxs) {
-        const x = Math.round((this.tbuf[i] - t0) * kx), v = c.buf[i];
+        const x = Math.round((L + (this.tbuf[i] - t0) * kx) * 2) / 2, v = c.buf[i];
         if (x !== col0) { flush(); col0 = x; mn = v; mx = v; } else { if (v < mn) mn = v; if (v > mx) mx = v; }
       }
       flush();
-      ctx.lineJoin = 'bevel';
-      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
-      // live dot
+      this.glowStroke(col);
       const li = idxs[idxs.length - 1];
-      const ly = bot - ((c.buf[li] - lo) / (hi - lo)) * ph;
-      ctx.beginPath(); ctx.arc(W - 3, ly, 3.5, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
-      // axis labels for this channel
+      if (!trig) { // rolling: a bright dot rides the newest value
+        const ly = yOf(c.buf[li]);
+        ctx.beginPath(); ctx.arc(L + (this.tbuf[li] - t0) * kx, ly, 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
+      }
+      plots.push({ c, ci, lo, ky, d, mid, yOf, st });
       const u = c.probe.unit;
-      scaleLabels.push([fmtSI(hi, u, 3), top + 10 + ci * 12, col], [fmtSI(lo, u, 3), bot - 4 - (this.channels.length - 1 - ci) * 12, col]);
-      meas.push(`<span style="color:${col}">● ${c.probe.label}</span> ${fmtSI(c.buf[li], u, 4)} <em>pp</em> ${fmtSI(st.pp, u, 3)} <em>rms</em> ${fmtSI(st.rms, u, 3)}${st.freq ? ` <em>f</em> ${fmtSI(st.freq, 'Hz', 4)}` : ''}`);
+      rows.push([col, ci + 1, c.probe.label, fmtSI(c.buf[li], u, 4), fmtSI(d, u, 2), fmtSI(st.pp, u, 3), fmtSI(st.rms, u, 3), st.freq ? fmtSI(st.freq, 'Hz', 4) : '—']);
     });
-    // scale readouts go on a backing plate, drawn after every trace so they stay legible
-    ctx.textAlign = 'right';
-    for (const [txt, y, col] of scaleLabels) {
-      const w = ctx.measureText(txt).width;
-      ctx.fillStyle = 'rgba(6,10,18,0.82)'; ctx.fillRect(W - 14 - w, y - 10, w + 8, 13);
-      ctx.fillStyle = col; ctx.fillText(txt, W - 10, y);
+    ctx.restore();
+    this.plots = { list: plots, t0, kx, L, T, R, B, trig, idxs, tNow };
+
+    // reference markers: each channel's 0 level in the left gutter (an arrow at the edge when it is off screen)
+    ctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
+    const tags = plots.map((p) => { const y0 = p.yOf(0); return { p, off: y0 < T + 2 ? -1 : y0 > B - 2 ? 1 : 0, y: Math.max(T + 7, Math.min(B - 7, y0)) }; });
+    tags.sort((a, b) => a.y - b.y);
+    for (let k = 1; k < tags.length; k++) tags[k].y = Math.max(tags[k].y, tags[k - 1].y + 14); // never stacked on top of each other
+    for (let k = tags.length - 1; k >= 0; k--) { const lim = k === tags.length - 1 ? B - 7 : tags[k + 1].y - 14; if (tags[k].y > lim) tags[k].y = lim; }
+    for (const g of tags) this.marker(L - 2, g.y, g.p.c.probe.color, g.p.ci + 1, g.off);
+    ctx.font = FONT;
+    // top / bottom value of each channel's screen at the right edge
+    const n = plots.length;
+    for (const p of plots) {
+      const u = p.c.probe.unit;
+      this.plate(fmtSI(p.mid + 4 * p.d, u, 3), R - 6, T + 14 + p.ci * 15, p.c.probe.color, 'right');
+      this.plate(fmtSI(p.lo, u, 3), R - 6, B - 6 - (n - 1 - p.ci) * 15, p.c.probe.color, 'right');
     }
-    ctx.fillStyle = 'rgba(200,215,240,0.7)';
-    ctx.fillText(`${fmtSI(this.window / 10, 's', 3)}/div`, W - 6, H - 5);
-    this.setMeas(meas.join('<br>'));
+    // trigger point (top edge) and level (right edge)
+    if (trig && plots[0]) {
+      const x = L + PRE * pw, col = plots[0].c.probe.color, ty = plots[0].yOf(trig.level);
+      ctx.fillStyle = '#e8eef8';
+      ctx.beginPath(); ctx.moveTo(x - 5, T + 1); ctx.lineTo(x + 5, T + 1); ctx.lineTo(x, T + 7); ctx.closePath(); ctx.fill();
+      if (ty > T && ty < B) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(R, ty); ctx.lineTo(R + GUT_R, ty - 4); ctx.lineTo(R + GUT_R, ty + 4); ctx.closePath(); ctx.fill(); }
+    }
+    // status: timebase, trigger state
+    const status = `${fmtSI(Wt / DIV_X, 's', 3)}/div`;
+    const mode = this.frozen ? 'STOP' : trig ? 'TRIG ↑ CH1' : this.trigOn ? 'AUTO' : 'ROLL';
+    const sw = ctx.measureText(status).width;
+    this.plate(status, L + 6, B - 6, '#dbe5f5');
+    this.plate(mode, L + 6 + sw + 12, B - 6, this.frozen ? '#f87171' : trig ? '#4ade80' : '#94a3b8');
+    if (this.cursor !== null) this.drawCursor();
+    this.setMeas(this.table(['CH', 'now', '/div', 'pp', 'rms', 'f'], rows));
   }
 
-  /** [top, bottom] of the trace area in CSS px */
-  plotArea() {
-    const n = Math.max(1, this.channels.length);
-    return [44, Math.max(80, this.h - 22 - n * 16)];
+  /** channel number tag pointing at its reference level (off = −1 above, +1 below the screen) */
+  marker(xr, y, col, num, off) {
+    const { ctx } = this;
+    const w = 16, h = 13, x = xr - w - 4;
+    ctx.fillStyle = col;
+    roundRect(ctx, x, y - h / 2, w, h, 3); ctx.fill();
+    ctx.beginPath();
+    if (!off) { ctx.moveTo(x + w - 1, y - 4); ctx.lineTo(xr, y); ctx.lineTo(x + w - 1, y + 4); } else { const s = off < 0 ? -1 : 1; ctx.moveTo(xr - 3, y - 3 * s); ctx.lineTo(xr + 1, y - 3 * s); ctx.lineTo(xr - 1, y + 3 * s); }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#05080f'; ctx.textAlign = 'center';
+    ctx.fillText(String(num), x + w / 2, y + 3.5);
+    ctx.textAlign = 'left';
+  }
+
+  /** touch read-out: a vertical line with every channel's value at that instant */
+  drawCursor() {
+    const P = this.plots;
+    if (!P || !P.list.length) return;
+    const { ctx } = this;
+    const x = Math.max(P.L, Math.min(P.R, this.cursor));
+    const t = P.t0 + (x - P.L) / P.kx;
+    // nearest sample
+    let best = P.idxs[0], bd = Infinity;
+    for (const i of P.idxs) { const dd = Math.abs(this.tbuf[i] - t); if (dd < bd) { bd = dd; best = i; } }
+    ctx.save();
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(230,238,250,0.6)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, P.T); ctx.lineTo(Math.round(x) + 0.5, P.B); ctx.stroke();
+    ctx.restore();
+    const ref = P.trig ? P.trig.t : P.tNow;
+    const lines = [[`t ${fmtSI(this.tbuf[best] - ref, 's', 4)}`, '#e8eef8']];
+    for (const p of P.list) {
+      const v = p.c.buf[best], y = p.yOf(v), col = p.c.probe.color;
+      if (y >= P.T && y <= P.B) { ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = '#05080f'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = col; ctx.stroke(); }
+      lines.push([`${p.ci + 1}  ${fmtSI(v, p.c.probe.unit, 4)}`, col]);
+    }
+    const bw = Math.max(...lines.map(([s]) => ctx.measureText(s).width)) + 16, bh = lines.length * 14 + 8;
+    const bx = x + 12 + bw > P.R ? x - 12 - bw : x + 12, by = P.T + 8;
+    ctx.fillStyle = 'rgba(8,13,24,0.92)'; ctx.strokeStyle = 'rgba(140,180,240,0.35)'; ctx.lineWidth = 1;
+    roundRect(ctx, bx, by, bw, bh, 7); ctx.fill(); ctx.stroke();
+    lines.forEach(([s, col], k) => { ctx.fillStyle = col; ctx.fillText(s, bx + 8, by + 16 + k * 14); });
+  }
+
+  /** readout table: a header row, then one row per channel */
+  table(head, rows) {
+    if (!rows.length) return '';
+    const cls = ['nm', 'v', 'v', 'v', 'v rms', 'v'];
+    let h = head.map((x, i) => `<span class="h ${cls[i] || 'v'}">${x}</span>`).join('');
+    for (const [col, num, name, ...vals] of rows) {
+      h += `<span class="nm" style="--c:${col}"><i>${num}</i>${esc(name)}</span>` + vals.map((v, i) => `<span class="${cls[i + 1] || 'v'}">${v}</span>`).join('');
+    }
+    return `<div class="sm-grid c${head.length}">${h}</div>`;
   }
 
   /** measurement text changes the DOM, so throttle it to 4 Hz */
   setMeas(html) {
     const now = performance.now();
-    if (html === this.lastMeas || (now - (this.measT || 0) < 250 && html)) return;
+    if (html === this.lastMeas || (now - (this.measT || 0) < 250 && html && this.lastMeas)) return;
     this.measT = now; this.lastMeas = html;
     this.measEl.innerHTML = html;
   }
 
-  drawXY(idxs) {
+  drawXY() {
     const { ctx } = this;
-    const W = this.w, H = this.h;
+    const [L, T, R, B] = this.plotRect();
+    this.drawGraticule(L, T, R, B);
+    if (!this.count) { this.setMeas(''); return; }
+    const tNow = this.tbuf[(this.head - 1 + N) % N];
+    const idxs = this.visible(tNow - this.window);
     const [a, b] = this.channels;
     const sa = this.stats(a, idxs), sb = this.stats(b, idxs);
     if (!sa || !sb) return;
-    const rx = Math.max(sa.pp, 1e-9), ry = Math.max(sb.pp, 1e-9);
-    const [top, bot] = this.plotArea();
+    const xs = niceScale(sa.mn, sa.mx, DIV_X, a.probe.unit), ys = niceScale(sb.mn, sb.mx, DIV_Y, b.probe.unit);
+    const kx = (R - L) / (DIV_X * xs.d), ky = (B - T) / (DIV_Y * ys.d);
+    const x0 = xs.c - 5 * xs.d, y0 = ys.c - 4 * ys.d;
+    ctx.save(); ctx.beginPath(); ctx.rect(L, T, R - L, B - T); ctx.clip();
     ctx.beginPath();
     let f = true;
     for (const i of idxs) {
-      const x = 10 + ((a.buf[i] - sa.mn) / rx) * (W - 20), y = bot - ((b.buf[i] - sb.mn) / ry) * (bot - top);
+      const x = L + (a.buf[i] - x0) * kx, y = B - (b.buf[i] - y0) * ky;
       if (f) { ctx.moveTo(x, y); f = false; } else ctx.lineTo(x, y);
     }
-    ctx.strokeStyle = '#4ade80'; ctx.globalAlpha = 0.25; ctx.lineWidth = 6; ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 1.8; ctx.stroke();
-    this.measEl.innerHTML = `XY: X = ${a.probe.label} (${fmtSI(sa.mn, a.probe.unit, 3)} … ${fmtSI(sa.mx, a.probe.unit, 3)}), Y = ${b.probe.label} (${fmtSI(sb.mn, b.probe.unit, 3)} … ${fmtSI(sb.mx, b.probe.unit, 3)})`;
+    this.glowStroke('#4ade80', 1.6);
+    const li = idxs[idxs.length - 1];
+    if (li !== undefined) { ctx.beginPath(); ctx.arc(L + (a.buf[li] - x0) * kx, B - (b.buf[li] - y0) * ky, 3.2, 0, Math.PI * 2); ctx.fillStyle = '#d9fbe6'; ctx.fill(); }
+    ctx.restore();
+    ctx.font = FONT;
+    this.plate(`X ${fmtSI(xs.d, a.probe.unit, 2)}/div`, L + 6, B - 6, a.probe.color);
+    this.plate(`Y ${fmtSI(ys.d, b.probe.unit, 2)}/div`, L + 6, T + 14, b.probe.color);
+    this.setMeas(`<div class="sm-line"><span style="color:${a.probe.color}">X = ${esc(a.probe.label)}</span> ${fmtSI(sa.mn, a.probe.unit, 3)} … ${fmtSI(sa.mx, a.probe.unit, 3)} &nbsp; <span style="color:${b.probe.color}">Y = ${esc(b.probe.label)}</span> ${fmtSI(sb.mn, b.probe.unit, 3)} … ${fmtSI(sb.mx, b.probe.unit, 3)}</div>`);
   }
 
-  drawFFT(idxs) {
+  drawFFT() {
     const { ctx } = this;
-    const W = this.w, H = this.h;
+    const [L, T, R, B] = this.plotRect();
+    const pw = R - L, ph = B - T;
+    ctx.fillStyle = '#04070d'; ctx.fillRect(0, 0, this.w, this.h);
+    const g = ctx.createLinearGradient(0, T, 0, B);
+    g.addColorStop(0, '#0c1628'); g.addColorStop(1, '#060b15');
+    ctx.fillStyle = g; ctx.fillRect(L, T, pw, ph);
+    if (!this.channels.length || !this.count) { this.frameFFT(L, T, R, B, 0, 0); this.setMeas(''); return; }
+    const tNow = this.tbuf[(this.head - 1 + N) % N];
+    const idxs = this.visible(tNow - this.window);
     let n = 1;
     while (n * 2 <= idxs.length && n < 2048) n *= 2;
-    if (n < 32) return;
+    if (n < 32) { this.frameFFT(L, T, R, B, 0, 0); return; }
     const sel = idxs.slice(idxs.length - n);
     const dtS = (this.tbuf[sel[n - 1]] - this.tbuf[sel[0]]) / (n - 1);
-    const fs = 1 / dtS;
-    const meas = [];
-    const [top, bot] = this.plotArea();
-    this.channels.forEach((c) => {
+    const fs = 1 / dtS, half = n / 2;
+    const fmin = fs / n, fmax = fs / 2, lmin = Math.log10(fmin), lspan = Math.log10(fmax) - lmin;
+    const xOf = (f) => L + ((Math.log10(f) - lmin) / lspan) * pw;
+    const yOf = (db) => T + (-db / 100) * ph;
+    this.frameFFT(L, T, R, B, fmin, fmax, xOf);
+    const rows = [];
+    ctx.save(); ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
+    this.channels.forEach((c, ci) => {
       const re = new Float64Array(n), im = new Float64Array(n);
       let mean = 0;
       for (let k = 0; k < n; k++) mean += c.buf[sel[k]];
       mean /= n;
       for (let k = 0; k < n; k++) re[k] = (c.buf[sel[k]] - mean) * (0.5 - 0.5 * Math.cos((2 * Math.PI * k) / (n - 1)));
       fft(re, im);
-      const half = n / 2;
       const mag = new Float64Array(half);
-      let peak = 1, pk = 1;
-      for (let k = 1; k < half; k++) { mag[k] = (Math.hypot(re[k], im[k]) * 4) / n; if (mag[k] > peak * 0 && mag[k] > mag[pk]) pk = k; }
-      peak = mag[pk] || 1e-12;
+      let pk = 1;
+      for (let k = 1; k < half; k++) { mag[k] = (Math.hypot(re[k], im[k]) * 4) / n; if (mag[k] > mag[pk]) pk = k; }
+      const peak = mag[pk] || 1e-12, col = c.probe.color;
       ctx.beginPath();
       for (let k = 1; k < half; k++) {
-        const x = (Math.log10(k) / Math.log10(half)) * W;
-        const db = 20 * Math.log10(Math.max(mag[k] / peak, 1e-5));
-        const y = top + (-db / 100) * (bot - top);
+        const x = xOf(k * fmin), y = yOf(20 * Math.log10(Math.max(mag[k] / peak, 1e-5)));
         if (k === 1) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
-      ctx.strokeStyle = c.probe.color; ctx.lineWidth = 1.6; ctx.stroke();
-      meas.push(`<span style="color:${c.probe.color}">● ${c.probe.label}</span> peak ${fmtSI((pk * fs) / n, 'Hz', 4)} @ ${fmtSI(mag[pk], c.probe.unit, 3)}`);
+      // soft fill under the first channel's spectrum
+      if (ci === 0) {
+        ctx.save(); ctx.lineTo(xOf((half - 1) * fmin), B); ctx.lineTo(xOf(fmin), B); ctx.closePath();
+        ctx.fillStyle = col; ctx.globalAlpha = 0.13; ctx.fill(); ctx.restore();
+        ctx.beginPath();
+        for (let k = 1; k < half; k++) { const x = xOf(k * fmin), y = yOf(20 * Math.log10(Math.max(mag[k] / peak, 1e-5))); if (k === 1) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+      }
+      this.glowStroke(col, 1.5);
+      // peak marker
+      const px = xOf(pk * fmin), py = yOf(0);
+      ctx.beginPath(); ctx.arc(px, py + 1, 3.2, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill();
+      ctx.font = FONT;
+      const lbl = fmtSI(pk * fmin, 'Hz', 3), lw = ctx.measureText(lbl).width;
+      this.plate(lbl, Math.min(R - lw - 6, Math.max(L + 6, px + 8)), py + 30 + ci * 15, col);
+      rows.push([col, ci + 1, c.probe.label, fmtSI(pk * fmin, 'Hz', 4), fmtSI(mag[pk], c.probe.unit, 3)]);
     });
-    ctx.fillStyle = 'rgba(200,215,240,0.7)'; ctx.textAlign = 'right';
-    ctx.fillText(`FFT ${n} pts · 0…−100 dB · ${fmtSI(fs / n, 'Hz', 3)} … ${fmtSI(fs / 2, 'Hz', 3)} (log)`, W - 6, H - 5);
-    this.measEl.innerHTML = meas.join('<br>');
+    ctx.restore();
+    this.plate(`FFT ${n} pts · ${fmtSI(fs / n, 'Hz', 3)} res`, R - 6, T + 14, '#94a3b8', 'right');
+    this.setMeas(this.table(['CH', 'peak f', 'amplitude'], rows));
+  }
+
+  /** FFT frame: dB lines every 20 dB and a line at every decade of frequency */
+  frameFFT(L, T, R, B, fmin, fmax, xOf) {
+    const { ctx } = this;
+    const ph = B - T;
+    ctx.font = FONT; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(120,165,230,0.11)';
+    ctx.beginPath();
+    for (let j = 1; j < 5; j++) { const y = Math.round(T + (j * ph) / 5) + 0.5; ctx.moveTo(L, y); ctx.lineTo(R, y); }
+    const decades = [];
+    if (xOf && fmax > fmin) {
+      for (let e = Math.ceil(Math.log10(fmin)); e <= Math.floor(Math.log10(fmax)); e++) {
+        const x = Math.round(xOf(10 ** e)) + 0.5; ctx.moveTo(x, T); ctx.lineTo(x, B); decades.push([x, 10 ** e]);
+        for (let m = 2; m < 10; m++) { const f = m * 10 ** e; if (f > fmin && f < fmax) { const xm = Math.round(xOf(f)) + 0.5; ctx.moveTo(xm, B - 4); ctx.lineTo(xm, B); } }
+      }
+    }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(140,180,240,0.30)';
+    ctx.strokeRect(Math.round(L) + 0.5, Math.round(T) + 0.5, Math.round(R - L) - 1, Math.round(B - T) - 1);
+    ctx.fillStyle = 'rgba(170,190,225,0.6)'; ctx.textAlign = 'right';
+    ctx.font = '9px JetBrains Mono, ui-monospace, monospace';
+    for (let j = 0; j < 5; j++) ctx.fillText(j ? `-${j * 20}` : 'dB', L - 3, Math.max(T + 8, T + (j * ph) / 5 + 3));
+    ctx.textAlign = 'left';
+    for (const [x, f] of decades) if (x > L + 4 && x < R - 40) ctx.fillText(fmtSI(f, 'Hz', 1), x + 3, B - 5);
+    ctx.font = FONT;
   }
 
   exportCSV() {
