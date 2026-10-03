@@ -1257,6 +1257,7 @@ export class Editor {
     const [sx, sy] = this.local(ev);
     this.pointers.set(ev.pointerId, [sx, sy]);
     this.q('.speed-pop').classList.remove('open');
+    this.zoomAnim = (this.zoomAnim || 0) + 1; // a finger on the board stops a double-tap zoom in flight
     if (this.pointers.size === 2) {
       this.cancelGesture();
       const [a, b] = [...this.pointers.values()];
@@ -1266,7 +1267,14 @@ export class Editor {
     }
     if (this.pointers.size > 2) return;
     const hit = this.hitTest(sx, sy);
-    this.gesture = { type: 'pending', hit, sx, sy, w: this.renderer.toWorld(sx, sy), t0: performance.now() };
+    // Google Maps one-finger zoom: a second tap on the board that stays down, then slide
+    const lt = this.lastTap, t0 = performance.now();
+    if (lt && t0 - lt.t < 320 && Math.hypot(sx - lt.sx, sy - lt.sy) < 44 && (hit.kind === 'none' || hit.kind === 'wire')) {
+      this.lastTap = null;
+      this.gesture = { type: 'dzoom', sx, sy, s0: this.renderer.scale, w: this.renderer.toWorld(sx, sy), moved: false };
+      return;
+    }
+    this.gesture = { type: 'pending', hit, sx, sy, w: this.renderer.toWorld(sx, sy), t0 };
     if (hit.kind === 'element' && hit.el.onPress && !this.multi) {
       if (hit.el.onPress()) { this.gesture.pressed = hit.el; this.pressChanged(hit.el); }
     }
@@ -1339,6 +1347,16 @@ export class Editor {
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       R.scale = Math.min(6, Math.max(0.15, (g.s0 * d) / g.d0));
       R.ox = mid[0] - g.w[0] * R.scale; R.oy = mid[1] - g.w[1] * R.scale;
+      this.dirtyDraw = true;
+      return;
+    }
+    if (g.type === 'dzoom') {
+      const dy = sy - g.sy;
+      if (!g.moved && Math.abs(dy) < 6) return;
+      if (!g.moved) { g.moved = true; this.haptic(6); }
+      // slide down = zoom in, up = zoom out, around the point that was tapped
+      R.scale = Math.min(6, Math.max(0.15, g.s0 * Math.exp(dy * 0.009)));
+      R.ox = g.sx - g.w[0] * R.scale; R.oy = g.sy - g.w[1] * R.scale;
       this.dirtyDraw = true;
       return;
     }
@@ -1448,10 +1466,18 @@ export class Editor {
     const g = this.gesture;
     if (!g) return;
     if (g.type === 'pinch') { if (this.pointers.size === 0) this.gesture = null; else this.gesture = { type: 'done' }; return; }
+    if (g.type === 'dzoom') { // a plain double tap (no slide) zooms in one step, like Maps
+      this.gesture = null;
+      if (!g.moved && !cancelled) this.animateZoom(g.sx, g.sy, 2);
+      return;
+    }
     if (g.pressed) { g.pressed.onRelease(); this.pressChanged(g.pressed); }
     if (cancelled) { this.cancelGesture(); return; }
     switch (g.type) {
-      case 'pending': this.tap(g); break;
+      case 'pending':
+        this.tap(g);
+        this.lastTap = g.hit.kind === 'none' || g.hit.kind === 'wire' ? { t: performance.now(), sx: g.sx, sy: g.sy } : null;
+        break;
       case 'move':
         // a bridge wire whose part came back to where it was is not needed
         for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
@@ -1475,6 +1501,21 @@ export class Editor {
     this.preview = null; this.marquee = null; this.marqueePick = null; this.hoverPost = null; this.drag = false;
     this.gesture = null;
     this.dirtyDraw = true;
+  }
+
+  /** smooth zoom by `factor` around a screen point (double tap) */
+  animateZoom(sx, sy, factor) {
+    const R = this.renderer, s0 = R.scale, s1 = Math.min(6, Math.max(0.15, s0 * factor)), w = R.toWorld(sx, sy), t0 = performance.now();
+    const id = this.zoomAnim = (this.zoomAnim || 0) + 1;
+    const step = (now) => {
+      if (id !== this.zoomAnim) return; // a newer gesture took over
+      const k = Math.min(1, (now - t0) / 220), e = 1 - Math.pow(1 - k, 3);
+      R.scale = s0 * Math.pow(s1 / s0, e);
+      R.ox = sx - w[0] * R.scale; R.oy = sy - w[1] * R.scale;
+      this.dirtyDraw = true;
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   tap(g) {

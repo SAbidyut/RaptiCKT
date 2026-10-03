@@ -186,6 +186,8 @@ The editor is where you build and run circuits. From top to bottom:
 | Tap a terminal, then another | Draws a wire between them (EveryCircuit style). |
 | Drag empty space | Pans the board. |
 | Pinch with two fingers | Zooms in and out. |
+| Double-tap the board and hold, then slide | One-finger zoom, like Google Maps: slide **down** to zoom in, **up** to zoom out, around the point you tapped. Works on empty board or a wire. |
+| Double-tap empty board | Zooms in one step around that point. |
 | Hold empty space, then drag | Draws a selection box. |
 | Tap a wire | Selects the wire (then you can scope or delete it). |
 | Tap empty space | Clears the selection. |

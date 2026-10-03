@@ -48,6 +48,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Drag from a terminal to wire, and wires follow moved parts
   - Tap switches and buttons live
   - Rotary knob for any value
+  - Pinch to zoom, or one finger like Google Maps: double-tap, hold and slide down (in) or up (out)
   - Undo/redo and multi-select
 - **7 big build-along projects** (first chip in Examples → *Projects*), each explained stage by stage:
   - **Complete house wiring (2-room flat)**: energy meter → DP main switch → 30 mA RCCB → one MCB per circuit (lights with one-way and staircase 2-way switches, calling bell, fan with regulator, 2 kW geyser, earthed sockets). Set a socket to *Faulty appliance* to trip the RCCB or *Short circuit* to trip its MCB.

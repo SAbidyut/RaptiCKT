@@ -254,6 +254,8 @@ export const CHAPTERS = [
         [['Tap a terminal, then another', 'একটি টার্মিনালে, তারপর আরেকটিতে ট্যাপ'], ['Draws a wire between them (EveryCircuit style).', 'দুটির মাঝে তার আঁকে (EveryCircuit-এর মতো)।']],
         [['Drag empty space', 'ফাঁকা জায়গায় টানা'], ['Pans the board.', 'বোর্ড সরায়।']],
         [['Pinch with two fingers', 'দুই আঙুলে চিমটি'], ['Zooms in and out.', 'জুম ইন/আউট।']],
+        [['Double-tap the board and hold, then slide', 'বোর্ডে ডাবল-ট্যাপ করে ধরে রেখে আঙুল টানা'], ['One-finger zoom, like Google Maps: slide **down** to zoom in, **up** to zoom out, around the point you tapped. Works on empty board or a wire.', 'এক আঙুলে জুম, Google Maps-এর মতো: **নিচে** টানলে জুম ইন, **উপরে** টানলে জুম আউট, যেখানে ট্যাপ করেছেন সেখানকে কেন্দ্র করে। ফাঁকা বোর্ডে বা তারের উপর কাজ করে।']],
+        [['Double-tap empty board', 'ফাঁকা বোর্ডে ডাবল-ট্যাপ'], ['Zooms in one step around that point.', 'ওই বিন্দুকে কেন্দ্র করে এক ধাপ জুম ইন করে।']],
         [['Hold empty space, then drag', 'ফাঁকা জায়গায় চেপে ধরে টানা'], ['Draws a selection box.', 'সিলেকশন বক্স আঁকে।']],
         [['Tap a wire', 'তারে ট্যাপ'], ['Selects the wire (then you can scope or delete it).', 'তার সিলেক্ট করে (তারপর স্কোপ বা ডিলিট করা যায়)।']],
         [['Tap empty space', 'ফাঁকা জায়গায় ট্যাপ'], ['Clears the selection.', 'সিলেকশন বাতিল করে।']],
