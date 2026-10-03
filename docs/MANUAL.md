@@ -403,17 +403,19 @@ Channel colours: yellow, cyan, pink, green, orange, purple. Probes are saved wit
 
 #### Reading the display
 
-- Each channel **auto-scales** to fit; the highest and lowest values of the screen are written at the right edge in the channel colour.
-- The bottom right corner shows the **time per division** (for example `2 ms/div`). There are 10 divisions across.
-- Under the graph, one line per channel gives the **latest value**, **pp** (peak-to-peak), **rms** and the **frequency f** (found from the signal).
-- A bright dot on the right edge marks the live value.
+- The screen has **10 × 8 divisions**, like a real scope. The screen **auto-scales** to a round **volts per division** (1-2-5 steps). All voltage channels share **one scale and one 0 V line**, set by the biggest signal (for example the input of a rectifier), so input and output can be compared directly; currents get their own scale. The top and bottom values of the screen are written at the right edge.
+- The **0** tag on the left edge marks the **0 V (ground) level** (**0V** / **0A** when volts and amps are both shown). When it is off the screen, the tag sits at the edge with a small arrow.
+- The bottom left shows the **time per division** (for example `2 ms/div`) and the trigger state: **TRIG ↑ CH1** (picture held still), **AUTO** (waiting for a repeating signal), **ROLL** (trigger off) or **STOP** (frozen).
+- Under the graph, a table gives for each channel the **latest value**, **/div**, **pp** (peak-to-peak), **rms** and the **frequency f** (found from the signal).
+- **Touch and hold** the graph to show a cursor: it reads the time and every channel's value at that point. Pinch to change the time scale.
 
 #### Scope buttons
 
 | Button | What it does |
 | --- | --- |
-| +  /  − | Zoom the time axis in / out (half or double the time window). You can also pinch on the scope. |
-| Mode | Cycles **Time → FFT → XY → Time**. XY needs at least 2 channels. |
+| +  /  − | Zoom the time axis in / out, one 1-2-5 step of time per division. You can also pinch on the scope. |
+| Trigger | On (green, the default): each sweep starts on a rising edge of **CH1**, so a repeating waveform stands still instead of sliding. Off: the picture rolls with the newest value at the right edge. |
+| TIME / FFT / XY | Shows the current view; tap to cycle **Time → FFT → XY → Time**. XY needs at least 2 channels. |
 | Freeze | Stops recording so you can study the picture. Press again to continue. |
 | Download | Exports the recorded data as a CSV file (time, then one column per channel). |
 | Colour chip with ✕ | Tap a channel chip to remove that probe. |

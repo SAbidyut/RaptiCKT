@@ -246,21 +246,36 @@ input.toggle:checked::after { transform: translateX(18px); }
 .tb.run { background: var(--grad); color: #fff; min-width: 58px; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4); }
 .tb.run.on { background: linear-gradient(135deg, #f59e0b, #ef4444); box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35); }
 
-.scope-panel { flex: none; height: 0; overflow: hidden; background: #070b14; border-bottom: 1px solid var(--border); position: relative; }
-.editor.with-scope .scope-panel { height: 32vh; min-height: 170px; max-height: 330px; }
-.scope-head { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; padding: 6px; z-index: 2; pointer-events: none; }
-.scope-chips { display: flex; flex-wrap: wrap; gap: 4px; pointer-events: auto; max-width: 62%; }
-.scope-tools { display: flex; gap: 2px; pointer-events: auto; background: rgba(7, 11, 20, 0.7); border-radius: 10px; padding: 2px; }
-.scope-tools .icon-btn { color: #b9c5da; }
-.chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 4px 0 8px; border-radius: 12px; font-size: 11px; font-weight: 600; color: #e8eef8;
-  background: rgba(7, 11, 20, 0.75); border: 1px solid color-mix(in srgb, var(--c) 60%, transparent); }
-.chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); box-shadow: 0 0 6px var(--c); }
-.chip span { opacity: 0.6; display: grid; place-items: center; }
+.scope-panel { flex: none; height: 0; overflow: hidden; background: #04070d; border-bottom: 1px solid var(--border); position: relative; box-shadow: inset 0 -12px 24px -18px rgba(0, 0, 0, 0.9); }
+.editor.with-scope .scope-panel { height: 34vh; min-height: 190px; max-height: 360px; }
+.scope-head { position: absolute; top: 0; left: 0; right: 0; height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 6px; z-index: 2; pointer-events: none; }
+.scope-chips { display: flex; gap: 4px; pointer-events: auto; min-width: 0; flex: 1; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, #000 88%, transparent); -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent); padding-right: 14px; }
+.scope-chips::-webkit-scrollbar { display: none; }
+.scope-tools { display: flex; align-items: center; gap: 1px; pointer-events: auto; flex: none; background: rgba(12, 20, 36, 0.9); border: 1px solid rgba(140, 180, 240, 0.14); border-radius: 11px; padding: 2px; }
+.scope-tools .icon-btn { color: #b9c5da; width: 28px; height: 28px; }
+.scope-tools .icon-btn.on { color: #4ade80; background: rgba(74, 222, 128, 0.12); }
+.scope-mode { height: 24px; min-width: 38px; padding: 0 6px; margin: 0 2px; border-radius: 7px; font: 700 10px/24px var(--mono); letter-spacing: 0.06em; color: #22d3ee; background: rgba(34, 211, 238, 0.12); border: 1px solid rgba(34, 211, 238, 0.3); }
+.chip { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 4px 0 4px; border-radius: 13px; font: 600 11px var(--mono); color: #e8eef8;
+  background: rgba(12, 20, 36, 0.9); border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); white-space: nowrap; }
+.chip i { width: 17px; height: 17px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 70%, transparent); color: #05080f; font: 800 10px/17px ui-sans-serif, system-ui, sans-serif; font-style: normal; text-align: center; }
+.chip span { opacity: 0.55; display: grid; place-items: center; }
 .scope-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
-.scope-meas { position: absolute; left: 6px; bottom: 6px; padding: 3px 6px; border-radius: 8px; background: rgba(7, 11, 20, 0.72); font: 10.5px/1.45 var(--mono); color: #cfd9ea; pointer-events: none; text-shadow: 0 1px 2px #000; }
+.scope-meas { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 8px; border-top: 1px solid rgba(140, 180, 240, 0.12); background: rgba(5, 9, 17, 0.92); font: 10px/14px var(--mono); color: #d4deee; pointer-events: none; overflow: hidden; }
 .scope-meas:empty { display: none; }
-.scope-meas em { color: #7f8ca6; font-style: normal; }
-.scope-empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 30px; color: #7f8ca6; font-size: 13px; pointer-events: none; }
+.sm-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(5, minmax(0, 1fr)); column-gap: 8px; }
+.sm-grid.c3 { grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)); }
+.sm-grid > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 14px; }
+.sm-grid .h { color: #64748b; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
+.sm-grid .v { text-align: right; font-variant-numeric: tabular-nums; }
+.sm-grid .nm { color: var(--c, #64748b); display: flex; align-items: center; gap: 5px; }
+.sm-grid .nm i { flex: none; width: 12px; height: 12px; border-radius: 3px; background: var(--c); color: #05080f; font: 800 8.5px/12px ui-sans-serif, system-ui, sans-serif; font-style: normal; text-align: center; }
+.sm-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scope-empty { position: absolute; inset: 40px 0 0; display: grid; place-items: center; text-align: center; padding: 20px 30px; color: #8a97b0; font-size: 13px; pointer-events: none; }
+.scope-empty b { color: #22d3ee; }
+@media (max-width: 380px) {
+  .sm-grid { grid-template-columns: minmax(0, 1.5fr) repeat(4, minmax(0, 1fr)); }
+  .sm-grid .rms { display: none; }
+}
 
 .stage { flex: 1; position: relative; overflow: hidden; }
 .board { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
@@ -572,7 +587,7 @@ input.toggle:checked::after { transform: translateX(18px); }
   .insp-body { padding: 4px 12px 14px; }
   .num-in input { width: 96px; }
   .meter-card { width: 200px; }
-  .scope-meas { font-size: 9.5px; max-width: calc(100% - 96px); }
+  .sm-grid { column-gap: 6px; }
   .toast { padding: 8px 12px; font-size: 13px; }
   .dmm-val { font-size: 22px; }
 }

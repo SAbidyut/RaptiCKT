@@ -80,6 +80,7 @@ class App {
   }
 
   openEditor(doc, opts) {
+    if (this.current === 'home') this.home.remember(); // back lands on the same spot in the list
     this.show('editor');
     requestAnimationFrame(() => this.editor.open(doc, opts));
   }
@@ -122,6 +123,7 @@ class App {
   }
 
   openSettings() {
+    if (this.current === 'home') this.home.remember();
     this.prevScreen = this.current;
     renderSettings(this, this.el.querySelector('.screen.settings'));
     this.show('settings');

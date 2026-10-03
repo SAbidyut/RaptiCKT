@@ -79,7 +79,30 @@ export class HomeScreen {
     if (this.tab === 'about') renderAbout(this.app, body);
     if (this.tab === 'manual') this.app.manual.mountTab(body, this);
     this.scrollApi = iosScroll(scroller, body, { onScroll });
+    this.restore(body);
     this.reveal(body);
+  }
+
+  /**
+   * Remember where the page is scrolled (and the category chips), so coming back
+   * from a circuit or Settings lands on the same card instead of the top.
+   */
+  remember() {
+    if (!this.scrollApi) return;
+    const row = this.root.querySelector('.home-body .chips');
+    this.kept = { tab: this.tab, folder: this.folder, cat: this.cat, y: this.scrollApi.y, chips: row ? (row._axis ? row._axis.pos : row.scrollLeft) : 0 };
+  }
+
+  restore(body) {
+    const k = this.kept;
+    this.kept = null;
+    if (!k || k.tab !== this.tab || k.folder !== this.folder || k.cat !== this.cat) return;
+    const row = body.querySelector('.chips');
+    if (row && k.chips) {
+      const ax = row._axis;
+      if (ax) { ax.measure(); ax.pos = ax.bound(k.chips); ax.apply(ax.pos); } else row.scrollLeft = k.chips;
+    }
+    if (k.y > 0) this.scrollApi.scrollTo(k.y, false);
   }
 
   /** Open About and bring the RAPTI institute introduction into view. */
