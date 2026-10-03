@@ -43,6 +43,29 @@ function niceScale(lo, hi, divs, unit) {
   return { d, c: Math.round(mid / d) * d };
 }
 
+/**
+ * Scales for several units with their 0 lines on one shared grid line: picks
+ * the grid line (z divisions above the bottom) and a 1-2-5 step per unit so
+ * that every signal fits and fills its share of the screen as well as possible.
+ */
+function alignedScale(range) {
+  const M = 0.15; // room left at the edges, in divisions
+  let best = null;
+  for (let z = 0; z <= DIV_Y; z++) {
+    const d = {};
+    let cost = Math.abs(z - DIV_Y / 2) * 1e-3, ok = true;
+    for (const [u, r] of range) {
+      const up = r.mx > 1e-9 ? r.mx / (DIV_Y - z - M) : 0, dn = r.mn < -1e-9 ? -r.mn / (z - M) : 0;
+      if ((r.mx > 1e-9 && DIV_Y - z - M <= 0) || (r.mn < -1e-9 && z - M <= 0)) { ok = false; break; }
+      const need = Math.max(up, dn);
+      d[u] = need > 0 ? nice125(need) : u === 'A' ? 1e-3 : 1;
+      if (need > 0) cost += d[u] / Math.max(r.mx - r.mn, Math.abs(r.mx), Math.abs(r.mn));
+    }
+    if (ok && (!best || cost < best.cost)) best = { z, d, cost };
+  }
+  return best || { z: DIV_Y / 2, d: Object.fromEntries([...range].map(([u, r]) => [u, nice125(Math.max(Math.abs(r.mn), Math.abs(r.mx), 1e-9) / 3.8)])) };
+}
+
 /** the next 1-2-5 step up (dir 1) or down (dir −1) from x */
 function step125(x, dir) {
   const n = nice125(x * 0.999);
@@ -238,22 +261,44 @@ export class Scope {
   }
 
   /**
-   * One scale for every channel of a unit (all the volts share one V/div and
-   * one 0 V line, set by the biggest signal), with hysteresis so the picture
-   * does not jump about while it runs.
+   * Keep a scale while the signal still fits it, so the picture does not jump
+   * about while it runs; a better fit (smaller signal, settled level) is taken
+   * once it has lasted a moment.
    */
-  autoScale(unit, mn, mx) {
-    const g = this.scales.get(unit) || {};
-    this.scales.set(unit, g);
-    const want = niceScale(mn, mx, DIV_Y, unit), sc = g.sc, now = performance.now();
-    if (!sc) { g.sc = want; return want; }
-    const eps = sc.d * 0.02, fits = mn >= sc.c - 4 * sc.d - eps && mx <= sc.c + 4 * sc.d + eps;
-    if (!fits) { g.sc = want; g.refitT = 0; return want; }
-    if (Math.abs(want.d - sc.d) > sc.d * 0.01 || Math.abs(want.c - sc.c) > sc.d * 0.01) { // a better fit (smaller signal, settled level): follow it once that has lasted a moment
+  hold(key, want, fits, same) {
+    const g = this.scales.get(key) || {};
+    this.scales.set(key, g);
+    if (!g.sc || !fits(g.sc)) { g.sc = want; g.refitT = 0; return want; }
+    if (!same(g.sc, want)) {
+      const now = performance.now();
       if (!g.refitT) g.refitT = now;
       else if (now - g.refitT > 450) { g.sc = want; g.refitT = 0; }
     } else g.refitT = 0;
     return g.sc;
+  }
+
+  /**
+   * Scales for the channels on screen. Channels of the same unit share one
+   * scale (all the volts one V/div and one 0 V line, set by the biggest
+   * signal). When volts and amps are shown together each unit keeps its own
+   * per-division value but both 0 lines sit on the same grid line, so a
+   * voltage and its current read against one zero.
+   */
+  scalesFor(range) {
+    const close = (a, b, d) => Math.abs(a - b) <= d * 0.01;
+    if (range.size === 1) {
+      const [[u, r]] = [...range];
+      const eps = (sc) => sc.d * 0.02;
+      return new Map([[u, this.hold(u, niceScale(r.mn, r.mx, DIV_Y, u),
+        (sc) => r.mn >= sc.c - 4 * sc.d - eps(sc) && r.mx <= sc.c + 4 * sc.d + eps(sc),
+        (a, b) => close(a.d, b.d, a.d) && close(a.c, b.c, a.d))]]);
+    }
+    const units = [...range.keys()];
+    const fitsAt = (z, u, d) => { const r = range.get(u), e = d * 0.02; return r.mn >= -z * d - e && r.mx <= (DIV_Y - z) * d + e; };
+    const j = this.hold(units.join('+'), alignedScale(range),
+      (sc) => units.every((u) => fitsAt(sc.z, u, sc.d[u])),
+      (a, b) => a.z === b.z && units.every((u) => close(a.d[u], b.d[u], a.d[u])));
+    return new Map(units.map((u) => [u, { d: j.d[u], c: (DIV_Y / 2 - j.z) * j.d[u], z: j.z }]));
   }
 
   /** [left, top, right, bottom] of the graticule in CSS px */
@@ -262,8 +307,7 @@ export class Scope {
     const rows = !this.channels.length ? 0 : this.mode === 'xy' ? 1 : this.channels.length + 1;
     const meas = rows ? rows * ROW + 9 : 0;
     const bot = Math.min(H - 6, Math.max(HEAD + 90, H - meas - 6));
-    const units = new Set(this.channels.map((c) => c.probe.unit)).size;
-    return [units > 1 ? GUT_L + 8 : GUT_L, HEAD, W - GUT_R, bot]; // room for '0V' / '0A' tags
+    return [GUT_L, HEAD, W - GUT_R, bot];
   }
 
   /** the screen: bezel, CRT-style face, 10 × 8 divisions with fine ticks on the centre axes */
@@ -346,7 +390,7 @@ export class Scope {
       const r = range.get(u);
       if (r) { r.mn = Math.min(r.mn, st.mn); r.mx = Math.max(r.mx, st.mx); r.chans.push(ci); } else range.set(u, { mn: st.mn, mx: st.mx, chans: [ci] });
     });
-    const scaleOf = new Map([...range].map(([u, r]) => [u, this.autoScale(u, r.mn, r.mx)]));
+    const scaleOf = this.scalesFor(range);
     this.channels.forEach((c, ci) => {
       const st = sts[ci];
       if (!st) return;
@@ -381,22 +425,26 @@ export class Scope {
     ctx.restore();
     this.plots = { list: plots, t0, kx, L, T, R, B, trig, idxs, tNow };
 
-    // one reference per scale: its 0 level in the left gutter (an arrow at the edge when it is off screen),
-    // and the top / bottom value of the screen at the right edge
+    // the 0 level in the left gutter (one line for every unit; an arrow at the edge when it is off screen)
     const groups = [...range].map(([u, r]) => ({ u, sc: scaleOf.get(u), chans: r.chans }));
-    const multi = groups.length > 1;
     const colOf = (g) => (g.chans.length === 1 ? this.channels[g.chans[0]].probe.color : '#e2e8f0');
+    const g0 = groups[0], y0 = B - (0 - (g0.sc.c - 4 * g0.sc.d)) * (ph / (8 * g0.sc.d));
     ctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
-    const tags = groups.map((g) => { const y0 = B - (0 - (g.sc.c - 4 * g.sc.d)) * (ph / (8 * g.sc.d)); return { g, off: y0 < T + 2 ? -1 : y0 > B - 2 ? 1 : 0, y: Math.max(T + 7, Math.min(B - 7, y0)) }; });
-    tags.sort((a, b) => a.y - b.y);
-    for (let k = 1; k < tags.length; k++) tags[k].y = Math.max(tags[k].y, tags[k - 1].y + 14); // never stacked on top of each other
-    for (let k = tags.length - 1; k >= 0; k--) { const lim = k === tags.length - 1 ? B - 7 : tags[k + 1].y - 14; if (tags[k].y > lim) tags[k].y = lim; }
-    for (const t of tags) this.marker(L - 2, t.y, colOf(t.g), multi ? '0' + t.g.u : '0', t.off);
+    this.marker(L - 2, Math.max(T + 7, Math.min(B - 7, y0)), groups.length > 1 ? '#e2e8f0' : colOf(g0), '0', y0 < T + 2 ? -1 : y0 > B - 2 ? 1 : 0);
     ctx.font = FONT;
-    groups.forEach((g, gi) => {
-      this.plate(fmtSI(g.sc.c + 4 * g.sc.d, g.u, 3), R - 6, T + 14 + gi * 15, colOf(g), 'right');
-      this.plate(fmtSI(g.sc.c - 4 * g.sc.d, g.u, 3), R - 6, B - 6 - (groups.length - 1 - gi) * 15, colOf(g), 'right');
-    });
+    if (groups.length === 1) { // top / bottom value of the screen at the right edge
+      this.plate(fmtSI(g0.sc.c + 4 * g0.sc.d, g0.u, 3), R - 6, T + 14, colOf(g0), 'right');
+      this.plate(fmtSI(g0.sc.c - 4 * g0.sc.d, g0.u, 3), R - 6, B - 6, colOf(g0), 'right');
+    } else { // volts and amps: values every other division, first unit along the left edge, the next along the right
+      const z = g0.sc.z;
+      groups.forEach((g, gi) => {
+        for (let k = 1; k < DIV_Y; k++) {
+          if ((k - z) % 2) continue;
+          const y = B - (k * ph) / DIV_Y + 3.5, txt = fmtSI((k - z) * g.sc.d, g.u, 3);
+          if (gi === 0) this.plate(txt, L + 6, y, colOf(g)); else this.plate(txt, R - 6, y + (gi - 1) * 15, colOf(g), 'right');
+        }
+      });
+    }
     // trigger point (top edge) and level (right edge)
     if (trig && plots[0]) {
       const x = L + PRE * pw, col = plots[0].c.probe.color, ty = plots[0].yOf(trig.level);

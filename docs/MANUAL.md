@@ -403,8 +403,9 @@ Channel colours: yellow, cyan, pink, green, orange, purple. Probes are saved wit
 
 #### Reading the display
 
-- The screen has **10 × 8 divisions**, like a real scope. The screen **auto-scales** to a round **volts per division** (1-2-5 steps). All voltage channels share **one scale and one 0 V line**, set by the biggest signal (for example the input of a rectifier), so input and output can be compared directly; currents get their own scale. The top and bottom values of the screen are written at the right edge.
-- The **0** tag on the left edge marks the **0 V (ground) level** (**0V** / **0A** when volts and amps are both shown). When it is off the screen, the tag sits at the edge with a small arrow.
+- The screen has **10 × 8 divisions**, like a real scope. The screen **auto-scales** to a round **volts per division** (1-2-5 steps). All voltage channels share **one scale and one 0 V line**, set by the biggest signal (for example the input of a rectifier), so input and output can be compared directly. The top and bottom values of the screen are written at the right edge.
+- When **voltages and currents** are shown together, currents get their own A/div but **0 V and 0 A sit on the same line**, so a voltage and its current read against one zero: volt values are written along the left edge and amp values along the right.
+- The **0** tag on the left edge marks the **0 (ground) line**. When it is off the screen, the tag sits at the edge with a small arrow.
 - The bottom left shows the **time per division** (for example `2 ms/div`) and the trigger state: **TRIG ↑ CH1** (picture held still), **AUTO** (waiting for a repeating signal), **ROLL** (trigger off) or **STOP** (frozen).
 - Under the graph, a table gives for each channel the **latest value**, **/div**, **pp** (peak-to-peak), **rms** and the **frequency f** (found from the signal).
 - **Touch and hold** the graph to show a cursor: it reads the time and every channel's value at that point. Pinch to change the time scale.
