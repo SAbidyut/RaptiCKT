@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.database.Cursor;
@@ -20,7 +21,9 @@ import android.os.Vibrator;
 import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -53,6 +56,7 @@ public class MainActivity extends Activity {
     private String pendingOpenName;
     private String pendingOpenText;
     private boolean pageReady;
+    private boolean immersive;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
@@ -152,6 +156,45 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         web.onResume();
+        if (immersive) applyImmersive(true);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && immersive) applyImmersive(true); // bars come back after dialogs and pickers
+    }
+
+    /** Full screen: hide the status and navigation bars (a swipe from the edge shows them briefly). */
+    @SuppressWarnings("deprecation")
+    private void applyImmersive(boolean on) {
+        immersive = on;
+        Window w = getWindow();
+        if (Build.VERSION.SDK_INT >= 28) {
+            WindowManager.LayoutParams lp = w.getAttributes();
+            lp.layoutInDisplayCutoutMode = on ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+            w.setAttributes(lp);
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController c = w.getInsetsController();
+            if (c != null) {
+                if (on) {
+                    c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                    c.hide(WindowInsets.Type.systemBars());
+                } else {
+                    c.show(WindowInsets.Type.systemBars());
+                }
+            }
+        } else {
+            View decor = w.getDecorView();
+            decor.setSystemUiVisibility(on ? View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : View.SYSTEM_UI_FLAG_VISIBLE);
+        }
     }
 
     @Override
@@ -339,6 +382,19 @@ public class MainActivity extends Activity {
                     Toast.makeText(MainActivity.this, "No file manager available", Toast.LENGTH_SHORT).show();
                 }
             });
+        }
+
+        @JavascriptInterface
+        public void setImmersive(boolean on) {
+            ui.post(() -> applyImmersive(on));
+        }
+
+        /** "landscape", "portrait" or anything else for the phone's own rotation. */
+        @JavascriptInterface
+        public void setOrientation(String mode) {
+            ui.post(() -> setRequestedOrientation("landscape".equals(mode) ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    : "portrait".equals(mode) ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED));
         }
 
         @JavascriptInterface

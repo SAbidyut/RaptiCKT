@@ -158,6 +158,14 @@ The editor is where you build and run circuits. From top to bottom:
 | Select | Turns on multi-select mode (chapter 6). |
 | Undo / Redo | Goes back or forward through your last 120 changes. |
 | Fit | Zooms so the whole circuit is visible. |
+| Full | Full screen: hides the bars and the phone's status and navigation bars (chapter 4, *Landscape & full screen*). |
+
+#### Landscape & full screen
+
+- Turn the phone **sideways**: the title, the buttons and the toolbar merge into **one row**, the **oscilloscope sits to the right** of the board instead of above it, and the properties and parts sheets open as a **side panel** on the right, so the circuit keeps its height.
+- Tap **Full** in the toolbar for **full screen**: the bars and the phone's status and navigation bars disappear and the board gets the whole display. A small **tool rail** on the left gives Exit full screen, Run / Pause, Restart, Oscilloscope, Multimeter, Labels, Undo and Fit. Swipe from the edge to see the phone's bars for a moment.
+- Leave full screen with the top button of the rail or the phone's **Back** button.
+- Settings → *Landscape & full screen*: lock the **screen rotation** (auto, always landscape or always portrait) and choose whether the **scope sits beside the circuit** in landscape.
 
 #### The board
 
@@ -551,6 +559,13 @@ Open Settings from the sliders icon on Home or from **⋮ → Settings** in the 
 | Live node voltages | Voltage of every net written on its wire. |
 | Live currents | Current and its direction beside each part. |
 | AC readings | **RMS** (like a meter) or **Instantaneous**. |
+
+#### Landscape & full screen
+
+| Setting | What it does |
+| --- | --- |
+| Screen rotation | **Auto** (follow the phone), **Always landscape** or **Always portrait**. |
+| Scope beside the circuit | On (default): in landscape the oscilloscope sits to the right of the board. Off: above it, as in portrait. |
 
 #### Simulation (for advanced users)
 

@@ -14,6 +14,8 @@ export const DEFAULT_SETTINGS = {
   liveVolts: true,
   liveAmps: true,
   acReadings: 'rms',
+  scopeSide: true,     // landscape: oscilloscope beside the circuit instead of above it
+  orientation: 'auto', // 'auto' | 'landscape' | 'portrait'
   showCharge: true,
   haptics: true,
   sound: true,
@@ -139,4 +141,15 @@ export const bridge = {
     });
   },
   keepScreenOn(on) { try { A()?.keepScreenOn(!!on); } catch { /* ignore */ } },
+  /** Full screen: Android hides the status and navigation bars; a browser uses the Fullscreen API. */
+  setImmersive(on) {
+    try { if (A()) { A().setImmersive(!!on); return; } } catch { /* fallthrough */ }
+    try {
+      const d = document;
+      if (on && !d.fullscreenElement && d.documentElement.requestFullscreen) d.documentElement.requestFullscreen().catch(() => {});
+      if (!on && d.fullscreenElement && d.exitFullscreen) d.exitFullscreen().catch(() => {});
+    } catch { /* ignore */ }
+  },
+  /** 'auto' | 'landscape' | 'portrait' */
+  setOrientation(mode) { try { A()?.setOrientation(String(mode)); } catch { /* ignore */ } },
 };

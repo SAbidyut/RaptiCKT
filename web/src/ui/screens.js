@@ -630,6 +630,9 @@ export function renderSettings(app, root) {
       ${row('Live node voltages', tog('liveVolts'), 'Voltage of every net written on its wire')}
       ${row('Live currents', tog('liveAmps'), 'Current and its direction beside each part')}
       ${row('AC readings', sel('acReadings', [['rms', 'RMS (like a meter)'], ['inst', 'Instantaneous']]), 'Live labels in circuits with an AC supply')}
+      <h4>Landscape &amp; full screen</h4>
+      ${row('Screen rotation', sel('orientation', [['auto', 'Auto (follow the phone)'], ['landscape', 'Always landscape'], ['portrait', 'Always portrait']]))}
+      ${row('Scope beside the circuit', tog('scopeSide'), 'In landscape the oscilloscope sits to the right of the board; off = above it')}
       <h4>Simulation</h4>
       ${row('Integration method', sel('method', [['trap', 'Trapezoidal (accurate)'], ['be', 'Backward Euler (damped)']]))}
       ${row('Start from DC operating point', tog('initialDC'), 'Off = power-on from zero state')}
@@ -665,6 +668,7 @@ export function renderSettings(app, root) {
     s[k] = v;
     app.saveSettings();
     if (k === 'theme') app.applyTheme();
+    if (k === 'orientation') app.bridge.setOrientation(v);
     if (k === 'animations') { if (v === 'auto') motion.reset(); motion.decide(v); renderSettings(app, root); }
   }));
   root.querySelector('[data-x=backup]').addEventListener('click', () => app.backupAll());

@@ -649,6 +649,72 @@ input.toggle:checked::after { transform: translateX(18px); }
   .modal-card { max-height: 92vh; }
 }
 
+/* ------------------------------------------- editor layout, landscape, full screen */
+.ed-head { flex: none; z-index: 20; }
+.ed-main { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.fs-rail { display: none; }
+.stage-fs { position: absolute; right: 10px; top: 10px; z-index: 6; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: var(--text2);
+  background: var(--glass); border: 1px solid var(--border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.stage-fs:active { transform: scale(0.9); }
+.editor.fs .stage-fs, .editor.wide .stage-fs { display: none; }
+.fs-btn { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: #b9c5da; transition: background 0.15s, transform 0.1s; }
+.fs-btn:active { transform: scale(0.9); background: var(--surface3); }
+.fs-btn.on { color: var(--accent); background: rgba(34, 211, 238, 0.12); }
+.fs-btn:disabled { opacity: 0.35; }
+.fs-btn.fs-run { color: #4ade80; }
+.fs-btn.fs-run.running { color: #fb923c; background: rgba(249, 115, 22, 0.14); }
+.fs-sep { height: 1px; margin: 1px 6px; background: var(--border2); flex: none; }
+
+/* full screen: no bars, a floating tool rail on the left of the board */
+.editor.fs .ed-head { display: none !important; }
+.editor.fs .fs-rail { display: flex; flex-direction: column; gap: 3px; position: absolute; left: 8px; top: 8px; z-index: 12; padding: 5px; border-radius: 18px;
+  background: rgba(10, 16, 32, 0.78); border: 1px solid var(--border2); box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.editor.fs .hud-status { left: 66px; }
+.editor.fs .meter-card { left: 66px; }
+.editor.fs .menu { top: 8px; }
+.editor.fs .popover { top: 60px; left: 66px; }
+
+/* phone sideways: one header row, oscilloscope beside the circuit, sheets as a side panel */
+.editor.wide .ed-head { display: flex; align-items: center; gap: 2px; min-height: calc(50px + var(--safe-t)); padding: var(--safe-t) 4px 0; background: var(--bg2); border-bottom: 1px solid var(--border); }
+.editor.wide .topbar { display: contents; }
+.editor.wide .topbar > .icon-btn { order: 3; flex: none; }
+.editor.wide .topbar > [data-a=home] { order: 0; }
+.editor.wide .topbar .title { order: 1; flex: 0 1 200px; min-width: 70px; }
+.editor.wide .topbar .title b { font-size: 14.5px; }
+.editor.wide .toolbar { order: 2; flex: 1 1 auto; min-width: 0; padding: 3px 4px; border: 0; background: none; }
+.editor.wide .tb { min-width: 46px; padding: 3px 5px; font-size: 9.5px; }
+.editor.wide .toolbar .sep { height: 26px; }
+.editor.side-scope .ed-main { flex-direction: row-reverse; }
+.editor.side-scope .scope-panel { height: auto !important; min-height: 0 !important; max-height: none !important; width: 0; border-bottom: 0; border-left: 1px solid var(--border); }
+.editor.side-scope.with-scope .scope-panel { width: clamp(300px, 44%, 580px); }
+.editor.wide .sheet { left: auto; right: 8px; top: calc(8px + var(--safe-t)); bottom: 8px; width: min(440px, 58%); height: auto; max-height: none; border-radius: 20px; border: 1px solid var(--border2);
+  transform: translate3d(110%, 0, 0); padding-bottom: 0; }
+.editor.wide .sheet.open { transform: translate3d(0, 0, 0); }
+.editor.wide .fab { width: 52px; height: 52px; border-radius: 17px; right: 12px; bottom: 12px; }
+.editor.wide .knob { bottom: 72px; right: 8px; }
+.editor.wide .quickbar { bottom: 12px; right: 76px; }
+.editor.wide .hud-status { top: 8px; }
+@media (max-height: 520px) {
+  .editor.fs .fs-rail { gap: 1px; padding: 4px; left: 6px; top: 6px; border-radius: 15px; }
+  .fs-btn { width: 36px; height: 36px; border-radius: 10px; }
+  .fs-btn svg { width: 18px; height: 18px; }
+  .editor.fs .hud-status, .editor.fs .meter-card { left: 58px; }
+}
+@media (max-width: 800px) {
+  .editor.wide .tb span { display: none; }
+  .editor.wide .tb { min-width: 38px; padding: 7px 5px; }
+  .editor.wide .topbar .title { flex-basis: 150px; }
+}
+
+/* home, settings and manual with the phone sideways: slimmer bars */
+@media (orientation: landscape) and (max-height: 520px) {
+  .home-head { padding-top: calc(4px + var(--safe-t)); padding-bottom: 4px; }
+  .bottom-nav { padding: 3px 8px calc(3px + var(--safe-b)); }
+  .bottom-nav button { flex-direction: row; gap: 7px; padding: 6px 14px; }
+  .home-scroll { padding-bottom: calc(60px + var(--safe-b)); }
+  .modal-card { max-height: 94vh; }
+}
+
 /* ------------------------------------------------------------ user manual */
 .manual[lang='bn'] { line-height: 1.7; }
 .man-lang { flex: none; margin: 0 6px 0 2px; white-space: nowrap; }

@@ -49,6 +49,7 @@ export class Editor {
     this.last = performance.now();
     this.loop = this.loop.bind(this);
     window.addEventListener('resize', () => this.onResize());
+    this.updateLayout();
   }
 
   q(s) { return this.root.querySelector(s); }
@@ -58,6 +59,7 @@ export class Editor {
   // ------------------------------------------------------------------ DOM
   buildDOM() {
     this.root.innerHTML = `
+      <div class="ed-head">
       <header class="topbar">
         <button class="icon-btn" data-a="home" title="Back">${icon('back', 22)}</button>
         <div class="title" data-a="rename"><b class="doc-name">Untitled</b><small class="doc-sub">Tap to rename</small></div>
@@ -76,11 +78,27 @@ export class Editor {
         <button class="tb" data-a="undo">${icon('undo', 20)}<span>Undo</span></button>
         <button class="tb" data-a="redo">${icon('redo', 20)}<span>Redo</span></button>
         <button class="tb" data-a="fit">${icon('fit', 20)}<span>Fit</span></button>
+        <button class="tb" data-a="fullscreen">${icon('fullscreen', 20)}<span>Full</span></button>
       </nav>
+      </div>
+      <div class="ed-main">
       <div class="scope-panel"></div>
       <div class="stage">
         <canvas class="board"></canvas>
+        <div class="fs-rail">
+          <button class="fs-btn" data-a="fullscreen" title="Exit full screen">${icon('fullscreenExit', 20)}</button>
+          <button class="fs-btn fs-run" data-a="run" title="Run / Pause">${icon('play', 20)}</button>
+          <button class="fs-btn" data-a="restart" title="Restart">${icon('reset', 19)}</button>
+          <i class="fs-sep"></i>
+          <button class="fs-btn" data-a="scope" title="Oscilloscope">${icon('scope', 20)}</button>
+          <button class="fs-btn" data-a="meter" title="Multimeter">${icon('meter', 20)}</button>
+          <button class="fs-btn" data-a="values" title="Labels">${icon('eye', 20)}</button>
+          <i class="fs-sep"></i>
+          <button class="fs-btn" data-a="undo" title="Undo">${icon('undo', 19)}</button>
+          <button class="fs-btn" data-a="fit" title="Fit">${icon('fit', 19)}</button>
+        </div>
         <button class="hud-status" data-a="speed"></button>
+        <button class="stage-fs" data-a="fullscreen" title="Full screen">${icon('fullscreen', 19)}</button>
         <div class="hud-error"></div>
         <div class="hint"></div>
         <div class="selbar"></div>
@@ -89,6 +107,7 @@ export class Editor {
         <div class="meter-card"></div>
         <button class="fab" data-a="add" title="Add component">${icon('plus', 28)}</button>
         <div class="toast"></div>
+      </div>
       </div>
       <div class="scrim"></div>
       <div class="sheet inspector"></div>
@@ -120,6 +139,7 @@ export class Editor {
       case 'undo': this.undo(); break;
       case 'redo': this.redo(); break;
       case 'fit': this.fit(); break;
+      case 'fullscreen': this.setFullscreen(!this.fullscreen); break;
       case 'add': this.palette.open(); break;
       case 'speed': this.openSpeed(); break;
       default:
@@ -159,6 +179,7 @@ export class Editor {
 
   close() {
     this.active = false;
+    if (this.fullscreen) this.setFullscreen(false);
     this.setRunning(false);
     this.stopSound();
     this.palette.close(); this.analysis.close();
@@ -166,9 +187,37 @@ export class Editor {
   }
 
   onResize() {
+    this.updateLayout();
     this.renderer.resize();
     this.scope.resize();
     this.dirtyDraw = true;
+  }
+
+  /**
+   * Phone sideways (landscape): the bars merge into one row and the
+   * oscilloscope sits beside the circuit instead of above it (Settings →
+   * Landscape & full screen), so the board keeps its height.
+   */
+  updateLayout() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const wide = w > h * 1.15 && h <= 640;
+    this.root.classList.toggle('wide', wide);
+    this.root.classList.toggle('side-scope', wide && this.settings.scopeSide !== false);
+  }
+
+  /** Full screen, as in RaptiAuto: no bars, no system UI, a small tool rail on the left. */
+  setFullscreen(on) {
+    if (!!on === !!this.fullscreen) return;
+    this.fullscreen = !!on;
+    this.root.classList.toggle('fs', this.fullscreen);
+    this.app.bridge.setImmersive(this.fullscreen);
+    this.haptic(8);
+    this.updateToolbar();
+    const relayout = () => { this.onResize(); if (this.scopeOpen) this.scope.draw(); };
+    requestAnimationFrame(relayout);
+    setTimeout(relayout, 120);
+    setTimeout(relayout, 450); // after the system bars have gone
+    if (this.fullscreen && !store.flag('fsTip')) { store.setFlag('fsTip'); this.toast('Full screen: the button at the top left (or Back) exits'); }
   }
 
   fit() {
@@ -403,6 +452,12 @@ export class Editor {
     const playing = this.running && !this.paused;
     run.innerHTML = `${icon(playing ? 'pause' : 'play', 20)}<span>${playing ? 'Pause' : this.running ? 'Resume' : 'Run'}</span>`;
     run.classList.toggle('on', playing);
+    const fr = this.q('.fs-rail .fs-run');
+    fr.innerHTML = icon(playing ? 'pause' : 'play', 20);
+    fr.classList.toggle('running', playing);
+    this.q('.fs-rail [data-a=undo]').disabled = !this.undoStack.length;
+    this.q('.fs-rail [data-a=scope]').classList.toggle('on', !!this.scopeOpen);
+    this.q('.fs-rail [data-a=meter]').classList.toggle('on', this.meter.open);
     this.q('[data-a=undo]').disabled = !this.undoStack.length;
     this.q('[data-a=redo]').disabled = !this.redoStack.length;
     this.q('[data-a=multi]').classList.toggle('on', this.multi);
@@ -1087,6 +1142,7 @@ export class Editor {
     if (this.inspector.sheetOpen) { this.inspector.closeSheet(); return true; }
     if (this.selection.size || this.selWires.size) { this.select(null); return true; }
     if (this.meter.open) { this.toggleMeter(false); return true; }
+    if (this.fullscreen) { this.setFullscreen(false); return true; }
     return false;
   }
 

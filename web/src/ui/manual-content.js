@@ -216,6 +216,19 @@ export const CHAPTERS = [
         [['Select', 'Select'], ['Turns on multi-select mode ({{ch:editing}}).', 'মাল্টি-সিলেক্ট মোড চালু করে ({{ch:editing}})।']],
         [['Undo / Redo', 'Undo / Redo'], ['Goes back or forward through your last 120 changes.', 'শেষ ১২০টি পরিবর্তনের মধ্যে পিছনে বা সামনে যায়।']],
         [['Fit', 'Fit'], ['Zooms so the whole circuit is visible.', 'পুরো সার্কিট দেখা যায় এমনভাবে জুম করে।']],
+        [['Full', 'Full'], ['Full screen: hides the bars and the phone\'s status and navigation bars ({{ch:editor}}, *Landscape & full screen*).', 'ফুল স্ক্রিন: বার ও ফোনের স্ট্যাটাস/নেভিগেশন বার লুকায় ({{ch:editor}}, *ল্যান্ডস্কেপ ও ফুল স্ক্রিন*)।']],
+      ]),
+      H('Landscape & full screen', 'ল্যান্ডস্কেপ ও ফুল স্ক্রিন'),
+      L([
+        'Turn the phone **sideways**: the title, the buttons and the toolbar merge into **one row**, the **oscilloscope sits to the right** of the board instead of above it, and the properties and parts sheets open as a **side panel** on the right, so the circuit keeps its height.',
+        'Tap **Full** in the toolbar for **full screen**: the bars and the phone\'s status and navigation bars disappear and the board gets the whole display. A small **tool rail** on the left gives Exit full screen, Run / Pause, Restart, Oscilloscope, Multimeter, Labels, Undo and Fit. Swipe from the edge to see the phone\'s bars for a moment.',
+        'Leave full screen with the top button of the rail or the phone\'s **Back** button.',
+        'Settings → *Landscape & full screen*: lock the **screen rotation** (auto, always landscape or always portrait) and choose whether the **scope sits beside the circuit** in landscape.',
+      ], [
+        'ফোন **আড়াআড়ি** করুন: টাইটেল, বাটন ও টুলবার **এক লাইনে** চলে আসে, **অসিলোস্কোপ বোর্ডের ডানপাশে** বসে (উপরে নয়), আর প্রপার্টিজ ও পার্টসের শিট ডানদিকে **সাইড প্যানেল** হিসেবে খোলে, তাই সার্কিট পুরো উচ্চতা পায়।',
+        'টুলবারের **Full** চাপলে **ফুল স্ক্রিন**: বারগুলো ও ফোনের স্ট্যাটাস/নেভিগেশন বার লুকিয়ে যায়, বোর্ড পুরো ডিসপ্লে পায়। বাঁদিকের ছোট **টুল রেলে** আছে: ফুল স্ক্রিন বন্ধ, Run / Pause, Restart, অসিলোস্কোপ, মাল্টিমিটার, লেবেল, Undo ও Fit। কিনারা থেকে সোয়াইপ করলে ফোনের বার কিছুক্ষণ দেখা যায়।',
+        'রেলের উপরের বাটন বা ফোনের **Back** চাপলে ফুল স্ক্রিন বন্ধ হয়।',
+        'Settings → *Landscape & full screen*: **স্ক্রিন রোটেশন** লক করুন (অটো, সবসময় ল্যান্ডস্কেপ বা সবসময় পোর্ট্রেট) আর ল্যান্ডস্কেপে **স্কোপ সার্কিটের পাশে** থাকবে কিনা বাছুন।',
       ]),
       H('The board', 'বোর্ড'),
       L([
@@ -738,6 +751,11 @@ export const CHAPTERS = [
         [['Live node voltages', 'Live node voltages'], ['Voltage of every net written on its wire.', 'প্রতিটি নেটের ভোল্টেজ তার ওপর লেখা।']],
         [['Live currents', 'Live currents'], ['Current and its direction beside each part.', 'প্রতিটি পার্টের পাশে কারেন্ট ও তার দিক।']],
         [['AC readings', 'AC readings'], ['**RMS** (like a meter) or **Instantaneous**.', '**RMS** (মিটারের মতো) অথবা **Instantaneous** (তাৎক্ষণিক)।']],
+      ]),
+      H('Landscape & full screen', 'ল্যান্ডস্কেপ ও ফুল স্ক্রিন'),
+      T([['Setting', 'সেটিং'], ['What it does', 'কী করে']], [
+        [['Screen rotation', 'Screen rotation'], ['**Auto** (follow the phone), **Always landscape** or **Always portrait**.', '**Auto** (ফোন অনুযায়ী), **Always landscape** (সবসময় আড়াআড়ি) অথবা **Always portrait** (সবসময় খাড়া)।']],
+        [['Scope beside the circuit', 'Scope beside the circuit'], ['On (default): in landscape the oscilloscope sits to the right of the board. Off: above it, as in portrait.', 'চালু (ডিফল্ট): ল্যান্ডস্কেপে অসিলোস্কোপ বোর্ডের ডানপাশে বসে। বন্ধ: পোর্ট্রেটের মতো উপরে।']],
       ]),
       H('Simulation (for advanced users)', 'সিমুলেশন (অভিজ্ঞ ব্যবহারকারীদের জন্য)'),
       T([['Setting', 'সেটিং'], ['What it does', 'কী করে']], [
