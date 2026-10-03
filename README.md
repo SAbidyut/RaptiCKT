@@ -48,14 +48,19 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Tap switches and buttons live
   - Rotary knob for any value
   - Undo/redo and multi-select
-- 29 explained examples (including tube light, staircase wiring, house wiring, dimmer, power-factor correction and a DOL motor starter), save/export/import `.rckt` files, PNG export, 3 themes, and an About section with RAPTI information.
+- **7 big build-along projects** (first chip in Examples → *Projects*), each explained stage by stage:
+  - **Complete house wiring (2-room flat)**: energy meter → DP main switch → 30 mA RCCB → one MCB per circuit (lights with one-way and staircase 2-way switches, calling bell, fan with regulator, 2 kW geyser, earthed sockets). Set a socket to *Faulty appliance* to trip the RCCB or *Short circuit* to trip its MCB.
+  - **16-bit RAM (4 words × 4 bits)**: 16 D-latch memory cells, an address decoder driving the word lines, bit lines from a hex keypad and a read multiplexer per column — write a digit at each address and read it back.
+  - **Mains to 5 V regulated power supply**: fuse → transformer → bridge → smoothing capacitor → 7805, with the ripple and the flat 5 V side by side on the scope.
+  - **Traffic light controller** (CD4017 + diode-OR logic), **4-bit binary adder** (two hex keypads, sum + carry), **digital seconds counter 00–59** (cascaded BCD counters, mod-60 reset, 7-segment displays) and an **automatic street light** (LDR → transistor → 12 V relay → 230 V lamp).
+- 37 explained examples in all (also tube light, staircase wiring, house wiring, dimmer, power-factor correction, a DOL motor starter and a 1-bit NOR-latch memory cell), save/export/import `.rckt` files, PNG export, 3 themes, and an About section with RAPTI information.
 
 ## Simulation engine (web/src/engine)
 
 - Modified Nodal Analysis with dense LU and partial pivoting, plus iterative refinement for badly scaled matrices.
 - Newton–Raphson with SPICE `pnjlim` junction limiting. Timesteps are halved automatically when a step does not converge.
 - Trapezoidal integration by default, switching to backward Euler right after discontinuities. Capacitors use companion models; inductors and transformers use branch-current formulations.
-- DC operating point with gmin stepping and source stepping, and automatic referencing of galvanically isolated islands.
+- DC operating point with gmin stepping and source stepping, and automatic referencing of galvanically isolated islands. Logic feedback loops (latches made of gates) are settled one gate at a time, so they power up in a stable state.
 - Small-signal AC analysis: devices are linearised at the operating point and solved with complex MNA.
 - SPICE-default tolerances: RELTOL 1e-3, VNTOL 1 µV, ABSTOL 1 nA, GMIN 1e-12. All are adjustable in Settings.
 
@@ -66,7 +71,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 - RC −3 dB/−45°, transformer ratio, logic truth tables
 - 555 frequency, 7805/LM317, motor steady state, solar Voc, relay, counter
 
-It also builds every example and checks that it is fully wired, solvable and gives the expected values.
+It also builds every example and checks that it is fully wired, solvable and gives the expected values; `tests/projects.test.js` runs the big projects like the real circuits (RCCB/MCB trips, RAM write/read-back, 59 → 00 roll-over, traffic-light timing, 5 V regulation, day/night switching).
 
 ## Project layout
 

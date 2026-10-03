@@ -527,9 +527,241 @@ export const EXAMPLES = [
       b.doc.simSettings.speed = 0.1;
     },
   },
+
+  // ------------------------------------------------------------ big projects
+  {
+    id: 'flat', cat: 'Projects', title: 'Complete house wiring (2-room flat)',
+    desc: 'A whole flat as a ladder diagram. Incomer: energy meter → double-pole main switch → 30 mA RCCB. The L bus feeds one MCB per circuit and every load returns to the N bus: lights (bedroom and drawing-room lamps, a staircase lamp on two 2-way switches, calling bell), fan with regulator, 2 kW geyser and two earthed sockets. Tap switches to watch the total current and kWh change; set a socket to "Faulty appliance" to trip the RCCB or to "Short circuit" to trip its MCB.',
+    build(b) {
+      // incomer — the neutral runs on the upper line, the phase on the lower one
+      b.vr('mains', -4, -6);
+      b.el('kwh', 0, -4, {}, 0, true);
+      b.h('dpst', 6, -5, { on: true });
+      b.el('rccb', 12, -5, { in: 40, idn: 0.03 }, 0, true);
+      b.h('acamp', 8, 0);
+      b.w([-4, -4], [-2, -4]); b.w([2, -4], [4, -4]); b.w([8, -4], [10, -4]);
+      b.w([-4, -8], [3, -8], [3, -6], [4, -6]); b.w([0, -6], [0, -8]); b.w([8, -6], [10, -6]);
+      // L bus down the left (through the ammeter), N bus down the right
+      b.w([14, -4], [16, -4], [16, 0], [10, 0]); b.w([6, 0], [0, 0], [0, 31]);
+      b.w([14, -6], [28, -6], [28, 37]);
+      const mcb = (y, p) => { b.h('mcb', 4, y, p); b.w([0, y], [2, y]); };
+      const load = (y, type, p) => { const e = b.h(type, 22, y, p); b.w([24, y], [28, y]); return e; };
+      // circuit 1 – lighting (B6): one MCB, several points
+      mcb(4, { in: 6, curve: 'B' }); b.w([6, 4], [8, 4], [8, 16]);
+      b.h('oneway', 10, 4, { on: true }); b.w([12, 4], [20, 4]); load(4, 'bulb', { w: 100 });
+      b.h('oneway', 10, 8, { on: true }); b.w([12, 8], [20, 8]); load(8, 'bulb', { w: 40 });
+      b.h('twoway', 10, 12); b.el('twoway', 16, 12, {}, 2);
+      b.w([12, 11], [14, 11]); b.w([12, 13], [14, 13]); b.w([18, 12], [20, 12]); load(12, 'bulb', { w: 60 });
+      b.h('pushno', 10, 16); b.w([12, 16], [20, 16]); load(16, 'bell');
+      // circuit 2 – fan (B6) with capacitive regulator
+      mcb(21, { in: 6, curve: 'B' }); b.w([6, 21], [8, 21]);
+      b.h('oneway', 10, 21, { on: true }); b.h('fanregcap', 15, 21, { step: 4 });
+      b.w([12, 21], [13, 21]); b.w([17, 21], [20, 21]); load(21, 'fan');
+      // circuit 3 – geyser (C20), switched off
+      mcb(26, { in: 20, curve: 'C' }); b.w([6, 26], [8, 26]);
+      b.h('oneway', 10, 26, { on: false }); b.w([12, 26], [20, 26]); load(26, 'heater', { w: 2000 });
+      // circuit 4 – switched sockets (C16), earth pins bonded to PE
+      mcb(31, { in: 16, curve: 'C' }); b.w([6, 31], [8, 31], [8, 37]);
+      for (const [y, app] of [[31, 'iron'], [37, 'tv']]) {
+        b.h('oneway', 10, y, { on: true }); b.w([12, y], [21, y]);
+        b.el('socket', 22, y + 2, { app }, 1, true);
+        b.w([23, y], [28, y]); b.w([24, y + 2], [25, y + 2]); b.el('earth', 25, y + 2);
+      }
+      b.el('label', 6, -2.2, { text: 'Main switch', size: 10 });
+      [[4, 'Bedroom'], [8, 'Drawing room'], [12, 'Staircase'], [16, 'Calling bell'], [21, 'Ceiling fan'], [26, 'Geyser'], [31, 'Kitchen socket'], [37, 'TV socket']]
+        .forEach(([y, text]) => b.el('label', -4, y, { text, size: 11 }));
+      b.doc.simSettings.speed = 0.1;
+    },
+  },
+  {
+    id: 'norlatch', cat: 'Digital', title: '1-bit memory cell (NOR latch)',
+    desc: 'The building block of every static RAM: two NOR gates, each feeding the other. Press SET and Q goes high; press RESET and it goes low. Let go and the loop keeps the bit — that is memory. Pressing both at once gives the forbidden state (Q = Q̄ = 0).',
+    build(b) {
+      b.el('nor', 8, 6); b.el('nor', 8, 0); // Q̄ gate first: the cell powers up holding 0
+      b.el('logicin', 1, -1, { momentary: true }); b.el('logicin', 1, 7, { momentary: true });
+      b.w([2, -1], [6, -1]); b.w([2, 7], [6, 7]);
+      b.w([10, 0], [11, 0], [11, 2], [5, 2], [5, 5], [6, 5]); // Q → lower gate
+      b.w([10, 6], [12, 6], [12, 4], [4, 4], [4, 1], [6, 1]); // Q̄ → upper gate
+      b.w([11, 0], [14, 0]); b.w([12, 6], [14, 6]);
+      b.el('logicout', 15, 0); b.el('logicout', 15, 6);
+      b.el('label', -2.5, -1, { text: 'RESET', size: 11 }); b.el('label', -2.5, 7, { text: 'SET', size: 11 });
+      b.el('label', 18, 0, { text: 'Q', size: 13 }); b.el('label', 18, 6, { text: 'Q̄', size: 13 });
+    },
+  },
+  {
+    id: 'ram16', cat: 'Projects', title: '16-bit RAM (4 words × 4 bits)',
+    desc: 'A small static RAM built like a real memory chip: 16 D-latch cells in 4 rows (words) × 4 columns (bits). To write: set DATA IN on the hex keypad, choose the address with A1 A0 and hold WRITE — the address decoder raises one word line and that row of cells copies the bit lines. To read: the multiplexer under each column picks the cell of the addressed row, so DATA OUT shows the word stored at A1 A0. Store a different digit at each of the four addresses, then step through them.',
+    build(b) {
+      const cols = [3, 2, 1, 0].map((bit, i) => ({ bit, x: 10 + 10 * i })); // bit 3 on the left, like a binary number
+      const rows = [0, 7, 14, 21]; // word 0 … word 3
+      // DATA IN: hex keypad → one bit line down the left of each column, tapped into every cell's D input
+      b.el('hexin', 0, -6, { v: 10 });
+      b.el('label', -4.6, -6, { text: 'DATA IN', size: 11 });
+      for (const { bit, x } of cols) {
+        const bl = x - 3, y0 = -7 + bit;
+        b.w([2, y0], [bl, y0], [bl, rows[3] - 1], [x - 2, rows[3] - 1]);
+        for (const y of rows.slice(0, 3)) b.w([bl, y - 1], [x - 2, y - 1]);
+        b.el('label', x, -3.2, { text: 'bit ' + bit, size: 10 });
+      }
+      // the memory cells; each Q runs down the right of its column to that column's read multiplexer
+      rows.forEach((y, j) => {
+        for (const { x } of cols) {
+          b.el('dlatch', x, y);
+          b.w([x - 2, y + 1], [x - 2, y + 3]); // EN ← word line j
+          b.w([x + 2, y - 1], [x + 6 - j, y - 1], [x + 6 - j, 25]); // Q → mux input I_j
+        }
+        b.el('label', -2.5, y, { text: 'word ' + j, size: 10 });
+      });
+      // address decoder (write): WRITE enables it, so only the addressed word line goes high
+      b.el('dec2to4', 3, 27, {}, 3);
+      rows.forEach((y, j) => b.w([2 + j, 25], [2 + j, y + 3], [cols[3].x - 2, y + 3]));
+      // read multiplexers: S1 S0 = address, output = the addressed cell of this column
+      for (const { bit, x } of cols) {
+        b.el('mux4', x + 5, 27, {}, 1);
+        b.w([x + 1, 27], [x - 1, 27], [x - 1, 34]); // S0 ← A0
+        b.w([x + 1, 28], [x, 28], [x, 32]); // S1 ← A1
+        b.w([x + 5, 29], [x + 5, 36 + bit], [47, 36 + bit]); // Y → DATA OUT bit
+      }
+      b.el('hexdisp', 49, 37);
+      b.el('label', 49, 42, { text: 'DATA OUT', size: 11 });
+      // address and write controls
+      b.el('logicin', -4, 32); b.el('logicin', -4, 34);
+      b.w([-3, 32], [cols[3].x, 32]); b.w([-3, 34], [cols[3].x - 1, 34]);
+      b.w([3, 29], [3, 32]); b.w([2, 29], [2, 34]);
+      b.el('label', -7, 32, { text: 'A1', size: 11 }); b.el('label', -7, 34, { text: 'A0', size: 11 });
+      b.el('logicin', -4, 30, { momentary: true }); b.w([-3, 30], [4, 30], [4, 29]);
+      b.el('label', -7.6, 30, { text: 'WRITE', size: 11 });
+    },
+  },
+  {
+    id: 'psu5v', cat: 'Projects', title: 'Mains to 5 V regulated power supply',
+    desc: 'Every stage of a linear DC supply: 230 V mains → fuse → 230 V : 12 V transformer → bridge rectifier → 1000 µF smoothing capacitor → 7805 regulator → steady 5 V with a power LED and a 100 Ω load. The scope compares the rippling ≈15 V on the capacitor with the flat 5 V output. Lower the mains voltage or the capacitor to watch the ripple dip below 7 V and the regulator drop out.',
+    build(b) {
+      b.v('mains', 0, 0);
+      b.h('fuse', 4, -4, { rating: 0.5 });
+      b.el('txstepdown', 10, 0);
+      b.v('acvolt', 14, 0);
+      b.el('bridge', 20, 0);
+      b.v('ecap', 25, 1, { c: 1000e-6, vmax: 25 });
+      b.el('reg78', 30, -1, { vout: 5, vdo: 2 });
+      b.v('ecap', 35, 1, { c: 100e-6, vmax: 16 });
+      b.v('resistor', 39, 1, { r: 330 });
+      b.v('led', 39, 5, { color: 'green' });
+      b.v('resistor', 44, 1, { r: 100 });
+      b.v('voltmeter', 49, 1);
+      b.el('ground', 30, 9);
+      b.w([0, -2], [0, -4], [2, -4]); b.w([6, -4], [8, -4], [8, -2]); b.w([0, 2], [0, 4], [8, 4], [8, 2]);
+      b.w([12, -2], [14, -2]); b.w([14, -2], [16, -2], [16, -1], [18, -1]);
+      b.w([12, 2], [14, 2]); b.w([14, 2], [16, 2], [16, 1], [18, 1]);
+      b.w([22, -1], [28, -1]); b.w([32, -1], [49, -1]);
+      b.w([39, 7], [39, 9]); b.w([22, 1], [22, 9], [49, 9]);
+      for (const x of [25, 35, 44, 49]) b.w([x, 3], [x, 9]);
+      b.w([30, 1], [30, 9]);
+      [[4, -6.5, 'Fuse'], [10, -4, 'Step-down'], [20, -4, 'Rectifier'], [25, -3.5, 'Filter'], [30, -4.5, 'Regulator'], [44, -3.5, 'Load']]
+        .forEach(([x, y, text]) => b.el('label', x, y, { text, size: 10 }));
+      b.node(25, -1, C[0]); b.node(32, -1, C[1]);
+      b.doc.simSettings.speed = 0.05;
+    },
+  },
+  {
+    id: 'traffic', cat: 'Projects', title: 'Traffic light controller (4017)',
+    desc: 'A 1 Hz clock steps a CD4017 decade counter through ten states — exactly one output is high at a time. Diodes combine the outputs (diode-OR logic): Q0–Q4 light RED for 5 s, Q5–Q8 GREEN for 4 s and Q9 YELLOW for 1 s, then the cycle repeats. Rewire the diodes to make your own timing.',
+    build(b) {
+      b.el('clock', 2, 0, { freq: 1 });
+      b.el('decade', 6, 0);
+      b.w([2, 0], [4, 0]); b.w([4, 1], [4, 3]); b.el('ground', 4, 3);
+      // Q0 (top) runs furthest right, so the ten output lines never cross
+      for (let k = 0; k < 10; k++) {
+        const x = 12 + 3 * (9 - k);
+        b.w([8, k - 4], [x, k - 4], [x, 7]);
+        b.v('diode', x, 9);
+      }
+      b.w([27, 11], [39, 11]); b.w([15, 11], [24, 11]); // red bus (Q0–Q4), green bus (Q5–Q8)
+      for (const [x, color, text] of [[12, 'yellow', 'YELLOW'], [20, 'green', 'GREEN'], [32, 'red', 'RED']]) {
+        b.w([x, 11], [x, 14]);
+        b.v('led', x, 16, { color });
+        b.v('resistor', x, 20, { r: 220 });
+        b.el('ground', x, 22);
+        b.el('label', x, 24.6, { text, size: 11 });
+      }
+      b.doc.simSettings.speed = 1;
+      b.doc.simSettings.maxStep = 5e-4; // a 1 Hz clock needs no finer step; keeps slow phones real-time
+    },
+  },
+  {
+    id: 'adder', cat: 'Projects', title: '4-bit binary adder (calculator)',
+    desc: 'Adds two 4-bit numbers, like the ALU inside a CPU. Tap keypad A and keypad B to pick 0–F; the 74HC283 adder shows the sum on the hex display. A sum above 15 does not fit in 4 bits, so CARRY lights — it is worth 16 (A = 9, B = 8 → display 1 + CARRY = 17). Cin adds one more, which is how adders are chained into 8, 16 or 64 bits.',
+    build(b) {
+      b.el('adder4', 10, 0);
+      b.el('hexin', 1, -3, { v: 9 });
+      b.el('hexin', 1, 6, { v: 5 });
+      for (let k = 0; k < 4; k++) {
+        b.w([3, k - 4], [8, k - 4]); // A
+        b.w([3, 5 + k], [4 + k, 5 + k], [4 + k, k], [8, k]); // B
+        b.w([12, k - 2], [16, k - 2]); // sum
+      }
+      b.el('logicin', 5, 11); b.w([6, 11], [8, 11], [8, 4]);
+      b.el('hexdisp', 18, -1);
+      b.w([12, 2], [13, 2], [13, 4], [21, 4]); b.el('logicout', 22, 4);
+      b.el('label', -2.5, -3, { text: 'A', size: 14 }); b.el('label', -2.5, 6, { text: 'B', size: 14 });
+      b.el('label', 2, 11, { text: 'Cin', size: 11 }); b.el('label', 18, -5, { text: 'A + B', size: 11 });
+      b.el('label', 25.5, 4, { text: 'CARRY', size: 11 });
+    },
+  },
+  {
+    id: 'clock60', cat: 'Projects', title: 'Digital seconds counter 00–59',
+    desc: 'The heart of every digital clock. A 1 Hz clock drives the units BCD counter; each time it wraps 9 → 0 its carry clocks the tens counter. An AND gate watches the tens counter: the moment it reaches 6 (Q1 = Q2 = 1) it resets it, so the display goes 58, 59, 00. Each digit passes through a BCD → 7-segment decoder. Turn the clock up to 10 Hz to see the roll-over sooner.',
+    build(b) {
+      // tens digit (top row) – reset to 0 when it reaches 6
+      b.el('bcdcounter', 6, 0); b.el('decoder7', 14, 0); b.el('sevenseg', 22, 0);
+      for (let k = 0; k < 4; k++) b.w([8, k - 2], [12, k - 2]);
+      for (let i = 0; i < 7; i++) b.w([16, i - 3], [20, i - 3]);
+      b.el('and', 12, 5);
+      b.w([10, 0], [10, 4]); b.w([9, -1], [9, 6], [10, 6]); // Q2, Q1 → AND
+      b.w([14, 5], [15, 5], [15, 7], [3, 7], [3, 1], [4, 1]); // AND → RST
+      // units digit (bottom row); its decoder feeds the right-hand display
+      b.el('bcdcounter', 6, 12); b.el('decoder7', 14, 12); b.el('sevenseg', 36, 0);
+      for (let k = 0; k < 4; k++) b.w([8, k + 10], [12, k + 10]);
+      for (let i = 0; i < 7; i++) b.w([16, 9 + i], [25 + i, 9 + i], [25 + i, i - 3], [34, i - 3]);
+      b.el('clock', 0, 11, { freq: 1 }); b.w([0, 11], [4, 11]);
+      b.w([4, 13], [4, 15]); b.el('ground', 4, 15);
+      b.w([8, 14], [9, 14], [9, 17], [2, 17], [2, -1], [4, -1]); // units CO → tens CLK
+      b.el('label', 22, -5, { text: 'tens', size: 11 }); b.el('label', 36, -5, { text: 'units', size: 11 });
+      b.el('label', 18.5, 5.6, { text: '= 6 → reset', size: 10 });
+      b.doc.simSettings.speed = 1;
+      b.doc.simSettings.maxStep = 5e-4; // a 1 Hz clock needs no finer step; keeps slow phones real-time
+    },
+  },
+  {
+    id: 'streetlight', cat: 'Projects', title: 'Automatic street light (LDR + relay)',
+    desc: 'A low-voltage sensor switching a mains lamp. In daylight the LDR has a low resistance and holds the transistor\'s base low. At dusk (below ≈30 lux) the divider voltage rises, the BC547 turns on and energises the 12 V relay, whose contact switches the 230 V lamp. The diode absorbs the coil\'s kick at switch-off, and because the relay drops out at a lower current than it pulls in, the lamp only turns off again above ≈60 lux — no chattering at dusk. Select the LDR and turn the light level down.',
+    build(b) {
+      b.el('rail', 2, -12, { amp: 12 });
+      b.v('resistor', 2, -6, { r: 47000 });
+      b.v('ldr', 2, 2, { lux: 1000 });
+      b.h('resistor', 8, -2, { r: 10000 });
+      b.el('npn', 12, -2, { model: 'BC547' });
+      b.el('relay', 16, -8, { vcoil: 12, rcoil: 400 });
+      b.vr('diode', 10, -8);
+      b.el('ground', 8, 6);
+      b.w([2, -12], [13, -12], [13, -9], [14, -9]); b.w([2, -12], [2, -8]);
+      b.w([2, -4], [2, 0]); b.w([2, -2], [6, -2]);
+      b.w([13, -4], [13, -7], [14, -7]); b.w([10, -10], [10, -12]); b.w([10, -6], [13, -6]);
+      b.w([13, 0], [13, 6]); b.w([2, 4], [2, 6], [13, 6]);
+      // 230 V side: L → relay COM, NO → lamp → N
+      b.vr('mains', 28, -6);
+      b.h('bulb', 24, -14, { w: 100 });
+      b.w([17, -6], [17, -2], [28, -2], [28, -4]);
+      b.w([18, -10], [18, -14], [22, -14]); b.w([26, -14], [28, -14], [28, -8]);
+      b.el('label', 8, -14.6, { text: '12 V control', size: 10 });
+      b.el('label', 32.5, -11, { text: '230 V lamp', size: 10 });
+      b.doc.simSettings.speed = 0.1;
+    },
+  },
 ];
 
-export const EXAMPLE_ALLOW_OPEN = { relay: 1 };
+// unused outputs that are legitimately left open (relay NC contacts, the RAM cells' Q̄, the tens carry)
+export const EXAMPLE_ALLOW_OPEN = { relay: 1, ram16: 16, clock60: 1, streetlight: 1 };
 
 export function buildExample(ex) {
   const b = builder(ex.title);
@@ -542,5 +774,6 @@ export function buildExample(ex) {
 export function exampleCategories() {
   const cats = [];
   for (const e of EXAMPLES) if (!cats.includes(e.cat)) cats.push(e.cat);
-  return cats;
+  // the big build-along projects come first, right after "All"
+  return cats.includes('Projects') ? ['Projects', ...cats.filter((c) => c !== 'Projects')] : cats;
 }

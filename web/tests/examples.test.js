@@ -65,17 +65,21 @@ test('example values are physically correct', () => {
 
 // Robustness: run every example with the same timestep the editor picks
 // (and a few awkward multiples of it) for several seconds of screen time.
+// Mirrors Editor.computeTiming / updateDt: mains and 3-phase supplies count as
+// periodic sources, and an example's own fixed timestep wins.
 function appTiming(doc) {
   let fmax = 0;
   for (const e of doc.elements) {
     const p = e.p;
-    if (p.wave && p.wave !== 'dc' && p.freq) fmax = Math.max(fmax, p.freq);
+    const periodic = p.freq > 0 && (p.wave ? p.wave !== 'dc' : e.constructor.category === 'Sources');
+    if (periodic) fmax = Math.max(fmax, p.freq);
     if (e.constructor.type === 'mic') fmax = Math.max(fmax, p.freq);
   }
   const speed = doc.simSettings.speed || (fmax > 0 ? Math.min(1, 2 / fmax) : 5e-3);
   let dt = speed / 2400;
   if (fmax > 0) dt = Math.min(dt, 1 / (fmax * 200));
-  return { speed, dt: Math.min(dt, 1e-4) };
+  dt = Math.min(dt, doc.simSettings.maxStep || 1e-4);
+  return { speed, dt: doc.simSettings.dt || dt };
 }
 
 for (const ex of EXAMPLES) {
