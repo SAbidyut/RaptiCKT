@@ -1,5 +1,5 @@
-// Visual smoke test: loads the built app in Chromium at phone size, clicks through screens,
-// and saves screenshots. Usage: node tests/shots.mjs <outdir>
+// Visual smoke test in landscape: the built app in Chromium at a phone held sideways (892 × 412),
+// clicking through screens and saving screenshots. Usage: node tests/shots-landscape.mjs <outdir>
 import { chromium } from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs';
