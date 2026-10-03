@@ -155,3 +155,35 @@ test('current animation: return current flows into ground, not along an idle wir
     if (touches) assert.ok(Math.abs(ed.i) < 1e-9, 'emitter wire carries ' + ed.i);
   }
 });
+
+test('switching a fan off: no ±kV ringing on its winding, and it runs down at 0 A', () => {
+  // the editor calls sim.discontinuity() for every tap; without it the trapezoidal rule rang
+  // at ~11 kV on the cut inductive winding and the fan read 346 rpm at 0 A
+  const { doc, sim, run } = open('flat');
+  const fan = doc.elements.find((e) => e.constructor.type === 'fan');
+  const mcb = doc.elements.find((e) => e.name === 'Q3');
+  run(0.5, 4.1667e-5);
+  assert.ok(fan.speed > 150, 'running ' + fan.speed);
+  mcb.onTap(); sim.discontinuity();
+  run(0.5, 4.1667e-5);
+  let vmax = 0;
+  for (let k = 0; k < 2000; k++) { run(4.1667e-5, 4.1667e-5); vmax = Math.max(vmax, Math.abs(fan.voltageDiff(sim))); }
+  assert.ok(vmax < 1, 'fan voltage after switch-off ' + vmax);
+  run(1.5, 4.1667e-5);
+  assert.ok(fan.speed < 10 && fan.irms.v < 1e-3, `fan ${fan.speed} rpm at ${fan.irms.v} A`);
+});
+
+test('5 V supply: the output capacitor carries no phantom current, and the 7805 can be turned up', () => {
+  const { doc, sim, run } = open('psu5v');
+  const reg = doc.elements.find((e) => e.constructor.type === 'reg78');
+  const c2 = doc.elements.find((e) => e.name === 'C2');
+  run(0.2, 2.0833e-5);
+  let sq = 0, n = 0;
+  for (let k = 0; k < 1000; k++) { run(2.0833e-5, 2.0833e-5); sq += c2.i * c2.i; n++; }
+  assert.ok(Math.sqrt(sq / n) < 5e-3, 'C2 RMS current ' + Math.sqrt(sq / n)); // was 0.22 A of trapezoidal ringing
+  reg.p.vout = 10; reg.onParamChange('vout'); sim.discontinuity(); // used to stop with "failed to converge"
+  run(0.05, 2.0833e-5);
+  const out = sim.pointNode(32 * 20, -20);
+  assert.ok(Math.abs(sim.v(out) - 10) < 0.05, 'Vout ' + sim.v(out));
+  assert.ok(Math.abs(reg.i - 0.124) < 0.01, 'Iout ' + reg.i); // 100 mA load + 24 mA LED, steady
+});

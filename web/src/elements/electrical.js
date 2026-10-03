@@ -356,11 +356,14 @@ export class CeilingFan extends TwoTerm {
     { key: 'rpm', label: 'Rated speed', unit: 'rpm', def: 330, min: 10, max: 3000 },
     { key: 'freq', label: 'Rated frequency', unit: 'Hz', def: 50, min: 1, max: 400 },
   ];
-  static description = 'Ceiling fan as an equivalent series R–L load (from rated power and power factor). Speed follows the applied RMS voltage with the fan load curve and the blade inertia; stalls below ≈35 % voltage — try it with a regulator.';
-  constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.rms = new Rms(0.1); this.speed = 0; this.ang = 0; }
+  static description = 'Ceiling fan as an equivalent series R–L load (from rated power and power factor). Speed follows the winding current (its share of the rated current equals the share of rated voltage reaching the fan) with the fan load curve and the blade inertia; stalls below ≈35 % — try it with a regulator. Switched off, it carries no current and runs down.';
+  constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.ang = 0; }
   branchCount() { return 1; }
   rl0() { const S = this.p.w / this.p.pf, Z = (this.p.v * this.p.v) / S, R = Z * this.p.pf, X = Z * Math.sqrt(1 - this.p.pf ** 2); return [R, X / (TAU * this.p.freq)]; }
-  reset() { this.rl.reset(); this.rms = new Rms(0.1); this.speed = 0; this.setCurrent(0); }
+  reset() { this.rl.reset(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.setCurrent(0); }
+  irated() { return this.p.w / (this.p.pf * this.p.v); }
+  /** spinning on its own inertia with (almost) no current: switched off or stalled by the regulator */
+  coasting() { return (this.speed || 0) >= 1 && this.icyc.v < 0.05 * this.irated(); }
   stamp(s) { const [R, L] = this.rl0(); this.rl.stamp(s, this.nodes[0], this.nodes[1], this.branches[0], R, L); }
   stampStep(s) { this.rl.step(s, this.branches[0], this.rl0()[1]); }
   accept(s) {
@@ -368,14 +371,19 @@ export class CeilingFan extends TwoTerm {
     this.rl.accept(s, this.nodes[0], this.nodes[1], this.branches[0], R);
     this.setCurrent(this.rl.i);
     if (s.mode === 'dc') return;
-    const vr = this.rms.push(this.voltageDiff(s), s.dt) / this.p.v;
+    this.rms.push(this.voltageDiff(s), s.dt);
+    // driven by the current, not the terminal voltage: an open-circuited winding has no torque
+    // (and an inductive kick across the open switch must not spin it up)
+    const vr = this.irms.push(this.rl.i, s.dt) / this.irated();
+    this.icyc.push(this.rl.i, s.dt);
     const target = vr < 0.35 ? 0 : this.p.rpm * Math.min(1.05, Math.pow((vr - 0.35) / 0.65, 0.6));
     this.speed += (target - this.speed) * Math.min(1, s.dt / 0.3); // quick spin-up, so it settles at mains simulation speeds
+    if (target === 0 && this.speed < 1) this.speed = 0; // bearing friction: it does stop
     this.ang += (this.speed / 60) * TAU * s.dt;
   }
   stampAC(ac) { const [R, L] = this.rl0(); this.rl.ac(ac, this.nodes[0], this.nodes[1], this.branches[0], R, L); }
-  valueLabel() { return fmtQty(Math.round(this.speed || 0), 'rpm'); }
-  readings(s) { return [['Speed', this.speed || 0, 'rpm'], ['Voltage (RMS)', this.rms.v, 'V'], ['Current', this.i, 'A'], ['Voltage', this.voltageDiff(s), 'V']]; }
+  valueLabel() { return fmtQty(Math.round(this.speed || 0), 'rpm') + (this.coasting() ? ' coasting' : ''); }
+  readings(s) { return [['Speed', this.speed || 0, 'rpm'], ['State', this.coasting() ? 'Coasting (no current)' : this.speed >= 1 ? 'Running' : 'Stopped', ''], ['Voltage (RMS)', this.rms.v, 'V'], ['Current (RMS)', this.irms.v, 'A'], ['Voltage', this.voltageDiff(s), 'V']]; }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
   localBox() { return [-2 * G, -1.1 * G, 2 * G, 1.1 * G]; }
   draw(g) {

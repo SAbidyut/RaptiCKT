@@ -296,7 +296,12 @@ export class Regulator extends Element {
   labelSide() { return [0, -1]; }
   valueLabel() { return this.adj ? '' : fmtShort(this.p.vout, 'V'); }
   vset() { return this.adj ? 1.25 : this.p.vout; }
-  reset() { this.postCurrents = [0, 0, 0]; }
+  reset() { this.postCurrents = [0, 0, 0]; this.ioIter = 0; this.limiting = false; }
+  /** current above the limit, smoothed (softplus): the output droops 50 V per amp of it */
+  overload(io) {
+    const w = 0.01 + 0.01 * this.p.ilim, u = (io - this.p.ilim) / w;
+    return { over: u > 30 ? u * w : w * Math.log1p(Math.exp(u)), dover: 1 / (1 + Math.exp(-u)) };
+  }
   stamp(s) {
     const [inp, out] = this.nodes, k = this.branches[0];
     s.addBranchKCL(inp, out, k);
@@ -304,15 +309,21 @@ export class Regulator extends Element {
   }
   stampNL(s) {
     const [inp, out, gnd] = this.nodes, k = this.branches[0];
-    const vin = s.v(inp), vg = s.v(gnd), io = s.x[k];
-    // current limit: effective set point droops when io exceeds ilim
-    const over = Math.max(0, io - this.p.ilim);
-    const vs = this.vset() - over * 50;
-    const m1 = smin(vs, vin - vg - this.p.vdo, 0.05);
+    const vin = s.v(inp), vg = s.v(gnd);
+    // Newton step limiting on the output current, like pnjlim for a junction
+    let io = s.x[k];
+    const lim = Math.max(0.5, this.p.ilim);
+    if (Math.abs(io - this.ioIter) > lim) { io = this.ioIter + Math.sign(io - this.ioIter) * lim; s.limited = true; }
+    this.ioIter = io;
+    // regulated voltage: the set point, or less in dropout, never below ≈0 V
+    const m1 = smin(this.vset(), vin - vg - this.p.vdo, 0.05);
     const m2 = smin(-m1.y, 0.02, 0.02); // smooth max(y, -0.02) = -smin(-y, 0.02)
-    const y = -m2.y, dy = m2.da; // d(-smin(-y))/dy = da
-    const dvin = dy * m1.db, dvs = dy * m1.da;
-    const dio = over > 0 ? -50 * dvs : 0;
+    const dvin = m2.da * m1.db;
+    // current limit: the output droops 50 V/A beyond ilim (smoothly). It is applied after the
+    // 0 V floor so Newton always sees its slope: inside the flat floor a raised set point with a
+    // big output capacitor (5 V → 10 V into 100 µF) bounced between ±24 A and never converged.
+    const { over, dover } = this.overload(io);
+    const y = -m2.y - 50 * over, dio = -50 * dover;
     // row: v_out - v_g - y(vin - vg, io) = 0
     s.addA(k, gnd - 1, -1 + dvin);
     s.addA(k, inp - 1, -dvin);
@@ -324,6 +335,12 @@ export class Regulator extends Element {
     const io = s.x[this.branches[0]];
     this.postCurrents = [io, -io, 0];
     this.i = io;
+    this.ioIter = io;
+    // entering or leaving current limit changes the output abruptly (a capacitor's charging
+    // current stops): damp it like a switch, or the trapezoidal rule rings on the capacitor
+    const limiting = 50 * this.overload(io).over > 0.05;
+    if (s.mode !== 'dc' && limiting !== !!this.limiting) s.markEvent();
+    this.limiting = limiting;
   }
   stampAC(ac) {
     const [inp, out, gnd] = this.nodes, k = this.branches[0];

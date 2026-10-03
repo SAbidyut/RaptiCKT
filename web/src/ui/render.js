@@ -571,10 +571,18 @@ export class Renderer {
       // gmin from every node to ground leaks ~gmin·V through parts that only feed an open
       // circuit (e.g. "229 pA" in an MCB ahead of an open switch): read that residue as zero
       const gmin = (sim.opt && sim.opt.gmin) || 1e-12;
+      // and, like the voltages, anything below 1e-8 of the largest current is noise for a live
+      // label (a switched-off fan's "420 pA" bleed in a circuit carrying 6.6 A reads 0 A)
+      let imax = 0;
+      for (const L of lay.amps) {
+        const r = rms && L.el.liveCurrent() != null ? rms.part(L.el) : null;
+        const i = r ? r.v : L.el.liveCurrent();
+        if (Number.isFinite(i)) imax = Math.max(imax, Math.abs(i));
+      }
       const residue = (e) => {
         let v = 0;
         for (const n of e.nodes || []) v = Math.max(v, Math.abs(rms ? rms.node(n).v : sim.nodeVoltage(n)));
-        return Math.max(1e-10, 4 * gmin * v);
+        return Math.max(1e-10, 4 * gmin * v, 1e-8 * imax);
       };
       for (const L of lay.amps) {
         if (rms && L.el.liveCurrent() != null) {

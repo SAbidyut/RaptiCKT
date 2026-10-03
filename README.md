@@ -59,7 +59,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 - Modified Nodal Analysis with dense LU and partial pivoting, plus iterative refinement for badly scaled matrices.
 - Newton–Raphson with SPICE `pnjlim` junction limiting. Timesteps are halved automatically when a step does not converge.
-- Trapezoidal integration by default, switching to backward Euler right after discontinuities. Capacitors use companion models; inductors and transformers use branch-current formulations.
+- Trapezoidal integration by default, switching to backward Euler right after discontinuities — switching events, every tap or value change you make while it runs, and any capacitor/inductor that starts zig-zagging from step to step — so a switched-off inductive load never rings at kilovolts. Capacitors use companion models; inductors and transformers use branch-current formulations.
 - DC operating point with gmin stepping and source stepping, and automatic referencing of galvanically isolated islands. Logic feedback loops (latches made of gates) are settled one gate at a time, so they power up in a stable state.
 - Small-signal AC analysis: devices are linearised at the operating point and solved with complex MNA.
 - SPICE-default tolerances: RELTOL 1e-3, VNTOL 1 µV, ABSTOL 1 nA, GMIN 1e-12. All are adjustable in Settings.

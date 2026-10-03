@@ -612,7 +612,7 @@ export class Editor {
     if (!live) this.checkpoint();
     el.p[key] = val;
     el.onParamChange(key);
-    if (this.sim) this.sim.dirty = true;
+    if (this.sim) this.sim.discontinuity();
     const def = el.propDef(key);
     if (def && def.structural) this.topologyChanged();
     if (key === 'freq' || key === 'wave') this.computeTiming();
@@ -1213,7 +1213,7 @@ export class Editor {
   }
 
   pressChanged(el) {
-    if (this.sim) this.sim.dirty = true;
+    if (this.sim) this.sim.discontinuity(); // a switch moved: damp the step, or cut inductors ring
     this.haptic(10);
     this.dirtyDraw = true;
     this.inspector.updateReadings();
