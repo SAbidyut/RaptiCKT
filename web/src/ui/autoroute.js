@@ -266,11 +266,12 @@ export function wireContext(doc, skipWires = new Set()) {
  * wire or running along one (all of which would create a connection the user
  * did not draw) costs a lot. Crossing another wire is fine.
  */
-export function routeCost(ctx, pts) {
+export function routeCost(ctx, pts, joinsOnly = false) {
   const G = GRID, HG = G / 2;
   let cost = 0;
   const last = pts.length - 1;
-  const inBody = (x, y) => ctx.bodies.some(([x1, y1, x2, y2]) => x > x1 + 0.5 && x < x2 - 0.5 && y > y1 + 0.5 && y < y2 - 0.5);
+  // joinsOnly: count only what would create a connection the user did not draw
+  const inBody = (x, y) => !joinsOnly && ctx.bodies.some(([x1, y1, x2, y2]) => x > x1 + 0.5 && x < x2 - 0.5 && y > y1 + 0.5 && y < y2 - 0.5);
   for (let k = 1; k <= last; k++) {
     const [p, q] = [pts[k - 1], pts[k]];
     const len = Math.max(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1]));
@@ -357,6 +358,14 @@ export function simpleRoutes(a, b, ea = -1, eb = -1, hFirst = true) {
     for (const x of new Set(cols)) out.push([a, [x, a[1]], [x, b[1]], b]);
     for (const y of new Set(rows)) out.push([a, [a[0], y], [b[0], y], b]);
     out.push([a, b]); // last resort: a straight slanted wire beats a false connection
+  } else if (a[0] !== b[0] || a[1] !== b[1]) {
+    // ends in line: the straight wire may run over a terminal in between (a part dragged next
+    // to its own wire), so also offer side-steps that run parallel to it
+    const vert = a[0] === b[0];
+    for (const d of [1, -1, 2, -2, 3, -3]) {
+      const ox = vert ? d * G : 0, oy = vert ? 0 : d * G;
+      out.push([a, [a[0] + ox, a[1] + oy], [b[0] + ox, b[1] + oy], b]);
+    }
   }
   return out;
 }
@@ -374,6 +383,9 @@ export function pickRoute(doc, candidates, opts = {}) {
   for (const raw of candidates) {
     if (!raw || raw.length < 2) continue;
     const c = simplifyPts(raw);
+    // both ends on one point (a drag brought them together): no shape to score — the caller
+    // keeps a zero-length wire. Scoring it used to crash the drag (reading pts[1] of one point).
+    if (c.length < 2) continue;
     const hard = routeCost(ctx, c);
     const score = hard * 100 + looksCost(doc, c, ctx);
     if (score < bestScore - 1e-9) { best = c; bestHard = hard; bestScore = score; }

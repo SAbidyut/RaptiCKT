@@ -289,6 +289,7 @@ export class Regulator extends Element {
   constructor(x, y) { super(x, y); this.postCurrents = [0, 0, 0]; }
   // posts: IN, OUT, GND/ADJ
   localPosts() { return [[-2 * G, 0], [2 * G, 0], [0, 2 * G]]; }
+  pinNames() { return ['IN', 'OUT', this.adj ? 'ADJ' : 'GND']; }
   localBox() { return [-2 * G, -1.2 * G, 2 * G, 2 * G]; }
   leads() { return [[0, -2 * G, 0, -1.4 * G, 0], [1, 2 * G, 0, 1.4 * G, 0], [2, 0, 2 * G, 0, 1.0 * G]]; }
   branchCount() { return 1; }

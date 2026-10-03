@@ -168,8 +168,10 @@ seq('decade', 'Decade Counter (CD4017)', '4017', [P('CLK', 'L', 'i'), P('RST', '
 seq('bcdcounter', 'BCD Counter (74HC390)', 'BCD', [P('CLK', 'L', 'i'), P('RST', 'L', 'i'), P('Q0', 'R', 'o'), P('Q1', 'R', 'o'), P('Q2', 'R', 'o'), P('Q3', 'R', 'o'), P('CO', 'R', 'o')],
   function (i, settle) {
     if (i[1]) { this.st = 0; this.prevClk = i[0]; } else if (this.edge(i[0], settle)) this.st = (this.st + 1) % 10;
-    return [...bits(this.st, 4), this.st === 9];
-  }, 'bcd counter decade 7490 74390 mod 10 counter', 'Counts 0–9 in BCD; CO is high at 9 to cascade the next digit. Drive a 7-segment decoder with Q0–Q3.', { shown() { return this.st ?? 0; } });
+    // ripple carry: high for counts 0–4, so its rising edge comes exactly when the count wraps
+    // 9 → 0 and CO can clock the next digit directly (it is also a 50 % duty ÷10 output)
+    return [...bits(this.st, 4), this.st <= 4];
+  }, 'bcd counter decade 7490 74390 mod 10 counter', 'Counts 0–9 in BCD. CO goes high as the count wraps from 9 to 0 (high for 0–4), so wiring CO to the next counter\'s CLK cascades digits (00 → 99). Drive a 7-segment decoder with Q0–Q3.', { shown() { return this.st ?? 0; } });
 seq('counter8', '8-bit Counter', 'CTR8', [P('CLK', 'L', 'i'), P('RST', 'L', 'i'), ...[0, 1, 2, 3, 4, 5, 6, 7].map((k) => P('Q' + k, 'R', 'o'))],
   function (i, settle) {
     if (i[1]) { this.st = 0; this.prevClk = i[0]; } else if (this.edge(i[0], settle)) this.st = (this.st + 1) & 255;

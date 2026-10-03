@@ -97,3 +97,22 @@ test('a bus of parallel wires shifted together gets no false junctions', () => {
   }
   for (const w of wires) assert.equal(routeCost(wireContext(d, new Set([w])), w.pts), 0, JSON.stringify(wires.map((x) => x.pts)));
 });
+
+test('a route whose ends meet (a part dragged onto its wire\'s other end) does not crash', () => {
+  const d = doc([['resistor', 0, 0]]);
+  const p = [4 * G, 0];
+  // every simple shape between a point and itself collapses to that point
+  assert.equal(pickRoute(d, simpleRoutes(p, p), { noSearch: true }), null);
+  assert.doesNotThrow(() => pickRoute(d, simpleRoutes(p, p)));
+});
+
+test('ends in line with a terminal between them: the route steps around it instead of shorting it', () => {
+  // a D latch dragged next to its own Q wire: the straight Q route would run over its Q̄ pin
+  const d = doc([['dlatch', 2, 1]]);
+  const [, , q, qbar] = d.elements[0].getPosts();
+  const far = [q[0], 10 * G];
+  assert.equal(qbar[0], q[0], 'Q̄ sits on the straight line');
+  const r = pickRoute(d, simpleRoutes(q, far, exitAt(d, q), exitAt(d, far)), { noSearch: true });
+  assert.equal(routeCost(wireContext(d), r, true), 0, JSON.stringify(r));
+  assert.ok(orthogonal(r));
+});

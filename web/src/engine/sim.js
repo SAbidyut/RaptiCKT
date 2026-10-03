@@ -398,7 +398,21 @@ export class Simulator {
       if (!ok) break;
       // settle digital states that depend on the solution
       let changed = false;
-      for (const e of this.elements) if (e.digitalSettle && e.digitalSettle(this)) changed = true;
+      if (pass < 3) {
+        for (const e of this.elements) if (e.digitalSettle && e.digitalSettle(this)) changed = true;
+      } else {
+        // Updating every gate at once never settles a symmetric feedback loop (a NOR latch
+        // flips 11 → 00 → 11 … forever). Settle one element at a time, re-solving after each
+        // change, so the loop falls into one of its stable states like a real circuit does.
+        for (const e of this.elements) {
+          if (!e.digitalSettle || !e.digitalSettle(this)) continue;
+          changed = true;
+          this.dirty = true;
+          ok = this.solvePoint(this.opt.dcMaxIter);
+          if (!ok) break;
+        }
+        if (!ok) break;
+      }
       if (!changed) break;
     }
     if (ok) {
