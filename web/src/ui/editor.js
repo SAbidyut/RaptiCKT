@@ -230,7 +230,8 @@ export class Editor {
     const ss = this.doc.simSettings;
     let dt = this.speed / 2400;
     if (this.fmax > 0) dt = Math.min(dt, 1 / (this.fmax * 200));
-    dt = Math.min(dt, this.settings.maxStep || 1e-4);
+    // a circuit may allow a longer step than the global cap (slow digital clocks): ss.maxStep
+    dt = Math.min(dt, ss.maxStep || this.settings.maxStep || 1e-4);
     if (ss.dt) dt = ss.dt;
     this.dt = Math.max(1e-12, dt);
   }
@@ -612,7 +613,7 @@ export class Editor {
     if (!live) this.checkpoint();
     el.p[key] = val;
     el.onParamChange(key);
-    if (this.sim) this.sim.dirty = true;
+    if (this.sim) this.sim.discontinuity();
     const def = el.propDef(key);
     if (def && def.structural) this.topologyChanged();
     if (key === 'freq' || key === 'wave') this.computeTiming();
@@ -732,8 +733,16 @@ export class Editor {
         continue;
       }
       // a straight wire has no shape to keep: use the cleanest simple shape (cheap, no search while dragging)
-      const kept = stretchWire(w.pts, na, nb)
-        || pickRoute(this.doc, simpleRoutes(na, nb, exitAt(this.doc, na), exitAt(this.doc, nb), a[1] === b[1]), { skipWires: new Set([w]), noSearch: true });
+      const simple = () => pickRoute(this.doc, simpleRoutes(na, nb, exitAt(this.doc, na), exitAt(this.doc, nb), a[1] === b[1]), { skipWires: new Set([w]), noSearch: true });
+      let kept = stretchWire(w.pts, na, nb);
+      if (kept) {
+        // the kept shape may now run over another terminal — even the moved part's own other pin
+        // (a RAM cell's Q wire through its Q̄) — and short them: then take the cleanest simple shape
+        const ctx = wireContext(this.doc, new Set([w])), joins = (pts) => routeCost(ctx, simplify(pts), true);
+        const bad = joins(kept);
+        if (bad > 0) { const alt = simple(); if (alt && joins(alt) < bad) kept = alt; }
+      }
+      kept = kept || simple();
       w.pts = simplify(kept || [na, nb]);
       if (w.pts.length < 2) w.pts = [na, nb];
     }
@@ -894,7 +903,8 @@ export class Editor {
       e.nodes.forEach((n, i) => {
         if (n > 0 && !names[n]) {
           const pins = e.pinNames ? e.pinNames() : null;
-          names[n] = e.name + (pins ? '.' + pins[i] : e.nodes.length > 1 ? (i === 0 ? '+' : i === 1 ? '−' : '.' + (i + 1)) : '');
+          // + / − only make sense for two-terminal parts; other unnamed pins are numbered
+          names[n] = e.name + (pins ? '.' + pins[i] : e.nodes.length === 2 ? (i === 0 ? '+' : '−') : e.nodes.length > 2 ? '.' + (i + 1) : '');
         }
       });
     }
@@ -1209,7 +1219,7 @@ export class Editor {
   }
 
   pressChanged(el) {
-    if (this.sim) this.sim.dirty = true;
+    if (this.sim) this.sim.discontinuity(); // a switch moved: damp the step, or cut inductors ring
     this.haptic(10);
     this.dirtyDraw = true;
     this.inspector.updateReadings();

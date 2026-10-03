@@ -78,7 +78,12 @@ export class WireGraph {
     });
     this.order = []; // [vertexKey, parentEdgeIdx, parentKey]
     const seen = new Set();
-    for (const start of this.adj.keys()) {
+    // Ground symbols carry no terminal current of their own, so a net's return current shows up
+    // as an imbalance that ends at the tree's root. Root each tree at a ground symbol when it has
+    // one, so that current visibly flows into the ground — not along some idle wire.
+    const grounds = [];
+    for (const e of doc.elements) if (e.isGround && e.isGround()) for (const p of e.getPosts()) grounds.push(key(p[0], p[1]));
+    for (const start of [...grounds.filter((k) => this.adj.has(k)), ...this.adj.keys()]) {
       if (seen.has(start)) continue;
       seen.add(start);
       const q = [start];
@@ -553,22 +558,43 @@ export class Renderer {
     // AC circuits: show the RMS over one supply cycle (what a meter reads), marked with "~"
     const rms = st.rms && st.rms.ready && set.acReadings !== 'inst' ? st.rms : null;
     if (volts) {
+      // solver round-off scales with the largest voltage in the circuit: a neutral that is
+      // really 0 V should not read "1.77 nV" next to 325 V mains
+      let vmax = 0;
+      for (const L of lay.volts) vmax = Math.max(vmax, Math.abs(rms ? rms.node(L.node).v : sim.nodeVoltage(L.node)));
+      const vfloor = Math.max(1e-9, 1e-8 * vmax);
       for (const L of lay.volts) {
         if (rms) {
-          const r = rms.node(L.node), v = Math.abs(r.v) < 1e-9 ? 0 : r.v;
+          const r = rms.node(L.node), v = Math.abs(r.v) < vfloor ? 0 : r.v;
           put(fmtSI(v, 'V', 3) + (r.ac && v ? '~' : ''), L.x, L.y, L.align, L.base, th.vLabel);
           continue;
         }
         const v = sim.nodeVoltage(L.node);
-        put(fmtSI(Math.abs(v) < 1e-9 ? 0 : v, 'V', 3), L.x, L.y, L.align, L.base, th.vLabel);
+        put(fmtSI(Math.abs(v) < vfloor ? 0 : v, 'V', 3), L.x, L.y, L.align, L.base, th.vLabel);
       }
     }
     if (amps) {
+      // gmin from every node to ground leaks ~gmin·V through parts that only feed an open
+      // circuit (e.g. "229 pA" in an MCB ahead of an open switch): read that residue as zero
+      const gmin = (sim.opt && sim.opt.gmin) || 1e-12;
+      // and, like the voltages, anything below 1e-8 of the largest current is noise for a live
+      // label (a switched-off fan's "420 pA" bleed in a circuit carrying 6.6 A reads 0 A)
+      let imax = 0;
+      for (const L of lay.amps) {
+        const r = rms && L.el.liveCurrent() != null ? rms.part(L.el) : null;
+        const i = r ? r.v : L.el.liveCurrent();
+        if (Number.isFinite(i)) imax = Math.max(imax, Math.abs(i));
+      }
+      const residue = (e) => {
+        let v = 0;
+        for (const n of e.nodes || []) v = Math.max(v, Math.abs(rms ? rms.node(n).v : sim.nodeVoltage(n)));
+        return Math.max(1e-10, 4 * gmin * v, 1e-8 * imax);
+      };
       for (const L of lay.amps) {
         if (rms && L.el.liveCurrent() != null) {
           const r = rms.part(L.el);
           if (r) {
-            const a = Math.abs(r.v) < 1e-10 ? 0 : r.v;
+            const a = Math.abs(r.v) < residue(L.el) ? 0 : r.v;
             if (r.ac) { put(fmtSI(a, 'A', 3) + (a ? '~' : ''), L.x, L.y, L.align, L.base, th.iLabel); continue; }
             const arrow = !a ? '' : (a > 0 ? L.fwd : L.back) + ' ';
             put(arrow + fmtSI(Math.abs(a), 'A', 3), L.x, L.y, L.align, L.base, th.iLabel);
@@ -577,7 +603,7 @@ export class Renderer {
         }
         const i = L.el.liveCurrent();
         if (i == null || !Number.isFinite(i)) continue;
-        const a = Math.abs(i) < 1e-10 ? 0 : i; // gmin-level residue reads as zero
+        const a = Math.abs(i) < residue(L.el) ? 0 : i; // gmin-level residue reads as zero
         const arrow = !a ? '' : (a > 0 ? L.fwd : L.back) + ' ';
         put(arrow + fmtSI(Math.abs(a), 'A', 3), L.x, L.y, L.align, L.base, th.iLabel);
       }

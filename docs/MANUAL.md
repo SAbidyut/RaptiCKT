@@ -23,7 +23,7 @@ Everything in the app, explained step by step.
 13. [Saving, opening and sharing](#en-ch-saving)
 14. [Settings reference](#en-ch-settings)
 15. [Component library (all 335)](#en-ch-library)
-16. [Examples (all 29)](#en-ch-examples)
+16. [Examples (all 37)](#en-ch-examples)
 17. [Quick reference: formulas and units](#en-ch-formulas)
 18. [Troubleshooting and FAQ](#en-ch-troubleshooting)
 19. [About RAPTI and contact](#en-ch-about)
@@ -42,7 +42,7 @@ Everything in the app, explained step by step.
 - Tap switches and push buttons while the circuit is running, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point** and export a **SPICE netlist**.
-- Learn from **29 ready-made examples**: LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL motor starter and more.
+- Learn from **37 ready-made examples**, including 7 big build-along **projects** (complete house wiring, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL motor starter and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
 
 #### Who it is for
@@ -96,7 +96,7 @@ When the app opens you see a short splash, then the **Home** screen. The bar at 
 
 #### Examples
 
-29 ready-made circuits, each with an explanation. Filter by category with the chips at the top. Opening an example starts it running by itself (press Pause to stop it). If you change an example, it is saved as your own circuit when you go back; the original example is never damaged.
+37 ready-made circuits, each with an explanation. Filter by category with the chips at the top. Opening an example starts it running by itself (press Pause to stop it). If you change an example, it is saved as your own circuit when you go back; the original example is never damaged.
 
 The full list is in the chapter **Examples**.
 
@@ -748,7 +748,7 @@ Parts for house wiring and lighting: bulbs, tube light with choke and starter, f
 | **Glow Starter** | Glow starter: a neon glow heats a bimetal strip until its contacts close (pre-heating the tube filaments); with the glow gone it cools and snaps open, giving the ballast kick. Stays idle once the tube runs at ~100 V. <br>*Settings:* Glow ignition voltage (V), Bimetal heating time (s), Contact opening time (s) |
 | **LED Bulb (AC)** | LED lamp with a linear driver: the LED string only conducts when \|v\| exceeds its string voltage (so the current flows in pulses near the peaks and the power factor is below 1). Sized for rated power at rated voltage. <br>*Settings:* Rated voltage (RMS) (V), Rated power (W), LED string voltage (V) |
 | **Neon Indicator Lamp** | Neon glow lamp: strikes at ≈90 V, then maintains ≈60 V. Use a series resistor (e.g. 100 kΩ on 230 V). Classic relaxation oscillator element. <br>*Settings:* Striking voltage (V), Maintaining voltage (V), Internal resistance (Ω) |
-| **Ceiling Fan** | Ceiling fan as an equivalent series R–L load (from rated power and power factor). Speed follows the applied RMS voltage with the fan load curve and the blade inertia; stalls below ≈35 % voltage — try it with a regulator. <br>*Settings:* Rated voltage (RMS) (V), Rated power (W), Power factor, Rated speed (rpm), Rated frequency (Hz) |
+| **Ceiling Fan** | Ceiling fan as an equivalent series R–L load (from rated power and power factor). Speed follows the winding current (its share of the rated current equals the share of rated voltage reaching the fan) with the fan load curve and the blade inertia; stalls below ≈35 % — try it with a regulator. Switched off, it carries no current and runs down. <br>*Settings:* Rated voltage (RMS) (V), Rated power (W), Power factor, Rated speed (rpm), Rated frequency (Hz) |
 | **Heater / Iron / Kettle** | Resistive heating element (R = V²/P) with a first-order thermal model: temperature rises towards ΔT ∝ P. <br>*Settings:* Rated voltage (V), Rated power (W), Thermal time constant (s) |
 | **Socket Outlet + Appliance** | 3-pin socket (L, N, E) with a selectable appliance modelled as an R–L load of its rated power and power factor. "Faulty appliance" leaks 50 mA to earth — an RCD must trip. <br>*Settings:* Plugged-in appliance, Rated voltage (V), Frequency (Hz) |
 | **Dimmer / Electronic Regulator** | TRIAC phase-angle controller in series with the load. Each half-cycle it waits for the firing angle α = (1 − level)·180° after the zero crossing, fires, and conducts until the current falls to zero. <br>*Settings:* Level (%), Mains frequency (Hz), TRIAC holding current (A) |
@@ -940,9 +940,9 @@ Adders, comparators, multiplexers, decoders, latches, flip-flops, counters, shif
 | **D Flip-Flop** | Positive-edge-triggered D flip-flop: Q takes the value of D on each rising clock edge. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
 | **JK Flip-Flop** | JK flip-flop (rising edge): J=K=1 toggles, J=1 sets, K=1 resets. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
 | **T Flip-Flop** | Toggle flip-flop: Q inverts on each rising clock edge while T is high (frequency divider). <br>*Settings:* Logic high level (V), Output resistance (Ω) |
-| **4-bit Counter** | 4-bit binary up-counter: increments on rising clock edges, synchronous-free reset when RST is high. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
+| **4-bit Counter** | 4-bit binary up-counter: increments on rising clock edges; an asynchronous reset holds it at 0 while RST is high. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
 | **4-bit Up/Down Counter** | Counts up (UP = 1) or down (UP = 0) on rising clock edges; RST clears to 0. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
-| **BCD Counter (74HC390)** | Counts 0–9 in BCD; CO is high at 9 to cascade the next digit. Drive a 7-segment decoder with Q0–Q3. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
+| **BCD Counter (74HC390)** | Counts 0–9 in BCD. CO goes high as the count wraps from 9 to 0 (high for 0–4), so wiring CO to the next counter's CLK cascades digits (00 → 99). Drive a 7-segment decoder with Q0–Q3. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
 | **Decade Counter (CD4017)** | Ten decoded outputs: exactly one output is high and it advances on every rising clock edge — the classic LED chaser. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
 | **8-bit Counter** | 8-bit binary up-counter (0–255) with reset. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
 | **4-bit Shift Register (SIPO)** | On each rising clock edge the bits shift Q0→Q3 and DATA enters Q0. RST clears. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
@@ -1059,7 +1059,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="en-ch-examples"></a>
 
-## 16. Examples (all 29)
+## 16. Examples (all 37)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1108,6 +1108,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 - **Logic gates truth table**: Toggle inputs A and B and watch every basic gate respond: NOT, AND, OR, NAND, NOR, XOR and XNOR.
 - **Counter & 7-segment display**: A 2 Hz clock drives a 4-bit binary counter; the decoder converts the count to 7-segment patterns (0–F). Toggle RESET to clear the counter.
+- **1-bit memory cell (NOR latch)**: The building block of every static RAM: two NOR gates, each feeding the other. Press SET and Q goes high; press RESET and it goes low. Let go and the loop keeps the bit — that is memory. Pressing both at once gives the forbidden state (Q = Q̄ = 0).
 
 ### Switches
 
@@ -1124,6 +1125,16 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 - **Power-factor correction**: A 1 kW inductive load at PF 0.7 draws extra reactive current. Close the switch to add a 700 VAR capacitor: the PF meter rises to ≈0.96 while the real power stays the same.
 - **DOL starter: 3-phase motor**: Direct-on-line starter. Press START: the contactor coil pulls in and its auxiliary contact (13–14) seals itself in, so the motor keeps running after you let go. Press STOP to break the coil circuit. Watch the ≈6× starting current settle as the motor reaches ≈1440 rpm.
+
+### Projects
+
+- **Complete house wiring (2-room flat)**: A whole flat as a ladder diagram. Incomer: energy meter → double-pole main switch → 30 mA RCCB. The L bus feeds one MCB per circuit and every load returns to the N bus: lights (bedroom and drawing-room lamps, a staircase lamp on two 2-way switches, calling bell), fan with regulator, 2 kW geyser and two earthed sockets. Tap switches to watch the total current and kWh change; set a socket to "Faulty appliance" to trip the RCCB or to "Short circuit" to trip its MCB.
+- **16-bit RAM (4 words × 4 bits)**: A small static RAM built like a real memory chip: 16 D-latch cells in 4 rows (words) × 4 columns (bits). To write: set DATA IN on the hex keypad, choose the address with A1 A0 and hold WRITE — the address decoder raises one word line and that row of cells copies the bit lines. To read: the multiplexer under each column picks the cell of the addressed row, so DATA OUT shows the word stored at A1 A0. Store a different digit at each of the four addresses, then step through them.
+- **Mains to 5 V regulated power supply**: Every stage of a linear DC supply: 230 V mains → fuse → 230 V : 12 V transformer → bridge rectifier → 1000 µF smoothing capacitor → 7805 regulator → steady 5 V with a power LED and a 100 Ω load. The scope compares the rippling ≈15 V on the capacitor with the flat 5 V output. Lower the mains voltage or the capacitor to watch the ripple dip below 7 V and the regulator drop out.
+- **Traffic light controller (4017)**: A 1 Hz clock steps a CD4017 decade counter through ten states — exactly one output is high at a time. Diodes combine the outputs (diode-OR logic): Q0–Q4 light RED for 5 s, Q5–Q8 GREEN for 4 s and Q9 YELLOW for 1 s, then the cycle repeats. Rewire the diodes to make your own timing.
+- **4-bit binary adder (calculator)**: Adds two 4-bit numbers, like the ALU inside a CPU. Tap keypad A and keypad B to pick 0–F; the 74HC283 adder shows the sum on the hex display. A sum above 15 does not fit in 4 bits, so CARRY lights — it is worth 16 (A = 9, B = 8 → display 1 + CARRY = 17). Cin adds one more, which is how adders are chained into 8, 16 or 64 bits.
+- **Digital seconds counter 00–59**: The heart of every digital clock. A 1 Hz clock drives the units BCD counter; each time it wraps 9 → 0 its carry clocks the tens counter. An AND gate watches the tens counter: the moment it reaches 6 (Q1 = Q2 = 1) it resets it, so the display goes 58, 59, 00. Each digit passes through a BCD → 7-segment decoder. Turn the clock up to 10 Hz to see the roll-over sooner.
+- **Automatic street light (LDR + relay)**: A low-voltage sensor switching a mains lamp. In daylight the LDR has a low resistance and holds the transistor's base low. At dusk (below ≈30 lux) the divider voltage rises, the BC547 turns on and energises the 12 V relay, whose contact switches the 230 V lamp. The diode absorbs the coil's kick at switch-off, and because the relay drops out at a lower current than it pulls in, the lamp only turns off again above ≈60 lux — no chattering at dusk. Select the LDR and turn the light level down.
 
 <a id="en-ch-formulas"></a>
 

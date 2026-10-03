@@ -398,7 +398,21 @@ export class Simulator {
       if (!ok) break;
       // settle digital states that depend on the solution
       let changed = false;
-      for (const e of this.elements) if (e.digitalSettle && e.digitalSettle(this)) changed = true;
+      if (pass < 3) {
+        for (const e of this.elements) if (e.digitalSettle && e.digitalSettle(this)) changed = true;
+      } else {
+        // Updating every gate at once never settles a symmetric feedback loop (a NOR latch
+        // flips 11 → 00 → 11 … forever). Settle one element at a time, re-solving after each
+        // change, so the loop falls into one of its stable states like a real circuit does.
+        for (const e of this.elements) {
+          if (!e.digitalSettle || !e.digitalSettle(this)) continue;
+          changed = true;
+          this.dirty = true;
+          ok = this.solvePoint(this.opt.dcMaxIter);
+          if (!ok) break;
+        }
+        if (!ok) break;
+      }
       if (!changed) break;
     }
     if (ok) {
@@ -489,6 +503,7 @@ export class Simulator {
     this.t += dt;
     this.event = false;
     for (const e of this.elements) if (e.accept) e.accept(this);
+    if (method === 'trap') this.watchRinging(); else if (this.zig) this.zig.fill(0);
     this.xPrev.set(this.x);
     if (this.beSteps > 0) this.beSteps--;
     if (this.event) this.beSteps = 2; // damp trapezoidal ringing after discontinuities
@@ -497,6 +512,34 @@ export class Simulator {
 
   /** Called by elements whose discrete state changed (switches, logic). */
   markEvent() { this.dirty = true; this.event = true; }
+
+  /**
+   * The trapezoidal rule does not damp a capacitor held by an ideal source (a regulator's
+   * output capacitor) or a time constant far below the step (a MOSFET gate): a leftover error
+   * then flips sign every step for ever, and RMS labels show currents that are not there.
+   * A real signal never zig-zags at the step rate (there are ≥ 200 steps per period), so when
+   * an unknown does it for six steps in a row, take two damped backward-Euler steps.
+   */
+  watchRinging() {
+    const m = this.size, x = this.x, xp = this.xPrev, nN = this.nodeCount - 1;
+    if (!this.zig || this.zig.length !== m) { this.zig = new Uint8Array(m); this.dLast = new Float64Array(m); }
+    const { reltol, vntol, abstol } = this.opt;
+    let ring = false;
+    for (let j = 0; j < m; j++) {
+      const d = x[j] - xp[j], dl = this.dLast[j];
+      const tol = 10 * (reltol * Math.abs(x[j]) + (j < nN ? vntol : abstol));
+      if (d * dl < 0 && Math.abs(d) > tol && Math.abs(dl) > tol) { if (++this.zig[j] >= 6) ring = true; } else this.zig[j] = 0;
+      this.dLast[j] = d;
+    }
+    if (ring) { this.beSteps = 2; this.zig.fill(0); }
+  }
+
+  /**
+   * A change made from outside a step (the user tapped a switch or changed a value). Like
+   * markEvent, the next steps use backward Euler: the trapezoidal rule never damps an
+   * inductor whose current was just cut, so it would ring at ±kV from step to step forever.
+   */
+  discontinuity() { this.dirty = true; this.beSteps = Math.max(this.beSteps || 0, 2); }
 
   nodeVoltage(node) { return node > 0 && node < this.nodeCount ? this.x[node - 1] : 0; }
 

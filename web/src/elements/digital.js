@@ -298,7 +298,7 @@ register(SRLatch);
 // ------------------------------------------------------------- counter
 export class Counter extends Digital {
   static type = 'counter'; static title = '4-bit Counter'; static keywords = 'counter binary 74hc161 74hc393 divider';
-  static description = '4-bit binary up-counter: increments on rising clock edges, synchronous-free reset when RST is high.';
+  static description = '4-bit binary up-counter: increments on rising clock edges; an asynchronous reset holds it at 0 while RST is high.';
   localPosts() { return [[-2 * G, -G], [-2 * G, G], [2 * G, -2 * G], [2 * G, -G], [2 * G, 0], [2 * G, G]]; }
   localBox() { return [-2 * G, -3.4 * G, 2 * G, 2.4 * G]; }
   leads() { return icLeads(this); }

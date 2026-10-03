@@ -87,7 +87,8 @@ class Breaker extends Element {
     if (this.tripped) { this.tripped = false; this.theta = 0; this.res2 = 0; this.p.on = true; this.cause = ''; } else this.p.on = !this.p.on;
     return true;
   }
-  valueLabel() { return `${this.p.curve || ''}${fmtShort(this.p.in, 'A')}`; }
+  // residual-current devices also show their trip sensitivity (e.g. "40A 30mA")
+  valueLabel() { return `${this.p.curve || ''}${fmtShort(this.p.in, 'A')}${this.constructor.rcd ? ' ' + fmtShort(this.p.idn, 'A') : ''}`; }
   readings() {
     const r = [['State', this.tripped ? 'TRIPPED — ' + this.cause : this.closed() ? 'ON' : 'OFF', ''], ['Current', this.i, 'A']];
     if (this.constructor.ocp) r.push(['Thermal load', Math.min(100, (this.theta / 1.69) * 100), '%']);

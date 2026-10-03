@@ -60,7 +60,7 @@ export const CHAPTERS = [
         'Tap switches and push buttons while the circuit is running, and turn a knob to change any value live.',
         'Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).',
         'Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point** and export a **SPICE netlist**.',
-        'Learn from **29 ready-made examples**: LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL motor starter and more.',
+        'Learn from **37 ready-made examples**, including 7 big build-along **projects** (complete house wiring, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL motor starter and more.',
         'Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).',
       ], [
         'অসীম আকারের ক্যানভাসে অ্যানালগ, ডিজিটাল ও মিক্সড সার্কিট বানান।',
@@ -69,7 +69,7 @@ export const CHAPTERS = [
         'সার্কিট চলার সময় সুইচ ও পুশ বাটন চাপুন, আর নব ঘুরিয়ে যেকোনো মান সাথে সাথে বদলান।',
         '**৬-চ্যানেল অসিলোস্কোপ** (FFT ও XY সহ) এবং **মাল্টিমিটার** (V, A, Ω, W) দিয়ে মাপুন।',
         '**AC sweep (Bode plot)**, **DC sweep**, **Operating point** চালান এবং **SPICE netlist** এক্সপোর্ট করুন।',
-        '**২৯টি তৈরি উদাহরণ** থেকে শিখুন: LED, RC ফিল্টার, রেকটিফায়ার, অ্যামপ্লিফায়ার, 555 টাইমার, টিউবলাইট, সিঁড়ির ওয়্যারিং, হাউস ওয়্যারিং, DOL মোটর স্টার্টার ইত্যাদি।',
+        '**৩৭টি তৈরি উদাহরণ** থেকে শিখুন, এর মধ্যে ৭টি বড় ধাপে-ধাপে **প্রজেক্ট** (পূর্ণ হাউস ওয়্যারিং, 16-bit RAM, মেইনস থেকে 5 V সাপ্লাই, ট্রাফিক লাইট, 4-bit অ্যাডার, সেকেন্ড কাউন্টার, অটোমেটিক স্ট্রিট লাইট): LED, RC ফিল্টার, রেকটিফায়ার, অ্যামপ্লিফায়ার, 555 টাইমার, টিউবলাইট, সিঁড়ির ওয়্যারিং, হাউস ওয়্যারিং, DOL মোটর স্টার্টার ইত্যাদি।',
         'সার্কিট ফোনে সেভ করুন, `.rckt` ফাইল হিসেবে শেয়ার করুন, আর ছবি (PNG) এক্সপোর্ট করুন।',
       ]),
       H('Who it is for', 'কাদের জন্য'),
@@ -145,8 +145,8 @@ export const CHAPTERS = [
         'ডান-উপরের **স্লাইডার** আইকন **Settings** খোলে।',
       ]),
       H('Examples', 'Examples'),
-      P('29 ready-made circuits, each with an explanation. Filter by category with the chips at the top. Opening an example starts it running by itself (press Pause to stop it). If you change an example, it is saved as your own circuit when you go back; the original example is never damaged.',
-        '২৯টি তৈরি সার্কিট, প্রতিটির ব্যাখ্যাসহ। উপরের চিপ দিয়ে ক্যাটাগরি অনুযায়ী ছাঁটাই করুন। উদাহরণ খুললে সেটা নিজে থেকেই চলতে শুরু করে (থামাতে Pause চাপুন)। উদাহরণে কিছু বদলালে ফিরে যাওয়ার সময় সেটা আপনার নিজের সার্কিট হিসেবে সেভ হয়; মূল উদাহরণ কখনও নষ্ট হয় না।'),
+      P('37 ready-made circuits, each with an explanation. Filter by category with the chips at the top. Opening an example starts it running by itself (press Pause to stop it). If you change an example, it is saved as your own circuit when you go back; the original example is never damaged.',
+        '৩৭টি তৈরি সার্কিট, প্রতিটির ব্যাখ্যাসহ। উপরের চিপ দিয়ে ক্যাটাগরি অনুযায়ী ছাঁটাই করুন। উদাহরণ খুললে সেটা নিজে থেকেই চলতে শুরু করে (থামাতে Pause চাপুন)। উদাহরণে কিছু বদলালে ফিরে যাওয়ার সময় সেটা আপনার নিজের সার্কিট হিসেবে সেভ হয়; মূল উদাহরণ কখনও নষ্ট হয় না।'),
       P('The full list is in the chapter **Examples**.', 'পূর্ণ তালিকা **Examples** অধ্যায়ে আছে।'),
       H('My Circuits', 'My Circuits'),
       P('Your saved **projects** (circuits), kept on this phone and sorted into **folders** like files on a computer. Tap a project to open it; tap a folder to go inside. The path at the top (**My Circuits › Folder › Sub-folder**) shows where you are: tap any name in it to jump up. The Android **Back** button also goes up one folder.',
@@ -771,7 +771,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 16 (examples: generated)
   {
     id: 'examples', icon: 'book', generated: 'examples',
-    title: { en: 'Examples (all 29)', bn: 'উদাহরণ (সবগুলো ২৯টি)' },
+    title: { en: 'Examples (all 37)', bn: 'উদাহরণ (সবগুলো ৩৭টি)' },
     blocks: [
       P('Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.',
         'যেকোনো উদাহরণ খুলুন, **Run** চাপুন (নিজেই শুরু হয়), তারপর পরীক্ষা করুন: সুইচ চাপুন, নব ঘোরান, স্কোপ প্রোব দিন, অ্যানালাইসিস চালান। মূল উদাহরণ নষ্ট হবে না।'),

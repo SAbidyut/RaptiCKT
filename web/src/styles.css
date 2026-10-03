@@ -163,7 +163,7 @@ img.thumb { animation: thumbIn 0.35s ease both; }
 .chip2.on { background: var(--grad); color: #fff; border-color: transparent; }
 .ex-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 6px; }
 .ex-item { display: flex; gap: 12px; text-align: left; padding: 10px; border-radius: var(--r); background: var(--surface); border: 1px solid var(--border); }
-.ex-item .thumb { width: 118px; flex: none; }
+.ex-item .thumb { width: 118px; flex: none; align-self: center; } /* keep 16:10: a stretched box crops wide circuits */
 .ex-item b { display: block; font-size: 14.5px; margin: 2px 0 3px; }
 .ex-item p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); font-weight: 700; }
