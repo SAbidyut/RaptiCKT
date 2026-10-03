@@ -550,14 +550,14 @@ export const CHAPTERS = [
         'চ্যানেলের রং: হলুদ, সায়ান, গোলাপি, সবুজ, কমলা, বেগুনি। প্রোব সার্কিটের সাথে সেভ হয়।'),
       H('Reading the display', 'ডিসপ্লে পড়া'),
       L([
-        'The screen has **10 × 8 divisions**, like a real scope. Each channel **auto-scales** to a round **volts per division** (1-2-5 steps); the top and bottom values of its screen are written at the right edge in the channel colour.',
-        'The numbered tag on the left edge marks each channel\'s **0 V (ground) level**. When 0 V is off the screen, the tag sits at the edge with a small arrow.',
+        'The screen has **10 × 8 divisions**, like a real scope. The screen **auto-scales** to a round **volts per division** (1-2-5 steps). All voltage channels share **one scale and one 0 V line**, set by the biggest signal (for example the input of a rectifier), so input and output can be compared directly; currents get their own scale. The top and bottom values of the screen are written at the right edge.',
+        'The **0** tag on the left edge marks the **0 V (ground) level** (**0V** / **0A** when volts and amps are both shown). When it is off the screen, the tag sits at the edge with a small arrow.',
         'The bottom left shows the **time per division** (for example `2 ms/div`) and the trigger state: **TRIG ↑ CH1** (picture held still), **AUTO** (waiting for a repeating signal), **ROLL** (trigger off) or **STOP** (frozen).',
         'Under the graph, a table gives for each channel the **latest value**, **/div**, **pp** (peak-to-peak), **rms** and the **frequency f** (found from the signal).',
         '**Touch and hold** the graph to show a cursor: it reads the time and every channel\'s value at that point. Pinch to change the time scale.',
       ], [
-        'স্ক্রিনে সত্যিকারের স্কোপের মতো **১০ × ৮টি ডিভিশন**। প্রতিটি চ্যানেল নিজে থেকে গোল **ভোল্ট প্রতি ডিভিশনে** (1-2-5 ধাপে) **অটো-স্কেল** হয়; স্ক্রিনের উপরের ও নিচের মান ডানদিকে চ্যানেলের রঙে লেখা থাকে।',
-        'বাঁদিকের নম্বর লেখা ট্যাগ প্রতিটি চ্যানেলের **0 V (গ্রাউন্ড) লেভেল** দেখায়। 0 V স্ক্রিনের বাইরে থাকলে ট্যাগটি কিনারায় ছোট তীরসহ বসে।',
+        'স্ক্রিনে সত্যিকারের স্কোপের মতো **১০ × ৮টি ডিভিশন**। স্ক্রিন নিজে থেকে গোল **ভোল্ট প্রতি ডিভিশনে** (1-2-5 ধাপে) **অটো-স্কেল** হয়। সব ভোল্টেজ চ্যানেল **একই স্কেল ও একই 0 V লাইন** ব্যবহার করে, যা সবচেয়ে বড় সিগন্যাল (যেমন রেকটিফায়ারের ইনপুট) ঠিক করে, তাই ইনপুট ও আউটপুট সরাসরি তুলনা করা যায়; কারেন্টের আলাদা স্কেল। স্ক্রিনের উপরের ও নিচের মান ডানদিকে লেখা থাকে।',
+        'বাঁদিকের **0** ট্যাগ **0 V (গ্রাউন্ড) লেভেল** দেখায় (ভোল্ট ও অ্যাম্পিয়ার দুটোই থাকলে **0V** / **0A**)। স্ক্রিনের বাইরে থাকলে ট্যাগটি কিনারায় ছোট তীরসহ বসে।',
         'নিচে বাঁদিকে **প্রতি ডিভিশনে সময়** (যেমন `2 ms/div`) ও ট্রিগারের অবস্থা: **TRIG ↑ CH1** (ছবি স্থির), **AUTO** (পুনরাবৃত্ত সিগন্যালের অপেক্ষা), **ROLL** (ট্রিগার বন্ধ) বা **STOP** (ফ্রিজ)।',
         'গ্রাফের নিচের টেবিলে প্রতি চ্যানেলের **সর্বশেষ মান**, **/div**, **pp** (পিক-টু-পিক), **rms** ও **ফ্রিকোয়েন্সি f** (সিগন্যাল থেকে নির্ণীত)।',
         'গ্রাফে **চেপে ধরে রাখলে** একটি কার্সর আসে: ওই বিন্দুর সময় ও প্রতিটি চ্যানেলের মান দেখায়। চিমটি কেটে টাইম স্কেল বদলান।',

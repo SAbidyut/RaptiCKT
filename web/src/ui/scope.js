@@ -9,7 +9,7 @@ const N = 4096;
 const PRE = 0.1; // triggered view: share of the screen before the trigger point
 const DIV_X = 10, DIV_Y = 8;
 const HEAD = 40; // chip / button band above the graticule
-const GUT_L = 22, GUT_R = 6; // left gutter holds the channel reference markers
+const GUT_L = 22, GUT_R = 6; // left gutter holds the 0-level markers
 const ROW = 14; // line height of the readout table (matches the CSS)
 const FONT = '10px JetBrains Mono, ui-monospace, monospace';
 
@@ -31,8 +31,16 @@ function niceScale(lo, hi, divs, unit) {
     const d = nice125(level / (divs * 0.8));
     return { d, c: Math.sign(lo + hi) * Math.min(3, Math.floor(divs / 2) - 1) * d }; // ground one division above the bottom (below the top if negative)
   }
-  const d = nice125((hi - lo) / (divs * 0.8));
-  return { d, c: Math.round((hi + lo) / 2 / d) * d };
+  // the smallest 1-2-5 step that holds the signal with a little room at both edges
+  const mid = (hi + lo) / 2, half = divs / 2;
+  let d = nice125((hi - lo) / divs);
+  for (let k = 0; k < 12; k++, d = step125(d, 1)) {
+    const m = d * 0.15;
+    for (const c of [Math.round(mid / d) * d, Math.floor(mid / d) * d, Math.ceil(mid / d) * d]) {
+      if (lo >= c - half * d + m && hi <= c + half * d - m) return { d, c };
+    }
+  }
+  return { d, c: Math.round(mid / d) * d };
 }
 
 /** the next 1-2-5 step up (dir 1) or down (dir −1) from x */
@@ -65,6 +73,7 @@ export class Scope {
     this.frozen = false;
     this.trigOn = true; // trigger on CH1 rising edges so periodic signals stand still
     this.cursor = null; // x (CSS px) of the touch read-out cursor
+    this.scales = new Map(); // unit → shared scale of all channels in that unit
     this.build();
   }
 
@@ -149,7 +158,7 @@ export class Scope {
     this.lastMeas = null;
   }
 
-  reset() { this.head = 0; this.count = 0; this.lastT = -Infinity; for (const c of this.channels) { c.buf.fill(0); c.sc = null; } }
+  reset() { this.head = 0; this.count = 0; this.lastT = -Infinity; this.scales.clear(); for (const c of this.channels) c.buf.fill(0); }
 
   sample(sim) {
     if (this.frozen || !this.channels.length) return;
@@ -228,17 +237,23 @@ export class Scope {
     return { t: xs[k], level: lvl };
   }
 
-  /** per-channel scale with hysteresis, so the picture does not jump about while it runs */
-  autoScale(c, st) {
-    const want = niceScale(st.mn, st.mx, DIV_Y, c.probe.unit), sc = c.sc, now = performance.now();
-    if (!sc) { c.sc = want; return want; }
-    const eps = sc.d * 0.02, fits = st.mn >= sc.c - 4 * sc.d - eps && st.mx <= sc.c + 4 * sc.d + eps;
-    if (!fits) { c.sc = want; c.refitT = 0; return want; }
+  /**
+   * One scale for every channel of a unit (all the volts share one V/div and
+   * one 0 V line, set by the biggest signal), with hysteresis so the picture
+   * does not jump about while it runs.
+   */
+  autoScale(unit, mn, mx) {
+    const g = this.scales.get(unit) || {};
+    this.scales.set(unit, g);
+    const want = niceScale(mn, mx, DIV_Y, unit), sc = g.sc, now = performance.now();
+    if (!sc) { g.sc = want; return want; }
+    const eps = sc.d * 0.02, fits = mn >= sc.c - 4 * sc.d - eps && mx <= sc.c + 4 * sc.d + eps;
+    if (!fits) { g.sc = want; g.refitT = 0; return want; }
     if (Math.abs(want.d - sc.d) > sc.d * 0.01 || Math.abs(want.c - sc.c) > sc.d * 0.01) { // a better fit (smaller signal, settled level): follow it once that has lasted a moment
-      if (!c.refitT) c.refitT = now;
-      else if (now - c.refitT > 450) { c.sc = want; c.refitT = 0; }
-    } else c.refitT = 0;
-    return c.sc;
+      if (!g.refitT) g.refitT = now;
+      else if (now - g.refitT > 450) { g.sc = want; g.refitT = 0; }
+    } else g.refitT = 0;
+    return g.sc;
   }
 
   /** [left, top, right, bottom] of the graticule in CSS px */
@@ -247,7 +262,8 @@ export class Scope {
     const rows = !this.channels.length ? 0 : this.mode === 'xy' ? 1 : this.channels.length + 1;
     const meas = rows ? rows * ROW + 9 : 0;
     const bot = Math.min(H - 6, Math.max(HEAD + 90, H - meas - 6));
-    return [GUT_L, HEAD, W - GUT_R, bot];
+    const units = new Set(this.channels.map((c) => c.probe.unit)).size;
+    return [units > 1 ? GUT_L + 8 : GUT_L, HEAD, W - GUT_R, bot]; // room for '0V' / '0A' tags
   }
 
   /** the screen: bezel, CRT-style face, 10 × 8 divisions with fine ticks on the centre axes */
@@ -321,10 +337,20 @@ export class Scope {
     const plots = [], rows = [];
     ctx.save();
     ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
+    // channels of the same unit share one scale and one 0 line, set by the biggest signal
+    const sts = this.channels.map((c) => this.stats(c, idxs));
+    const range = new Map();
     this.channels.forEach((c, ci) => {
-      const st = this.stats(c, idxs);
+      const st = sts[ci], u = c.probe.unit;
       if (!st) return;
-      const { d, c: mid } = this.autoScale(c, st);
+      const r = range.get(u);
+      if (r) { r.mn = Math.min(r.mn, st.mn); r.mx = Math.max(r.mx, st.mx); r.chans.push(ci); } else range.set(u, { mn: st.mn, mx: st.mx, chans: [ci] });
+    });
+    const scaleOf = new Map([...range].map(([u, r]) => [u, this.autoScale(u, r.mn, r.mx)]));
+    this.channels.forEach((c, ci) => {
+      const st = sts[ci];
+      if (!st) return;
+      const { d, c: mid } = scaleOf.get(c.probe.unit);
       const lo = mid - 4 * d, ky = ph / (8 * d), col = c.probe.color;
       const yOf = (v) => B - (v - lo) * ky;
       // min/max decimation: at most two vertices per pixel column keeps the path short
@@ -355,21 +381,22 @@ export class Scope {
     ctx.restore();
     this.plots = { list: plots, t0, kx, L, T, R, B, trig, idxs, tNow };
 
-    // reference markers: each channel's 0 level in the left gutter (an arrow at the edge when it is off screen)
+    // one reference per scale: its 0 level in the left gutter (an arrow at the edge when it is off screen),
+    // and the top / bottom value of the screen at the right edge
+    const groups = [...range].map(([u, r]) => ({ u, sc: scaleOf.get(u), chans: r.chans }));
+    const multi = groups.length > 1;
+    const colOf = (g) => (g.chans.length === 1 ? this.channels[g.chans[0]].probe.color : '#e2e8f0');
     ctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
-    const tags = plots.map((p) => { const y0 = p.yOf(0); return { p, off: y0 < T + 2 ? -1 : y0 > B - 2 ? 1 : 0, y: Math.max(T + 7, Math.min(B - 7, y0)) }; });
+    const tags = groups.map((g) => { const y0 = B - (0 - (g.sc.c - 4 * g.sc.d)) * (ph / (8 * g.sc.d)); return { g, off: y0 < T + 2 ? -1 : y0 > B - 2 ? 1 : 0, y: Math.max(T + 7, Math.min(B - 7, y0)) }; });
     tags.sort((a, b) => a.y - b.y);
     for (let k = 1; k < tags.length; k++) tags[k].y = Math.max(tags[k].y, tags[k - 1].y + 14); // never stacked on top of each other
     for (let k = tags.length - 1; k >= 0; k--) { const lim = k === tags.length - 1 ? B - 7 : tags[k + 1].y - 14; if (tags[k].y > lim) tags[k].y = lim; }
-    for (const g of tags) this.marker(L - 2, g.y, g.p.c.probe.color, g.p.ci + 1, g.off);
+    for (const t of tags) this.marker(L - 2, t.y, colOf(t.g), multi ? '0' + t.g.u : '0', t.off);
     ctx.font = FONT;
-    // top / bottom value of each channel's screen at the right edge
-    const n = plots.length;
-    for (const p of plots) {
-      const u = p.c.probe.unit;
-      this.plate(fmtSI(p.mid + 4 * p.d, u, 3), R - 6, T + 14 + p.ci * 15, p.c.probe.color, 'right');
-      this.plate(fmtSI(p.lo, u, 3), R - 6, B - 6 - (n - 1 - p.ci) * 15, p.c.probe.color, 'right');
-    }
+    groups.forEach((g, gi) => {
+      this.plate(fmtSI(g.sc.c + 4 * g.sc.d, g.u, 3), R - 6, T + 14 + gi * 15, colOf(g), 'right');
+      this.plate(fmtSI(g.sc.c - 4 * g.sc.d, g.u, 3), R - 6, B - 6 - (groups.length - 1 - gi) * 15, colOf(g), 'right');
+    });
     // trigger point (top edge) and level (right edge)
     if (trig && plots[0]) {
       const x = L + PRE * pw, col = plots[0].c.probe.color, ty = plots[0].yOf(trig.level);
@@ -387,17 +414,17 @@ export class Scope {
     this.setMeas(this.table(['CH', 'now', '/div', 'pp', 'rms', 'f'], rows));
   }
 
-  /** channel number tag pointing at its reference level (off = −1 above, +1 below the screen) */
-  marker(xr, y, col, num, off) {
+  /** ground tag pointing at a scale's 0 level (off = −1 above, +1 below the screen) */
+  marker(xr, y, col, txt, off) {
     const { ctx } = this;
-    const w = 16, h = 13, x = xr - w - 4;
+    const w = Math.max(14, ctx.measureText(txt).width + 6), h = 13, x = xr - w - 4;
     ctx.fillStyle = col;
     roundRect(ctx, x, y - h / 2, w, h, 3); ctx.fill();
     ctx.beginPath();
     if (!off) { ctx.moveTo(x + w - 1, y - 4); ctx.lineTo(xr, y); ctx.lineTo(x + w - 1, y + 4); } else { const s = off < 0 ? -1 : 1; ctx.moveTo(xr - 3, y - 3 * s); ctx.lineTo(xr + 1, y - 3 * s); ctx.lineTo(xr - 1, y + 3 * s); }
     ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#05080f'; ctx.textAlign = 'center';
-    ctx.fillText(String(num), x + w / 2, y + 3.5);
+    ctx.fillText(txt, x + w / 2, y + 3.5);
     ctx.textAlign = 'left';
   }
 
