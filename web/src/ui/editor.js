@@ -613,9 +613,10 @@ export class Editor {
     if (!e) return;
     const boxes = this.doc.elements.map((o) => o.worldBox());
     const pad = GRID;
+    const ctx = this.placementCtx([e], [], true);
     const free = () => {
       const [a, b, c, d] = e.worldBox();
-      return !boxes.some(([p, q, r, t]) => a - pad < r && c + pad > p && b - pad < t && d + pad > q);
+      return !boxes.some(([p, q, r, t]) => a - pad < r && c + pad > p && b - pad < t && d + pad > q) && !this.placementBlocked(ctx);
     };
     // spiral search for a free spot near the view centre
     const x0 = e.x, y0 = e.y;
@@ -713,17 +714,115 @@ export class Editor {
       || this.doc.elements.some((e) => e.getPosts().some((q) => same(p, q)));
   }
 
+  /**
+   * What a move of `els` (and the selected `movedWires`) must not run into, taken before the
+   * move. Parts never join by being dropped on each other: a part may not sit on another part,
+   * and its terminals may not land on a terminal or wire they were not already connected to.
+   * `fresh`: the parts are new (duplicate, add), so nothing counts as connected or overlapping yet.
+   */
+  placementCtx(els, movedWires = [], fresh = false) {
+    const moving = new Set(els), moved = new Set(movedWires);
+    const solid = (e) => e.constructor.type !== 'label'; // a text note is not a part
+    const still = this.doc.elements.filter((e) => !moving.has(e) && solid(e));
+    const stillBoxes = still.map((e) => [e, e.worldBox()]);
+    const stillPosts = new Set(this.doc.elements.filter((e) => !moving.has(e)).flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
+    const touches = (w, p) => w.pts.some((q, i) => same(p, q) || (i && onSeg(p, w.pts[i - 1], q)));
+    const stillPts = [...stillPosts].map((k) => k.split(',').map(Number));
+    // terminals of the parts that stay put, and points of other wires, lying on a wire now
+    // (a T-joint is a connection); the moving parts' own terminals do not count
+    const onWire = (w) => {
+      const mine = new Set(els.flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
+      const pts = stillPts.concat(...this.doc.wires.filter((o) => o !== w).map((o) => o.pts));
+      return new Set(pts.filter((p) => touches(w, p)).map((p) => p[0] + ',' + p[1]).filter((k) => !mine.has(k)));
+    };
+    const wireHad = new Map(fresh ? [] : this.doc.wires.map((w) => [w, onWire(w)]));
+    const before = new Map(), attached = new Map();
+    for (const e of els) {
+      const B = e.worldBox();
+      before.set(e, new Set(fresh ? [] : stillBoxes.filter(([, b]) => boxesHit(B, b)).map(([o]) => o)));
+      attached.set(e, e.getPosts().map((p) => new Set(fresh ? [] : this.doc.wires.filter((w) => touches(w, p)))));
+    }
+    return { els, solid, moved, stillBoxes, stillPosts, touches, before, attached, onWire, wireHad };
+  }
+
+  /** Why the parts in `c` may not stay where they are now ('part', 'terminal', 'wire'), or null. */
+  placementBlocked(c, okWires = [], followed = []) {
+    // a wire that follows the part must not be bent across a terminal it did not touch before
+    for (const w of followed) {
+      if (okWires.includes(w)) continue;
+      const had = c.wireHad.get(w) || new Set();
+      for (const k of c.onWire(w)) if (!had.has(k)) return 'route';
+    }
+    for (const e of c.els) {
+      if (c.solid(e)) {
+        const B = e.worldBox(), was = c.before.get(e);
+        for (const [o, b] of c.stillBoxes) if (!was.has(o) && boxesHit(B, b)) return 'part';
+      }
+      const att = c.attached.get(e);
+      const posts = e.getPosts();
+      for (let k = 0; k < posts.length; k++) {
+        const p = posts[k];
+        if (c.stillPosts.has(p[0] + ',' + p[1])) return 'terminal';
+        for (const w of this.doc.wires) {
+          if (c.moved.has(w) || att[k]?.has(w) || okWires.includes(w)) continue;
+          if (c.touches(w, p)) return 'wire';
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Which terminals share a net, as a string: wires join their own points and anything lying on them. */
+  connSig() {
+    const par = new Map();
+    const k = (p) => p[0] + ',' + p[1];
+    const f = (x) => { if (!par.has(x)) par.set(x, x); while (par.get(x) !== x) { par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
+    const pts = [];
+    for (const w of this.doc.wires) w.pts.forEach((p, i) => { pts.push(p); if (i) par.set(f(k(w.pts[i - 1])), f(k(p))); });
+    for (const e of this.doc.elements) for (const p of e.getPosts()) { pts.push(p); f(k(p)); }
+    for (const w of this.doc.wires) for (let i = 1; i < w.pts.length; i++) {
+      for (const p of pts) if (onSeg(p, w.pts[i - 1], w.pts[i])) par.set(f(k(p)), f(k(w.pts[i])));
+    }
+    const lab = new Map();
+    return this.doc.elements.map((e) => e.getPosts().map((p) => { const r = f(k(p)); if (!lab.has(r)) lab.set(r, lab.size); return lab.get(r); }).join('.')).join(' ');
+  }
+
+  /** Tidy the wires a move bent, unless tidying would join or split a net: then keep them as they are. */
+  safeTidy(follow) {
+    const keep = this.doc.wires.map((w) => [w, w.pts.map((p) => [...p])]);
+    const sig = this.connSig();
+    this.tidyWires(follow);
+    if (this.connSig() !== sig) this.doc.wires = keep.map(([w, pts]) => { w.pts = pts; return w; });
+  }
+
+  blockedToast(why) {
+    this.haptic(18);
+    this.toast(why === 'part' ? 'Parts cannot sit on top of each other'
+      : why === 'route' ? 'Its wire would run over another terminal here'
+        : 'A terminal cannot be dropped on another terminal or wire — connect them with a wire');
+  }
+
   duplicateSelection() {
     if (!this.selection.size && !this.selWires.size) return;
     this.checkpoint();
-    const off = GRID * 2;
     const newEls = [], newWires = [];
     for (const e of this.selection) {
-      const o = e.toJSON(); o.x += off; o.y += off;
-      const c = Element.fromJSON(o);
+      const c = Element.fromJSON(e.toJSON());
       this.doc.add(c); newEls.push(c);
     }
-    for (const w of this.selWires) newWires.push(this.doc.addWire(w.pts.map(([x, y]) => [x + off, y + off])));
+    const wirePts = [...this.selWires].map((w) => w.pts);
+    for (const pts of wirePts) newWires.push(this.doc.addWire(pts.map((p) => [...p])));
+    // the copy goes to the nearest free spot (down-right first), never on top of anything
+    const home = newEls.map((c) => [c.x, c.y]), live = newWires.filter(Boolean);
+    const ctx = this.placementCtx(newEls, live, true);
+    const offsets = [];
+    for (let r = 1; r <= 12; r++) offsets.push([r, r], [r, 0], [0, r], [r, -r], [-r, r], [-r, 0], [0, -r], [-r, -r]);
+    for (const [ox, oy] of offsets) {
+      const dx = ox * GRID * 2, dy = oy * GRID * 2;
+      newEls.forEach((c, i) => { c.x = home[i][0] + dx; c.y = home[i][1] + dy; });
+      live.forEach((w, i) => { w.pts = wirePts[i].map(([x, y]) => [x + dx, y + dy]); });
+      if (!this.placementBlocked(ctx)) break;
+    }
     this.doc.assignNames();
     this.selection = new Set(newEls); this.selWires = new Set(newWires.filter(Boolean));
     this.afterSelect();
@@ -767,11 +866,24 @@ export class Editor {
     for (const e of this.selection) {
       const old = e.getPosts();
       this.splitAtJunctions();
+      const ctx = this.placementCtx([e]);
       const fixed = new Set(this.doc.elements.filter((x) => x !== e).flatMap((x) => x.getPosts()).map((p) => p[0] + ',' + p[1]));
       const bridges = old.filter((p) => fixed.has(p[0] + ',' + p[1])).map((p) => new Wire([p, p]));
       this.doc.wires.push(...bridges);
       fn(e);
-      this.tidyWires(this.followWires(new Map([[e, old]])));
+      const follow = this.followWires(new Map([[e, old]]));
+      const why = this.placementBlocked(ctx, bridges, follow);
+      if (why) {
+        // turning it would put it on another part or join it to something: leave everything as it was
+        const keep = [...this.selection].map((x) => this.doc.elements.indexOf(x));
+        this.restoreFrom(this.undoStack.pop());
+        this.updateToolbar();
+        this.selection = new Set(keep.map((i) => this.doc.elements[i]).filter(Boolean));
+        this.afterSelect();
+        this.blockedToast(why);
+        return;
+      }
+      this.safeTidy(follow);
       this.doc.wires = this.doc.wires.filter((w) => !bridges.includes(w) || !same(w.pts[0], w.pts[w.pts.length - 1]));
     }
     this.topologyChanged();
@@ -1410,7 +1522,8 @@ export class Editor {
       const moving = new Set(els);
       const fixed = new Set(this.doc.elements.filter((e) => !moving.has(e)).flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
       g.bridges = els.flatMap((e) => e.getPosts()).filter((p) => fixed.has(p[0] + ',' + p[1])).map((p) => ({ p: [...p], w: new Wire([p, p]) }));
-      g.dx = 0; g.dy = 0;
+      g.place = this.placementCtx(els, wires);
+      g.dx = 0; g.dy = 0; g.okDx = 0; g.okDy = 0;
       return;
     }
     g.type = this.multi && h.kind === 'none' ? 'marquee' : 'pan';
@@ -1458,18 +1571,16 @@ export class Editor {
         const dx = snap(wx - g.w[0]), dy = snap(wy - g.w[1]);
         if (dx === g.dx && dy === g.dy) break;
         g.dx = dx; g.dy = dy; g.moved = true;
-        // restore original geometry then apply delta
-        const cur = JSON.parse(g.snapshot);
-        this.doc.wires.forEach((w, i) => { if (cur.wires[i]) w.pts = cur.wires[i].map((p) => [...p]); });
-        for (const o of g.els) { o.e.x = o.x + dx; o.e.y = o.y + dy; }
-        const moved = new Set();
-        for (const o of g.wires) { o.w.pts = o.pts.map(([x, y]) => [x + dx, y + dy]); moved.add(o.w); }
-        for (const b of g.bridges || []) { b.w.pts = [[...b.p], [...b.p]]; if (!this.doc.wires.includes(b.w)) this.doc.wires.push(b.w); }
-        g.follow = this.followWires(new Map(g.els.map((o) => [o.e, o.posts])), moved);
-        this.graph = new WireGraph(this.doc);
-        this.dirtyDraw = true;
+        this.applyMove(g, dx, dy);
+        const why = (dx || dy) && this.placementBlocked(g.place, (g.bridges || []).map((b) => b.w), g.follow || []);
+        if (why) {
+          // the part stops at the last free spot until the finger reaches free space again
+          this.applyMove(g, g.okDx, g.okDy);
+          if (g.blocked !== why) { g.blocked = why; this.blockedToast(why); }
+        } else { g.okDx = dx; g.okDy = dy; g.blocked = null; }
         break;
       }
+      case 'marquee':
       case 'marquee':
         this.marquee = [g.sx, g.sy, sx, sy];
         this.marqueePick = this.pickInBox(this.marquee);
@@ -1477,6 +1588,19 @@ export class Editor {
         break;
       default:
     }
+  }
+
+  /** Put the dragged parts (and selected wires) at offset dx, dy from where the drag began. */
+  applyMove(g, dx, dy) {
+    const cur = JSON.parse(g.snapshot);
+    this.doc.wires.forEach((w, i) => { if (cur.wires[i]) w.pts = cur.wires[i].map((p) => [...p]); });
+    for (const o of g.els) { o.e.x = o.x + dx; o.e.y = o.y + dy; }
+    const moved = new Set();
+    for (const o of g.wires) { o.w.pts = o.pts.map(([x, y]) => [x + dx, y + dy]); moved.add(o.w); }
+    for (const b of g.bridges || []) { b.w.pts = [[...b.p], [...b.p]]; if (!this.doc.wires.includes(b.w)) this.doc.wires.push(b.w); }
+    g.follow = this.followWires(new Map(g.els.map((o) => [o.e, o.posts])), moved);
+    this.graph = new WireGraph(this.doc);
+    this.dirtyDraw = true;
   }
 
   onUp(ev, cancelled) {
@@ -1501,7 +1625,7 @@ export class Editor {
         // a bridge wire whose part came back to where it was is not needed
         for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
         if (g.moved) {
-          this.tidyWires(g.follow || []);
+          this.safeTidy(g.follow || []);
           this.undoStack.push(g.undoSnap || g.snapshot); this.redoStack = []; this.updateToolbar();
           this.topologyChanged();
         }
@@ -1607,6 +1731,8 @@ function closestOnSeg(x, y, a, b) {
   t = Math.max(0, Math.min(1, t));
   return [a[0] + t * dx, a[1] + t * dy];
 }
+/** Do two part boxes overlap (more than touching edge to edge)? */
+function boxesHit(a, b) { return a[0] + 2 < b[2] && a[2] - 2 > b[0] && a[1] + 2 < b[3] && a[3] - 2 > b[1]; }
 function onSeg(p, a, b) {
   const c = closestOnSeg(p[0], p[1], a, b);
   return Math.hypot(c[0] - p[0], c[1] - p[1]) < 0.5;

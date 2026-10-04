@@ -53,7 +53,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 - **Fault simulation**: break a terminal, short two terminals or add leakage to any part from its properties sheet, or place a timed fault to watch protection trip.
 - **Landscape & full screen** (like RaptiAuto): sideways the bars merge into one row, the oscilloscope sits beside the circuit and sheets open as a side panel; **Full** hides every bar (and Android's status and navigation bars) so the board runs edge to edge; the tool rail and + button hide behind a small ☰ handle until you need them. Screen rotation can be locked in Settings.
 - **Interaction**:
-  - Drag from a terminal to wire, and wires follow moved parts
+  - Drag from a terminal to wire, and wires follow moved parts; parts never land on each other or join by touching
   - Tap switches and buttons live
   - Rotary knob for any value
   - Pinch to zoom, or one finger like Google Maps: double-tap, hold and slide down (in) or up (out)

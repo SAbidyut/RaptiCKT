@@ -181,7 +181,7 @@ The editor is where you build and run circuits. From top to bottom:
 | --- | --- |
 | Tap a part | Selects it. On a switch or button, it also operates it. |
 | Hold a part (half a second) | Opens its properties. |
-| Drag a part | Moves it. Wires stay attached and follow. |
+| Drag a part | Moves it. Wires stay attached and follow. A part never lands on another part. |
 | Tap a terminal, then another | Draws a wire between them (EveryCircuit style). |
 | Drag empty space | Pans the board. |
 | Pinch with two fingers | Zooms in and out. |
@@ -252,7 +252,7 @@ Note: `m` is **milli** and `M` is **mega**. The unit letter (Ω, F, H, V, A) is 
 
 #### Move, rotate, flip, copy, delete
 
-- **Move**: drag the part. It snaps to the grid. Connected wires follow and re-route neatly. The undo button reverses the move.
+- **Move**: drag the part. It snaps to the grid. Connected wires follow and re-route neatly. A part cannot be dropped on top of another part, and its terminals never join another terminal or wire just by touching: it stops at the last free spot (drag on into free space to hop over), and you connect parts by drawing a wire. Duplicates are placed on a free spot too. The undo button reverses the move.
 - **Rotate**: quick bar button (or **R** on a keyboard).
 - **Flip**: properties sheet (mirrors the part).
 - **Copy**: properties sheet or selection bar. The copy appears slightly down and right.
