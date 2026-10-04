@@ -188,8 +188,10 @@ test('DC motor steady-state speed', () => {
   const m = mk('motor', [1, 0], { ra: 2, la: 1e-3, k: 0.01, j: 1e-6, b: 1e-6, load: 0 });
   const s = sim([mk('dcv', [1, 0], { amp: 6 }), m]);
   assert.ok(s.start());
+  assert.equal(m.w, 0, 'the rotor starts at rest');
+  for (let i = 0; i < 4000; i++) assert.ok(s.step(1e-4)); // τ_mech ≈ 20 ms
   const w = (6 * 0.01) / (2 * 1e-6 + 0.01 * 0.01);
-  close(m.w, w, 1e-6, 'ω');
+  close(m.w, w, 1e-3, 'ω');
 });
 
 test('solar cell open-circuit voltage ≈ Voc', () => {

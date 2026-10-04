@@ -24,9 +24,9 @@ test('6-terminal motor: delta draws 3× the line current of star (locked rotor)'
   near(ratio, 3, 0.05, 'I_line(delta) / I_line(star)');
 });
 
-test('6-terminal motor in star behaves like the 3-terminal motor', () => {
+test('6-terminal 400 V Δ motor in delta behaves like the 400 V Y 3-terminal motor', () => {
   const speed = (type) => {
-    const nodes = type === 'im3' ? [1, 2, 3] : [1, 2, 3, 9, 9, 9];
+    const nodes = type === 'im3' ? [1, 2, 3] : [1, 2, 3, 2, 3, 1];
     const { sim, els } = net([['ac3y', [1, 2, 3, 0]], [type, nodes, { load: 10 }]]);
     assert.ok(sim.start(), sim.error);
     run(sim, 1.2, 1e-4);
@@ -242,9 +242,10 @@ test('stepper driver: current chopping and one 1.8° step per STEP pulse', () =>
 });
 
 test('firing unit + SCR bridge: Vdc = (Vm/π)(1 + cos α) on a resistive load', () => {
-  // mains L=1 N=0; bridge: T1 1→3, T3 0→3 (top), T2 4→0... (A,K,G)
-  const { sim, els } = net([['mains', [1, 0], { zs: 0.01 }], ['firing', [1, 0, 11, 3, 12, 3, 13, 1, 14, 4], { alpha: 60 }],
-    ['scr', [1, 3, 11]], ['scr', [0, 3, 12]], ['scr', [4, 0, 13]], ['scr', [4, 1, 14]], ['resistor', [3, 4], { r: 50 }]]);
+  // mains L=1 N=0, output P=3 M=4 (A, K, G): T1 L→P and T4 M→N fire in the positive half-cycle
+  // (G1/K1, G4/K4), T2 N→P and T3 M→L in the negative one (G2/K2, G3/K3)
+  const { sim, els } = net([['mains', [1, 0], { zs: 0.01 }], ['firing', [1, 0, 11, 3, 12, 3, 13, 1, 14, 0], { alpha: 60 }],
+    ['scr', [1, 3, 11]], ['scr', [0, 3, 12]], ['scr', [4, 1, 13]], ['scr', [4, 0, 14]], ['resistor', [3, 4], { r: 50 }]]);
   assert.ok(sim.start(), sim.error);
   run(sim, 0.04, 1e-5);
   let sum = 0, n = 0;

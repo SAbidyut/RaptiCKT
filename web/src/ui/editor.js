@@ -247,7 +247,7 @@ export class Editor {
   // ------------------------------------------------------------- simulator
   simOptions() {
     const s = this.settings;
-    return { method: s.method, initialDC: s.initialDC, reltol: s.reltol, vntol: s.vntol, abstol: s.abstol, gmin: s.gmin, maxIter: s.maxIter };
+    return { method: s.method, initialDC: this.doc.simSettings.initialDC ?? s.initialDC, reltol: s.reltol, vntol: s.vntol, abstol: s.abstol, gmin: s.gmin, maxIter: s.maxIter };
   }
 
   topologyChanged() {

@@ -30,6 +30,13 @@ export const CHEM = {
   lithium: [[0, 2.0], [0.05, 2.6], [0.15, 2.85], [0.5, 2.95], [0.9, 3.0], [1, 3.2]],
 };
 
+// open-circuit voltage vs state of charge q. Below q = 0 (the rated cut-off) only a sliver of
+// charge remains and the voltage collapses: the curve falls to 0 V at q = −QX, so an
+// exhausted battery cannot keep a load running at its cut-off voltage forever.
+export const QX = 0.03;
+export const socOCV = (tbl, q) => (q >= 0 ? interp(tbl, Math.min(1, q)) : interp(tbl, 0) * Math.max(0, 1 + q / QX));
+export const socStep = (q, dq) => Math.min(1, Math.max(-QX, q + dq));
+
 export class Battery extends TwoTerm {
   static category = 'Sources';
   static prefix = 'BT';
@@ -45,7 +52,7 @@ export class Battery extends TwoTerm {
   refNode = 1;
   branchCount() { return 1; }
   reset() { this.q = this.p.soc / 100; this.setCurrent(0); }
-  ocv(q = this.q ?? this.p.soc / 100) { return this.constructor.cells * interp(CHEM[this.constructor.chem], Math.min(1, Math.max(0, q))); }
+  ocv(q = this.q ?? this.p.soc / 100) { return this.constructor.cells * socOCV(CHEM[this.constructor.chem], q); }
   stamp(s) {
     const k = this.branches[0], [a, b] = this.nodes;
     s.addBranchKCL(a, b, k); s.addA(k, a - 1, 1); s.addA(k, b - 1, -1); s.addA(k, k, -this.p.rint);
@@ -55,7 +62,7 @@ export class Battery extends TwoTerm {
     const i = s.x[this.branches[0]];
     this.setCurrent(i);
     // branch current > 0 flows into + : charging
-    if (s.mode !== 'dc') this.q = Math.min(1, Math.max(0, this.q + (i * s.dt) / (3600 * this.p.ah)));
+    if (s.mode !== 'dc') this.q = socStep(this.q, (i * s.dt) / (3600 * this.p.ah));
   }
   stampAC(ac) {
     const k = this.branches[0], [a, b] = this.nodes;
@@ -65,7 +72,7 @@ export class Battery extends TwoTerm {
   readings(s) {
     const v = this.voltageDiff(s);
     return [['Terminal voltage', v, 'V'], ['Open-circuit voltage', this.ocv(), 'V'], ['Current (out of +)', -this.i, 'A'],
-      ['State of charge', (this.q ?? 0) * 100, '%'], ['Power delivered', -v * this.i, 'W']];
+      ['State of charge', Math.max(0, this.q ?? 0) * 100, '%'], ['Power delivered', -v * this.i, 'W']];
   }
   spice(n) { return `V${this.name} ${n[0]} ${n[1]} DC ${this.ocv()} Rser=${this.p.rint}`; }
   leads() { return [[0, -2 * G, 0, -0.9 * G, 0], [1, 2 * G, 0, 0.9 * G, 0]]; }

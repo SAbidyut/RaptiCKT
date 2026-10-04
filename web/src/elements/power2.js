@@ -235,7 +235,7 @@ export class StepperDriver extends Bridge {
     for (let k = 0; k < 2; k++) {
       const it = T[k], i = this.wind(k);
       let m;
-      if (ins[2] || Math.abs(it) < 1e-6 * this.p.ilim) m = 'off';
+      if (ins[2] || s.mode === 'dc' || Math.abs(it) < 1e-6 * this.p.ilim) m = 'off'; // windings start de-energised
       else if (t < this.offUntil[k]) m = this.mode[k];
       else if (i * Math.sign(it) < -0.02 * this.p.ilim || Math.abs(i) > Math.abs(it) * 1.1) { m = 'off'; this.offUntil[k] = t + this.p.toff; }
       else if (Math.abs(i) >= Math.abs(it)) { m = 'slow'; this.offUntil[k] = t + this.p.toff; }
@@ -360,7 +360,7 @@ export class FiringUnit extends withChip(Element) {
     for (let k = 0; k < 4; k++) { const g = this.nodes[2 + 2 * k], c = this.nodes[3 + 2 * k], br = this.branches[k]; ac.addBranchKCL(g, c, br); ac.addA(br, g - 1, 1); ac.addA(br, c - 1, -1); ac.addA(br, br, -this.p.rg); }
   }
   valueLabel() { return `α ${Math.round(this.p.alpha)}°`; }
-  readings() { return [['Firing angle', this.p.alpha, '°'], ['Line frequency', 1 / this.T, 'Hz'], ['Pulses', this.on.map((x, k) => (x ? `G${k + 1}` : '')).filter(Boolean).join(' ') || '—', '']]; }
+  readings() { return [['Firing angle', this.p.alpha, '°'], ['Line frequency', 1 / (this.T || 0.02), 'Hz'], ['Pulses', (this.on || []).map((x, k) => (x ? `G${k + 1}` : '')).filter(Boolean).join(' ') || '—', '']]; }
   draw(g) { this.drawChip(g, 'FIRING'); }
 }
 register(FiringUnit);

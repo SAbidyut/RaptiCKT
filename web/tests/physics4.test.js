@@ -331,3 +331,37 @@ test('faults survive JSON round trip', async () => {
   const back = Element.fromJSON(o);
   assert.deepEqual(back.fault, { m: 'res', a: 0, b: 1, r: 220 });
 });
+
+// ------------------------------------------------------------ model fixes
+test('UART transmitter with EN left unconnected is enabled (pull-up) and is received', () => {
+  const { sim, els } = net([['uarttx', [1, 2], { text: 'AB' }], ['uartrx', [2, 3]]]);
+  assert.ok(sim.start(), sim.error);
+  run(sim, 0.01, 1e-5);
+  assert.ok(sim.v(1) > 4, 'EN pulled high: ' + sim.v(1));
+  assert.ok(els[1].rx.startsWith('AB'), 'received ' + els[1].rx);
+});
+
+test('SCR stays latched while gated, even when an inductive load keeps its current below IH at first', () => {
+  for (const dt of [2e-5, 2e-6]) {
+    const { sim, els } = net([['dcv', [1, 0], { amp: 100 }], ['scr', [1, 2, 3]], ['inductor', [2, 0], { l: 1 }], ['dcv', [4, 2], { amp: 5 }], ['resistor', [4, 3], { r: 100 }]], { initialDC: false });
+    assert.ok(sim.start(), sim.error);
+    run(sim, 2e-3, dt); // di/dt = 100 A/s: 0.2 A after 2 ms — but only 2 mA after the first 20 µs
+    assert.ok(els[1].on, 'latched at dt ' + dt);
+    near(els[2].i, 0.2, 0.01, 'inductor current at dt ' + dt);
+  }
+});
+
+test('DC motor: starts at rest; a positive load torque never turns an unpowered shaft backwards', () => {
+  const { sim, els } = net([['motor', [1, 0], { ra: 2, la: 1e-3, k: 0.02, j: 1e-5, b: 1e-6, load: 0.01 }], ['resistor', [1, 0], { r: 1e6 }]]);
+  assert.ok(sim.start(), sim.error);
+  assert.equal(els[0].w, 0);
+  run(sim, 0.5, 1e-4);
+  assert.ok(Math.abs(els[0].w) < 0.6, 'shaft held near standstill: ' + els[0].w);
+});
+
+test('battery: an exhausted cell collapses instead of holding its cut-off voltage forever', () => {
+  const { sim, els } = net([['liion', [1, 0], { soc: 2, ah: 0.001, rint: 0.05 }], ['resistor', [1, 0], { r: 4 }]]);
+  assert.ok(sim.start(), sim.error);
+  run(sim, 2, 1e-3); // 0.02 mAh·… left: empty within ≈0.1 s at ≈0.8 A
+  assert.ok(sim.v(1) < 1, 'terminal voltage after exhaustion: ' + sim.v(1));
+});

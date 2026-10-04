@@ -25,7 +25,9 @@ const wrap = (x) => x - TAU * Math.floor(x / TAU);
 export class InductionMotor6 extends InductionMotor3 {
   static type = 'im3d'; static title = '3-Phase Induction Motor (6 terminals)';
   static keywords = 'induction motor six terminal 6 lead star delta wye delta u1 v1 w1 u2 v2 w2 terminal box';
-  static description = 'Squirrel-cage induction motor with both ends of each winding brought out: U1–U2, V1–V2, W1–W2. Link U2-V2-W2 for star (each winding gets 230 V from a 400 V supply) or U1-W2, V1-U2, W1-V2 for delta (each winding gets the full 400 V) — the basis of star-delta starting: in star the starting current and torque are one third of delta. Same dynamic model as the 3-terminal motor, with the leakage inductance also in the zero-sequence path so a delta connection is handled correctly.';
+  // rated 400 V Δ / 690 V Y: each winding is built for 400 V, so impedances are 3× those of the 400 V Y motor
+  static props = InductionMotor3.props.map((p) => ({ ...p, def: { rs: 4.5, rr: 3.3, lls: 0.0195, llr: 0.0195, lm: 0.6 }[p.key] ?? p.def }));
+  static description = 'Squirrel-cage induction motor with both ends of each winding brought out: U1–U2, V1–V2, W1–W2. Rated 400 V Δ / 690 V Y (3.7 kW): link U2-V2-W2 for star (each winding gets only 230 V from a 400 V supply) or U1-W2, V1-U2, W1-V2 for delta (each winding gets its full 400 V) — the basis of star-delta starting: in star the starting current and torque are one third of delta. Same dynamic model as the 3-terminal motor, with the leakage inductance also in the zero-sequence path so a delta connection is handled correctly.';
   localPosts() { return [[-2 * G, -G], [-2 * G, 0], [-2 * G, G], [2 * G, -G], [2 * G, 0], [2 * G, G]]; }
   pinNames() { return ['U1', 'V1', 'W1', 'U2', 'V2', 'W2']; }
   localBox() { return [-2 * G, -1.6 * G, 2 * G, 1.6 * G]; }
@@ -299,7 +301,7 @@ export class StepperMotor extends Element {
     { key: 'l', label: 'Winding inductance', unit: 'H', def: 0.004, min: 1e-6, max: 10, log: true },
     { key: 'tdet', label: 'Detent torque', unit: 'N·m', def: 0.015, min: 0, max: 100 },
     { key: 'j', label: 'Rotor + load inertia', unit: 'kg·m²', def: 1e-5, min: 1e-8, max: 10, log: true },
-    { key: 'b', label: 'Viscous damping', unit: 'N·m·s', def: 2e-4, min: 0, max: 10 },
+    { key: 'b', label: 'Viscous damping', unit: 'N·m·s', def: 1e-3, min: 0, max: 10 },
   ];
   static description = 'Two-phase hybrid stepper (NEMA-17 class, 1.8° per step): windings A (A+, A−) and B (B+, B−). Energising A, B, −A, −B in turn moves the rotor one full step each; T = Kt·(−iA·sin Nθ + iB·cos Nθ) − detent, with N = steps/4 rotor teeth. Drive it with the stepper driver; too high a step rate or load makes it stall and lose steps.';
   constructor(x, y) { super(x, y); this.postCurrents = [0, 0, 0, 0]; }

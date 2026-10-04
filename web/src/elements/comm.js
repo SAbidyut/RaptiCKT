@@ -426,6 +426,7 @@ export class UARTTx extends Chip {
     this.bits = bits;
   }
   // EN has a 100 kΩ pull-up to 5 V: unconnected means enabled
+  connectivity() { return [[0, 1, 'gnd']]; } // EN is referenced to ground through the pull-up
   stamp(s) { super.stamp(s); s.addG(this.nodes[0], 0, 1e-5); }
   stampStep(s) { super.stampStep(s); s.addI(0, this.nodes[0], 5e-5); }
   stampAC(ac) { super.stampAC(ac); ac.addY(this.nodes[0], 0, 1e-5); }
@@ -485,7 +486,7 @@ export class UARTRx extends Chip {
     const o = t < this.rdyUntil;
     if (o !== this.out[0]) { this.out = [o]; s.event = true; }
   }
-  shown() { return this.rx.slice(-8); }
+  shown() { return (this.rx || '').slice(-8); }
   readings() { return [['Received text', this.rx || '—', ''], ['Last byte', this.last == null ? '—' : `0x${this.last.toString(16).toUpperCase().padStart(2, '0')}`, ''], ['Framing / parity errors', this.errs, '']]; }
 }
 register(UARTRx);

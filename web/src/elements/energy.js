@@ -14,7 +14,7 @@
 
 import { Element, register, GRID } from './base.js';
 import { withChip } from './kit.js';
-import { Battery, CHEM, battery, interp, PVModule } from './sources2.js';
+import { Battery, CHEM, battery, interp, PVModule, socOCV, socStep } from './sources2.js';
 import { Junction, diodeIV } from './semis.js';
 import { VT } from '../engine/sim.js';
 import { fmtQty, fmtShort } from '../engine/units.js';
@@ -65,16 +65,16 @@ export class BatteryPack extends Battery {
   P() { return Math.max(1, Math.round(this.p.np)); }
   rint() { return (this.S() * this.p.cr) / this.P(); }
   cap() { return this.P() * this.p.cah; }
-  ocv(q = this.q ?? this.p.soc / 100) { return this.S() * interp(CHEM[this.p.chem] || CHEM.liion, clamp(q, 0, 1)); }
+  ocv(q = this.q ?? this.p.soc / 100) { return this.S() * socOCV(CHEM[this.p.chem] || CHEM.liion, q); }
   stamp(s) { const k = this.branches[0], [a, b] = this.nodes; s.addBranchKCL(a, b, k); s.addA(k, a - 1, 1); s.addA(k, b - 1, -1); s.addA(k, k, -this.rint()); }
   stampAC(ac) { const k = this.branches[0], [a, b] = this.nodes; ac.addBranchKCL(a, b, k); ac.addA(k, a - 1, 1); ac.addA(k, b - 1, -1); ac.addA(k, k, -this.rint()); }
   accept(s) {
     const i = s.x[this.branches[0]];
     this.setCurrent(i);
-    if (s.mode !== 'dc') this.q = clamp(this.q + (i * s.dt) / (3600 * this.cap()), 0, 1);
+    if (s.mode !== 'dc') this.q = socStep(this.q, (i * s.dt) / (3600 * this.cap()));
   }
   valueLabel() { return `${this.S()}S${this.P()}P ${fmtShort(this.ocv(this.p.soc / 100), 'V')}`; }
-  readings(s) { return [...super.readings(s), ['Capacity', this.cap(), 'Ah'], ['Internal resistance', this.rint(), 'Ω'], ['Energy stored', this.ocv() * this.cap() * (this.q ?? 0), 'Wh']]; }
+  readings(s) { return [...super.readings(s), ['Capacity', this.cap(), 'Ah'], ['Internal resistance', this.rint(), 'Ω'], ['Energy stored', this.ocv() * this.cap() * Math.max(0, this.q ?? 0), 'Wh']]; }
   spice(n) { return `V${this.name} ${n[0]} ${n[1]} DC ${this.ocv()} Rser=${this.rint()}`; }
 }
 register(BatteryPack);
@@ -429,7 +429,7 @@ export class OffGridInverter extends withChip(Element) {
       if ((this.why === 'low battery' && this.vf > this.p.vrec) || (this.why === 'overload' && this.tOff > 5)) { this.on = true; this.why = ''; this.pavg = 0; s.event = true; }
     }
   }
-  valueLabel() { return this.on ? `${fmtShort(this.p.vrms, 'V')} ${fmtShort(this.p.freq, 'Hz')}` : this.why.toUpperCase(); }
+  valueLabel() { return this.on !== false ? `${fmtShort(this.p.vrms, 'V')} ${fmtShort(this.p.freq, 'Hz')}` : (this.why || '').toUpperCase(); }
   readings(s) {
     return [['State', this.on ? 'running' : `off (${this.why})`, ''], ['Battery voltage', s.v(this.nodes[0]) - s.v(this.nodes[1]), 'V'], ['Battery current', this.iin || 0, 'A'],
       ['Output power (avg)', this.pavg || 0, 'W'], ['V(L–N)', s.v(this.nodes[2]) - s.v(this.nodes[3]), 'V']];
