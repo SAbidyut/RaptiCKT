@@ -55,21 +55,23 @@ export const CHAPTERS = [
       H('What you can do with it', 'এই অ্যাপ দিয়ে কী কী করা যায়'),
       L([
         'Build analog, digital and mixed circuits on an unlimited canvas.',
-        'Pick from **335 components in 20 categories**: sources, batteries, resistors, capacitors, transformers, protection devices, switches, house-wiring parts, motors, diodes, transistors, op-amps, logic ICs, sensors, meters and more.',
+        'Pick from **504 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
         'Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.',
         'Tap switches and push buttons while the circuit is running, and turn a knob to change any value live.',
         'Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).',
-        'Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point** and export a **SPICE netlist**.',
-        'Learn from **37 ready-made examples**, including 7 big build-along **projects** (complete house wiring, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL motor starter and more.',
+        'Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.',
+        'Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.',
+        'Learn from **66 ready-made examples**, including 7 big build-along **projects** (complete house wiring, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
         'Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).',
       ], [
         'অসীম আকারের ক্যানভাসে অ্যানালগ, ডিজিটাল ও মিক্সড সার্কিট বানান।',
-        '২০টি ক্যাটাগরির **৩৩৫টি কম্পোনেন্ট** থেকে বেছে নিন: সোর্স, ব্যাটারি, রেজিস্টর, ক্যাপাসিটর, ট্রান্সফরমার, প্রটেকশন ডিভাইস, সুইচ, হাউস-ওয়্যারিং-এর যন্ত্রাংশ, মোটর, ডায়োড, ট্রানজিস্টর, অপ-অ্যাম্প, লজিক আইসি, সেন্সর, মিটার ইত্যাদি।',
+        '২২টি ক্যাটাগরির **৫০৪টি কম্পোনেন্ট** থেকে বেছে নিন: সোর্স, ব্যাটারি, সোলার ও উইন্ড, রেজিস্টর, ক্যাপাসিটর, ট্রান্সফরমার, প্রটেকশন ডিভাইস, সুইচ, কন্টাক্টর, হাউস-ওয়্যারিং-এর যন্ত্রাংশ, মোটর ও ড্রাইভ, ডায়োড, ট্রানজিস্টর, পাওয়ার ইলেকট্রনিক্স, অপ-অ্যাম্প, লজিক আইসি, কমিউনিকেশন ব্লক, সেন্সর, মিটার ইত্যাদি।',
         'সার্কিট চলা দেখুন: সবুজ তার মানে পজিটিভ, লাল তার মানে নেগেটিভ, হলুদ ডট কারেন্টের সাথে চলে।',
         'সার্কিট চলার সময় সুইচ ও পুশ বাটন চাপুন, আর নব ঘুরিয়ে যেকোনো মান সাথে সাথে বদলান।',
         '**৬-চ্যানেল অসিলোস্কোপ** (FFT ও XY সহ) এবং **মাল্টিমিটার** (V, A, Ω, W) দিয়ে মাপুন।',
-        '**AC sweep (Bode plot)**, **DC sweep**, **Operating point** চালান এবং **SPICE netlist** এক্সপোর্ট করুন।',
-        '**৩৭টি তৈরি উদাহরণ** থেকে শিখুন, এর মধ্যে ৭টি বড় ধাপে-ধাপে **প্রজেক্ট** (পূর্ণ হাউস ওয়্যারিং, 16-bit RAM, মেইনস থেকে 5 V সাপ্লাই, ট্রাফিক লাইট, 4-bit অ্যাডার, সেকেন্ড কাউন্টার, অটোমেটিক স্ট্রিট লাইট): LED, RC ফিল্টার, রেকটিফায়ার, অ্যামপ্লিফায়ার, 555 টাইমার, টিউবলাইট, সিঁড়ির ওয়্যারিং, হাউস ওয়্যারিং, DOL মোটর স্টার্টার ইত্যাদি।',
+        '**AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** ও **Power / efficiency** অ্যানালাইসিস চালান এবং **SPICE netlist** এক্সপোর্ট করুন।',
+        'যেকোনো পার্টে **ফল্ট** দিন (টার্মিনাল খোলা, শর্ট সার্কিট, লিকেজ), ট্রাবলশুটিং অনুশীলন ও প্রটেকশন পরীক্ষার জন্য।',
+        '**৬৬টি তৈরি উদাহরণ** থেকে শিখুন, এর মধ্যে ৭টি বড় ধাপে-ধাপে **প্রজেক্ট** (পূর্ণ হাউস ওয়্যারিং, 16-bit RAM, মেইনস থেকে 5 V সাপ্লাই, ট্রাফিক লাইট, 4-bit অ্যাডার, সেকেন্ড কাউন্টার, অটোমেটিক স্ট্রিট লাইট): LED, RC ফিল্টার, রেকটিফায়ার, অ্যামপ্লিফায়ার, 555 টাইমার, টিউবলাইট, সিঁড়ির ওয়্যারিং, হাউস ওয়্যারিং, DOL ও **স্টার-ডেল্টা** মোটর স্টার্টার, ফরোয়ার্ড/রিভার্স ও পাম্প কন্ট্রোল, **VFD**, ইনভার্টার, SMPS, সোলার ও উইন্ড সিস্টেম, RS-485, I²C, SPI, রেডিও ইত্যাদি।',
         'সার্কিট ফোনে সেভ করুন, `.rckt` ফাইল হিসেবে শেয়ার করুন, আর ছবি (PNG) এক্সপোর্ট করুন।',
       ]),
       H('Who it is for', 'কাদের জন্য'),
@@ -472,6 +474,11 @@ export const CHAPTERS = [
       H('Which value is on the knob?', 'নবে কোন মানটি থাকে?'),
       P('Each component decides. Resistor → resistance; capacitor → capacitance; DC source → voltage; AC source → frequency or amplitude; potentiometer → wiper position; LDR → light; NTC → temperature; PWM generator → duty cycle; and so on. The other values are always in the properties sheet.',
         'প্রতিটি কম্পোনেন্ট নিজেই ঠিক করে। রেজিস্টর → রেজিস্ট্যান্স; ক্যাপাসিটর → ক্যাপাসিট্যান্স; DC সোর্স → ভোল্টেজ; AC সোর্স → ফ্রিকোয়েন্সি বা অ্যামপ্লিটিউড; পটেনশিওমিটার → ওয়াইপারের অবস্থান; LDR → আলো; NTC → তাপমাত্রা; PWM জেনারেটর → ডিউটি সাইকেল ইত্যাদি। বাকি মানগুলো সবসময় প্রপার্টিজ শিটে পাবেন।'),
+      H('Faults: break or short a part on purpose', 'ফল্ট: ইচ্ছে করে পার্ট ভাঙা বা শর্ট করা'),
+      P('At the bottom of the properties sheet, **⚡ Fault** lets you damage any part to practise fault-finding or to test protection: **Open circuit (broken terminal)** disconnects one terminal; **Short circuit** joins two terminals (≈1 mΩ); **Leakage / partial short** puts a resistance of your choice between two terminals. A faulty part shows a red ⚡ badge on the board; choose **None (healthy)** to repair it. Faults are saved with the circuit.',
+        'প্রপার্টিজ শিটের নিচে **⚡ Fault** দিয়ে যেকোনো পার্ট নষ্ট করা যায়, ফল্ট খোঁজার অনুশীলন বা প্রটেকশন পরীক্ষার জন্য: **Open circuit (broken terminal)** একটি টার্মিনাল বিচ্ছিন্ন করে; **Short circuit** দুই টার্মিনাল জুড়ে দেয় (≈1 mΩ); **Leakage / partial short** দুই টার্মিনালের মাঝে আপনার পছন্দের রেজিস্ট্যান্স বসায়। ফল্টি পার্টে বোর্ডে লাল ⚡ চিহ্ন দেখায়; ঠিক করতে **None (healthy)** বাছুন। ফল্ট সার্কিটের সাথে সেভ হয়।'),
+      TIP('For a fault that happens at a set moment while the circuit runs (to watch a breaker trip), use the **Fault (timed short circuit)** part from **Power Systems** — see the example **Short-circuit fault & MCB tripping**.',
+        'সার্কিট চলার সময় নির্দিষ্ট মুহূর্তে ঘটে এমন ফল্টের জন্য (ব্রেকার ট্রিপ দেখতে) **Power Systems** থেকে **Fault (timed short circuit)** পার্ট ব্যবহার করুন — উদাহরণ **Short-circuit fault & MCB tripping** দেখুন।'),
     ],
   },
 
@@ -584,6 +591,8 @@ export const CHAPTERS = [
         [['+  /  −', '+  /  −'], ['Zoom the time axis in / out, one 1-2-5 step of time per division. You can also pinch on the scope.', 'টাইম অক্ষ জুম ইন/আউট, প্রতি ডিভিশনের সময় 1-2-5 ধাপে। স্কোপে চিমটি কেটেও করা যায়।']],
         [['Trigger', 'Trigger'], ['On (green, the default): each sweep starts on a rising edge of **CH1**, so a repeating waveform stands still instead of sliding. Off: the picture rolls with the newest value at the right edge.', 'চালু (সবুজ, ডিফল্ট): প্রতিটি সুইপ **CH1**-এর উঠন্ত প্রান্তে শুরু হয়, তাই পুনরাবৃত্ত তরঙ্গ সরে না গিয়ে স্থির থাকে। বন্ধ: ছবি গড়িয়ে চলে, সর্বশেষ মান ডানদিকে।']],
         [['TIME / FFT / XY', 'TIME / FFT / XY'], ['Shows the current view; tap to cycle **Time → FFT → XY → Time**. XY needs at least 2 channels.', 'বর্তমান ভিউ দেখায়; ট্যাপ করলে **Time → FFT → XY → Time** ঘোরে। XY-এর জন্য কমপক্ষে ২টি চ্যানেল লাগে।']],
+        [['DC / AC', 'DC / AC'], ['Input coupling. **DC** (default) shows the whole signal. **AC** removes the average (DC) part, like the AC switch of a real scope, so a small ripple riding on a large DC voltage (for example a power-supply output) fills the screen. The rms column then reads **ac rms**.', 'ইনপুট কাপলিং। **DC** (ডিফল্ট) পুরো সিগন্যাল দেখায়। **AC** গড় (DC) অংশ সরিয়ে দেয়, সত্যিকারের স্কোপের AC সুইচের মতো, ফলে বড় DC ভোল্টেজের ওপর ছোট রিপল (যেমন পাওয়ার সাপ্লাইয়ের আউটপুট) পুরো স্ক্রিন জুড়ে দেখা যায়। তখন rms কলামে **ac rms** দেখায়।']],
+        [['Σ', 'Σ'], ['Switches the measurement table between **basic** (now, /div, pp, rms, f) and **timing**: **mean** (average), **duty** cycle, **rise** and **fall** time (10–90 %) and **φ**, the phase of each channel relative to CH1.', 'মাপের টেবিল **basic** (now, /div, pp, rms, f) ও **timing**-এর মধ্যে বদলায়: **mean** (গড়), **duty** সাইকেল, **rise** ও **fall** টাইম (১০–৯০ %) এবং **φ**, CH1-এর সাপেক্ষে প্রতিটি চ্যানেলের ফেজ।']],
         [['Freeze', 'Freeze'], ['Stops recording so you can study the picture. Press again to continue.', 'রেকর্ডিং থামায়, ছবি ভালোভাবে দেখার জন্য। আবার চাপলে চলে।']],
         [['Download', 'Download'], ['Exports the recorded data as a CSV file (time, then one column per channel).', 'রেকর্ড করা ডেটা CSV ফাইলে এক্সপোর্ট করে (সময়, তারপর প্রতি চ্যানেলের একটি কলাম)।']],
         [['Colour chip with ✕', 'রঙিন চিপ ও ✕'], ['Tap a channel chip to remove that probe.', 'চ্যানেলের চিপে ট্যাপ করলে ওই প্রোব মুছে যায়।']],
@@ -615,7 +624,11 @@ export const CHAPTERS = [
         [['**Ω**', '**Ω**'], ['Place the probes across a part or network. The app switches off all sources and measures what is left.', 'প্রোব কোনো পার্ট বা নেটওয়ার্কের দুই প্রান্তে বসান। অ্যাপ সব সোর্স বন্ধ ধরে বাকিটা মাপে।'], ['Small-signal resistance (**OL** if open).', 'স্মল-সিগন্যাল রেজিস্ট্যান্স (খোলা থাকলে **OL**)।']],
         [['**A**', '**A**'], ['Select a two-terminal component. Probes are not used.', 'একটি দুই-টার্মিনালের কম্পোনেন্ট সিলেক্ট করুন। প্রোব লাগে না।'], ['Current through it: average, RMS and instantaneous.', 'এর ভেতর দিয়ে কারেন্ট: গড়, RMS ও তাৎক্ষণিক।']],
         [['**W**', '**W**'], ['Select a two-terminal component.', 'একটি দুই-টার্মিনালের কম্পোনেন্ট সিলেক্ট করুন।'], ['Average power in it (positive = absorbing power, negative = delivering).', 'এতে গড় পাওয়ার (পজিটিভ = শোষণ করছে, নেগেটিভ = দিচ্ছে)।']],
+        [['**Hz**', '**Hz**'], ['Place the probes like in V mode.', 'V মোডের মতো প্রোব বসান।'], ['Frequency of the voltage between the probes (counted from its cycles).', 'প্রোবদ্বয়ের মাঝের ভোল্টেজের ফ্রিকোয়েন্সি (সাইকেল গুনে)।']],
+        [['**LC**', '**LC**'], ['Place the probes across a capacitor or an inductor (sources switched off, measured at 1 kHz like an LCR meter).', 'প্রোব ক্যাপাসিটর বা ইন্ডাক্টরের দুই প্রান্তে বসান (সোর্স বন্ধ ধরে, LCR মিটারের মতো 1 kHz-এ মাপা হয়)।'], ['Capacitance or inductance, with the impedance.', 'ক্যাপাসিট্যান্স বা ইন্ডাকট্যান্স, সাথে ইম্পিড্যান্স।']],
       ]),
+      P('In **Ω** mode a reading below about 30 Ω also shows **Continuity**, like the beeper of a real meter — handy for checking a wire or a closed switch.',
+        '**Ω** মোডে প্রায় ৩০ Ω-এর কম হলে **Continuity**-ও দেখায়, সত্যিকারের মিটারের বিপারের মতো — তার বা বন্ধ সুইচ পরীক্ষা করতে কাজে লাগে।'),
       P('The display reads smoothly (about a 0.4 s average) so numbers do not flicker. Tap **✕** on the card to close the meter.',
         'ডিসপ্লে মসৃণভাবে পড়ে (প্রায় ০.৪ সেকেন্ডের গড়) যাতে সংখ্যা কাঁপে না। মিটার বন্ধ করতে কার্ডের **✕** চাপুন।'),
       TIP('For permanent meters inside the circuit, use parts from the **Meters** category (voltmeter, ammeter, wattmeter, power-factor meter, frequency meter, kWh meter…). They stay in the circuit and are saved with it.',
@@ -626,10 +639,10 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 12
   {
     id: 'analysis', icon: 'bode',
-    title: { en: 'Analysis: Bode, DC sweep, operating point, SPICE', bn: 'অ্যানালাইসিস: Bode, DC sweep, operating point, SPICE' },
+    title: { en: 'Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE', bn: 'অ্যানালাইসিস: Bode, সুইপ, হারমোনিক্স, Monte Carlo, SPICE' },
     blocks: [
-      P('Tap the **Analysis** icon (top bar) or use **⋮ → Operating point / SPICE netlist**. There are four tabs. These tools solve the circuit mathematically and do not need the simulation to be running.',
-        'টপ বারের **Analysis** আইকন চাপুন, অথবা **⋮ → Operating point / SPICE netlist** ব্যবহার করুন। চারটি ট্যাব আছে। এই টুলগুলো সার্কিট গাণিতিকভাবে সলভ করে, সিমুলেশন চালু থাকা লাগে না।'),
+      P('Tap the **Analysis** icon (top bar) or use **⋮ → Operating point / SPICE netlist**. There are nine tabs. These tools solve the circuit by themselves and do not need the simulation to be running.',
+        'টপ বারের **Analysis** আইকন চাপুন, অথবা **⋮ → Operating point / SPICE netlist** ব্যবহার করুন। নয়টি ট্যাব আছে। এই টুলগুলো নিজেরাই সার্কিট সলভ করে, সিমুলেশন চালু থাকা লাগে না।'),
       H('1. AC Sweep (Bode plot)', '১. AC Sweep (Bode plot)'),
       P('Shows how the circuit responds to different frequencies: gain (in dB) and phase (in degrees). The input source is driven with 1 V at 0° and other sources are set to zero.',
         'বিভিন্ন ফ্রিকোয়েন্সিতে সার্কিট কেমন সাড়া দেয় তা দেখায়: গেইন (dB-তে) ও ফেজ (ডিগ্রিতে)। ইনপুট সোর্সকে 0° ফেজে 1 V দিয়ে চালানো হয়, বাকি সোর্স শূন্য ধরা হয়।'),
@@ -677,7 +690,24 @@ export const CHAPTERS = [
       H('3. Operating Point', '৩. Operating Point'),
       P('A table of every **node voltage** and, for every component, its **voltage, current and power**. If the simulation is not running, you get the **DC operating point** (capacitors treated as open, inductors as short). If it is running, you get the values at the current moment. **Refresh** re-reads; **CSV** exports.',
         'প্রতিটি **নোড ভোল্টেজ** এবং প্রতিটি কম্পোনেন্টের **ভোল্টেজ, কারেন্ট ও পাওয়ার**-এর টেবিল। সিমুলেশন না চললে **DC operating point** পাবেন (ক্যাপাসিটর খোলা, ইন্ডাক্টর শর্ট ধরে)। চললে এখনকার মুহূর্তের মান পাবেন। **Refresh** আবার পড়ে; **CSV** এক্সপোর্ট করে।'),
-      H('4. SPICE Netlist', '৪. SPICE Netlist'),
+      H('4. Harmonics', '৪. Harmonics'),
+      P('Runs the circuit for a number of cycles of the fundamental and takes the Fourier series of a probed signal: the amplitude of every harmonic as a bar chart, the **THD** (total harmonic distortion), RMS and crest factor. Choose the probe, the fundamental frequency and the number of harmonics, then tap **Analyse harmonics**. Use it for the current of a rectifier, CFL, dimmer or VFD.',
+        'মূল ফ্রিকোয়েন্সির কয়েকটি সাইকেল সার্কিট চালিয়ে কোনো প্রোবের সিগন্যালের ফুরিয়ার সিরিজ বের করে: প্রতিটি হারমোনিকের অ্যাম্প্লিচিউড বার চার্টে, **THD** (মোট হারমোনিক ডিস্টরশন), RMS ও ক্রেস্ট ফ্যাক্টর। প্রোব, মূল ফ্রিকোয়েন্সি ও হারমোনিকের সংখ্যা বেছে **Analyse harmonics** চাপুন। রেকটিফায়ার, CFL, ডিমার বা VFD-এর কারেন্ট দেখতে ব্যবহার করুন।'),
+      H('5. Impedance', '৫. Impedance'),
+      P('Measures the impedance between the two terminals of a **voltage probe** versus frequency, like an impedance analyser: |Z| and its phase on a Bode-style graph, with the minimum and maximum marked. Tap **Sweep impedance**. Find resonances, the input impedance of a filter, or check a loudspeaker or motor model.',
+        'একটি **ভোল্টেজ প্রোবের** দুই টার্মিনালের মাঝে ফ্রিকোয়েন্সির সাথে ইম্পিড্যান্স মাপে, ইম্পিড্যান্স অ্যানালাইজারের মতো: Bode-ধাঁচের গ্রাফে |Z| ও তার ফেজ, সর্বনিম্ন ও সর্বোচ্চ চিহ্নিত। **Sweep impedance** চাপুন। রেজোন্যান্স, ফিল্টারের ইনপুট ইম্পিড্যান্স খুঁজুন, বা স্পিকার বা মোটরের মডেল যাচাই করুন।'),
+      H('6. Parametric', '৬. Parametric'),
+      P('Runs the transient simulation once for each value of one component parameter and overlays the chosen signal — a family of curves, for example RC charging for five resistances or a motor start for several loads. Choose the component, parameter, values and run time, then tap **Run parametric sweep**.',
+        'একটি কম্পোনেন্টের প্যারামিটারের প্রতিটি মানের জন্য একবার করে ট্রানজিয়েন্ট সিমুলেশন চালিয়ে বাছাই করা সিগন্যাল একসাথে আঁকে — কার্ভের একটি পরিবার, যেমন পাঁচটি রেজিস্ট্যান্সে RC চার্জিং বা কয়েকটি লোডে মোটর স্টার্ট। কম্পোনেন্ট, প্যারামিটার, মানগুলো ও রানের সময় বেছে **Run parametric sweep** চাপুন।'),
+      H('7. Monte Carlo', '৭. Monte Carlo'),
+      P('A production-tolerance check: every resistor, capacitor and inductor is varied at random within the tolerance you set (default ±5 % for resistors, ±10 % for capacitors and inductors; Gaussian, uniform or worst-case) and the circuit is solved for each run. A histogram, the mean, standard deviation and worst cases show how much real parts move your output. Tap **Run Monte Carlo**.',
+        'উৎপাদনের টলারেন্স যাচাই: প্রতিটি রেজিস্টর, ক্যাপাসিটর ও ইন্ডাক্টরের মান আপনার দেওয়া টলারেন্সের (ডিফল্ট রেজিস্টরে ±৫ %, ক্যাপাসিটর ও ইন্ডাক্টরে ±১০ %; Gaussian, uniform বা worst-case) মধ্যে এলোমেলোভাবে বদলে প্রতিবার সার্কিট সলভ করা হয়। হিস্টোগ্রাম, গড়, স্ট্যান্ডার্ড ডেভিয়েশন ও সবচেয়ে খারাপ ফল দেখায় বাস্তব পার্ট আউটপুট কতটা সরায়। **Run Monte Carlo** চাপুন।'),
+      H('8. Power', '৮. Power'),
+      P('Runs the circuit and averages the power flowing into every component over the last part of the run: negative = the part supplies power, positive = it consumes it. Choose the useful load to get the **efficiency** (for example of a converter or an inverter). Tap **Measure power**.',
+        'সার্কিট চালিয়ে রানের শেষ অংশে প্রতিটি কম্পোনেন্টে যাওয়া গড় পাওয়ার বের করে: নেগেটিভ = পার্টটি পাওয়ার দিচ্ছে, পজিটিভ = খরচ করছে। কাজের লোড বেছে নিলে **দক্ষতা (efficiency)** পাওয়া যায় (যেমন কনভার্টার বা ইনভার্টারের)। **Measure power** চাপুন।'),
+      TIP('Every tab has a **CSV** button to export its results.',
+        'প্রতিটি ট্যাবে ফল এক্সপোর্ট করার জন্য **CSV** বাটন আছে।'),
+      H('9. SPICE Netlist', '৯. SPICE Netlist'),
       P('Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` commands, that you can open in **ngspice** or **LTspice** to cross-check results or continue research. Buttons: **Copy**, **Save .cir**, **Share**. Parts without a SPICE equivalent (such as digital blocks) are written as comments.',
         'আপনার স্কিমাটিকের স্ট্যান্ডার্ড SPICE নেটলিস্ট বানায়, `.op` ও `.tran` কমান্ডসহ, যা **ngspice** বা **LTspice**-এ খুলে ফল মিলিয়ে দেখা বা গবেষণা চালিয়ে যাওয়া যায়। বাটন: **Copy**, **Save .cir**, **Share**। যেসব পার্টের SPICE সমতুল্য নেই (যেমন ডিজিটাল ব্লক) সেগুলো কমেন্ট হিসেবে লেখা হয়।'),
     ],
@@ -786,7 +816,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 15 (library: generated)
   {
     id: 'library', icon: 'chip', generated: 'library',
-    title: { en: 'Component library (all 335)', bn: 'কম্পোনেন্ট লাইব্রেরি (সবগুলো ৩৩৫টি)' },
+    title: { en: 'Component library (all 504)', bn: 'কম্পোনেন্ট লাইব্রেরি (সবগুলো ৫০৪টি)' },
     blocks: [
       P('Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.',
         'অ্যাপের প্রতিটি কম্পোনেন্ট, **+** মেনুর মতো গ্রুপ করে দেওয়া হলো। প্রতিটি পার্টের ক্ষেত্রে কী করে ও কোন সেটিং বদলানো যায় তা পাবেন। দ্রুত কোনো পার্ট খুঁজতে ম্যানুয়ালের উপরের সার্চ বক্স ব্যবহার করুন।'),
@@ -796,7 +826,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 16 (examples: generated)
   {
     id: 'examples', icon: 'book', generated: 'examples',
-    title: { en: 'Examples (all 37)', bn: 'উদাহরণ (সবগুলো ৩৭টি)' },
+    title: { en: 'Examples (all 66)', bn: 'উদাহরণ (সবগুলো ৬৬টি)' },
     blocks: [
       P('Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.',
         'যেকোনো উদাহরণ খুলুন, **Run** চাপুন (নিজেই শুরু হয়), তারপর পরীক্ষা করুন: সুইচ চাপুন, নব ঘোরান, স্কোপ প্রোব দিন, অ্যানালাইসিস চালান। মূল উদাহরণ নষ্ট হবে না।'),
@@ -921,6 +951,14 @@ export const CATEGORY_NOTES = {
     en: 'Each battery has a **state of charge** (%), a capacity (Ah) and an internal resistance. Its voltage falls as it discharges and a heavy load makes it sag. Current flowing into the + terminal charges it.',
     bn: 'প্রতিটি ব্যাটারির **চার্জের অবস্থা** (%), ক্ষমতা (Ah) ও অভ্যন্তরীণ রেজিস্ট্যান্স আছে। ডিসচার্জ হলে ভোল্টেজ কমে, ভারী লোডে ভোল্টেজ নেমে যায়। + টার্মিনালে ঢোকা কারেন্ট ব্যাটারি চার্জ করে।',
   },
+  Renewables: {
+    en: 'Solar panels and arrays, MPPT and PWM charge controllers, off-grid and grid-tie inverters, a wind turbine and a fuel cell. They follow the real curves (the panel\'s I–V curve with irradiance and temperature, the turbine\'s power coefficient), so you can size a solar home system or watch an MPPT controller track the maximum power point. Turn the **irradiance** or **wind** knob while running.',
+    bn: 'সোলার প্যানেল ও অ্যারে, MPPT ও PWM চার্জ কন্ট্রোলার, অফ-গ্রিড ও গ্রিড-টাই ইনভার্টার, উইন্ড টারবাইন ও ফুয়েল সেল। এগুলো বাস্তব কার্ভ মেনে চলে (আলো ও তাপমাত্রার সাথে প্যানেলের I–V কার্ভ, টারবাইনের পাওয়ার কোএফিশিয়েন্ট), তাই সোলার হোম সিস্টেমের মাপ ঠিক করা বা MPPT কন্ট্রোলারকে ম্যাক্সিমাম পাওয়ার পয়েন্ট খুঁজতে দেখা যায়। চলার সময় **irradiance** বা **wind** নব ঘোরান।',
+  },
+  Communication: {
+    en: 'Behavioural communication blocks (no firmware or code runs): UART transmitter and terminal, RS-232, RS-485 and CAN transceivers, I²C and SPI masters with real slave chips (PCF8574, 74HC595), wireless links with a link budget (433 MHz, nRF24L01, Bluetooth LE, Wi-Fi, LoRa, Zigbee), an RFID reader, a fibre link, and signal blocks for radio (filters, RF amplifier, mixer, envelope detector, antenna). The messages are typed into the transmitter\'s settings.',
+    bn: 'আচরণভিত্তিক কমিউনিকেশন ব্লক (কোনো ফার্মওয়্যার বা কোড চলে না): UART ট্রান্সমিটার ও টার্মিনাল, RS-232, RS-485 ও CAN ট্রান্সসিভার, বাস্তব স্লেভ চিপসহ (PCF8574, 74HC595) I²C ও SPI মাস্টার, লিংক বাজেটসহ ওয়্যারলেস লিংক (433 MHz, nRF24L01, Bluetooth LE, Wi-Fi, LoRa, Zigbee), RFID রিডার, ফাইবার লিংক, এবং রেডিওর সিগন্যাল ব্লক (ফিল্টার, RF অ্যামপ্লিফায়ার, মিক্সার, এনভেলপ ডিটেক্টর, অ্যান্টেনা)। বার্তা ট্রান্সমিটারের সেটিংসে লিখে দিতে হয়।',
+  },
   Passive: {
     en: 'Resistors, capacitors and inductors, plus variable and real-world versions. The knob changes the main value. Polarised capacitors (electrolytic, tantalum, supercapacitor) must be connected the right way round.',
     bn: 'রেজিস্টর, ক্যাপাসিটর ও ইন্ডাক্টর, সাথে ভেরিয়েবল ও বাস্তব সংস্করণ। নব মূল মান বদলায়। পোলারিটিযুক্ত ক্যাপাসিটর (ইলেক্ট্রোলাইটিক, ট্যান্টালাম, সুপারক্যাপাসিটর) সঠিক দিকে জুড়তে হবে।',
@@ -934,8 +972,8 @@ export const CATEGORY_NOTES = {
     bn: 'ফিউজ, ব্রেকার, রেসিডুয়াল-কারেন্ট ডিভাইস, সার্জ প্রটেক্টর ও রিলে। সিমুলেশনে এগুলো সত্যিই **ট্রিপ** করে (MCB তার B/C/D কার্ভ অনুসরণ করে, RCCB লিকেজ কারেন্টে ট্রিপ করে)। ট্রিপের পর পার্টে কারণসহ **TRIPPED** দেখায়। একবার ট্যাপ করলে রিসেট হয়।',
   },
   'Switches & Relays': {
-    en: 'Tap a switch to toggle it while the circuit runs. Push buttons act only while held. Relays, contactors and timer relays have a **coil** side and a **contact** side: when the coil is energised the contacts move.',
-    bn: 'সার্কিট চলার সময় সুইচে ট্যাপ করলে টগল হয়। পুশ বাটন কেবল চেপে ধরা অবস্থায় কাজ করে। রিলে, কন্টাক্টর ও টাইমার রিলের **কয়েল** ও **কন্টাক্ট** দুই দিক আছে: কয়েলে কারেন্ট এলে কন্টাক্ট নড়ে।',
+    en: 'Tap a switch to toggle it while the circuit runs. Push buttons act only while held. Relays, contactors (with main poles and auxiliary 13-14 / 21-22 contacts), latching and timer relays, the 3-pole overload relay and phase / voltage monitoring relays have a **coil** or sensing side and a **contact** side: when the coil is energised the contacts move. Net labels make ladder (control) diagrams tidy.',
+    bn: 'সার্কিট চলার সময় সুইচে ট্যাপ করলে টগল হয়। পুশ বাটন কেবল চেপে ধরা অবস্থায় কাজ করে। রিলে, কন্টাক্টর (মেইন পোল ও অক্সিলিয়ারি 13-14 / 21-22 কন্টাক্টসহ), ল্যাচিং ও টাইমার রিলে, থ্রি-পোল ওভারলোড রিলে এবং ফেজ / ভোল্টেজ মনিটরিং রিলের **কয়েল** বা সেন্সিং দিক ও **কন্টাক্ট** দিক আছে: কয়েলে কারেন্ট এলে কন্টাক্ট নড়ে। নেট লেবেল দিয়ে ল্যাডার (কন্ট্রোল) ডায়াগ্রাম গোছানো হয়।',
   },
   Electrical: {
     en: 'Parts for house wiring and lighting: bulbs, tube light with choke and starter, fan with regulators, heater, socket with a selectable appliance (including "Faulty" and "Short circuit" for testing protection), dimmer, bell and earth electrode. Use them with **AC Mains**.',
@@ -946,8 +984,8 @@ export const CATEGORY_NOTES = {
     bn: 'রেটেড লোড (R-L, R-C, থ্রি-ফেজ স্টার ও ডেল্টা), পাওয়ার-ফ্যাক্টর কারেকশন ক্যাপাসিটর ও ট্রান্সমিশন-লাইন মডেল। পাওয়ার ও পাওয়ার ফ্যাক্টর দিয়ে লোড ঠিক করুন।',
   },
   Machines: {
-    en: 'DC motors and generators, single- and 3-phase induction motors and an alternator. They include electrical and mechanical behaviour: starting current, speed and torque. Read the live **rpm** and **current** in the properties sheet.',
-    bn: 'DC মোটর ও জেনারেটর, সিঙ্গেল ও থ্রি-ফেজ ইনডাকশন মোটর এবং অল্টারনেটর। এতে বৈদ্যুতিক ও যান্ত্রিক আচরণ আছে: স্টার্টিং কারেন্ট, গতি ও টর্ক। প্রপার্টিজ শিটে লাইভ **rpm** ও **current** দেখুন।',
+    en: 'DC motors and generators (shunt, series, compound, universal), single- and 3-phase induction motors (including a 6-terminal motor for star-delta starting), synchronous motor, PMSM, BLDC with hall sensors, stepper motor and alternators. They include electrical and mechanical behaviour: starting current, speed, torque and slip; motors start at rest. Read the live **rpm** and **current** in the properties sheet.',
+    bn: 'DC মোটর ও জেনারেটর (শান্ট, সিরিজ, কম্পাউন্ড, ইউনিভার্সাল), সিঙ্গেল ও থ্রি-ফেজ ইনডাকশন মোটর (স্টার-ডেল্টা স্টার্টিংয়ের জন্য ৬-টার্মিনাল মোটরসহ), সিনক্রোনাস মোটর, PMSM, হল সেন্সরসহ BLDC, স্টেপার মোটর ও অল্টারনেটর। এতে বৈদ্যুতিক ও যান্ত্রিক আচরণ আছে: স্টার্টিং কারেন্ট, গতি, টর্ক ও স্লিপ; মোটর থেমে থাকা অবস্থা থেকে শুরু হয়। প্রপার্টিজ শিটে লাইভ **rpm** ও **কারেন্ট** দেখুন।',
   },
   Diodes: {
     en: 'Diodes conduct only one way (anode → cathode). Zener diodes hold a fixed reverse voltage. Bridge and 3-phase rectifiers are ready-made blocks. Pick a **model** to get real-part numbers.',
@@ -958,8 +996,8 @@ export const CATEGORY_NOTES = {
     bn: 'BJT, MOSFET, JFET, IGBT ইত্যাদি। টার্মিনাল: BJT = কালেক্টর, বেজ, এমিটার; MOSFET = ড্রেন, গেট, সোর্স। বাস্তব সংখ্যার জন্য **model** (2N3904, 2N2222, BC547, 2N7000, IRF540N…) বাছুন।',
   },
   'Thyristors & Power': {
-    en: 'SCR, TRIAC, DIAC, GTO and friends for phase control and power switching, plus gate drivers and buck/boost converter modules.',
-    bn: 'ফেজ কন্ট্রোল ও পাওয়ার সুইচিংয়ের জন্য SCR, TRIAC, DIAC, GTO ইত্যাদি, সাথে গেট ড্রাইভার ও বাক/বুস্ট কনভার্টার মডিউল।',
+    en: 'SCR, TRIAC, DIAC, GTO and friends for phase control and power switching, a firing unit for SCR bridges, H-bridge and 3-phase inverter bridges, an SPWM modulator (V/f control), BLDC and stepper drivers, gate drivers, and averaged DC-DC converters (buck, boost, buck-boost, Ćuk, SEPIC, flyback, forward, push-pull, half and full bridge).',
+    bn: 'ফেজ কন্ট্রোল ও পাওয়ার সুইচিংয়ের জন্য SCR, TRIAC, DIAC, GTO ইত্যাদি, SCR ব্রিজের জন্য ফায়ারিং ইউনিট, H-ব্রিজ ও থ্রি-ফেজ ইনভার্টার ব্রিজ, SPWM মডুলেটর (V/f কন্ট্রোল), BLDC ও স্টেপার ড্রাইভার, গেট ড্রাইভার, এবং অ্যাভারেজড DC-DC কনভার্টার (বাক, বুস্ট, বাক-বুস্ট, Ćuk, SEPIC, ফ্লাইব্যাক, ফরোয়ার্ড, পুশ-পুল, হাফ ও ফুল ব্রিজ)।',
   },
   'Analog ICs': {
     en: 'Op-amps (with gain-bandwidth and slew rate), comparators, the 555 timer, fixed and adjustable regulators and other analog building blocks. Real op-amp models: LM741, LM358, TL071 and more.',
