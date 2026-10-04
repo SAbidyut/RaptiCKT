@@ -1581,7 +1581,6 @@ export class Editor {
         break;
       }
       case 'marquee':
-      case 'marquee':
         this.marquee = [g.sx, g.sy, sx, sy];
         this.marqueePick = this.pickInBox(this.marquee);
         this.dirtyDraw = true;
