@@ -671,11 +671,21 @@ export class Renderer {
       else if (vb === 'middle') { push(vx, vy + 14, va, 'middle', 3); push(vx, vy - 14, va, 'middle', 4); }
       else if (vb === 'top') push(vx, vy + 14, va, 'top', 4);
       else push(vx, vy - 14, va, 'bottom', 5);
+      // crowded (a text label, a tag or a neighbour right where the reading would go):
+      // step further out on every side rather than settle on top of something
+      const out = { left: [1, 0], right: [-1, 0], top: [0, 1], alphabetic: [0, -1] };
+      [[-sx, -sy], [sx, sy], [sy, sx], [-sy, -sx]].forEach((sd, j) => {
+        const [x, y, a, bl] = e.labelAnchor(sd);
+        const [ux, uy] = bl === 'middle' ? out[a] : out[bl];
+        for (let k = 1; k <= 3; k++) push(x + ux * 13 * k, y + uy * 13 * k, a, bl, 10 + j * 3 + k * 4);
+        if (bl === 'middle') for (const d of [-26, 26]) push(x, y + d, a, bl, 14 + j * 3);
+        else for (const d of [-1, 1]) push(x + d * (AW / 2 + 8), y, a, bl, 14 + j * 3);
+      });
       let best = null, bestScore = Infinity;
       for (const c of cands) {
         const r = rectOf(c.x, c.y, AW, VH, c.align, c.base);
         const sc = overlap(r) * 2 + c.pen;
-                if (sc < bestScore) { bestScore = sc; best = { ...c, r }; }
+        if (sc < bestScore) { bestScore = sc; best = { ...c, r }; }
       }
       const [p0, p1] = e.getPosts();
       const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
@@ -704,33 +714,43 @@ export class Renderer {
       const cands = [];
       for (const [a, b] of segs) {
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        if (len < GRID * 0.9) continue;
+        if (len < 1) continue;
+        const short = len < GRID * 0.9 ? 20 : 0; // a stub between two pins: only if nothing better
         const horiz = a[1] === b[1];
-        for (const t of [0.5, 0.3, 0.7, 0.15, 0.85]) {
+        for (const t of short ? [0.5] : [0.5, 0.3, 0.7, 0.15, 0.85]) {
           const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
           if (horiz) {
-            const room = len >= VW + 8 ? 0 : 12; // prefer stretches wide enough for the text
+            const room = (len >= VW + 8 ? 0 : 12) + short; // prefer stretches wide enough for the text
             cands.push({ x, y: y - 5, align: 'center', base: 'bottom', pen: room + Math.abs(t - 0.5) * 6 });
             cands.push({ x, y: y + 5, align: 'center', base: 'top', pen: room + 4 + Math.abs(t - 0.5) * 6 });
+            // one line further out, for when the spot next to the wire is taken
+            cands.push({ x, y: y - 19, align: 'center', base: 'bottom', pen: room + 40 + Math.abs(t - 0.5) * 6 });
+            cands.push({ x, y: y + 19, align: 'center', base: 'top', pen: room + 44 + Math.abs(t - 0.5) * 6 });
           } else {
-            cands.push({ x: x + 6, y, align: 'left', base: 'middle', pen: 10 + Math.abs(t - 0.5) * 6 });
-            cands.push({ x: x - 6, y, align: 'right', base: 'middle', pen: 12 + Math.abs(t - 0.5) * 6 });
+            const pen = 10 + short + Math.abs(t - 0.5) * 6;
+            cands.push({ x: x + 6, y, align: 'left', base: 'middle', pen });
+            cands.push({ x: x - 6, y, align: 'right', base: 'middle', pen: pen + 2 });
+            cands.push({ x: x + 20, y, align: 'left', base: 'middle', pen: pen + 38 });
+            cands.push({ x: x - 20, y, align: 'right', base: 'middle', pen: pen + 40 });
           }
         }
       }
-      for (const [x, y] of posts) {
-        cands.push({ x: x + 5, y: y - 5, align: 'left', base: 'bottom', pen: 30 });
-        cands.push({ x: x - 5, y: y - 5, align: 'right', base: 'bottom', pen: 32 });
-        cands.push({ x: x + 5, y: y + 5, align: 'left', base: 'top', pen: 34 });
-        cands.push({ x: x - 5, y: y + 5, align: 'right', base: 'top', pen: 36 });
+      for (const [x, y] of posts) for (const [d, p] of [[5, 30], [16, 50]]) {
+        cands.push({ x: x + 5, y: y - d, align: 'left', base: 'bottom', pen: p });
+        cands.push({ x: x - 5, y: y - d, align: 'right', base: 'bottom', pen: p + 2 });
+        cands.push({ x: x + 5, y: y + d, align: 'left', base: 'top', pen: p + 4 });
+        cands.push({ x: x - 5, y: y + d, align: 'right', base: 'top', pen: p + 6 });
       }
       let best = null, bestScore = Infinity;
       for (const c of cands) {
         const r = rectOf(c.x, c.y, VW, VH, c.align, c.base);
-        const sc = overlap(r) * 2 + c.pen;
-        if (sc < bestScore) { bestScore = sc; best = { ...c, r }; }
+        const ov = overlap(r);
+        const sc = ov * 2 + c.pen;
+        if (sc < bestScore) { bestScore = sc; best = { ...c, r, ov }; }
       }
-      if (!best) continue;
+      // nowhere free near the net (pins wired straight into a crowded block): leave the
+      // reading out rather than print it over a part or another label; a probe still reads it
+      if (!best || best.ov > VW * VH * 0.35) continue;
       box(best.r, 2);
       volts.push({ node: n, x: best.x, y: best.y, align: best.align, base: best.base });
     }

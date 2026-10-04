@@ -1,4 +1,4 @@
-// The in-app manual: opens from Home / Settings / editor, language switch, search, jump links,
+// The in-app manual: opens from Home / Settings / editor, search, jump links,
 // library and examples, and "Open this example" without losing the circuit being edited.
 // Usage: npm run build && node tests/manual.mjs [shots-dir]
 import { chromium } from 'playwright';
@@ -30,7 +30,7 @@ ok('Manual tab opens the manual inside Home', await screen() === 'home' && await
 ok('the RaptiCKT header and bottom menu stay', await page.locator('.screen.home .home-head .brand').isVisible() && await page.locator('.screen.home .bottom-nav [data-tab=manual].on').count() === 1);
 ok('contents page lists 19 chapters', await page.locator('.man-card[data-nav^="ch:"]').count() === 19);
 ok('contents page is short (no chapter text on it)', await page.locator('.man-inner .man-b').count() === 0);
-ok('default language English', await title() === 'User Manual');
+ok('opens on the contents page', await title() === 'User Manual');
 await shot('1-contents');
 // chapter -> section -> back, back
 await nav('ch:scope');
@@ -54,13 +54,13 @@ ok('Next chapter button', (await title()).startsWith('Quick start'));
 await back();
 // library: categories, then components
 await nav('ch:library');
-ok('library lists 20 categories', await page.locator('.man-card[data-nav^="sec:library/"]').count() === 20);
+ok('library lists 22 categories', await page.locator('.man-card[data-nav^="sec:library/"]').count() === 22);
 await nav('sec:library/Sensors');
-ok('a category lists its components', await page.locator('.man-item').count() === 41);
+ok('a category lists its components', await page.locator('.man-item').count() === 58);
 await shot('4-category');
 await back(); await back();
 // chapter links inside text
-await nav('ch:editor'); await nav('sec:editor/2');
+await nav('ch:editor'); await nav('sec:editor/3');
 await tap(page.locator('.man-ref[data-nav="ch:running"]'));
 ok('chapter references are links', await title() === 'Running the simulation');
 await back(); await back(); await back();
@@ -76,19 +76,6 @@ await page.fill('.man-search input', 'zzzzqqq'); await page.waitForTimeout(400);
 ok('no-result message', await page.locator('.man-empty').count() === 1);
 await page.fill('.man-search input', ''); await page.waitForTimeout(400);
 ok('clearing the search shows the contents again', await page.locator('.man-card[data-nav^="ch:"]').count() === 19);
-// language
-await nav('ch:scope');
-await page.click('[data-x=lang]'); await page.waitForTimeout(500);
-ok('switches to Bangla and stays on the page', await title() === 'অসিলোস্কোপ');
-ok('language is remembered', await page.evaluate(() => JSON.parse(localStorage.getItem('raptickt.settings.v1')).manualLang) === 'bn');
-await shot('6-bn-chapter');
-await back();
-await page.fill('.man-search input', 'ক্যাপাসিটর'); await page.waitForTimeout(500);
-ok('Bangla search works', await page.locator('.man-card.res').count() >= 1);
-await shot('7-bn-search');
-await page.fill('.man-search input', ''); await page.waitForTimeout(300);
-await shot('8-bn-contents');
-await page.click('[data-x=lang]'); await page.waitForTimeout(400);
 await back();
 ok('Back from the contents goes to the Home tab', await screen() === 'home' && await page.evaluate(() => app.home.tab) === 'home');
 

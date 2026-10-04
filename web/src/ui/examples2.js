@@ -99,7 +99,7 @@ export const EXAMPLES2 = [
       tagR(b, ...b.pin(kd, 8), 'L1 ctrl'); b.w(b.pin(kd, 9), b.pin(l2, 0)); tagR(b, ...b.pin(l2, 1), 'N');
       tagR(b, ...b.pin(olr, 8), 'L1 ctrl'); b.w(b.pin(olr, 9), b.pin(l3, 0)); tagR(b, ...b.pin(l3, 1), 'N');
       b.label(57, -2.4, 'STOP'); b.label(62, -2.4, 'START'); b.label(73, 6.3, 'KT 1.5 s');
-      b.label(25, -3.4, 'KM'); b.label(25, 23.6, 'KY'); b.label(37.6, 11.2, 'KΔ'); b.label(25, 7.4, 'OLR');
+      b.label(25, -3.4, 'KM'); b.label(25, 23.6, 'KY'); b.label(36.6, 12.4, 'KΔ'); b.label(25, 7.4, 'OLR');
       b.label(39, 24.3, 'STAR'); b.label(51, 11.3, 'DELTA'); b.label(37, 8.3, 'TRIP');
       b.cur(mot, C[0]);
       b.doc.simSettings.speed = 0.2;
@@ -145,7 +145,7 @@ export const EXAMPLES2 = [
       const fl = b.h('floatsw', 25, 0, { mode: 'NC', set: 80, hyst: 60, level: 85 });
       b.w([22, -3], [22, 0], b.pin(fl, 0)); b.w(b.pin(fl, 1), [30, 0]); tagR(b, 30, 0, 'K');
       const run = b.h('neon', 25, 4); tagL(b, ...b.pin(run, 0), 'RUN'); tagR(b, ...b.pin(run, 1), 'N');
-      b.label(25, 1.9, 'FLOAT (NC)'); b.label(25, 5.6, 'RUN (K 13-14)'); b.label(5, 0.4, 'K');
+      b.label(25, 1.5, 'FLOAT (NC)'); b.label(25, 5.6, 'RUN (K 13-14)'); b.label(5, 0.4, 'K');
       b.cur(mot, C[0]);
       b.doc.simSettings.speed = 0.2;
     },
@@ -165,7 +165,7 @@ export const EXAMPLES2 = [
       for (let k = 0; k < 4; k++) b.w(b.pin(ctr, 2 + k), b.pin(dec, k));
       for (let k = 0; k < 7; k++) b.w(b.pin(dec, 4 + k), b.pin(seg, k));
       b.el('ground', 0, 8);
-      b.label(6, -0.4, 'photo-eye'); b.label(2.5, -3.4, '+24 V');
+      b.label(6.8, -0.6, 'photo-eye'); b.label(2.5, -3.4, '+24 V');
       b.node(14, 2, C[0]);
     },
   },
@@ -209,7 +209,7 @@ export const EXAMPLES2 = [
       b.w([0, 1], [0, -1], b.pin(tx, 0)); b.w(b.pin(tx, 1), b.pin(r, 0)); b.w(b.pin(r, 0), [13, -1], b.pin(pm, 0));
       b.w(b.pin(r, 1), [10, 5], [0, 5]); b.w(b.pin(r, 1), b.pin(pm, 1));
       b.el('ground', 0, 5);
-      b.label(4, -2.6, 'PT 0–10 bar'); b.label(10, 4.2, '250 Ω'); b.label(-2.6, 3, '24 V');
+      b.label(4, -2.6, 'PT 0–10 bar'); b.label(8.8, 4.2, '250 Ω'); b.label(-2.6, 3, '24 V');
       b.cur(tx, C[0]);
     },
   },
@@ -258,7 +258,7 @@ export const EXAMPLES2 = [
       const mot = b.el('im3', 24, 2, { load: 15, loadType: 'fan' });
       for (let k = 0; k < 3; k++) b.w(b.pin(inv, 5 + k), b.pin(mot, k));
       b.label(0, -3.2, '400 V 3~'); b.label(6, -2.8, 'rectifier'); b.label(14, -2.8, 'DC bus');
-      b.label(10, -1.4, 'SPWM V/f'); b.label(16, -2.4, 'inverter'); b.label(10, 7.6, 'EN');
+      b.label(10, -1.4, 'SPWM V/f'); b.label(16.4, -2.4, 'inverter'); b.label(10, 7.6, 'EN');
       b.cur(mot, C[0]);
       b.doc.simSettings.speed = 0.1; b.doc.simSettings.maxStep = 1e-5;
     },

@@ -37,7 +37,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Output (23): LEDs (RGB, bicolour, IR, laser), 7- and 14-segment, dot matrix, hex display, bar graph, buzzers, speaker, headphone, preamp, tone control, equaliser, solenoid, servo, Peltier, DC fan, electromagnet
   - Vacuum Tubes (3) and Meters (21): voltmeter, ammeter, ohmmeter, wattmeter, true-RMS meters, frequency, phase, power-factor, VAR, kWh, dB, peak, LCR, megger, panel meter, moving-coil meters, test point
 - **AC readings like a real meter**: in circuits with a sinusoidal supply (mains, AC sources, 3-phase), live labels show the RMS over one supply cycle (e.g. `12 V~` on a 230 V : 12-0-12 V transformer) and DC nets show their average. Voltmeters and ammeters default to *Auto* (RMS in AC circuits). Switch to instantaneous values in Settings → AC readings.
-- **Live readings on the schematic**: while the simulation runs, every net shows its voltage (blue) and every two-terminal part shows its current with a direction arrow (green), placed so they never overlap. Both can be switched off in Settings.
+- **Live readings on the schematic**: while the simulation runs, every net shows its voltage (blue) and every two-terminal part shows its current with a direction arrow (green), placed so they never overlap one another, a part or a text label (when a crowded net has no free spot, its reading is left out; a probe still reads it). Both can be switched off in Settings.
 - **Oscilloscope**: 6 channels on a real 10 × 8 graticule with one shared 1-2-5 V/div scale and 0 V line for all voltage channels (currents on their own A/div with 0 A on the same line), 1-2-5 time/div, CH1 edge trigger (a steady picture), ground markers, a touch cursor read-out, frequency/RMS/p-p, FFT spectrum, XY mode, AC/DC input coupling, timing measurements (mean, duty cycle, rise/fall time, phase) and CSV export.
 - **Multimeter**: draggable probes for V (DC + true RMS), A, Ω (small-signal, with continuity), W, Hz and LC (capacitance / inductance at 1 kHz).
 - **Analyses**:
@@ -73,9 +73,9 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## User manual
 
-A complete, step-by-step manual is built into the app, in **English and বাংলা**: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 504 components and 66 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
+A complete, step-by-step manual is built into the app: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 504 components and 66 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
 
-The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md) (English) and [docs/MANUAL.bn.md](docs/MANUAL.bn.md) (বাংলা). They are generated from `web/src/ui/manual-content.js` with `cd web && npm run manual`; re-run it after editing the manual. `web/tests/manual-content.test.js` fails if a component, example, setting or menu item is added to the app without being covered by the manual.
+The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md). It is generated from `web/src/ui/manual-content.js` with `cd web && npm run manual`; re-run it after editing the manual. `web/tests/manual-content.test.js` fails if a component, example, setting or menu item is added to the app without being covered by the manual.
 
 ## Simulation engine (web/src/engine)
 

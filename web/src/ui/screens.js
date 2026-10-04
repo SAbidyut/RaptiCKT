@@ -179,7 +179,7 @@ export class HomeScreen {
       </section>
       ${auto && auto.elements && auto.elements.length ? `
       <button class="resume" data-h="resume">${icon('play', 18)}<div><b>Continue where you left off</b><span>${esc(auto.name)} · ${auto.elements.length} components</span></div>${icon('back', 18, 'flipx')}</button>` : ''}
-      <button class="resume manual-link" data-h="manual">${icon('manual', 18)}<div><b>User manual</b><span>Step-by-step guide · English & বাংলা</span></div>${icon('back', 18, 'flipx')}</button>
+      <button class="resume manual-link" data-h="manual">${icon('manual', 18)}<div><b>User manual</b><span>Step-by-step guide</span></div>${icon('back', 18, 'flipx')}</button>
       <section class="feat-grid">
         ${[
           ['scope', 'Oscilloscope', 'Multichannel, FFT & XY'],

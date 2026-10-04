@@ -1,5 +1,3 @@
-[বাংলায় পড়ুন → MANUAL.bn.md](MANUAL.bn.md)
-
 # RaptiCKT — User Manual
 
 *Resonance Automation · Circuit Simulator · Version 1.0.0*
@@ -8,27 +6,27 @@ Everything in the app, explained step by step.
 
 ## Contents
 
-1. [Welcome to RaptiCKT](#en-ch-welcome)
-2. [Quick start: your first circuit](#en-ch-quickstart)
-3. [Home, Examples, My Circuits, About](#en-ch-screens)
-4. [The editor at a glance](#en-ch-editor)
-5. [Adding components](#en-ch-adding)
-6. [Moving, selecting and editing parts](#en-ch-editing)
-7. [Wiring](#en-ch-wiring)
-8. [Changing values and the knob](#en-ch-values)
-9. [Running the simulation](#en-ch-running)
-10. [Oscilloscope](#en-ch-scope)
-11. [Multimeter](#en-ch-meter)
-12. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#en-ch-analysis)
-13. [Saving, opening and sharing](#en-ch-saving)
-14. [Settings reference](#en-ch-settings)
-15. [Component library (all 504)](#en-ch-library)
-16. [Examples (all 66)](#en-ch-examples)
-17. [Quick reference: formulas and units](#en-ch-formulas)
-18. [Troubleshooting and FAQ](#en-ch-troubleshooting)
-19. [About RAPTI and contact](#en-ch-about)
+1. [Welcome to RaptiCKT](#ch-welcome)
+2. [Quick start: your first circuit](#ch-quickstart)
+3. [Home, Examples, My Circuits, About](#ch-screens)
+4. [The editor at a glance](#ch-editor)
+5. [Adding components](#ch-adding)
+6. [Moving, selecting and editing parts](#ch-editing)
+7. [Wiring](#ch-wiring)
+8. [Changing values and the knob](#ch-values)
+9. [Running the simulation](#ch-running)
+10. [Oscilloscope](#ch-scope)
+11. [Multimeter](#ch-meter)
+12. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
+13. [Saving, opening and sharing](#ch-saving)
+14. [Settings reference](#ch-settings)
+15. [Component library (all 504)](#ch-library)
+16. [Examples (all 66)](#ch-examples)
+17. [Quick reference: formulas and units](#ch-formulas)
+18. [Troubleshooting and FAQ](#ch-troubleshooting)
+19. [About RAPTI and contact](#ch-about)
 
-<a id="en-ch-welcome"></a>
+<a id="ch-welcome"></a>
 
 ## 1. Welcome to RaptiCKT
 
@@ -57,9 +55,9 @@ Electrical and electronic engineering students, teachers, technicians, hobbyists
 
 #### How to read this manual
 
-If you are new, read chapters 2 to 6 first (about 10 minutes). The rest is a reference: come back when you need a feature. Use the search box at the top, or tap a chapter in the contents. The **English / বাংলা** button switches the language.
+If you are new, read chapters 2 to 6 first (about 10 minutes). The rest is a reference: come back when you need a feature. Use the search box at the top, or tap a chapter in the contents.
 
-<a id="en-ch-quickstart"></a>
+<a id="ch-quickstart"></a>
 
 ## 2. Quick start: your first circuit
 
@@ -79,7 +77,7 @@ Let us build the "hello world" of electronics: a battery, a resistor and an LED.
 
 > **Tip:** If the LED does not light, check that every wire end really touches a terminal, and that there is a resistor in series. See **Troubleshooting**.
 
-<a id="en-ch-screens"></a>
+<a id="ch-screens"></a>
 
 ## 3. Home, Examples, My Circuits, About
 
@@ -131,7 +129,7 @@ Version number, a short description of the app and its engine, information about
 
 The Android **Back** button closes the topmost thing: an open dialog, then Settings or Manual, then panels inside the editor, then clears the selection, and finally goes back to Home. Your circuit is saved when you leave the editor or put the app in the background.
 
-<a id="en-ch-editor"></a>
+<a id="ch-editor"></a>
 
 ## 4. The editor at a glance
 
@@ -195,7 +193,7 @@ The editor is where you build and run circuits. From top to bottom:
 
 On a computer browser you can also use: **Delete** (remove), **R** (rotate), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), and the mouse wheel to zoom.
 
-<a id="en-ch-adding"></a>
+<a id="ch-adding"></a>
 
 ## 5. Adding components
 
@@ -211,7 +209,7 @@ On a computer browser you can also use: **Delete** (remove), **R** (rotate), **S
 
 The complete list of all 335 components, with what each one does and which values you can change, is in the chapter **Component library**.
 
-<a id="en-ch-editing"></a>
+<a id="ch-editing"></a>
 
 ## 6. Moving, selecting and editing parts
 
@@ -273,7 +271,7 @@ Note: `m` is **milli** and `M` is **mega**. The unit letter (Ω, F, H, V, A) is 
 
 Every change (adding, moving, wiring, changing a value, deleting) can be undone. The app remembers your last 120 steps. Undo and Redo are greyed out when there is nothing to undo or redo.
 
-<a id="en-ch-wiring"></a>
+<a id="ch-wiring"></a>
 
 ## 7. Wiring
 
@@ -311,7 +309,7 @@ Voltages are measured against **ground (0 V)**. Add a **Ground** symbol (Sources
 - Do not connect ideal voltage sources directly across each other, and do not leave a current source with nowhere to push its current.
 - Check polarity: battery **+**, diode and LED **anode/cathode**, electrolytic capacitor **+**.
 
-<a id="en-ch-values"></a>
+<a id="ch-values"></a>
 
 ## 8. Changing values and the knob
 
@@ -344,7 +342,7 @@ At the bottom of the properties sheet, **⚡ Fault** lets you damage any part to
 
 > **Tip:** For a fault that happens at a set moment while the circuit runs (to watch a breaker trip), use the **Fault (timed short circuit)** part from **Power Systems** — see the example **Short-circuit fault & MCB tripping**.
 
-<a id="en-ch-running"></a>
+<a id="ch-running"></a>
 
 ## 9. Running the simulation
 
@@ -403,7 +401,7 @@ While running you can touch the circuit like a real one:
 
 If the circuit cannot be solved, a bar at the top tells you what and where, for example **"Circuit cannot be solved (singular matrix) near R3. Check for floating current sources or open circuits."** The part concerned is highlighted. A yellow bar is a warning, for example "D1 is short-circuited". See **Troubleshooting** for what to do.
 
-<a id="en-ch-scope"></a>
+<a id="ch-scope"></a>
 
 ## 10. Oscilloscope
 
@@ -448,7 +446,7 @@ Channel colours: yellow, cyan, pink, green, orange, purple. Probes are saved wit
 
 > **Tip:** The scope keeps the most recent 4096 points. If a signal looks too fast or too slow, change the **time scale** (+ / −) or the **simulation speed** (chapter 9).
 
-<a id="en-ch-meter"></a>
+<a id="ch-meter"></a>
 
 ## 11. Multimeter
 
@@ -469,7 +467,7 @@ The display reads smoothly (about a 0.4 s average) so numbers do not flicker. Ta
 
 > **Tip:** For permanent meters inside the circuit, use parts from the **Meters** category (voltmeter, ammeter, wattmeter, power-factor meter, frequency meter, kWh meter…). They stay in the circuit and are saved with it.
 
-<a id="en-ch-analysis"></a>
+<a id="ch-analysis"></a>
 
 ## 12. Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE
 
@@ -534,7 +532,7 @@ Runs the circuit and averages the power flowing into every component over the la
 
 Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` commands, that you can open in **ngspice** or **LTspice** to cross-check results or continue research. Buttons: **Copy**, **Save .cir**, **Share**. Parts without a SPICE equivalent (such as digital blocks) are written as comments.
 
-<a id="en-ch-saving"></a>
+<a id="ch-saving"></a>
 
 ## 13. Saving, opening and sharing
 
@@ -574,7 +572,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 2. Choose **Share** and pick WhatsApp, Messenger, email or any app. Or choose **Export file** and send the `.rckt` file yourself.
 3. Your friend opens the file with **Open file** (or **Import**) in RaptiCKT. It is added to their My Circuits.
 
-<a id="en-ch-settings"></a>
+<a id="ch-settings"></a>
 
 ## 14. Settings reference
 
@@ -629,15 +627,13 @@ These are the same defaults SPICE uses. Change them only if you know why; **Rese
 | Restore backup | Loads a backup or circuit file. |
 | Reset settings | Back to defaults (your circuits are not touched). |
 
-<a id="en-ch-library"></a>
+<a id="ch-library"></a>
 
 ## 15. Component library (all 504)
 
 Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.
 
-*Component descriptions are shown in English, exactly as they appear inside the app.*
-
-### Sources (34)
+### Sources — 34
 
 Every circuit needs a source. **DC Voltage** is a battery-like source; **AC Voltage**, **Square**, **Pulse**, **Triangle**, **Sawtooth**, **Sweep**, **Noise**, **AM/FM**, **Step**, **Exponential**, **Damped sine**, **Piecewise-linear** and **f(t)** are signal generators for testing. **AC Mains** and the **3-phase** supplies are for power and house-wiring circuits (values are RMS). **Ground**, **Protective Earth** and **Chassis Ground** are all 0 V. The controlled sources (VCVS, VCCS, CCVS, CCCS) copy a measurement from one pair of terminals to another.
 
@@ -678,7 +674,7 @@ Every circuit needs a source. **DC Voltage** is a battery-like source; **AC Volt
 | **CCVS** | Current-controlled voltage source: Vout = r · Iin, where Iin flows through the left terminals (0 V sense). <br>*Settings:* Transresistance (Ω) |
 | **CCCS** | Current-controlled current source: Iout = β · Iin, where Iin flows through the left terminals. <br>*Settings:* Current gain (A/A) |
 
-### Batteries (16)
+### Batteries — 16
 
 Each battery has a **state of charge** (%), a capacity (Ah) and an internal resistance. Its voltage falls as it discharges and a heavy load makes it sag. Current flowing into the + terminal charges it.
 
@@ -701,7 +697,7 @@ Each battery has a **state of charge** (%), a capacity (Ah) and an internal resi
 | **Battery Protection Board (BMS)** | Li-ion protection board (DW01 + dual MOSFET style). B+/B− go to the cells, P+/P− to the load or charger. Two back-to-back MOSFETs in the negative lead: the discharge FET opens on over-discharge (released only when a charger is connected and the cell recovers) or over-current (released when the load is removed); the charge FET opens on over-charge. Each FET’s body diode still lets current flow the other way, so a cut-off pack can always be charged and an over-charged pack can still be discharged. <br>*Settings:* Cells in series, Over-charge cut-off (per cell) (V), Over-charge release (V), Over-discharge cut-off (per cell) (V), Over-discharge release (charger connected) (V), Over-current trip (A), MOSFET on-resistance (each) (Ω) |
 | **CC-CV Battery Charger** | Lithium/lead-acid charger IC: below the pre-charge threshold it trickles at 10 % of the set current; then constant current until the battery reaches the CV voltage; then holds that voltage while the current tapers; charging terminates when the current falls below the termination level and restarts when the battery drops below the recharge threshold. The linear type draws the same current from VIN as it delivers (TP4056); the switching type draws P/η. <br>*Settings:* Battery type, Charge current (CC) (A), Charge voltage (CV) (V), Termination current (% of CC), Pre-charge below (V), Recharge below (V), Type, Efficiency (switching) |
 
-### Renewables (7)
+### Renewables — 7
 
 Solar panels and arrays, MPPT and PWM charge controllers, off-grid and grid-tie inverters, a wind turbine and a fuel cell. They follow the real curves (the panel's I–V curve with irradiance and temperature, the turbine's power coefficient), so you can size a solar home system or watch an MPPT controller track the maximum power point. Turn the **irradiance** or **wind** knob while running.
 
@@ -715,7 +711,7 @@ Solar panels and arrays, MPPT and PWM charge controllers, off-grid and grid-tie 
 | **Wind Turbine Generator** | Small wind turbine with a permanent-magnet generator and built-in rectifier (DC output). Aerodynamic power P = ½ρπR²v³·Cp(λ), with the power coefficient Cp peaking at ≈0.48 near tip-speed ratio λ = ωR/v ≈ 8; the generator EMF is Ke·ω and the rectifier only lets current flow out of +. Above rated power the blades stall/furl to hold the rated power; above the cut-out speed the rotor is braked. Load it with a battery to see the operating point settle. <br>*Settings:* Wind speed (m/s), Rotor radius (m), Rated power (W), Generator EMF constant (rectified) (V·s/rad), Generator + rectifier resistance (Ω), Rotor inertia (kg·m²), Cut-out wind speed (m/s) |
 | **Fuel Cell Stack (PEM)** | PEM fuel-cell stack: each cell gives ≈1 V open circuit, then the voltage falls with current through activation losses (logarithmic), ohmic losses (linear) and concentration losses that collapse the voltage near the limiting current — the classic polarisation curve. Hydrogen use = N·I / 2F; efficiency ≈ Vcell / 1.25 V (LHV). <br>*Settings:* Cells in series, Open-circuit voltage per cell (V), Activation (Tafel) slope (V), Activation current scale (A), Ohmic resistance per cell (Ω), Limiting current (A) |
 
-### Passive (25)
+### Passive — 25
 
 Resistors, capacitors and inductors, plus variable and real-world versions. The knob changes the main value. Polarised capacitors (electrolytic, tantalum, supercapacitor) must be connected the right way round.
 
@@ -747,7 +743,7 @@ Resistors, capacitors and inductors, plus variable and real-world versions. The 
 | **Transmission Line (lossless)** | Ideal lossless line (Branin method of characteristics). Port 1 on the left, port 2 on the right, returns at the bottom. Mismatched terminations produce reflections after 2·Td. <br>*Settings:* Characteristic impedance Z0 (Ω), Delay Td (s) |
 | **Memristor (HP model)** | HP TiO₂ memristor (Strukov 2008) with a Joglekar window: R = Ron·w + Roff·(1 − w), dw/dt = k·i·(1 − (2w − 1)^(2p)). A sine drive gives the pinched I–V hysteresis loop. <br>*Settings:* R_on (Ω), R_off (Ω), Mobility factor µv·Ron/D² (1/C), Initial state w0, Joglekar window exponent p |
 
-### Transformers (11)
+### Transformers — 11
 
 Coupled-coil models with a turns ratio. Use them for isolation and for stepping voltage up or down. The 3-phase transformers have standard vector groups (Dyn11, Yyn0, Yd1, Dd0). CT and PT are instrument transformers for metering.
 
@@ -765,7 +761,7 @@ Coupled-coil models with a turns ratio. Use them for isolation and for stepping 
 | **3-Phase Transformer** | Three single-phase windings pairs (one per limb) connected per the vector group. Primary A, B, C on the left; secondary a, b, c and neutral n on the right. Dyn11: secondary leads primary by 30°. <br>*Settings:* Vector group, Primary line voltage (V), Secondary line voltage (V), Magnetising inductance (per phase, primary) (H), Coupling k, Primary winding resistance (Ω), Secondary winding resistance (Ω) |
 | **Coupled Inductors (M)** | Two inductors with mutual inductance M = k·√(L1·L2) (dots mark the in-phase ends). Loosely coupled coils, wireless power, tuned transformers. <br>*Settings:* L1 (H), L2 (H), Coupling coefficient k, R1 (Ω), R2 (Ω) |
 
-### Protection (21)
+### Protection — 21
 
 Fuses, breakers, residual-current devices, surge protectors and relays. They really **trip** in the simulation (an MCB follows its B/C/D curve, an RCCB trips on leakage current). After a trip the part shows **TRIPPED** with the cause. Tap it once to reset.
 
@@ -793,7 +789,7 @@ Fuses, breakers, residual-current devices, surge protectors and relays. They rea
 | **TVS Diode** | Unidirectional transient-voltage-suppression diode: clamps at its breakdown voltage in reverse, conducts like a diode forward. <br>*Settings:* Model, Breakdown voltage (V) |
 | **TVS Diode (bidirectional)** | Bidirectional TVS: two junctions back to back; clamps at about ±V in either polarity. <br>*Settings:* Clamping voltage (V) |
 
-### Switches & Relays (40)
+### Switches & Relays — 40
 
 Tap a switch to toggle it while the circuit runs. Push buttons act only while held. Relays, contactors (with main poles and auxiliary 13-14 / 21-22 contacts), latching and timer relays, the 3-pole overload relay and phase / voltage monitoring relays have a **coil** or sensing side and a **contact** side: when the coil is energised the contacts move. Net labels make ladder (control) diagrams tidy.
 
@@ -840,7 +836,7 @@ Tap a switch to toggle it while the circuit runs. Push buttons act only while he
 | **Timer Relay (TON/TOF)** | Time-delay relay. On-delay: the changeover contact (15 COM, 16 NC, 18 NO) switches T seconds after the coil is energised. Off-delay: it switches immediately and returns T seconds after de-energising. <br>*Settings:* Delay time (s), Function, Coil rated voltage (V), Coil resistance (Ω), Coil inductance (H), AC coil, AC coil frequency (Hz) |
 | **Solid-State Relay (SSR)** | Optically isolated AC solid-state relay: input LED (3+/4−, ~1.2 V + 1 kΩ internal) triggers a TRIAC output (1–2) at the next voltage zero crossing; it turns off at current zero after the input is removed. <br>*Settings:* Input trigger current (A), Zero-cross switching, Output holding current (A) |
 
-### Electrical (23)
+### Electrical — 23
 
 Parts for house wiring and lighting: bulbs, tube light with choke and starter, fan with regulators, heater, socket with a selectable appliance (including "Faulty" and "Short circuit" for testing protection), dimmer, bell and earth electrode. Use them with **AC Mains**.
 
@@ -870,7 +866,7 @@ Parts for house wiring and lighting: bulbs, tube light with choke and starter, f
 | **PIR Light Switch (motion)** | Passive-infrared occupancy switch for corridors and stairs: when it sees motion in the dark (ambient light below the threshold) it closes L → LOAD and keeps the light on for the hold time after the last movement (re-triggerable). Tap it to simulate someone walking past. <br>*Settings:* Motion detected, Ambient light (lx), Works only below (lx), Hold time after last motion (s) |
 | **Emergency Light (battery backup)** | Self-contained emergency luminaire: while the mains is present it trickle-charges its 3.6 V NiCd pack (≈2 W) and the lamp stays off (non-maintained) or on (maintained); when the mains fails the LED lamp lights from the battery until it is flat (autonomy = capacity × 3.6 V ÷ lamp power, typically 1–3 h). <br>*Settings:* Lamp power (W), Battery capacity (3.6 V NiCd) (Ah), Initial battery charge (%), Maintained (lamp also on with mains) |
 
-### Power Systems (13)
+### Power Systems — 13
 
 Rated loads (R-L, R-C, 3-phase star and delta), a power-factor correction capacitor and transmission-line models. Set the load by its power and power factor.
 
@@ -890,7 +886,7 @@ Rated loads (R-L, R-C, 3-phase star and delta), a power-factor correction capaci
 | **Junction Box** | Junction box: four cable entries joined by a connector (≈1 mΩ each) — a tidy way to branch a circuit. |
 | **Fault (timed short circuit)** | Applies a short circuit (through the fault resistance) between its terminals at the set time and optionally removes it later — for testing fuses, breakers, relays and protection coordination: connect it line-to-earth or line-to-line where the fault should happen. <br>*Settings:* Fault applied at (s), Fault cleared at (0 = never) (s), Fault resistance (Ω) |
 
-### Machines (16)
+### Machines — 16
 
 DC motors and generators (shunt, series, compound, universal), single- and 3-phase induction motors (including a 6-terminal motor for star-delta starting), synchronous motor, PMSM, BLDC with hall sensors, stepper motor and alternators. They include electrical and mechanical behaviour: starting current, speed, torque and slip; motors start at rest. Read the live **rpm** and **current** in the properties sheet.
 
@@ -913,7 +909,7 @@ DC motors and generators (shunt, series, compound, universal), single- and 3-pha
 | **Stepper Motor (2-phase bipolar)** | Two-phase hybrid stepper (NEMA-17 class, 1.8° per step): windings A (A+, A−) and B (B+, B−). Energising A, B, −A, −B in turn moves the rotor one full step each; T = Kt·(−iA·sin Nθ + iB·cos Nθ) − detent, with N = steps/4 rotor teeth. Drive it with the stepper driver; too high a step rate or load makes it stall and lose steps. <br>*Settings:* Load torque (N·m), Torque constant (N·m/A), Full steps per revolution, Winding resistance (Ω), Winding inductance (H), Detent torque (N·m), Rotor + load inertia (kg·m²), Viscous damping (N·m·s) |
 | **AC Generator (1-phase)** | Single-phase synchronous generator (portable genset): EMF E = k·If at the set frequency behind the winding resistance and synchronous reactance, so the terminal voltage drops with load (and more with lagging loads). Excitation controls the voltage. <br>*Settings:* Excitation (%), Open-circuit voltage at 100 % (RMS) (V), Frequency (Hz), Synchronous reactance (Ω), Winding resistance (Ω) |
 
-### Diodes (17)
+### Diodes — 17
 
 Diodes conduct only one way (anode → cathode). Zener diodes hold a fixed reverse voltage. Bridge and 3-phase rectifiers are ready-made blocks. Pick a **model** to get real-part numbers.
 
@@ -937,7 +933,7 @@ Diodes conduct only one way (anode → cathode). Zener diodes hold a fixed rever
 | **Bridge Rectifier (1-phase)** | Four-diode full-wave bridge (1N4007-class diodes): AC in on the two ~ pins, DC out on + and −. <br>*Settings:* Diode Is (A), Emission coefficient, Reverse voltage rating (V) |
 | **Bridge Rectifier (3-phase)** | Six-pulse three-phase diode bridge: DC output ≈ 1.35 × line voltage (RMS). <br>*Settings:* Diode Is (A), Emission coefficient, Reverse voltage rating (V) |
 
-### Transistors (13)
+### Transistors — 13
 
 BJTs, MOSFETs, JFETs, IGBT and more. Terminals: BJT = collector, base, emitter; MOSFET = drain, gate, source. Pick a **model** (2N3904, 2N2222, BC547, 2N7000, IRF540N…) for real numbers.
 
@@ -957,7 +953,7 @@ BJTs, MOSFETs, JFETs, IGBT and more. Terminals: BJT = collector, base, emitter; 
 | **UJT (2N2646)** | Unijunction transistor: the emitter diode sees η·Vbb; when Ve exceeds η·Vbb + 0.6 V (peak point) the lower base floods with carriers and its resistance collapses, discharging the emitter until the current falls below the valley current. Classic relaxation oscillator f ≈ 1/(R·C·ln(1/(1−η))) and SCR trigger. Terminals E (left), B2 (top), B1 (bottom). <br>*Settings:* Intrinsic stand-off ratio η, Interbase resistance (Ω), Peak-point current Ip (A), Valley current Iv (A), Lower-base resistance when fired (Ω) |
 | **Optocoupler (PC817)** | Infrared LED (A–K, ≈1.2 V) optically coupled to a phototransistor (C–E): Ic ≈ CTR × If until the transistor saturates. Input and output are galvanically isolated. <br>*Settings:* Current transfer ratio (%) |
 
-### Thyristors & Power (30)
+### Thyristors & Power — 30
 
 SCR, TRIAC, DIAC, GTO and friends for phase control and power switching, a firing unit for SCR bridges, H-bridge and 3-phase inverter bridges, an SPWM modulator (V/f control), BLDC and stepper drivers, gate drivers, and averaged DC-DC converters (buck, boost, buck-boost, Ćuk, SEPIC, flyback, forward, push-pull, half and full bridge).
 
@@ -994,7 +990,7 @@ SCR, TRIAC, DIAC, GTO and friends for phase control and power switching, a firin
 | **Half-Bridge Converter (isolated)** | Half-bridge converter: the primary sees ±Vin/2 from a split capacitor: Vout = n·D·Vin (D per switch ≤ 0.5). Averaged (switching-cycle mean) model in continuous conduction: open loop the output follows the conversion ratio; regulated, the duty cycle adjusts to hold Vset until it reaches the maximum duty. Input current follows from power balance. <br>*Settings:* Control, Output voltage set (magnitude) (V), Duty cycle (open loop) (%), Turns ratio Ns/Np, Maximum duty cycle (%), Efficiency, Output resistance (Ω) |
 | **Full-Bridge Converter (isolated)** | Full-bridge converter: four switches apply ±Vin to the primary: Vout = 2·n·D·Vin (D per diagonal ≤ 0.5) — the high-power choice. Averaged (switching-cycle mean) model in continuous conduction: open loop the output follows the conversion ratio; regulated, the duty cycle adjusts to hold Vset until it reaches the maximum duty. Input current follows from power balance. <br>*Settings:* Control, Output voltage set (magnitude) (V), Duty cycle (open loop) (%), Turns ratio Ns/Np, Maximum duty cycle (%), Efficiency, Output resistance (Ω) |
 
-### Analog ICs (27)
+### Analog ICs — 27
 
 Op-amps (with gain-bandwidth and slew rate), comparators, the 555 timer, fixed and adjustable regulators and other analog building blocks. Real op-amp models: LM741, LM358, TL071 and more.
 
@@ -1028,7 +1024,7 @@ Op-amps (with gain-bandwidth and slew rate), comparators, the 555 timer, fixed a
 | **VCO (Voltage-Controlled Osc.)** | Voltage-controlled oscillator: f = f0 + Kv·Vin (never negative). Square, sine or triangle output. <br>*Settings:* Centre frequency (Vin = 0) (Hz), Sensitivity (Hz/V), Output high (V), Output |
 | **True-RMS Converter (AD736)** | True-RMS to DC converter: OUT = √(mean(IN²)) with an averaging time constant. <br>*Settings:* Averaging time (s) |
 
-### Control & Math (22)
+### Control & Math — 22
 
 Signal-flow blocks, as in Simulink: gain, adders, multiplier, integrator, differentiator, transfer functions, PID, limiter, delay and mathematical functions. They work on voltages standing for signals.
 
@@ -1057,7 +1053,7 @@ Signal-flow blocks, as in Simulink: gain, adders, multiplier, integrator, differ
 | **Rate Limiter** | Output follows the input but changes no faster than ±R (slew-rate limit / soft start). <br>*Settings:* Max rate (V/s) |
 | **Relay (Hysteresis)** | Two-level relay with hysteresis (bang-bang control): turns on when u > on-point, off when u < off-point. <br>*Settings:* Switch-on point (V), Switch-off point (V), Output when on (V), Output when off (V) |
 
-### Logic Gates (20)
+### Logic Gates — 20
 
 Inputs, outputs and gates. **Logic input** is a switch you tap (HIGH/LOW); **Clock** gives a square wave; **Logic output** is an indicator that shows 1 (lit) or 0. Gates give outputs from the logic levels at their inputs.
 
@@ -1084,7 +1080,7 @@ Inputs, outputs and gates. **Logic input** is a switch you tap (HIGH/LOW); **Clo
 | **AND Gate (4-input)** | 4-input AND gate. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
 | **NAND Gate (4-input)** | 4-input NAND gate. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
 
-### Digital ICs (46)
+### Digital ICs — 46
 
 Adders, comparators, multiplexers, decoders, latches, flip-flops, counters, shift registers, monostable, ADC and DAC. Drive them with a **Clock** and **Logic inputs**, and watch with **Logic output** or a 7-segment display.
 
@@ -1137,7 +1133,7 @@ Adders, comparators, multiplexers, decoders, latches, flip-flops, counters, shif
 | **RAM 16×4 (74HC189)** | 16 words × 4 bits of static RAM. A0–A3 select the word; while WE is high the data D0–D3 is written into it; Q0–Q3 always show the stored word at the current address. Contents are cleared when the simulation restarts. <br>*Settings:* Logic high level (V), Output resistance (Ω) |
 | **ROM 16×8 (programmable)** | Read-only memory with 16 bytes you can edit (hex, separated by spaces). While CE is high the byte at address A3–A0 appears on D0–D7. The default contents are the 7-segment patterns for 0–F (D0 = segment a … D6 = g), so it works as a hex-to-7-segment decoder. <br>*Settings:* Contents (16 hex bytes), Logic high level (V), Output resistance (Ω) |
 
-### Communication (18)
+### Communication — 18
 
 Behavioural communication blocks (no firmware or code runs): UART transmitter and terminal, RS-232, RS-485 and CAN transceivers, I²C and SPI masters with real slave chips (PCF8574, 74HC595), wireless links with a link budget (433 MHz, nRF24L01, Bluetooth LE, Wi-Fi, LoRa, Zigbee), an RFID reader, a fibre link, and signal blocks for radio (filters, RF amplifier, mixer, envelope detector, antenna). The messages are typed into the transmitter's settings.
 
@@ -1162,7 +1158,7 @@ Behavioural communication blocks (no firmware or code runs): UART transmitter an
 | **I²C Master (byte writer)** | Behavioural I²C master (no code): repeatedly writes one data byte per transaction to the slave address — START, address + W, ACK, data, ACK, STOP — through open-drain SCL/SDA (add pull-up resistors, e.g. 4.7 kΩ to 5 V). It checks the slave’s acknowledge bits and reports ACK / NACK. <br>*Settings:* 7-bit slave address, Data bytes (hex), Bus speed (Hz), Pause between transactions (s), Logic supply (thresholds) (V) |
 | **I²C I/O Expander (PCF8574)** | I²C slave with eight quasi-bidirectional port pins: it watches SCL/SDA for a START, compares the address, acknowledges by pulling SDA low on the 9th clock, and writes each received data byte to P0–P7 (1 = weak pull-up ≈100 µA, 0 = strong sink ≈25 mA — so LEDs are connected from VCC to the pin, active low). Default address 0x20. <br>*Settings:* 7-bit address, Supply (V) |
 
-### Sensors (58)
+### Sensors — 58
 
 Each sensor has an **environment knob**: light for an LDR, temperature for an NTC or LM35, strain for a strain gauge, field for a Hall sensor, and so on. Turn it while running to see the sensor respond. Tap a PIR to simulate motion.
 
@@ -1227,7 +1223,7 @@ Each sensor has an **environment knob**: light for an LDR, temperature for an NT
 | **Magnetometer / Compass (3-axis)** | Three-axis magnetometer with ratiometric analog outputs (Vcc/2 = 0, 1 % of Vcc per µT, ±50 µT range): the horizontal component of the earth’s field B·cos(dip) splits into X = cos(heading) and Y = −sin(heading) parts, Z = B·sin(dip). Heading = atan2(−Y, X) — a digital compass. <br>*Settings:* Heading (from magnetic north) (°), Earth field strength (µT), Inclination (dip) (°) |
 | **Water Level Sensor (analog)** | Conductive water-level probe module: the parallel traces conduct through the water, so the output rises (non-linearly) with the immersion depth — 0 when dry, ≈0.25·Vcc when just wet, ≈0.7·Vcc fully immersed (40 mm). <br>*Settings:* Immersion depth (mm) |
 
-### Output (23)
+### Output — 23
 
 LEDs (single, RGB, bicolour, infrared, laser), a bar graph, 7-segment and hex displays, buzzers, speaker, solenoid and servo. They light, sound or move to show what the circuit is doing.
 
@@ -1257,7 +1253,7 @@ LEDs (single, RGB, bicolour, infrared, laser), a bar graph, 7-segment and hex di
 | **DC Fan (brushless, 12 V)** | Brushless DC cooling fan (with built-in commutation and reverse-polarity protection): speed and airflow rise roughly in proportion to the voltage, the air load torque ∝ speed², and it stalls below about a third of the rated voltage. Current flows only with the correct polarity. <br>*Settings:* Rated voltage (V), Rated current (A), Rated speed (rpm), Rated airflow (CFM) |
 | **Electromagnet** | U-core electromagnet holding an iron armature across two air gaps: the flux density B = μ0·N·I / (2g) (limited by core saturation), the inductance L = μ0·N²·A / (2g), and the holding force F = B²·A/μ0 (both poles). Force rises with the square of the current and falls steeply as the gap opens. <br>*Settings:* Turns, Coil resistance (Ω), Air gap (each pole) (mm), Pole face area (each) (cm²), Core saturation (T) |
 
-### Vacuum Tubes (3)
+### Vacuum Tubes — 3
 
 Classic valves: vacuum diode, triode and pentode, for vintage audio and radio circuits.
 
@@ -1267,7 +1263,7 @@ Classic valves: vacuum diode, triode and pentode, for vintage audio and radio ci
 | **Vacuum Triode** | Vacuum triode with Norman Koren’s SPICE model (heater implied) plus grid-current conduction when the grid goes positive. Terminals: grid (left), plate/anode (top), cathode (bottom). <br>*Settings:* Type, Amplification factor µ, Exponent, Kg1, Kp, Kvb |
 | **Vacuum Pentode (EL84)** | Power pentode (Koren model, EL84 defaults) with its screen grid G2 as a terminal: plate current is set by Vg1k and Vg2k and almost independent of plate voltage. Terminals: G1 (left), plate (top), cathode (bottom), G2 (right). <br>*Settings:* µ (screen), Exponent, Kg1, Kg2, Kp, Kvb |
 
-### Meters (21)
+### Meters — 21
 
 Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC), ohmmeter, wattmeter, power-factor, VAR, kWh, frequency, phase, dB, peak, LCR, megger and moving-coil meters. **Test point** and **Label** mark and name places on the schematic.
 
@@ -1295,7 +1291,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 | **Test Point (voltage tag)** | Single-terminal tag that displays the node voltage (relative to ground) next to its name. Draws no current. <br>*Settings:* Tag |
 | **Text Label** | Free text annotation for documenting your circuit. <br>*Settings:* Text, Size (px) |
 
-<a id="en-ch-examples"></a>
+<a id="ch-examples"></a>
 
 ## 16. Examples (all 66)
 
@@ -1415,7 +1411,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 - **RFID door lock (125 kHz reader)**: An RDM6300-style 125 kHz RFID reader: bring the tag closer than 5 cm (select the reader and turn the tag-distance knob down) and its TAG output goes high while the tag ID is sent as 9600-baud UART text — shown on the terminal. TAG drives an NPN transistor that energises the 12 V door-lock solenoid; the diode across the solenoid absorbs the inductive kick when the transistor switches off. Move the tag away and the lock closes again.
 - **Fibre-optic serial link**: A UART message travels as light through a 20 m plastic optical fibre: an LED transmitter, the fibre and a photodiode receiver with a comparator. It is immune to electrical noise and isolates the two ends. The link budget decides whether it works: received power = −3 dBm − 0.2 dB/m × length − 2 × connector loss. Lengthen the fibre past ≈ 100 m (or switch to multimode glass and back) and see when the received power drops below the −25 dBm sensitivity and the text stops.
 
-<a id="en-ch-formulas"></a>
+<a id="ch-formulas"></a>
 
 ## 17. Quick reference: formulas and units
 
@@ -1466,7 +1462,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 - Blue labels = voltages · Green labels = currents.
 - Scope: yellow, cyan, pink, green, orange, purple channels. Bode: yellow = gain, cyan dashed = phase.
 
-<a id="en-ch-troubleshooting"></a>
+<a id="ch-troubleshooting"></a>
 
 ## 18. Troubleshooting and FAQ
 
@@ -1544,7 +1540,7 @@ Yes. Only the buttons that open the RAPTI website, WhatsApp, email or map need i
 
 The engine follows SPICE methods and has been checked against textbook answers (RC and RL time constants, resonance, diode, BJT and MOSFET equations, op-amp gain, transformer ratio, logic truth tables, 555 frequency and more). Blocks such as logic gates, the 555, regulators, sensors and protection devices are **idealised models**. Always confirm important designs with datasheets and real measurements, and use **SPICE netlist** to cross-check in ngspice or LTspice.
 
-<a id="en-ch-about"></a>
+<a id="ch-about"></a>
 
 ## 19. About RAPTI and contact
 

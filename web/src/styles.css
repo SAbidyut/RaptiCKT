@@ -742,7 +742,6 @@ input.toggle:checked::after { transform: translateX(18px); }
 
 /* ------------------------------------------------------------ user manual */
 .manual[lang='bn'] { line-height: 1.7; }
-.man-lang { flex: none; margin: 0 6px 0 2px; white-space: nowrap; }
 .man-search { flex: none; display: flex; align-items: center; gap: 8px; width: calc(100% - 24px); max-width: 736px; align-self: center; height: 42px; margin: 8px 12px 4px; padding: 0 12px;
   border-radius: 14px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
 .man-search input { flex: 1; min-width: 0; height: 100%; background: none; border: 0; outline: 0; color: var(--text); font: inherit; font-size: 14.5px; }
