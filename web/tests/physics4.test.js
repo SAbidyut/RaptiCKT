@@ -122,3 +122,144 @@ test('EMI filter passes 50 Hz to the load', () => {
   run(sim, 0.02, 2e-5, () => { m = Math.max(m, sim.v(2) - sim.v(3)); });
   near(m, 325, 5, 'load peak voltage');
 });
+
+// ------------------------------------------------------------ installation & output devices
+import { getType } from '../src/elements/index.js';
+import { Simulator } from '../src/engine/sim.js';
+
+test('cable: R = ρL/A at temperature, voltage drop reading', () => {
+  const { sim, els } = net([['mains', [1, 0], { zs: 0 }], ['cable', [1, 0, 2, 3], { len: 30, size: '2.5' }], ['resistor', [2, 3], { r: 23 }]]);
+  const c = els[1], R = 0.017241 * (1 + 0.00393 * 50) * 30 / 2.5;
+  near(c.R(), R, 1e-6, 'conductor resistance');
+  assert.ok(sim.start(), sim.error);
+  run(sim, 0.4, 1e-4);
+  const r = Object.fromEntries(c.readings(sim).map(([k, v]) => [k, v]));
+  near(r['Voltage drop'], (2 * R) / (23 + 2 * R) * 100, 0.1, 'drop %');
+  near(r['Current (RMS)'], 230 / (23 + 2 * R), 0.1, 'current');
+  assert.equal(r['Current-carrying capacity'], 27);
+});
+
+test('net labels connect posts with the same name', () => {
+  const mk = (t, x, y, p = {}) => { const C = getType(t), e = new C(x, y); Object.assign(e.p, p); e.name = t; return e; };
+  // battery at (100,100): + post (60,100), − post (140,100); resistor at (300,100): (260,100)-(340,100)
+  const els = [mk('dcv', 100, 100, { amp: 9 }), mk('resistor', 300, 100, { r: 1000 }), mk('netlabel', 80, 100, { name: 'VCC' }), mk('netlabel', 280, 100, { name: 'VCC' }),
+    mk('ground', 140, 100), mk('ground', 340, 100)];
+  const sim = new Simulator().build(els, []);
+  assert.ok(sim.start(), sim.error);
+  near(els[1].i, 9e-3, 1e-5, 'current through the resistor via the labels');
+});
+
+test('CFL: rated power at a poor power factor; LED driver: constant current at unity PF', () => {
+  const { sim, els } = net([['mains', [1, 0]], ['cfl', [1, 0], { w: 15 }]]);
+  assert.ok(sim.start(), sim.error);
+  run(sim, 0.3, 2e-5);
+  const r = Object.fromEntries(els[1].readings().map(([k, v]) => [k, v]));
+  near(r['Power (avg)'], 15 / 0.9 + 0.5, 1.5, 'CFL input power');
+  assert.ok(r['Power factor'] > 0.45 && r['Power factor'] < 0.75, 'CFL PF ' + r['Power factor']);
+  const d = net([['mains', [1, 0]], ['leddriver', [1, 0, 2, 3], { iset: 0.7 }], ['resistor', [2, 3], { r: 30 }]]);
+  assert.ok(d.sim.start(), d.sim.error);
+  run(d.sim, 0.3, 5e-5);
+  near(d.els[1].io, 0.7, 0.01, 'LED current');
+  let p = 0, i2 = 0, n = 0;
+  run(d.sim, 0.04, 5e-5, () => { const v = d.sim.v(1), i = -d.els[0].i; p += v * i; i2 += i * i; n++; });
+  const pin = p / n, irms = Math.sqrt(i2 / n);
+  near(pin, (0.49 * 30) / 0.88, 1, 'input power');
+  assert.ok(pin / (230 * irms) > 0.97, 'PFC power factor ' + pin / (230 * irms));
+});
+
+test('LED strip current; laser module lases at 5 V', () => {
+  const { sim, els } = net([['dcv', [1, 0], { amp: 12 }], ['ledstrip', [1, 0], { len: 1 }], ['dcv', [2, 0], { amp: 5 }], ['lasermod', [2, 0]]]);
+  assert.ok(sim.start(), sim.error);
+  const seg = els[1].segI();
+  assert.ok(seg > 0.015 && seg < 0.03, 'segment current ' + seg);
+  near(els[1].i, 20 * seg, 1e-6, '20 segments per metre');
+  const pz = els[3].popt();
+  assert.ok(pz > 0.002 && pz < 0.01, 'laser optical power ' + pz);
+});
+
+test('photocell, PIR switch and emergency light', () => {
+  const { sim, els } = net([['mains', [1, 0]], ['photocell', [1, 0, 2], { lux: 300, delay: 0.1 }], ['resistor', [2, 0], { r: 1000 }],
+    ['pirsw', [1, 0, 3], { lux: 5, hold: 0.2 }], ['resistor', [3, 0], { r: 1000 }]]);
+  const [, pc, , pir] = els;
+  assert.ok(sim.start(), sim.error);
+  run(sim, 0.2, 1e-4);
+  assert.ok(!pc.on && !pir.on, 'both off');
+  pc.p.lux = 5; pir.p.motion = true; run(sim, 0.2, 1e-4);
+  assert.ok(pc.on, 'dark: photocell on');
+  assert.ok(pir.on, 'motion in the dark: light on');
+  pir.p.motion = false; run(sim, 0.3, 1e-4);
+  assert.ok(!pir.on, 'off after the hold time');
+  const e = net([['mains', [1, 0]], ['emerg', [1, 0]]]);
+  assert.ok(e.sim.start(), e.sim.error);
+  run(e.sim, 0.1, 1e-4);
+  assert.ok(!e.els[1].lit, 'mains present: lamp off');
+  e.els[0].p.vrms = 0; e.sim.dirty = true; run(e.sim, 0.3, 1e-4);
+  assert.ok(e.els[1].lit, 'mains failed: lamp lit');
+});
+
+test('panel meter text, 14-segment decoder and dot matrix', () => {
+  const pm = new (getType('panelmeter'))(0, 0);
+  pm.p.range = '20'; assert.equal(pm.text(12.34), ' 12.34');
+  assert.equal(pm.text(25), ' 1   ');
+  pm.p.range = '2'; assert.equal(pm.text(1.2345), ' 1.235'.slice(0, 6));
+  pm.p.range = '0.2'; assert.equal(pm.text(-0.0456), '-45.6');
+  // 0x41 = 'A' on D0..D6
+  const bitsA = [1, 0, 0, 0, 0, 0, 1];
+  const parts = [['seg14', [1, 2, 3, 4, 5, 6, 7]], ...bitsA.map((b, k) => ['dcv', [k + 1, 0], { amp: b ? 5 : 0 }])];
+  const { sim, els } = net(parts);
+  assert.ok(sim.start(), sim.error);
+  run(sim, 1e-4, 1e-5);
+  assert.equal(els[0].ch(), 'A');
+  // dot matrix: R1 = 5 V, C1 through 330 Ω to ground; other pins through 1 MΩ
+  const dm = net([['dotmatrix', [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]], ['dcv', [1, 0], { amp: 5 }], ['resistor', [9, 0], { r: 330 }],
+    ...[2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16].map((n) => ['resistor', [n, 0], { r: 1e6 }])]);
+  assert.ok(dm.sim.start(), dm.sim.error);
+  run(dm.sim, 0.1, 1e-3);
+  near(dm.els[0].ii[0], (5 - 1.85) / 330, 0.0008, 'dot (1,1) current');
+  assert.ok(dm.els[0].ii[1] < 1e-5, 'dot (1,2) dark');
+});
+
+test('opto-SCR latches; Peltier cools; DC fan speed; electromagnet force', () => {
+  const { sim, els } = net([['dcv', [1, 0], { amp: 0 }], ['resistor', [1, 2], { r: 300 }], ['optoscr', [2, 0, 3, 0]], ['dcv', [4, 0], { amp: 12 }], ['resistor', [4, 3], { r: 100 }]]);
+  assert.ok(sim.start(), sim.error);
+  run(sim, 1e-3, 1e-5);
+  assert.ok(els[4].i < 1e-3, 'off without LED current');
+  els[0].p.amp = 5; sim.dirty = true; run(sim, 1e-3, 1e-5);
+  assert.ok(Math.abs(els[4].i) > 0.1, 'fired: ' + els[4].i);
+  els[0].p.amp = 0; sim.dirty = true; run(sim, 1e-3, 1e-5);
+  assert.ok(Math.abs(els[4].i) > 0.1, 'latched on DC');
+  const p = net([['dcv', [1, 0], { amp: 12 }], ['peltier', [1, 0], { qload: 5 }]]);
+  assert.ok(p.sim.start(), p.sim.error);
+  run(p.sim, 40, 5e-3);
+  const pe = p.els[1];
+  assert.ok(pe.tc - 273.15 < 10, 'cold side well below ambient: ' + (pe.tc - 273.15));
+  assert.ok(pe.th > pe.tc + 20, 'ΔT > 20 K');
+  const f = net([['dcv', [1, 0], { amp: 12 }], ['dcfan', [1, 0]], ['dcv', [2, 0], { amp: 3 }], ['dcfan', [2, 0]]]);
+  assert.ok(f.sim.start(), f.sim.error);
+  run(f.sim, 3, 1e-3);
+  near(f.els[1].w * 60 / (2 * Math.PI), 2500, 60, 'rated speed at 12 V');
+  near(f.els[1].i, 0.15, 0.01, 'rated current');
+  assert.ok(f.els[3].w < 1, 'stalled at 3 V');
+  const m = net([['dcv', [1, 0], { amp: 12 }], ['electromagnet', [1, 0]]]);
+  assert.ok(m.sim.start(), m.sim.error);
+  near(m.els[1].force(), (1.5 * 1.5 * 4e-4) / (4e-7 * Math.PI), 1, 'saturated holding force');
+});
+
+test('ACB: long-time, short-time and instantaneous trips; thermal fuse', () => {
+  const trip = (amps, extra = {}) => {
+    const { sim, els } = net([['dcv', [2, 0], { amp: amps * (0.01 + 0.004 / 3) }], ['resistor', [2, 1], { r: 0.01 }], ['acb', [1, 1, 1, 0, 0, 0], { tr: 1, ...extra }]]);
+    assert.ok(sim.start(), sim.error);
+    let t = null;
+    run(sim, 6, 1e-3, () => { if (t == null && els[2].tripped) t = sim.t; });
+    return { t, why: els[2].cause };
+  };
+  const lt = trip(4800 * 3), st = trip(16000 * 3), ins = trip(30000 * 3);
+  // three poles in parallel share the current equally
+  near(lt.t, -(1 / 0.04807) * Math.log(1 - 1.69 / 9), 0.2, 'long-time at 3 Ir');
+  near(st.t, 0.2, 0.03, 'short-time delay'); assert.match(st.why, /short-time/);
+  assert.ok(ins.t < 0.005, 'instantaneous'); assert.match(ins.why, /magnetic/);
+  const { sim, els } = net([['dcv', [1, 0], { amp: 10 }], ['tco', [1, 2]], ['resistor', [2, 0], { r: 10 }]]);
+  assert.ok(sim.start(), sim.error);
+  run(sim, 0.01, 1e-4); near(els[2].i, 1, 0.01, 'closed');
+  els[1].p.temp = 160; run(sim, 0.01, 1e-4); assert.ok(els[1].open && Math.abs(els[2].i) < 1e-6, 'opened');
+});

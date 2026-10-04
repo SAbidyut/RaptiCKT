@@ -88,6 +88,14 @@ export class Simulator {
         }
       }
     }
+    // net labels: posts carrying the same net name are connected
+    const nets = new Map();
+    for (const e of elements) {
+      const nm = e.netName ? e.netName() : '';
+      if (!nm || !e._posts.length) continue;
+      const k = key(e._posts[0][0], e._posts[0][1]);
+      if (nets.has(nm)) uf.union(nets.get(nm), k); else nets.set(nm, k);
+    }
     // ground
     let groundRoot = null;
     for (const e of elements) {
