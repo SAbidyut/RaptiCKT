@@ -8,6 +8,7 @@
 import { CATEGORIES, getType } from '../elements/index.js';
 import { EXAMPLES } from './examples.js';
 import { APP, RAPTI } from './brand.js';
+import { CAT_BN, EXCAT_BN, COMP_BN, EX_BN } from './manual-bn.js';
 
 const P = (en, bn) => ({ t: 'p', en, bn });
 const H = (en, bn) => ({ t: 'h', en, bn });
@@ -30,7 +31,7 @@ export const UI_TEXT = {
   props: { en: 'Settings', bn: 'সেটিংস' },
   note: {
     en: 'Component descriptions are shown in English, exactly as they appear inside the app.',
-    bn: 'কম্পোনেন্টের বর্ণনা অ্যাপের ভেতরে যেমন আছে, তেমনই ইংরেজিতে দেওয়া হলো।',
+    bn: 'পার্ট, টার্মিনাল ও সেটিংয়ের নাম অ্যাপে যেমন দেখায় তেমনই ইংরেজিতে রাখা হয়েছে, যাতে অ্যাপের সাথে সহজে মিলিয়ে নিতে পারেন।',
   },
   parts: { en: 'components', bn: 'টি কম্পোনেন্ট' },
   examplesCount: { en: 'examples', bn: 'টি উদাহরণ' },
@@ -1084,14 +1085,19 @@ export function expandRefs(text, lang, link = (id, label) => label) {
 const strip = (s) => String(s || '').replace(/\s+/g, ' ').trim();
 
 /** The component library as data: [{id, note, items:[{title, desc, props}]}], read live from the registry. */
-export function libraryData() {
+/** Category heading in the given language, e.g. "সুইচ ও রিলে (Switches & Relays)". */
+export const catTitle = (id, lang, tbl = CAT_BN) => (lang === 'bn' && tbl[id] ? `${tbl[id]} (${id})` : id);
+
+export function libraryData(lang = 'en') {
   return CATEGORIES.map((c) => ({
     id: c.id,
+    title: catTitle(c.id, lang),
     note: CATEGORY_NOTES[c.id],
     items: c.items.map((t) => getType(t)).filter(Boolean).map((C) => ({
       type: C.type,
       title: C.title,
-      desc: strip(C.description),
+      desc: lang === 'bn' && COMP_BN[C.type] ? COMP_BN[C.type] : strip(C.description),
+      descEn: strip(C.description),
       props: (C.props || []).filter((p) => !p.hidden).map((p) => p.label + (p.unit ? ` (${p.unit})` : '')),
     })),
   }));
@@ -1100,12 +1106,12 @@ export function libraryData() {
 export function libraryCount() { return libraryData().reduce((n, c) => n + c.items.length, 0); }
 
 /** The examples as data, grouped by category in the order they appear in the app. */
-export function exampleData() {
+export function exampleData(lang = 'en') {
   const cats = [];
   for (const e of EXAMPLES) {
     let c = cats.find((x) => x.id === e.cat);
-    if (!c) { c = { id: e.cat, items: [] }; cats.push(c); }
-    c.items.push({ id: e.id, title: e.title, desc: strip(e.desc) });
+    if (!c) { c = { id: e.cat, title: catTitle(e.cat, lang, EXCAT_BN), items: [] }; cats.push(c); }
+    c.items.push({ id: e.id, title: e.title, desc: lang === 'bn' && EX_BN[e.id] ? EX_BN[e.id] : strip(e.desc), descEn: strip(e.desc) });
   }
   return cats;
 }
@@ -1147,8 +1153,8 @@ export function manualMarkdown(lang = 'en') {
     for (const b of c.blocks) out.push(blockMd(b, lang));
     if (c.generated === 'library') {
       out.push(`*${L2(UI_TEXT.note)}*`, '');
-      for (const cat of libraryData()) {
-        out.push(`### ${cat.id} (${cat.items.length})`, '');
+      for (const cat of libraryData(lang)) {
+        out.push(`### ${cat.title} — ${cat.items.length}`, '');
         if (cat.note) out.push(cat.note[lang], '');
         out.push('| | |', '| --- | --- |');
         for (const it of cat.items) out.push(`| **${cell(it.title)}** | ${cell(it.desc)}${it.props.length ? ` <br>*${L2(UI_TEXT.props)}:* ${cell(it.props.join(', '))}` : ''} |`);
@@ -1156,9 +1162,9 @@ export function manualMarkdown(lang = 'en') {
       }
     }
     if (c.generated === 'examples') {
-      for (const cat of exampleData()) {
-        out.push(`### ${cat.id}`, '');
-        for (const it of cat.items) out.push(`- **${it.title}**: ${it.desc}`);
+      for (const cat of exampleData(lang)) {
+        out.push(`### ${cat.title}`, '');
+        for (const it of cat.items) out.push(`- **${it.title}**: ${mdInline(it.desc)}`);
         out.push('');
       }
     }
