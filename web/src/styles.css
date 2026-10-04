@@ -668,7 +668,7 @@ input.toggle:checked::after { transform: translateX(18px); }
 /* full screen: no bars, the board edge to edge; the tools hide behind a small handle */
 :root { --cut-t: 0px; --cut-r: 0px; --cut-b: 0px; --cut-l: 0px; }
 .fs-handle { display: none; }
-.editor.fs .fs-handle { display: grid; place-items: center; position: absolute; left: calc(6px + var(--cut-l)); top: calc(6px + var(--cut-t)); z-index: 12; width: 38px; height: 38px; border-radius: 12px;
+.editor.fs .fs-handle { display: grid; place-items: center; position: absolute; left: calc(6px + var(--cut-l)); top: calc(6px + var(--stage-t)); z-index: 12; width: 38px; height: 38px; border-radius: 12px;
   color: #cbd5e1; background: rgba(10, 16, 32, 0.55); border: 1px solid var(--border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0.75;
   transition: opacity 0.2s, transform 0.2s; }
 .editor.fs .fs-handle:active { transform: scale(0.9); }
@@ -678,13 +678,18 @@ input.toggle:checked::after { transform: translateX(18px); }
 .editor.fs:not(.fs-ui) .fab { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
 .editor.fs:not(.fs-ui) .hud-status { opacity: 0; pointer-events: none; transform: translateY(-10px); }
 .editor.fs .fab { right: calc(12px + var(--cut-r)); bottom: calc(12px + var(--cut-b)); }
-.editor.fs .scope-panel { padding-top: var(--cut-t); box-sizing: content-box; }
-.editor.side-scope.fs .scope-panel { padding-top: 0; padding-right: var(--cut-r); }
+/* an open scope keeps clear of the camera cutout with a border in its own colour (padding would
+   not move its absolutely placed contents, and on a closed, zero-size panel would show a strip) */
+.editor.fs.with-scope:not(.side-scope) .scope-panel { border-top: var(--cut-t) solid #04070d; }
+.editor.fs.side-scope.with-scope .scope-panel { border-right: var(--cut-r) solid #04070d; }
+/* the board's own buttons clear the cutout only when the board reaches the top edge */
+.editor.fs { --stage-t: var(--cut-t); }
+.editor.fs.with-scope:not(.side-scope) { --stage-t: 0px; }
 .editor.fs .fs-hide { color: var(--muted); }
 .editor.fs .ed-head { display: none !important; }
-.editor.fs .fs-rail { display: flex; flex-direction: column; gap: 3px; position: absolute; left: calc(8px + var(--cut-l)); top: calc(8px + var(--cut-t)); z-index: 12; padding: 5px; border-radius: 18px;
+.editor.fs .fs-rail { display: flex; flex-direction: column; gap: 3px; position: absolute; left: calc(8px + var(--cut-l)); top: calc(8px + var(--stage-t)); z-index: 12; padding: 5px; border-radius: 18px;
   background: rgba(10, 16, 32, 0.78); border: 1px solid var(--border2); box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-.editor.fs .hud-status { left: calc(66px + var(--cut-l)); top: calc(10px + var(--cut-t)); }
+.editor.fs .hud-status { left: calc(66px + var(--cut-l)); top: calc(10px + var(--stage-t)); }
 .editor.fs .meter-card { left: 66px; }
 .editor.fs .menu { top: 8px; }
 .editor.fs .popover { top: 60px; left: 66px; }
@@ -710,7 +715,7 @@ input.toggle:checked::after { transform: translateX(18px); }
 .editor.wide .quickbar { bottom: 12px; right: 76px; }
 .editor.wide .hud-status { top: 8px; }
 @media (max-height: 520px) {
-  .editor.fs .fs-rail { gap: 0; padding: 3px; left: calc(6px + var(--cut-l)); top: calc(5px + var(--cut-t)); border-radius: 14px; }
+  .editor.fs .fs-rail { gap: 0; padding: 3px; left: calc(6px + var(--cut-l)); top: calc(5px + var(--stage-t)); border-radius: 14px; }
   .fs-btn { width: 35px; height: 35px; border-radius: 10px; }
   .fs-btn svg { width: 18px; height: 18px; }
   .fs-sep { margin: 1px 5px; }
