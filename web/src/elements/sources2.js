@@ -377,7 +377,7 @@ export class PVModule extends SolarCell {
 register(PVModule);
 
 // ------------------------------------------------------ signal generators
-class SigSource extends VoltageSource {
+export class SigSource extends VoltageSource {
   static category = 'Sources';
   static glyph = '';
   value(s) { return this.f(s.mode === 'dc' ? 0 : s.tNext) * (s.srcScale ?? 1); }

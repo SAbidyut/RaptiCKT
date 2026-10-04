@@ -263,3 +263,39 @@ test('ACB: long-time, short-time and instantaneous trips; thermal fuse', () => {
   run(sim, 0.01, 1e-4); near(els[2].i, 1, 0.01, 'closed');
   els[1].p.temp = 160; run(sim, 0.01, 1e-4); assert.ok(els[1].open && Math.abs(els[2].i) < 1e-6, 'opened');
 });
+
+test('SPI master → 74HC595 latches each byte; I²C master → PCF8574 port with ACK', () => {
+  // spimaster SCK=1 MOSI=2 CS=3 ; 595: SER=2 SRCLK=1 RCLK=3 OE=0, Q0..Q7 = 10..17, Q7' = 18
+  const { sim, els } = net([['spimaster', [1, 2, 3], { data: 'A5 3C', clk: 10000, gap: 0.002 }], ['hc595', [2, 1, 3, 0, 10, 11, 12, 13, 14, 15, 16, 17, 18]]]);
+  assert.ok(sim.start(), sim.error);
+  const seen = new Set();
+  run(sim, 0.01, 5e-6, () => seen.add(els[1].lat));
+  assert.ok(seen.has(0xa5) && seen.has(0x3c), 'latched ' + [...seen].map((x) => x.toString(16)));
+  // I²C: pull-ups 4.7 kΩ to 5 V
+  const b = net([['dcv', [9, 0], { amp: 5 }], ['resistor', [9, 1], { r: 4700 }], ['resistor', [9, 2], { r: 4700 }],
+    ['i2cmaster', [1, 2], { data: '5A', rate: 20000 }], ['pcf8574', [1, 2, 10, 11, 12, 13, 14, 15, 16, 17]],
+    ...[10, 11, 12, 13, 14, 15, 16, 17].map((n) => ['resistor', [n, 0], { r: 1e6 }])]);
+  assert.ok(b.sim.start(), b.sim.error);
+  run(b.sim, 0.03, 2e-6);
+  assert.equal(b.els[4].port, 0x5a, 'port value');
+  assert.equal(b.els[3].lastAck, 'ACK');
+  assert.ok(b.sim.v(11) > 4 && b.sim.v(10) < 0.5, 'P1 high, P0 low');
+  const c = net([['dcv', [9, 0], { amp: 5 }], ['resistor', [9, 1], { r: 4700 }], ['resistor', [9, 2], { r: 4700 }],
+    ['i2cmaster', [1, 2], { data: '5A', rate: 20000, addr: 33 }], ['pcf8574', [1, 2, 10, 11, 12, 13, 14, 15, 16, 17]],
+    ...[10, 11, 12, 13, 14, 15, 16, 17].map((n) => ['resistor', [n, 0], { r: 1e6 }])]);
+  assert.ok(c.sim.start(), c.sim.error);
+  run(c.sim, 0.03, 2e-6);
+  assert.match(c.els[3].lastAck, /NACK/, 'wrong address is not acknowledged');
+  assert.equal(c.els[4].port, 255);
+});
+
+test('equaliser band gains; magnetometer heading', async () => {
+  const { freqResp } = await import('../src/elements/comm.js');
+  const eq = new (getType('equalizer'))(0, 0);
+  const g = (f) => { const h = freqResp(eq.secs, 2 * Math.PI * f); return 20 * Math.log10(Math.hypot(h.re, h.im)); };
+  near(g(60), 4, 0.6, '60 Hz band');
+  near(g(14000), 3, 0.6, '14 kHz band');
+  const m = new (getType('magneto'))(0, 0); m.p.hdg = 90;
+  const r = Object.fromEntries(m.readings().map(([k, v]) => [k, v]));
+  near(r['Heading from X, Y'], 90, 1e-6, 'heading');
+});
