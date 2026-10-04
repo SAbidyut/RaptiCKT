@@ -124,6 +124,7 @@ export class Simulator {
     };
     this.wireNodes = wires.map((w) => nodeFor(key(w.pts[0][0], w.pts[0][1])));
     this.hasGround = groundRoot !== null;
+    n = this.applyFaults(n);
     return this.finishBuild(n);
   }
 
@@ -136,7 +137,42 @@ export class Simulator {
     for (const e of elements) for (const nd of e.nodes) n = Math.max(n, nd + 1);
     this.nodeKeys = new Array(n).fill(null);
     this.hasGround = true;
+    n = this.applyFaults(n);
     return this.finishBuild(n);
+  }
+
+  /**
+   * Component faults (element.fault = {m, a, b, r}): 'open' gives pin a its own
+   * node, joined to its net by 1 GΩ; 'short' joins pins a and b with 1 mΩ;
+   * 'res' joins them with r ohms (leaky / partial short).
+   */
+  applyFaults(n) {
+    const extra = [];
+    const link = (a, b, g, owner) => ({
+      name: `${owner.name || owner.constructor.type} (fault)`, nodes: [a, b], inodes: [], branches: [], postCurrents: [0, 0], isFault: true,
+      connectivity() { return null; },
+      stamp(s) { s.addG(this.nodes[0], this.nodes[1], g); },
+      stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], g); },
+      accept(s) { const i = (s.v(this.nodes[0]) - s.v(this.nodes[1])) * g; this.postCurrents = [i, -i]; this.i = i; },
+    });
+    for (const e of this.elements) {
+      const f = e.fault;
+      if (!f || !f.m || f.m === 'none' || !e.nodes || e.nodes.length < 2) continue;
+      const a = Math.max(0, f.a | 0), b = f.b == null ? 1 : f.b | 0;
+      if (f.m === 'open') {
+        if (a >= e.nodes.length) continue;
+        const orig = e.nodes[a];
+        e.nodes[a] = n;
+        extra.push(link(n, orig, 1e-9, e));
+        n++;
+      } else if (a < e.nodes.length && b < e.nodes.length && a !== b) {
+        const r = f.m === 'short' ? 1e-3 : Math.max(1e-6, +f.r || 1000);
+        extra.push(link(e.nodes[a], e.nodes[b], 1 / r, e));
+      }
+    }
+    if (extra.length) this.elements = this.elements.concat(extra);
+    this.faultCount = extra.length;
+    return n;
   }
 
   finishBuild(n) {

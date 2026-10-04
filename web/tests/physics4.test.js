@@ -299,3 +299,35 @@ test('equaliser band gains; magnetometer heading', async () => {
   const r = Object.fromEntries(m.readings().map(([k, v]) => [k, v]));
   near(r['Heading from X, Y'], 90, 1e-6, 'heading');
 });
+
+test('fault injection: open and short terminals, leakage, timed fault switch', () => {
+  const mk = (fault) => {
+    const { sim, els } = net([['dcv', [1, 0], { amp: 10 }], ['resistor', [1, 2], { r: 1000 }], ['resistor', [2, 0], { r: 1000 }]]);
+    els[2].fault = fault; sim.buildNet(els);
+    assert.ok(sim.start(), sim.error);
+    return sim.v(2);
+  };
+  near(mk(null), 5, 1e-6, 'healthy divider');
+  near(mk({ m: 'open', a: 0 }), 10, 1e-3, 'lower resistor open');
+  near(mk({ m: 'short', a: 0, b: 1 }), 10 * 1e-3 / 1000, 1e-4, 'lower resistor shorted');
+  near(mk({ m: 'res', a: 0, b: 1, r: 1000 }), 10 * 500 / 1500, 1e-6, 'leakage 1 kΩ in parallel');
+  // BJT collector–emitter short keeps the load on with no base drive
+  const q = net([['dcv', [1, 0], { amp: 12 }], ['resistor', [1, 2], { r: 1000 }], ['npn', [0, 2, 0]]]);
+  q.els[2].fault = { m: 'short', a: 1, b: 2 }; q.sim.buildNet(q.els);
+  assert.ok(q.sim.start(), q.sim.error);
+  near(q.els[1].i, 12e-3, 1e-4, 'C–E short');
+  // timed fault blows the fuse
+  const f = net([['mains', [1, 0], { zs: 0.1 }], ['fuse', [1, 2], { rating: 10, i2t: 5 }], ['resistor', [2, 0], { r: 46 }], ['faultsw', [2, 0], { tf: 0.04 }]]);
+  assert.ok(f.sim.start(), f.sim.error);
+  run(f.sim, 0.2, 5e-5);
+  assert.ok(f.els[1].blown, 'fuse cleared the fault');
+  assert.ok(f.els[3].peak > 100, 'fault current before the fuse cleared ' + f.els[3].peak);
+});
+
+test('faults survive JSON round trip', async () => {
+  const { Element } = await import('../src/elements/base.js');
+  const r = new (getType('resistor'))(0, 0); r.fault = { m: 'res', a: 0, b: 1, r: 220 };
+  const o = JSON.parse(JSON.stringify(r.toJSON()));
+  const back = Element.fromJSON(o);
+  assert.deepEqual(back.fault, { m: 'res', a: 0, b: 1, r: 220 });
+});

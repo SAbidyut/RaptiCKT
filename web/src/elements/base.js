@@ -110,6 +110,7 @@ export class Element {
     for (const pr of this.constructor.props) if (this.p[pr.key] !== pr.def) p[pr.key] = this.p[pr.key];
     if (Object.keys(p).length) out.p = p;
     if (this.label) out.l = this.label;
+    if (this.fault && this.fault.m && this.fault.m !== 'none') out.fl = { ...this.fault };
     return out;
   }
 
@@ -121,6 +122,7 @@ export class Element {
     e.flip = !!o.f;
     if (o.p) Object.assign(e.p, o.p);
     if (o.l) e.label = o.l;
+    if (o.fl) e.fault = { ...o.fl };
     e.onParamChange();
     return e;
   }

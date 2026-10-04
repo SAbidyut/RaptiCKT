@@ -923,3 +923,35 @@ export class Electromagnet extends TwoTerm {
   }
 }
 register(Electromagnet);
+
+// ============================================================ fault switch
+export class FaultSwitch extends TwoTerm {
+  static type = 'faultsw'; static title = 'Fault (timed short circuit)'; static category = 'Power Systems';
+  static prefix = 'FLT'; static keywords = 'fault short circuit line to ground fault bolted fault arc fault fault resistance timed fault protection test';
+  static props = [
+    { key: 'tf', label: 'Fault applied at', unit: 's', def: 0.05, min: 0, max: 1e4, knob: true },
+    { key: 'tc', label: 'Fault cleared at (0 = never)', unit: 's', def: 0, min: 0, max: 1e4 },
+    { key: 'rf', label: 'Fault resistance', unit: 'Ω', def: 0.01, min: 1e-6, max: 1e6, log: true },
+  ];
+  static description = 'Applies a short circuit (through the fault resistance) between its terminals at the set time and optionally removes it later — for testing fuses, breakers, relays and protection coordination: connect it line-to-earth or line-to-line where the fault should happen.';
+  static noFault = true;
+  reset() { this.on = false; this.peak = 0; this.setCurrent(0); }
+  g() { return this.on ? 1 / this.p.rf : 1e-9; }
+  stamp(s) { s.addG(this.nodes[0], this.nodes[1], this.g()); }
+  stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], this.g()); }
+  preStep(s) {
+    if (s.mode === 'dc') return;
+    const t = s.tNext, on = t >= this.p.tf && !(this.p.tc > this.p.tf && t >= this.p.tc);
+    if (on !== this.on) { this.on = on; s.markEvent(); }
+  }
+  accept(s) { const i = this.voltageDiff(s) * this.g(); this.setCurrent(i); if (this.on) this.peak = Math.max(this.peak, Math.abs(i)); }
+  valueLabel() { return this.on ? 'FAULT' : `@${fmtShort(this.p.tf, 's')}`; }
+  readings(s) { return [['State', this.on ? 'FAULT ON' : 'healthy', ''], ['Fault current', this.i, 'A'], ['Peak fault current', this.peak || 0, 'A'], ['Voltage', this.voltageDiff(s), 'V']]; }
+  draw(g) {
+    const on = this.on && g.running;
+    g.line(-G, 0, -0.3 * G, 0, g.vc(g.pv(0)), g.lw); g.line(0.3 * G, 0, G, 0, g.vc(g.pv(1)), g.lw);
+    g.poly([[-0.3 * G, 0], [0.05 * G, -0.45 * G], [-0.05 * G, 0], [0.3 * G, 0.45 * G], [0.3 * G, 0]], { stroke: on ? '#ef4444' : g.body, width: g.lw * 0.9 });
+    if (on) g.glow(0, 0, 0.9 * G, '255,70,70', 0.5);
+  }
+}
+register(FaultSwitch);

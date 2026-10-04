@@ -362,6 +362,7 @@ export class Editor {
       if (!ok) { this.showError(); this.paused = true; this.updateToolbar(); break; }
       if (this.rms) this.rms.sample(sim, sim.t - t0s);
       this.scope.sample(sim);
+      if (this.meter.open) this.meter.sample(sim);
       if ((n & 7) === 0 && performance.now() - t0 > budgetMs) break;
     }
     const done = simTime > 0 ? Math.min(1, (sim.t - (target - simTime)) / simTime) : 1;
