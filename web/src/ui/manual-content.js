@@ -44,7 +44,7 @@ export const CHAPTERS = [
       H('What you can do with it'),
       L([
         'Build analog, digital and mixed circuits on an unlimited canvas.',
-        'Pick from **504 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
+        'Pick from **511 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
         'Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.',
         'Tap switches and push buttons while the circuit is running, and turn a knob to change any value live.',
         'Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).',
@@ -586,7 +586,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 15 (library: generated)
   {
     id: 'library', icon: 'chip', generated: 'library',
-    title: 'Component library (all 504)',
+    title: 'Component library (all 511)',
     blocks: [
       P('Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.'),
     ],
@@ -693,7 +693,7 @@ export const CATEGORY_NOTES = {
   Passive: 'Resistors, capacitors and inductors, plus variable and real-world versions. The knob changes the main value. Polarised capacitors (electrolytic, tantalum, supercapacitor) must be connected the right way round.',
   Transformers: 'Coupled-coil models with a turns ratio. Use them for isolation and for stepping voltage up or down. The 3-phase transformers have standard vector groups (Dyn11, Yyn0, Yd1, Dd0). CT and PT are instrument transformers for metering.',
   Protection: 'Fuses, breakers, residual-current devices, surge protectors and relays. They really **trip** in the simulation (an MCB follows its B/C/D curve, an RCCB trips on leakage current). After a trip the part shows **TRIPPED** with the cause. Tap it once to reset.',
-  'Switches & Relays': 'Tap a switch to toggle it while the circuit runs. Push buttons act only while held. Relays, contactors (with main poles and auxiliary 13-14 / 21-22 contacts), latching and timer relays, the 3-pole overload relay and phase / voltage monitoring relays have a **coil** or sensing side and a **contact** side: when the coil is energised the contacts move. Net labels make ladder (control) diagrams tidy.',
+  'Switches & Relays': 'Tap a switch to toggle it while the circuit runs. Push buttons act only while held. Relays, contactors (with main poles and auxiliary 13-14 / 21-22 contacts), latching and timer relays, the 3-pole overload relay and phase / voltage monitoring relays have a **coil** or sensing side and a **contact** side: when the coil is energised the contacts move. To draw a control circuit as a **ladder diagram** (like a textbook), use the ladder parts: put a **Contactor Coil** or **Timer Coil** in a rung and give it a tag such as `KF`; every **NO Contact**, **NC Contact** and **Main Contacts 3-pole** part with the same tag then follows that coil, and **Overload Relay Heaters** / **Phase Monitor** work the same way for their 95-96, 97-98 and 11-14 contacts. The Industrial Control examples (forward/reverse, star-delta, water pump, phase failure) are drawn this way.',
   Electrical: 'Parts for house wiring and lighting: bulbs, tube light with choke and starter, fan with regulators, heater, socket with a selectable appliance (including "Faulty" and "Short circuit" for testing protection), dimmer, bell and earth electrode. Use them with **AC Mains**.',
   'Power Systems': 'Rated loads (R-L, R-C, 3-phase star and delta), a power-factor correction capacitor and transmission-line models. Set the load by its power and power factor.',
   Machines: 'DC motors and generators (shunt, series, compound, universal), single- and 3-phase induction motors (including a 6-terminal motor for star-delta starting), synchronous motor, PMSM, BLDC with hall sensors, stepper motor and alternators. They include electrical and mechanical behaviour: starting current, speed, torque and slip; motors start at rest. Read the live **rpm** and **current** in the properties sheet.',

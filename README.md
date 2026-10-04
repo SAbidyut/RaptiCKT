@@ -16,14 +16,14 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## Features
 
-- **504 components** in 22 categories, each with a physical simulation model:
+- **511 components** in 22 categories, each with a physical simulation model:
   - Sources (34): DC/AC/pulse/triangle/saw/noise/chirp, AM/FM, PWM, step, ramp, exponential, damped sine, PWL, f(t) expression, single-phase mains presets, 3-phase star/delta supply, bench PSU (CV/CC), dual PSU, PV module, rails, net labels, controlled sources, earth/chassis
   - Batteries (16): AA, 9 V, coin cell, NiMH, NiCd, Li-ion, 2S Li-Po, LiFePO₄ cell and 12.8 V battery, lead-acid, AGM, gel, configurable S/P pack, supercapacitor, BMS protection board, CC-CV charger — all with state-of-charge models that collapse when exhausted
   - Renewables (7): PV array, MPPT and PWM solar charge controllers, off-grid and grid-tie (anti-islanding) inverters, wind turbine, PEM fuel cell
   - Passive (25): R, shunt, fusible resistor, pots, rheostat, C (electrolytic, non-polar, tantalum, MLCC, film, PET, PP, silver-mica, variable, ESR/ESL model), L (variable, saturating iron core), ferrite bead, crystal, ceramic resonator, transmission line, memristor
   - Transformers (11): single-phase, centre-tapped, dual secondary, isolation, step-down/up, autotransformer (variac), 3-phase Dyn11/Yyn0/Yd1/Dd0, CT, PT, coupled inductors
-  - Protection (21): fuse, HRC fuse, thermal fuse, PTC polyfuse, MCB 1P/2P/3P (B/C/D curves), MCCB, ACB (LSI), RCCB, RCBO, overload relays (1- and 3-pole), phase-failure/sequence and over/under-voltage relays, IDMT relay, MOV, arrester, GDT, TVS
-  - Switches & Relays (40): house-wiring switches, toggle/slide/rocker/key/DIP/foot switches, push buttons, emergency stop, limit, reed, float, pressure, thermostat, isolator, changeover, voltage/current-controlled switches, relays (SPST/DPST/DPDT, reed, latching, control relay 2NO+2NC), contactors with auxiliary contacts, timer relay, SSR
+  - Protection (23): fuse, HRC fuse, thermal fuse, PTC polyfuse, MCB 1P/2P/3P (B/C/D curves), MCCB, ACB (LSI), RCCB, RCBO, overload relays (1- and 3-pole), phase-failure/sequence and over/under-voltage relays, IDMT relay, MOV, arrester, GDT, TVS, and ladder-diagram overload heaters and phase monitor
+  - Switches & Relays (45): house-wiring switches, toggle/slide/rocker/key/DIP/foot switches, push buttons, emergency stop, limit, reed, float, pressure, thermostat, isolator, changeover, voltage/current-controlled switches, relays (SPST/DPST/DPDT, reed, latching, control relay 2NO+2NC), contactors with auxiliary contacts, timer relay, SSR, and ladder-diagram parts (contactor coil, timer coil, NO and NC contacts, 3-pole main contacts) whose contacts follow the coil with the same tag
   - Electrical (23): incandescent, halogen, CFL, LED bulb, LED strip/panel/driver, tube light with choke and starter, neon, fan, heater, socket + appliance, dimmer, fan regulators, bell, earth electrode, photocell and PIR light switches, emergency light
   - Power Systems (13): rated R/L/C and 3-phase loads, PF-correction capacitor, short and π lines, 2- and 4-core cables (resistance from length, size, copper/aluminium), busbar, junction box, timed fault
   - Machines (16): DC motors (PM, separately excited, shunt, series, compound, universal), DC generator, 3-phase induction motor (3- and 6-terminal for star-delta), capacitor motor, synchronous motor, PMSM, BLDC with Hall sensors, stepper, alternators
@@ -73,7 +73,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## User manual
 
-A complete, step-by-step manual is built into the app: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 504 components and 66 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
+A complete, step-by-step manual is built into the app: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 511 components and 66 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
 
 The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md). It is generated from `web/src/ui/manual-content.js` with `cd web && npm run manual`; re-run it after editing the manual. `web/tests/manual-content.test.js` fails if a component, example, setting or menu item is added to the app without being covered by the manual.
 

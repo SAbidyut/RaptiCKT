@@ -320,6 +320,10 @@ export class OverloadRelay3 extends withChip(Element) {
     const c1 = s.x[k[3]], c2 = s.x[k[4]];
     this.postCurrents[6] = c1; this.postCurrents[7] = -c1; this.postCurrents[8] = c2; this.postCurrents[9] = -c2;
     this.i = is[0];
+    this.thermal(s, is);
+  }
+  /** Thermal image of the three heater currents `is`; trips on overload or phase loss. */
+  thermal(s, is) {
     if (s.mode === 'dc' || this.tripped) return;
     const a = Math.min(1, s.dt / 0.1);
     this.i2 = this.i2.map((v, p) => v + (is[p] * is[p] - v) * a);
@@ -374,6 +378,10 @@ export class PhaseRelay extends withChip(Element) {
     const n = this.nodes, k = this.branches, c1 = s.x[k[0]], c2 = s.x[k[1]];
     const v = [0, 1, 2].map((p) => s.v(n[p]) - s.v(n[3]));
     this.postCurrents = [...v.map((x) => x / 220e3), -(v[0] + v[1] + v[2]) / 220e3, c1 + c2, -c2, -c1];
+    this.monitor(s, v);
+  }
+  /** Phase-to-neutral voltages `v`: decide healthy / released (with the trip delay). */
+  monitor(s, v) {
     if (s.mode === 'dc') return;
     v.forEach((x, p) => this.meters[p].push(s.t, s.dt, x));
     this.t = s.t;

@@ -13,19 +13,39 @@ const tagL = (b, x, y, name) => b.el('netlabel', x - 1, y, { name }, 2); // post
  * 400 V supply (ac3y, neutral tagged N) with a 3-pole MCB, drawn vertically:
  * the three outputs run down columns cx−1, cx, cx+1 and end at y = yTop.
  */
-function supply3(b, cx, y0, yTop, mcb = { in: 16, curve: 'D' }) {
+function supply3(b, cx, y0, yTop, mcb = { in: 16, curve: 'D' }, tags = true) {
   const src = b.el('ac3y', cx + 1, y0, {}, 1, true);
   const cb = b.el('mcb3p', cx, y0 + 6, mcb, 1, true);
   b.w(b.pin(src, 0), [cx - 1, y0 + 3], [cx - 2, y0 + 3], b.pin(cb, 0));
   b.w(b.pin(src, 1), b.pin(cb, 1));
   b.w(b.pin(src, 2), [cx + 1, y0 + 3], [cx + 2, y0 + 3], b.pin(cb, 2));
-  tagR(b, ...b.pin(src, 3), 'N');
+  if (tags) tagR(b, ...b.pin(src, 3), 'N');
   b.w(b.pin(cb, 3), [cx - 2, y0 + 9], [cx - 1, y0 + 9], [cx - 1, yTop]);
   b.w(b.pin(cb, 4), [cx, yTop]);
   b.w(b.pin(cb, 5), [cx + 2, y0 + 9], [cx + 1, y0 + 9], [cx + 1, yTop]);
-  tagL(b, ...b.pin(cb, 3), 'L1');
+  if (tags) tagL(b, ...b.pin(cb, 3), 'L1');
   return { src, cb };
 }
+
+/**
+ * Supply for a ladder-diagram example (no net labels): 400 V 3-phase source and 3-pole MCB,
+ * the phases running down columns cx−1, cx, cx+1 to y = yTop. The control ladder sits to the
+ * right between an L rail at x = xl (fed from L3 after the MCB) and an N rail at x = xn (fed
+ * from the source neutral over the top); both rails run down to y = yBot.
+ */
+function ladderSupply(b, cx, y0, yTop, xl, xn, yBot, mcb) {
+  const { src, cb } = supply3(b, cx, y0, yTop, mcb, false);
+  const [lx, ly] = b.pin(cb, 5), [nx, ny] = b.pin(src, 3);
+  b.w([lx, ly], [xl, ly], [xl, yBot]); // L rail
+  b.w([nx, ny], [nx + 1, ny], [nx + 1, y0 - 2], [xn, y0 - 2], [xn, yBot]); // N rail
+  b.label(xl - 1.3, ly - 0.9, 'L3'); b.label(xn + 1, y0 - 2.9, 'N');
+  b.label(cx, y0 - 4.2, 'POWER CIRCUIT', 11); b.label((xl + xn) / 2, ly - 3.2, 'CONTROL CIRCUIT', 11);
+  return { src, cb, top: ly };
+}
+/** NO / NC contact or coil of the ladder, centred at grid (x, y), terminals at x ± 2. */
+const lno = (b, x, y, tag, terms = '13-14') => b.h('lno', x, y, { tag, terms });
+const lnc = (b, x, y, tag, terms = '21-22') => b.h('lnc', x, y, { tag, terms });
+const lcoil = (b, x, y, tag) => b.h('lcoil', x, y, { tag });
 /** motor below an overload relay: OLR at (cx, oy), motor 3 rows under its outputs */
 function olrMotor(b, cx, oy, olrP, motorType, motorP) {
   const olr = b.el('olr3', cx, oy, olrP);
@@ -48,104 +68,81 @@ export const EXAMPLES2 = [
   // ======================================================= industrial control
   {
     id: 'stardelta', cat: 'Industrial Control', title: 'Star-delta starter (automatic)',
-    desc: 'The standard way to start a large induction motor with reduced current. Press START: the main contactor KM and the star contactor KY pull in, so each winding gets 400/√3 = 230 V — starting current and torque are one third of a direct start. The timer KT (on-delay) drops KY and, through the interlocks, picks up the delta contactor KΔ: now each winding gets the full 400 V and the motor runs at full power. The NC auxiliary contacts of KY and KΔ make it impossible for both to be closed together (that would short the supply). The overload relay\'s 95-96 contact feeds the whole control circuit; the pilot lamps show STAR, DELTA and TRIP. Net labels (L1 ctrl, N, KM, KY, KΔ) join the control wiring to the contactor coils.',
+    desc: 'The standard way to start a large induction motor with reduced current, drawn as a power circuit (left) and a ladder diagram (right). Press START: coils KM and KY pull in (KM holds itself with KM 13-14), so the main contacts KM feed the motor and KY joins the winding ends U2-V2-W2 into a star — each winding gets 400/√3 = 230 V, and starting current and torque are one third of a direct start. The timer coil KT starts at the same time; after 1.5 s its KT 15-16 contact drops KY and its KT 15-18 contact picks up KΔ, which connects the windings in delta: each now gets the full 400 V. KΔ 21-22 in the KY rung and KY 21-22 in the KΔ rung make it impossible for both to close together (that would short the supply). The overload contact F1 95-96 feeds the whole control circuit; the lamps show STAR, DELTA and TRIP.',
     build(b) {
-      // ---- power circuit (vertical, L1 L2 L3 left to right)
-      const src = b.el('ac3y', 31, -14, {}, 1, true);
-      const mcb = b.el('mcb3p', 30, -8, { in: 25, curve: 'D' }, 1, true);
-      const km = b.el('contactor', 30, -1);
-      const olr = b.el('olr3', 30, 9, { ir: 4.5 });
-      const mot = b.el('im3d', 30, 16, { load: 20, loadType: 'fan' }, 1, true);
-      const ky = b.el('contactor2', 30, 26);
-      const kd = b.el('contactor2', 42, 13);
-      b.w(b.pin(src, 0), [29, -11], [28, -11], b.pin(mcb, 0));
-      b.w(b.pin(src, 1), b.pin(mcb, 1));
-      b.w(b.pin(src, 2), [31, -11], [32, -11], b.pin(mcb, 2));
-      tagR(b, ...b.pin(src, 3), 'N');
-      b.w(b.pin(mcb, 3), [28, -5], [29, -5], b.pin(km, 2));
-      b.w(b.pin(mcb, 4), b.pin(km, 3));
-      b.w(b.pin(mcb, 5), [32, -5], [31, -5], b.pin(km, 4));
-      tagL(b, ...b.pin(mcb, 3), 'L1');
-      for (let k = 0; k < 3; k++) b.w(b.pin(km, 5 + k), b.pin(olr, k));
+      const yb = 15;
+      ladderSupply(b, 10, -14, 1, 24, 58, yb, { in: 25, curve: 'D' });
+      // ---- power circuit
+      b.el('lmain3', 10, 3, { tag: 'KM' });
+      for (let k = 0; k < 3; k++) b.w([9 + k, 5], [9 + k, 9]);
+      const olr = b.el('lolr', 10, 11, { tag: 'F1', ir: 4.5 });
+      const mot = b.el('im3d', 10, 17, { load: 20, loadType: 'fan' }, 1, true);
       for (let k = 0; k < 3; k++) b.w(b.pin(olr, 3 + k), b.pin(mot, k));
-      for (let k = 0; k < 3; k++) b.w(b.pin(mot, 3 + k), b.pin(ky, 2 + k));
-      b.w(b.pin(ky, 5), b.pin(ky, 7)); // star point
-      // delta contactor fed from the KM outputs: L1'→W2, L2'→U2, L3'→V2
-      b.w([29, 4], [41, 4], b.pin(kd, 2)); b.w([30, 5], [42, 5], b.pin(kd, 3)); b.w([31, 6], [43, 6], b.pin(kd, 4));
-      b.w(b.pin(kd, 5), [41, 21], [31, 21]); b.w(b.pin(kd, 6), [42, 20], [29, 20]); b.w(b.pin(kd, 7), [43, 19], [30, 19]);
-      // coils via net labels
-      tagL(b, ...b.pin(km, 0), 'KM'); tagL(b, ...b.pin(km, 1), 'N');
-      tagL(b, ...b.pin(ky, 0), 'KY'); tagL(b, ...b.pin(ky, 1), 'N');
-      tagL(b, ...b.pin(kd, 0), 'KΔ'); tagL(b, ...b.pin(kd, 1), 'N');
-      tagL(b, ...b.pin(olr, 6), 'L1'); tagL(b, ...b.pin(olr, 7), 'L1 ctrl');
-      // ---- control circuit (ladder on the right)
-      tagR(b, 54, -7, 'L1 ctrl');
-      const stop = b.h('pushnc', 57, -4), start = b.h('pushno', 62, -4);
-      const kt = b.el('tdr', 73, 3, { t: 1.5 });
-      b.w([54, -7], [54, -4], b.pin(stop, 0)); b.w(b.pin(stop, 1), b.pin(start, 0));
-      b.w(b.pin(start, 1), [69, -4]); tagR(b, 69, -4, 'KM');
-      b.w([66, -4], [66, 2], b.pin(kt, 0)); // X rail → timer coil
-      tagL(b, ...b.pin(kt, 1), 'N');
-      b.w(b.pin(km, 8), [35, -2], [35, -8], [59, -8], b.pin(stop, 1)); // KM 13 → between STOP and START
-      b.w(b.pin(km, 9), [66, 0]); // KM 14 → X rail (hold-in)
-      b.w([66, -2], [76, -2], [76, 2], b.pin(kt, 2)); // X → KT 15 (COM)
-      b.w(b.pin(kt, 3), [78, 3], [78, 14], b.pin(kd, 10)); // KT 16 (NC) → KΔ 21-22 → KY coil
-      b.w(b.pin(kd, 11), [47, 15]); tagR(b, 47, 15, 'KY');
-      b.w(b.pin(kt, 4), [80, 4], [80, 27], b.pin(ky, 10)); // KT 18 (NO) → KY 21-22 → KΔ coil
-      b.w(b.pin(ky, 11), [36, 28]); tagR(b, 36, 28, 'KΔ');
-      // pilot lamps: STAR (KY 13-14), DELTA (KΔ 13-14), TRIP (OLR 97-98)
-      const l1 = b.h('neon', 39, 26), l2 = b.h('neon', 51, 13), l3 = b.h('neon', 37, 10);
-      tagR(b, ...b.pin(ky, 8), 'L1 ctrl'); b.w(b.pin(ky, 9), b.pin(l1, 0)); tagR(b, ...b.pin(l1, 1), 'N');
-      tagR(b, ...b.pin(kd, 8), 'L1 ctrl'); b.w(b.pin(kd, 9), b.pin(l2, 0)); tagR(b, ...b.pin(l2, 1), 'N');
-      tagR(b, ...b.pin(olr, 8), 'L1 ctrl'); b.w(b.pin(olr, 9), b.pin(l3, 0)); tagR(b, ...b.pin(l3, 1), 'N');
-      b.label(57, -2.4, 'STOP'); b.label(62, -2.4, 'START'); b.label(73, 6.3, 'KT 1.5 s');
-      b.label(25, -3.4, 'KM'); b.label(25, 23.6, 'KY'); b.label(36.6, 12.4, 'KΔ'); b.label(25, 7.4, 'OLR');
-      b.label(39, 24.3, 'STAR'); b.label(51, 11.3, 'DELTA'); b.label(37, 8.3, 'TRIP');
+      b.el('lmain3', 10, 25, { tag: 'KY' });
+      for (let k = 0; k < 3; k++) b.w(b.pin(mot, 3 + k), [9 + k, 23]);
+      b.w([9, 27], [11, 27]); // star point
+      // delta contactor fed from the KM outputs: L1 → W2, L2 → U2, L3 → V2
+      b.el('lmain3', 17, 13, { tag: 'KΔ' });
+      b.w([9, 6], [16, 6], [16, 11]); b.w([10, 7], [17, 7], [17, 11]); b.w([11, 8], [18, 8], [18, 11]);
+      b.w([16, 15], [16, 20], [11, 20]); b.w([17, 15], [17, 21], [9, 21]); b.w([18, 15], [18, 22], [10, 22]);
+      // ---- control circuit (ladder)
+      lnc(b, 26, -6, 'F1', '95-96'); b.h('pushnc', 30, -6); b.h('pushno', 34, -6);
+      b.w([36, -6], [50, -6]); lcoil(b, 52, -6, 'KM'); b.w([54, -6], [58, -6]);
+      lno(b, 34, -3, 'KM'); b.w([32, -6], [32, -3]); b.w([36, -6], [36, -3]); // hold-in
+      b.w([38, -6], [38, 6]); // everything below runs while KM is held in
+      b.w([38, 0], [50, 0]); b.h('ltimer', 52, 0, { tag: 'KT', t: 1.5 }); b.w([54, 0], [58, 0]);
+      lnc(b, 40, 3, 'KT', '15-16'); lnc(b, 44, 3, 'KΔ'); b.w([46, 3], [50, 3]); lcoil(b, 52, 3, 'KY'); b.w([54, 3], [58, 3]);
+      lno(b, 40, 6, 'KT', '15-18'); lnc(b, 44, 6, 'KY'); b.w([46, 6], [50, 6]); lcoil(b, 52, 6, 'KΔ'); b.w([54, 6], [58, 6]);
+      const lamp = (y, tag, terms, text) => { lno(b, 26, y, tag, terms); b.w([28, y], [50, y]); b.h('neon', 52, y); b.w([54, y], [58, y]); b.label(46, y - 0.9, text); };
+      lamp(9, 'KY', '13-14', 'STAR'); lamp(12, 'KΔ', '13-14', 'DELTA'); lamp(yb, 'F1', '97-98', 'TRIP');
+      b.label(30, -7.7, 'STOP'); b.label(34, -7.7, 'START');
       b.cur(mot, C[0]);
       b.doc.simSettings.speed = 0.2;
     },
   },
   {
     id: 'fwdrev', cat: 'Industrial Control', title: 'Forward / reverse motor control',
-    desc: 'Reversing a 3-phase motor = swapping two phases. Contactor KF connects L1-L2-L3 to the motor in order; KR swaps L1 and L3. Press FWD or REV to start, STOP to stop. Each contactor seals itself in with its 13-14 contact (hold-in) and blocks the other one through its 21-22 NC contact (electrical interlock) — so KF and KR can never close together and short two phases. To reverse, press STOP first. The net labels Y, F, R, KF, KR, N and L1 ctrl join the ladder to the contactor terminals; watch the speed change sign.',
+    desc: 'Reversing a 3-phase motor = swapping two phases. Left, the power circuit: main contacts KF connect L1-L2-L3 to the motor in order, KR swaps L1 and L3; F1 is the overload relay. Right, the control circuit as a ladder diagram between L3 and N: press FWD and coil KF pulls in, its KF 13-14 contact across FWD holds it in after you let go, and its KF 21-22 contact in the KR rung blocks reverse (electrical interlock) — so KF and KR can never close together and short two phases. REV works the same way for KR. STOP or an overload (F1 95-96) drops the coil; F1 97-98 lights TRIP. Every contact carries the tag of the coil it belongs to. To reverse, press STOP first and watch the speed change sign.',
     build(b) {
-      supply3(b, 10, -14, 0);
-      const kf = b.el('contactor2', 10, 3), kr = b.el('contactor2', 20, 3);
-      b.w([9, -4], [19, -4], b.pin(kr, 2)); b.w([10, -3], [20, -3], b.pin(kr, 3)); b.w([11, -2], [21, -2], b.pin(kr, 4));
-      const { olr, mot } = olrMotor(b, 10, 13, { ir: 8 }, 'im3', { load: 10 });
-      for (let k = 0; k < 3; k++) b.w(b.pin(kf, 5 + k), b.pin(olr, k));
-      b.w(b.pin(kr, 5), [19, 10], [11, 10]); b.w(b.pin(kr, 6), [20, 9], [10, 9]); b.w(b.pin(kr, 7), [21, 8], [9, 8]); // L1 ↔ L3 swapped
-      tagL(b, ...b.pin(kf, 0), 'KF'); tagL(b, ...b.pin(kf, 1), 'N'); tagL(b, ...b.pin(kr, 0), 'KR'); tagL(b, ...b.pin(kr, 1), 'N');
-      ['Y', 'F', 'R', 'KR'].forEach((n, k) => tagR(b, ...b.pin(kf, 8 + k), n));
-      ['Y', 'R', 'F', 'KF'].forEach((n, k) => tagR(b, ...b.pin(kr, 8 + k), n));
-      tripLamp(b, olr);
-      // ladder
-      tagR(b, 28, -3, 'L1 ctrl');
-      const stop = b.h('pushnc', 31, 0), fwd = b.h('pushno', 38, 0), rev = b.h('pushno', 38, 4);
-      b.w([28, -3], [28, 0], b.pin(stop, 0)); b.w(b.pin(stop, 1), [35, 0]); b.w([35, 0], b.pin(fwd, 0));
-      b.w([35, -2], [35, 4], b.pin(rev, 0)); tagR(b, 35, -2, 'Y');
-      b.w(b.pin(fwd, 1), [43, 0]); tagR(b, 43, 0, 'F'); b.w(b.pin(rev, 1), [43, 4]); tagR(b, 43, 4, 'R');
-      b.label(31, 1.5, 'STOP'); b.label(38, 1.5, 'FWD'); b.label(38, 5.5, 'REV'); b.label(5, 0.4, 'KF'); b.label(15.6, 0.4, 'KR');
+      const yb = 8;
+      ladderSupply(b, 10, -14, 1, 24, 52, yb);
+      // power circuit
+      b.el('lmain3', 10, 3, { tag: 'KF' }); b.el('lmain3', 16, 3, { tag: 'KR' });
+      b.w([9, -4], [15, -4], [15, 1]); b.w([10, -3], [16, -3], [16, 1]); b.w([11, -2], [17, -2], [17, 1]);
+      const olr = b.el('lolr', 10, 11, { tag: 'F1', ir: 8 });
+      for (let k = 0; k < 3; k++) b.w([9 + k, 5], [9 + k, 9]);
+      b.w([15, 5], [15, 8], [11, 8]); b.w([16, 5], [16, 7], [10, 7]); b.w([17, 5], [17, 6], [9, 6]); // KR: L1 ↔ L3 swapped
+      const mot = b.el('im3', 10, 17, { load: 10 }, 1, true);
+      for (let k = 0; k < 3; k++) b.w(b.pin(olr, 3 + k), b.pin(mot, k));
+      // control circuit (ladder)
+      lnc(b, 26, -6, 'F1', '95-96'); b.h('pushnc', 30, -6); b.h('pushno', 34, -6); lnc(b, 38, -6, 'KR');
+      b.w([40, -6], [44, -6]); lcoil(b, 46, -6, 'KF'); b.w([48, -6], [52, -6]);
+      lno(b, 34, -3, 'KF'); b.w([32, -6], [32, -3]); b.w([36, -6], [36, -3]); // hold-in
+      b.w([32, -3], [32, 1]); b.h('pushno', 34, 1); lnc(b, 38, 1, 'KF');
+      b.w([40, 1], [44, 1]); lcoil(b, 46, 1, 'KR'); b.w([48, 1], [52, 1]);
+      lno(b, 34, 4, 'KR'); b.w([32, 1], [32, 4]); b.w([36, 1], [36, 4]);
+      lno(b, 26, yb, 'F1', '97-98'); b.w([28, yb], [44, yb]); b.h('neon', 46, yb); b.w([48, yb], [52, yb]);
+      b.label(30, -7.7, 'STOP'); b.label(34, -7.7, 'FWD'); b.label(34, -0.7, 'REV'); b.label(46, yb - 1.6, 'TRIP');
       b.cur(mot, C[0]);
       b.doc.simSettings.speed = 0.2;
     },
   },
   {
     id: 'waterpump', cat: 'Industrial Control', title: 'Automatic water pump (float switch)',
-    desc: 'Overhead-tank pump control. A tethered float switch (NC) sits in the contactor coil circuit: it opens when the water rises above 80 % and — because of its 60 % hysteresis — only closes again when the level falls below 20 %, like the classic low/high electrodes with a hold-in contact. Select the float and drag its level knob down below 20 %: the contactor pulls in and the pump motor starts; raise the level above 80 % and it stops. The overload relay protects the motor (TRIP lamp).',
+    desc: 'Overhead-tank pump control, drawn as a power circuit (left) and a ladder diagram (right). A tethered float switch (NC) sits in the rung of contactor coil K: it opens when the water rises above 80 % and — because of its 60 % hysteresis — only closes again when the level falls below 20 %, like the classic low/high electrodes with a hold-in contact. Select the float and drag its level knob down below 20 %: coil K pulls in, the main contacts K start the pump and K 13-14 lights RUN; raise the level above 80 % and it stops. The overload relay F1 protects the motor: its 95-96 contact drops the coil, 97-98 lights TRIP.',
     build(b) {
-      supply3(b, 10, -14, 0);
-      const k = b.el('contactor', 10, 3);
-      const { olr, mot } = olrMotor(b, 10, 11, { ir: 8 }, 'im3', { load: 8, loadType: 'fan' });
-      for (let j = 0; j < 3; j++) b.w(b.pin(k, 5 + j), b.pin(olr, j));
-      tagL(b, ...b.pin(k, 0), 'K'); tagL(b, ...b.pin(k, 1), 'N');
-      tagR(b, ...b.pin(k, 8), 'L1 ctrl'); tagR(b, ...b.pin(k, 9), 'RUN');
-      tripLamp(b, olr);
-      tagR(b, 22, -3, 'L1 ctrl');
-      const fl = b.h('floatsw', 25, 0, { mode: 'NC', set: 80, hyst: 60, level: 85 });
-      b.w([22, -3], [22, 0], b.pin(fl, 0)); b.w(b.pin(fl, 1), [30, 0]); tagR(b, 30, 0, 'K');
-      const run = b.h('neon', 25, 4); tagL(b, ...b.pin(run, 0), 'RUN'); tagR(b, ...b.pin(run, 1), 'N');
-      b.label(25, 1.5, 'FLOAT (NC)'); b.label(25, 5.6, 'RUN (K 13-14)'); b.label(5, 0.4, 'K');
+      const yb = 8;
+      ladderSupply(b, 10, -14, 1, 22, 46, yb);
+      b.el('lmain3', 10, 3, { tag: 'K' });
+      const olr = b.el('lolr', 10, 9, { tag: 'F1', ir: 8 });
+      for (let k = 0; k < 3; k++) b.w([9 + k, 5], [9 + k, 7]);
+      const mot = b.el('im3', 10, 15, { load: 8, loadType: 'fan' }, 1, true);
+      for (let k = 0; k < 3; k++) b.w(b.pin(olr, 3 + k), b.pin(mot, k));
+      lnc(b, 24, -6, 'F1', '95-96'); b.h('floatsw', 30, -6, { mode: 'NC', set: 80, hyst: 60, level: 85 });
+      b.w([26, -6], [28, -6]); b.w([32, -6], [38, -6]); lcoil(b, 40, -6, 'K'); b.w([42, -6], [46, -6]);
+      lno(b, 24, 1, 'K'); b.w([26, 1], [38, 1]); b.h('neon', 40, 1); b.w([42, 1], [46, 1]);
+      lno(b, 24, yb, 'F1', '97-98'); b.w([26, yb], [38, yb]); b.h('neon', 40, yb); b.w([42, yb], [46, yb]);
+      b.label(30, -7.8, 'FLOAT (NC)'); b.label(40, -0.6, 'RUN'); b.label(40, yb - 1.6, 'TRIP');
       b.cur(mot, C[0]);
       b.doc.simSettings.speed = 0.2;
     },
@@ -171,29 +168,29 @@ export const EXAMPLES2 = [
   },
   {
     id: 'phasefail', cat: 'Industrial Control', title: 'Phase-failure protection relay',
-    desc: 'A 3-phase motor must never run on two phases (single-phasing): it overheats within seconds. The phase-monitoring relay watches L1-L2-L3 after the fuses and keeps its 11-14 contact closed only while all three phases are present, in the right sequence and balanced. Start the motor (START), then open the "blown fuse" switch in L3: the relay drops out after its delay, its contact breaks the coil circuit and the contactor disconnects the motor. Close the switch again and restart.',
+    desc: 'A 3-phase motor must never run on two phases (single-phasing): it overheats within seconds. The phase monitor KP watches L1-L2-L3 after the fuses; while all three phases are present, in the right sequence and balanced, its contact KP 11-14 in the coil rung of the ladder (right) is closed. Press START: coil K pulls in and holds itself with K 13-14, and the main contacts K run the motor. Now open the "blown fuse" switch in L3: KP releases after its delay, KP 11-14 opens, coil K drops and the motor is disconnected, while KP 11-12 lights PHASE FAULT. Close the switch again and restart. F1 is the overload relay (95-96 in the coil rung, 97-98 for TRIP).',
     build(b) {
-      supply3(b, 10, -14, -3);
+      const yb = 5;
+      ladderSupply(b, 10, -14, -3, 26, 54, yb);
       const fuse = b.v('switch', 11, -1, { closed: true });
-      b.w([9, -3], [9, 6]); b.w([10, -3], [10, 6]); b.w([11, -3], b.pin(fuse, 0)); b.w(b.pin(fuse, 1), [11, 6]);
-      const k = b.el('contactor', 10, 9);
-      const { olr, mot } = olrMotor(b, 10, 17, { ir: 8 }, 'im3', { load: 10 });
-      for (let j = 0; j < 3; j++) b.w(b.pin(k, 5 + j), b.pin(olr, j));
-      tagL(b, ...b.pin(k, 0), 'K'); tagL(b, ...b.pin(k, 1), 'N');
-      tagR(b, ...b.pin(k, 8), 'P'); tagR(b, ...b.pin(k, 9), 'X');
-      // phase relay senses the lines after the fuses
-      const pr = b.el('phaserelay', 26, 0, { delay: 0.3 });
-      b.w([9, 3], [18, 3], [18, -1], b.pin(pr, 0)); b.w([10, 4], [19, 4], [19, 0], b.pin(pr, 1)); b.w([11, 5], [17, 5], [17, 1], b.pin(pr, 2));
-      b.w(b.pin(pr, 3), [22, 2]); tagL(b, 22, 2, 'N');
-      tagR(b, ...b.pin(pr, 4), 'X'); tagR(b, ...b.pin(pr, 6), 'K');
-      tripLamp(b, olr);
-      // ladder: L1 ctrl → STOP → START → X (→ phase relay 11-14 → K coil)
-      tagR(b, 36, -6, 'L1 ctrl');
-      const stop = b.h('pushnc', 39, -4), start = b.h('pushno', 45, -4);
-      b.w([36, -6], [36, -4], b.pin(stop, 0)); b.w(b.pin(stop, 1), b.pin(start, 0));
-      b.w([42, -4], [42, -2]); tagR(b, 42, -2, 'P');
-      b.w(b.pin(start, 1), [49, -4]); tagR(b, 49, -4, 'X');
-      b.label(39, -2.5, 'STOP'); b.label(45, -2.5, 'START'); b.label(14, -1, 'blown fuse'); b.label(26, -3.2, 'phase relay');
+      b.w([9, -3], [9, 6]); b.w([10, -3], [10, 6]); b.w(b.pin(fuse, 1), [11, 6]);
+      b.el('lmain3', 10, 8, { tag: 'K' });
+      const olr = b.el('lolr', 10, 14, { tag: 'F1', ir: 8 });
+      for (let k = 0; k < 3; k++) b.w([9 + k, 10], [9 + k, 12]);
+      const mot = b.el('im3', 10, 20, { load: 10 }, 1, true);
+      for (let k = 0; k < 3; k++) b.w(b.pin(olr, 3 + k), b.pin(mot, k));
+      // phase monitor senses the lines after the fuses; its neutral comes from the source
+      b.el('lphase', 20, 4, { tag: 'KP', delay: 0.3 });
+      b.w([9, 3], [18, 3]); b.w([10, 4], [18, 4]); b.w([11, 5], [18, 5]);
+      b.w([13, -14], [16, -14], [16, 6], [18, 6]);
+      // control circuit (ladder)
+      lnc(b, 28, -6, 'F1', '95-96'); b.h('pushnc', 32, -6); b.h('pushno', 36, -6); lno(b, 40, -6, 'KP', '11-14');
+      b.w([42, -6], [46, -6]); lcoil(b, 48, -6, 'K'); b.w([50, -6], [54, -6]);
+      lno(b, 36, -3, 'K'); b.w([34, -6], [34, -3]); b.w([38, -6], [38, -3]); // hold-in
+      lnc(b, 28, 1, 'KP', '11-12'); b.w([30, 1], [46, 1]); b.h('neon', 48, 1); b.w([50, 1], [54, 1]);
+      lno(b, 28, yb, 'F1', '97-98'); b.w([30, yb], [46, yb]); b.h('neon', 48, yb); b.w([50, yb], [54, yb]);
+      b.label(32, -7.7, 'STOP'); b.label(36, -7.7, 'START'); b.label(14, -1, 'blown fuse');
+      b.label(48, -0.6, 'PHASE FAULT'); b.label(48, yb - 1.6, 'TRIP');
       b.cur(mot, C[0]);
       b.doc.simSettings.speed = 0.2;
     },
