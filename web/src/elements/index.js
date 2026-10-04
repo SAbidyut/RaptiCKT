@@ -24,6 +24,7 @@ import './outputs.js';
 import './meters2.js';
 import './power2.js';
 import './energy.js';
+import './comm.js';
 import './sensors3.js';
 import './machines2.js';
 import './switches3.js';
@@ -53,8 +54,9 @@ export const CATEGORIES = [
   { id: 'Control & Math', icon: 'sigma', items: ['gain', 'sum2', 'sum3', 'mult', 'div', 'integ', 'deriv', 'tf1', 'tf2', 'pid', 'limiter', 'absb', 'sqrtb', 'powb', 'logb', 'expb', 'trigb', 'fcn', 'delay', 'zoh', 'ratelim', 'hystb'] },
   { id: 'Logic Gates', icon: 'logic', items: ['logicin', 'logicout', 'hexin', 'clock', 'and', 'or', 'not', 'nand', 'nor', 'xor', 'xnor', 'buffer', 'schmitt', 'tristate', 'and3', 'or3', 'nand3', 'nor3', 'and4', 'nand4'] },
   { id: 'Digital ICs', icon: 'chip', items: ['halfadder', 'fulladder', 'halfsub', 'fullsub', 'sub4', 'adder4', 'comp4', 'mux2', 'mux4', 'demux4', 'dec2to4', 'dec3to8', 'enc4to2', 'enc8to3', 'enc4to2s', 'parity', 'decoder7', 'dlatch', 'srlatch', 'srff', 'dff', 'jkff', 'tff', 'counter', 'updown', 'bcdcounter', 'decade', 'counter8', 'ring4', 'johnson4', 'shift4', 'siso4', 'piso8', 'univ194', 'reg4', 'mono', 'dtimer', 'clockdiv', 'adc', 'dac', 'adc8', 'dac8', 'levelshift', 'ram16x4', 'rom16x8'] },
+  { id: 'Communication', icon: 'antenna', items: ['antenna', 'rfamp', 'mixer', 'envdet', 'filterblk', 'emifilter', 'uarttx', 'uartrx', 'rs485', 'rs232', 'can', 'wireless', 'rfid', 'fiber'] },
   { id: 'Sensors', icon: 'sensor', items: ['ldr', 'photodiode', 'phototransistor', 'solar', 'ntc', 'ptc', 'pt100', 'pt1000', 'thermocouple', 'lm35', 'lm335', 'strain', 'loadcell', 'fsr', 'flex', 'lvdt', 'hall', 'hallswitch', 'acs712', 'vsense', 'accel', 'tilt', 'pir', 'irprox', 'irdist', 'ultrasonic', 'gas', 'humidity', 'soilm', 'rain', 'pressure', 'flame', 'uv', 'anemometer', 'flow', 'encoder', 'tacho', 'piezosens', 'mic', 'ph', 'capsense', 'proxind', 'proxcap', 'photoeye', 'ltx', 'ptx', 'ttx', 'ftx', 'smoke', 'gyro', 'co2', 'soundmod', 'imu', 'colorsens', 'hcsr04', 'linenc'] },
-  { id: 'Output', icon: 'bulb', items: ['led', 'rgbled', 'bicolor', 'irled', 'laser', 'sevenseg', 'hexdisp', 'vubar', 'buzzer', 'piezobuzz', 'speaker', 'solenoid', 'servo'] },
+  { id: 'Output', icon: 'bulb', items: ['led', 'rgbled', 'bicolor', 'irled', 'laser', 'sevenseg', 'hexdisp', 'vubar', 'buzzer', 'piezobuzz', 'speaker', 'preamp', 'tonectl', 'solenoid', 'servo'] },
   { id: 'Vacuum Tubes', icon: 'tube', items: ['vacdiode', 'triode', 'pentode'] },
   { id: 'Meters', icon: 'meter', items: ['voltmeter', 'ammeter', 'acvolt', 'acamp', 'ohmmeter', 'wattmeter', 'pfmeter', 'varmeter', 'kwh', 'freqmeter', 'phasemeter', 'dbmeter', 'peakvolt', 'lcr', 'megger', 'mcvolt', 'mcamp', 'galvo', 'testpoint', 'label'] },
 ];
