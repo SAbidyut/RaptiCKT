@@ -263,3 +263,122 @@ test('averaged isolated and inverting converters', () => {
   near(els[1].dutyNow(), 0.037 / 0.137, 0.01, 'flyback duty');
   near(sim.v(5), -18, 0.1, 'inverting buck-boost at D = 60 %');
 });
+
+test('battery pack S/P scaling', () => {
+  const { sim, els } = net([['batpack', [1, 0], { s: 13, np: 4, chem: 'liion', soc: 80, cr: 0.04 }], ['resistor', [1, 0], { r: 5 }]]);
+  assert.ok(sim.start(), sim.error);
+  const ocv = 13 * 4.0, r = 13 * 0.04 / 4;
+  near(sim.v(1), ocv * 5 / (5 + r), 0.01, 'loaded pack voltage');
+});
+
+test('BMS: over-current trip/release, over-discharge latch released by a charger, over-charge cut-off', () => {
+  // cell + BMS (B+ 1, B− 0, P+ 2, P− 3), load between P+ and P−
+  const { sim, els } = net([['liion', [1, 0], { soc: 50, rint: 0.05 }], ['bms', [1, 0, 2, 3]], ['resistor', [2, 3], { r: 0.3 }]]);
+  const [cell, bms, load] = els;
+  assert.ok(sim.start(), sim.error);
+  run(sim, 0.03, 1e-5);
+  assert.equal(bms.why, 'short circuit');
+  near(load.i, 0, 1e-3, 'load cut off');
+  load.p.r = 1e6; sim.dirty = true; run(sim, 0.01, 1e-5);
+  assert.ok(bms.dOn, 'released when the load is removed');
+  load.p.r = 10; sim.dirty = true; run(sim, 0.01, 1e-5);
+  near(load.i, 3.78 / 10.05, 0.02, 'normal discharge');
+  // over-discharge: weak, nearly empty cell
+  const b = net([['liion', [1, 0], { soc: 1, rint: 0.5, ah: 1e-5 }], ['bms', [1, 0, 2, 3]], ['resistor', [2, 3], { r: 1 }], ['dcv', [4, 3], { amp: 0 }], ['resistor', [2, 4], { r: 1 }]]);
+  assert.ok(b.sim.start(), b.sim.error);
+  run(b.sim, 0.05, 1e-5);
+  assert.equal(b.els[1].why, 'over-discharge');
+  run(b.sim, 0.05, 1e-5);
+  assert.ok(!b.els[1].dOn, 'stays off without a charger');
+  b.els[2].p.r = 1e6; b.els[3].p.amp = 5; b.sim.dirty = true; run(b.sim, 0.02, 1e-5);
+  assert.ok(b.els[1].dOn, 'charger releases the over-discharge latch');
+  // over-charge: full cell on a 5 V charger through 1 Ω
+  const c = net([['liion', [1, 0], { soc: 100, rint: 0.2 }], ['bms', [1, 0, 2, 3]], ['dcv', [4, 3], { amp: 5 }], ['resistor', [2, 4], { r: 1 }]]);
+  assert.ok(c.sim.start(), c.sim.error);
+  run(c.sim, 0.01, 1e-5);
+  assert.equal(c.els[1].why, 'over-charge');
+  assert.ok(Math.abs(c.els[2].i) < 0.01, 'charge current blocked: ' + c.els[2].i);
+});
+
+test('CC-CV charger: constant current, constant voltage, termination', () => {
+  const { sim, els } = net([['dcv', [1, 0], { amp: 5 }], ['cccv', [1, 0, 2], { icc: 1 }], ['liion', [2, 0], { soc: 20, ah: 0.001, rint: 0.05 }]]);
+  const [, ch, cell] = els;
+  assert.ok(sim.start(), sim.error);
+  run(sim, 0.1, 1e-3);
+  assert.equal(ch.st, 'cc');
+  near(ch.iout, 1, 0.01, 'CC current');
+  near(els[0].i, -1, 0.01, 'linear charger: input current = output current');
+  const seen = new Set();
+  run(sim, 6, 1e-3, () => seen.add(ch.st));
+  assert.ok(seen.has('cv') && seen.has('done'), 'stages ' + [...seen]);
+  assert.ok(cell.q > 0.97, 'charged to ' + cell.q);
+  assert.ok(sim.v(2) < 4.2 + 1e-3, 'never above CV: ' + sim.v(2));
+});
+
+test('MPPT tracks the panel maximum power point and beats a PWM controller', () => {
+  const pmp = (pv) => { let best = 0; for (let v = 0; v < 25; v += 0.01) { const i = pv.iph() - pv.p.is * (Math.exp(v / (pv.nEff * 0.025852)) - 1); best = Math.max(best, v * i); } return best; };
+  const sys = (type) => net([['pvmodule', [1, 0]], [type, [1, 0, 2, 3]], ['leadacid', [2, 0], { soc: 50, ah: 1000 }], ['resistor', [3, 0], { r: 1e6 }]]);
+  const a = sys('mpptcc');
+  assert.ok(a.sim.start(), a.sim.error);
+  run(a.sim, 0.6, 1e-4);
+  let p = 0, n = 0;
+  run(a.sim, 0.2, 1e-4, () => { p += a.els[1].pin; n++; });
+  const best = pmp(a.els[0]);
+  assert.ok(p / n > 0.97 * best, `MPPT ${p / n} W vs Pmp ${best} W`);
+  near(a.els[1].iout, 0.96 * (p / n) / a.sim.v(2), 0.4, 'battery current from power balance');
+  const b = sys('pwmcc');
+  assert.ok(b.sim.start(), b.sim.error);
+  run(b.sim, 0.1, 1e-4);
+  const ppwm = b.sim.v(1) * b.els[1].ich;
+  assert.ok(ppwm < 0.9 * best, `PWM controller ${ppwm} W stays below the MPP`);
+});
+
+test('off-grid inverter: battery current from power balance and low-battery cut-off', () => {
+  const { sim, els } = net([['leadacid', [1, 0], { soc: 90, ah: 1000 }], ['invoff', [1, 0, 2, 3]], ['resistor', [2, 3], { r: 105.8 }]]);
+  assert.ok(sim.start(), sim.error);
+  run(sim, 0.04, 2e-5);
+  let pdc = 0, vsq = 0, n = 0;
+  run(sim, 0.04, 2e-5, () => { pdc += els[1].iin * sim.v(1); vsq += (sim.v(2) - sim.v(3)) ** 2; n++; });
+  const vrms = Math.sqrt(vsq / n), pout = vrms * vrms / 105.8;
+  near(vrms, 230 * 105.8 / 106.3, 1, 'AC output');
+  near(pdc / n, pout / 0.9 + 10, 8, 'battery power = output / η + idle');
+  const e = net([['leadacid', [1, 0], { soc: 0, ah: 1000 }], ['invoff', [1, 0, 2, 3]], ['resistor', [2, 3], { r: 105.8 }]]);
+  assert.ok(e.sim.start(), e.sim.error);
+  run(e.sim, 0.2, 2e-5);
+  assert.ok(!e.els[1].on && e.els[1].why === 'low battery', 'cut off on a flat battery');
+});
+
+test('grid-tie inverter exports the array MPP power in phase and stops when the grid is lost', () => {
+  const { sim, els } = net([['pvarray', [1, 0], { ns: 6 }], ['invgrid', [1, 0, 2, 3]], ['mains', [2, 3], { zs: 0.2 }]]);
+  const [pv, inv, grid] = els;
+  assert.ok(sim.start(), sim.error);
+  run(sim, 1.2, 5e-5);
+  assert.ok(inv.run, 'connected');
+  let pg = 0, n = 0;
+  run(sim, 0.2, 5e-5, () => { pg += (sim.v(2) - sim.v(3)) * grid.i; n++; });
+  let best = 0; for (let v = 0; v < 260; v += 0.05) { const i = pv.iph() - pv.p.is * (Math.exp(v / (pv.nEff * 0.025852)) - 1); best = Math.max(best, v * i); }
+  // power flows into the grid source (its current runs into +)
+  assert.ok(pg / n > 0.93 * 0.97 * best, `exported ${pg / n} W vs MPP ${best} W`);
+  grid.p.vrms = 0; sim.dirty = true;
+  run(sim, 0.1, 5e-5);
+  assert.ok(!inv.run, 'anti-islanding trip');
+});
+
+test('wind turbine settles near the optimum tip-speed ratio on a 48 V battery', () => {
+  const { sim, els } = net([['windgen', [1, 0], { wind: 9 }], ['dcv', [2, 0], { amp: 48 }], ['resistor', [1, 2], { r: 0.1 }]]);
+  assert.ok(sim.start(), sim.error);
+  run(sim, 25, 2e-3);
+  const w = els[0], lam = (w.w * w.p.r) / w.p.wind;
+  assert.ok(lam > 6 && lam < 10, 'λ = ' + lam);
+  const pel = sim.v(1) * w.io;
+  assert.ok(pel > 500 && pel < 1000, 'electrical power ' + pel);
+});
+
+test('fuel cell polarisation: ≈48 V open circuit, ≈28 V at 40 A', () => {
+  const a = net([['fuelcell', [1, 0]], ['resistor', [1, 0], { r: 1e6 }]]);
+  assert.ok(a.sim.start(), a.sim.error);
+  near(a.sim.v(1), 48, 0.01, 'open circuit');
+  const b = net([['fuelcell', [1, 0]], ['resistor', [1, 0], { r: 0.7025 }]]);
+  assert.ok(b.sim.start(), b.sim.error);
+  near(b.els[0].io, 40, 1, 'current');
+});

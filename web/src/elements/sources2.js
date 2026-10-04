@@ -14,7 +14,7 @@ const G = GRID;
 const TAU = 2 * Math.PI;
 
 // ------------------------------------------------------------- batteries
-const interp = (tbl, x) => {
+export const interp = (tbl, x) => {
   if (x <= tbl[0][0]) return tbl[0][1];
   for (let k = 1; k < tbl.length; k++) {
     if (x <= tbl[k][0]) { const [x0, y0] = tbl[k - 1], [x1, y1] = tbl[k]; return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0); }
@@ -22,7 +22,7 @@ const interp = (tbl, x) => {
   return tbl[tbl.length - 1][1];
 };
 
-const CHEM = {
+export const CHEM = {
   alkaline: [[0, 0.9], [0.1, 1.15], [0.3, 1.25], [0.6, 1.35], [0.9, 1.5], [1, 1.58]],
   liion: [[0, 3.0], [0.05, 3.3], [0.1, 3.45], [0.2, 3.6], [0.3, 3.68], [0.4, 3.73], [0.5, 3.78], [0.6, 3.85], [0.7, 3.92], [0.8, 4.0], [0.9, 4.08], [1, 4.2]],
   leadacid: [[0, 1.93], [0.2, 1.98], [0.5, 2.03], [0.8, 2.08], [1, 2.12]],
@@ -30,7 +30,7 @@ const CHEM = {
   lithium: [[0, 2.0], [0.05, 2.6], [0.15, 2.85], [0.5, 2.95], [0.9, 3.0], [1, 3.2]],
 };
 
-class Battery extends TwoTerm {
+export class Battery extends TwoTerm {
   static category = 'Sources';
   static prefix = 'BT';
   static chem = 'alkaline'; static cells = 1;
@@ -89,7 +89,7 @@ class Battery extends TwoTerm {
   }
 }
 
-function battery(type, title, chem, cells, soc, ah, r, keywords, desc) {
+export function battery(type, title, chem, cells, soc, ah, r, keywords, desc) {
   const C = class extends Battery {};
   Object.assign(C, { type, title, chem, cells, keywords, props: Battery.mkProps(soc, ah, r) });
   if (desc) C.description = desc;

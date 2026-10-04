@@ -23,6 +23,7 @@ import './sensors2.js';
 import './outputs.js';
 import './meters2.js';
 import './power2.js';
+import './energy.js';
 import './sensors3.js';
 import './machines2.js';
 import './switches3.js';
@@ -36,7 +37,8 @@ export { getType, allTypes, Element, GRID } from './base.js';
 
 export const CATEGORIES = [
   { id: 'Sources', icon: 'bolt', items: ['dcv', 'acv', 'mains', 'ac3y', 'ac3d', 'rail', 'ground', 'earth', 'chassis', 'benchpsu', 'dualpsu', 'pvmodule', 'dci', 'aci', 'square', 'pulse', 'pwm', 'triangle', 'sawtooth', 'sweep', 'noise', 'amsrc', 'fmsrc', 'stepsrc', 'expsrc', 'dampsine', 'pwlsrc', 'funcsrc', 'vcvs', 'vccs', 'ccvs', 'cccs'] },
-  { id: 'Batteries', icon: 'battery', items: ['cellaa', 'bat9v', 'coincell', 'nimh', 'liion', 'lipo2s', 'leadacid', 'supercap'] },
+  { id: 'Batteries', icon: 'battery', items: ['cellaa', 'bat9v', 'coincell', 'nimh', 'nicd', 'liion', 'lipo2s', 'lifepo4', 'lifepo12', 'leadacid', 'agm', 'gel', 'batpack', 'supercap', 'bms', 'cccv'] },
+  { id: 'Renewables', icon: 'sun', items: ['pvarray', 'mpptcc', 'pwmcc', 'invoff', 'invgrid', 'windgen', 'fuelcell'] },
   { id: 'Passive', icon: 'wave', items: ['resistor', 'shuntr', 'fusibler', 'rheostat', 'pot', 'trimpot', 'capacitor', 'ecap', 'npecap', 'tantalum', 'varcap', 'realcap', 'ceramiccap', 'filmcap', 'polyestercap', 'ppcap', 'micacap', 'inductor', 'varind', 'coreind', 'ferrite', 'crystal', 'ceramicres', 'tline', 'memristor'] },
   { id: 'Transformers', icon: 'coil', items: ['transformer', 'txstepdown', 'txstepup', 'isotx', 'xfmrct', 'xfmr2s', 'autotx', 'ct', 'pt', 'tx3ph', 'coupledl'] },
   { id: 'Protection', icon: 'shield', items: ['fuse', 'hrcfuse', 'polyfuse', 'mcb', 'mcb2p', 'mcb3p', 'mccb', 'rccb', 'rcbo', 'olr', 'olr3', 'phaserelay', 'voltrelay', 'idmt', 'mov', 'arrester', 'gdt', 'tvs', 'tvsbi'] },
