@@ -94,7 +94,7 @@ export class Scope {
     this.lastT = -Infinity;
     this.mode = 'time';
     this.frozen = false;
-    this.trigOn = true; // trigger on CH1 rising edges so periodic signals stand still
+    this.trigOn = false; // free-running by default; the trigger button holds periodic signals still on CH1 rising edges
     this.ac = false; // AC coupling: the mean of each trace is removed
     this.meas = 'basic'; // readout set: basic (pp, rms, f) or timing (mean, duty, rise, fall, phase)
     this.cursor = null; // x (CSS px) of the touch read-out cursor
@@ -109,7 +109,7 @@ export class Scope {
         <div class="scope-tools">
           <button class="icon-btn sm" data-a="zin" title="Zoom in time">${icon('plus', 18)}</button>
           <button class="icon-btn sm" data-a="zout" title="Zoom out time"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
-          <button class="icon-btn sm on" data-a="trig" title="Trigger on CH1 (steady picture)">${TRIG_SVG}</button>
+          <button class="icon-btn sm" data-a="trig" title="Trigger on CH1 (steady picture)">${TRIG_SVG}</button>
           <button class="scope-mode sm" data-a="cpl" title="Input coupling: DC / AC">DC</button>
           <button class="scope-mode sm" data-a="meas" title="Measurements: basic / timing">Σ</button>
           <button class="scope-mode" data-a="mode" title="Time / FFT / XY">TIME</button>

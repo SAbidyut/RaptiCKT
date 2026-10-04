@@ -409,7 +409,7 @@ export const CHAPTERS = [
       H('Scope buttons'),
       T(['Button', 'What it does'], [
         ['+  /  −', 'Zoom the time axis in / out, one 1-2-5 step of time per division. You can also pinch on the scope.'],
-        ['Trigger', 'On (green, the default): each sweep starts on a rising edge of **CH1**, so a repeating waveform stands still instead of sliding. Off: the picture rolls with the newest value at the right edge.'],
+        ['Trigger', 'Off by default: the picture rolls with the newest value at the right edge. Tap it to turn it on (green): each sweep then starts on a rising edge of **CH1**, so a repeating waveform stands still instead of sliding.'],
         ['TIME / FFT / XY', 'Shows the current view; tap to cycle **Time → FFT → XY → Time**. XY needs at least 2 channels.'],
         ['DC / AC', 'Input coupling. **DC** (default) shows the whole signal. **AC** removes the average (DC) part, like the AC switch of a real scope, so a small ripple riding on a large DC voltage (for example a power-supply output) fills the screen. The rms column then reads **ac rms**.'],
         ['Σ', 'Switches the measurement table between **basic** (now, /div, pp, rms, f) and **timing**: **mean** (average), **duty** cycle, **rise** and **fall** time (10–90 %) and **φ**, the phase of each channel relative to CH1.'],
