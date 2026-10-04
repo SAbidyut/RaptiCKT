@@ -140,21 +140,33 @@ class Linked extends CoilRelay {
 }
 
 /** One NO or NC contact: two terminals left and right, tag above, terminal numbers below. */
+/**
+ * The contact symbol between (−G, 0) and (G, 0). NO: the blade is raised until it closes flat.
+ * NC (IEC): the blade rests against a small upright stop on the fixed contact; operated, it
+ * drops away from it. Blue only while the simulation runs and the contact conducts.
+ * Returns the blade tip.
+ */
+function drawBlade(g, nc, closed) {
+  const col = g.running && closed ? g.accent : g.body, w = g.lw * 1.3;
+  let tip;
+  if (nc) {
+    g.line(0.6 * G, 0, G, 0, g.body, g.lw); // fixed contact
+    g.line(0.6 * G, 0, 0.6 * G, -0.48 * G, g.body, g.lw); // its stop
+    tip = closed ? [0.85 * G, -0.42 * G] : [0.8 * G, 0.38 * G];
+  } else tip = closed ? [G, 0] : [0.85 * G, -0.55 * G];
+  g.line(-G, 0, tip[0], tip[1], col, w);
+  return tip;
+}
+
 class LadderContact extends Linked {
   static pins = [['1', 'L'], ['2', 'R']];
   localPosts() { return [[-2 * G, 0], [2 * G, 0]]; }
   localBox() { return [-2 * G, -1.05 * G, 2 * G, 0.75 * G]; }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
   draw(g) {
-    const nc = this.constructor.paths[0][2] === 'NC', c = this.closedAt(0), col = c ? g.accent : g.body;
-    g.circle(-G, 0, 2.5, { fill: g.vc(g.pv(0)) });
-    g.circle(G, 0, 2.5, { fill: g.vc(g.pv(1)) });
-    if (nc) {
-      // IEC normally-closed: the blade rests against a stop; operated, it swings away from it
-      g.line(0.7 * G, -0.42 * G, 0.7 * G, 0.02 * G, g.body, g.lw);
-      g.line(-G, 0, c ? G : 0.75 * G, c ? 0 : 0.36 * G, col, g.lw * 1.3);
-    } else g.line(-G, 0, c ? G : 0.85 * G, c ? 0 : -0.55 * G, col, g.lw * 1.3);
-    const [tt, tc] = this.tagText(g, c);
+    const nc = this.constructor.paths[0][2] === 'NC', c = this.closedAt(0);
+    drawBlade(g, nc, c);
+    const [tt, tc] = this.tagText(g, g.running && c);
     g.text(tt, 0, -0.78 * G, { size: 8.5, color: tc, bold: true, follow: false });
     if (this.p.terms) g.text(this.p.terms, 0, 0.62 * G, { size: 6, color: g.muted, follow: false });
   }
@@ -432,17 +444,12 @@ class LadderLimit extends LadderContact {
   }
   readings() { return [['Operated', this.operated() ? 'Yes' : 'No', ''], ['State', this.closedAt(0) ? 'Closed' : 'Open', ''], ['Current', this.i || 0, 'A']]; }
   draw(g) {
-    const nc = this.constructor.paths[0][2] === 'NC', c = this.closedAt(0), col = c ? g.accent : g.body;
-    g.circle(-G, 0, 2.5, { fill: g.vc(g.pv(0)) });
-    g.circle(G, 0, 2.5, { fill: g.vc(g.pv(1)) });
-    let tip;
-    if (nc) { g.line(0.7 * G, -0.42 * G, 0.7 * G, 0.02 * G, g.body, g.lw); tip = c ? [G, 0] : [0.75 * G, 0.36 * G]; }
-    else tip = c ? [G, 0] : [0.85 * G, -0.55 * G];
-    g.line(-G, 0, tip[0], tip[1], col, g.lw * 1.3);
+    const nc = this.constructor.paths[0][2] === 'NC', c = this.closedAt(0);
+    const tip = drawBlade(g, nc, c);
     // the roller lever that the machine pushes
     g.line(-0.1 * G, (tip[1]) * 0.55, -0.1 * G, -0.75 * G, g.body, g.lw * 0.7);
     g.circle(-0.1 * G, -0.85 * G, 3, { stroke: g.body, width: g.lw * 0.7 });
-    g.text(String(this.p.name || ''), 0.62 * G, -0.85 * G, { size: 8.5, color: c ? g.accent : g.text1, bold: true, follow: false, align: 'left' });
+    g.text(String(this.p.name || ''), 0.62 * G, -0.85 * G, { size: 8.5, color: g.running && c ? g.accent : g.text1, bold: true, follow: false, align: 'left' });
     g.text(`${this.p.side === 'low' ? '≤' : '≥'}${Math.round(this.p.at)}%`, 0, 0.62 * G, { size: 6, color: g.muted, follow: false });
   }
 }
