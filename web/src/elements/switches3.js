@@ -6,7 +6,7 @@
 // relay.
 
 import { Element, register, GRID } from './base.js';
-import { MultiSwitch, CoilRelay, stampSw, stampSwAC } from './switches2.js';
+import { MultiSwitch, CoilRelay, stampSw, stampSwAC, drawContactor } from './switches2.js';
 import { withChip, CycleMeter } from './kit.js';
 import { fmtShort } from '../engine/units.js';
 
@@ -242,9 +242,8 @@ export class Contactor2 extends CoilRelay {
   static chipOpts = { dense: true };
   static description = 'Power contactor with a 230 V AC coil (A1–A2), three main contacts (L1–T1, L2–T2, L3–T3) and two auxiliary contacts: 13–14 NO for the hold-in circuit and 21–22 NC for electrical interlocking (forward/reverse, star/delta).';
   draw(g) {
-    this.drawCoilAndContacts(g, 'KM');
-    const on = this.contactsClosed(), { posts } = this.geom();
-    for (let p = 0; p < 3; p++) { const x = posts[2 + p][0]; g.line(x, -0.5 * G, x + (on ? 0 : 0.25 * G), 0.35 * G, g.body, g.lw * 0.8); }
+    drawContactor(this, g, 'KM', [[8, 9, 'NO'], [10, 11, 'NC']]);
+    g.circle(this.geom().bw - 0.4 * G, this.geom().top + 0.4 * G, 3, { fill: this.contactsClosed() ? g.hi : g.lo });
   }
 }
 register(Contactor2);

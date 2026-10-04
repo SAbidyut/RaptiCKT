@@ -3,6 +3,7 @@
 import { CircuitDoc, makeElement } from './doc.js';
 import { GRID } from '../elements/index.js';
 import { EXAMPLES2, ALLOW_OPEN2 } from './examples2.js';
+import { EXAMPLES3, ALLOW_OPEN3 } from './examples3.js';
 
 const G = GRID;
 
@@ -764,10 +765,10 @@ const BASE = [
   },
 ];
 
-export const EXAMPLES = [...BASE, ...EXAMPLES2];
+export const EXAMPLES = [...BASE, ...EXAMPLES2, ...EXAMPLES3];
 
 // unused outputs that are legitimately left open (relay NC contacts, the RAM cells' Q̄, the tens carry)
-export const EXAMPLE_ALLOW_OPEN = { relay: 1, ram16: 16, clock60: 1, streetlight: 1, ...ALLOW_OPEN2 };
+export const EXAMPLE_ALLOW_OPEN = { relay: 1, ram16: 16, clock60: 1, streetlight: 1, ...ALLOW_OPEN2, ...ALLOW_OPEN3 };
 
 export function buildExample(ex) {
   const b = builder(ex.title);

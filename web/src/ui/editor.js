@@ -94,6 +94,7 @@ export class Editor {
           <button class="fs-btn" data-a="meter" title="Multimeter">${icon('meter', 20)}</button>
           <button class="fs-btn" data-a="values" title="Labels">${icon('eye', 20)}</button>
           <i class="fs-sep"></i>
+          <button class="fs-btn" data-a="multi" title="Select">${icon('select', 19)}</button>
           <button class="fs-btn" data-a="undo" title="Undo">${icon('undo', 19)}</button>
           <button class="fs-btn" data-a="fit" title="Fit">${icon('fit', 19)}</button>
           <button class="fs-btn fs-hide" data-a="fsui" title="Hide the tools">${icon('chevLeft', 19)}</button>
@@ -477,7 +478,7 @@ export class Editor {
     this.q('.fs-rail [data-a=meter]').classList.toggle('on', this.meter.open);
     this.q('[data-a=undo]').disabled = !this.undoStack.length;
     this.q('[data-a=redo]').disabled = !this.redoStack.length;
-    this.q('[data-a=multi]').classList.toggle('on', this.multi);
+    this.root.querySelectorAll('[data-a=multi]').forEach((b) => b.classList.toggle('on', this.multi));
     this.q('[data-a=scope]').classList.toggle('on', !!this.scopeOpen);
     this.q('[data-a=meter]').classList.toggle('on', this.meter.open);
     this.updateStatus();

@@ -33,13 +33,13 @@ function supply3(b, cx, y0, yTop, mcb = { in: 16, curve: 'D' }, tags = true) {
  * right between an L rail at x = xl (fed from L3 after the MCB) and an N rail at x = xn (fed
  * from the source neutral over the top); both rails run down to y = yBot.
  */
-function ladderSupply(b, cx, y0, yTop, xl, xn, yBot, mcb) {
+export function ladderSupply(b, cx, y0, yTop, xl, xn, yBot, mcb, titleDy = 0) {
   const { src, cb } = supply3(b, cx, y0, yTop, mcb, false);
   const [lx, ly] = b.pin(cb, 5), [nx, ny] = b.pin(src, 3);
   b.w([lx, ly], [xl, ly], [xl, yBot]); // L rail
   b.w([nx, ny], [nx + 1, ny], [nx + 1, y0 - 2], [xn, y0 - 2], [xn, yBot]); // N rail
   b.label(xl - 1.3, ly - 0.9, 'L3'); b.label(xn + 1, y0 - 2.9, 'N');
-  b.label(cx, y0 - 4.2, 'POWER CIRCUIT', 11); b.label((xl + xn) / 2, ly - 3.2, 'CONTROL CIRCUIT', 11);
+  b.label(cx, y0 - 4.2, 'POWER CIRCUIT', 11); b.label((xl + xn) / 2, ly - 3.2 + titleDy, 'CONTROL CIRCUIT', 11);
   return { src, cb, top: ly };
 }
 /** NO / NC contact or coil of the ladder, centred at grid (x, y), terminals at x ± 2. */
@@ -67,7 +67,7 @@ function tripLamp(b, olr) {
 export const EXAMPLES2 = [
   // ======================================================= industrial control
   {
-    id: 'stardelta', cat: 'Industrial Control', title: 'Star-delta starter (automatic)',
+    id: 'stardelta', cat: 'Industrial Control (Ladder)', title: 'Star-delta starter (automatic)',
     desc: 'The standard way to start a large induction motor with reduced current, drawn as a power circuit (left) and a ladder diagram (right). Press START: coils KM and KY pull in (KM holds itself with KM 13-14), so the main contacts KM feed the motor and KY joins the winding ends U2-V2-W2 into a star — each winding gets 400/√3 = 230 V, and starting current and torque are one third of a direct start. The timer coil KT starts at the same time; after 1.5 s its KT 15-16 contact drops KY and its KT 15-18 contact picks up KΔ, which connects the windings in delta: each now gets the full 400 V. KΔ 21-22 in the KY rung and KY 21-22 in the KΔ rung make it impossible for both to close together (that would short the supply). The overload contact F1 95-96 feeds the whole control circuit; the lamps show STAR, DELTA and TRIP.',
     build(b) {
       const yb = 15;
@@ -101,7 +101,7 @@ export const EXAMPLES2 = [
     },
   },
   {
-    id: 'fwdrev', cat: 'Industrial Control', title: 'Forward / reverse motor control',
+    id: 'fwdrev', cat: 'Industrial Control (Ladder)', title: 'Forward / reverse motor control',
     desc: 'Reversing a 3-phase motor = swapping two phases. Left, the power circuit: main contacts KF connect L1-L2-L3 to the motor in order, KR swaps L1 and L3; F1 is the overload relay. Right, the control circuit as a ladder diagram between L3 and N: press FWD and coil KF pulls in, its KF 13-14 contact across FWD holds it in after you let go, and its KF 21-22 contact in the KR rung blocks reverse (electrical interlock) — so KF and KR can never close together and short two phases. REV works the same way for KR. STOP or an overload (F1 95-96) drops the coil; F1 97-98 lights TRIP. Every contact carries the tag of the coil it belongs to. To reverse, press STOP first and watch the speed change sign.',
     build(b) {
       const yb = 8;
@@ -128,7 +128,7 @@ export const EXAMPLES2 = [
     },
   },
   {
-    id: 'waterpump', cat: 'Industrial Control', title: 'Automatic water pump (float switch)',
+    id: 'waterpump', cat: 'Industrial Control (Ladder)', title: 'Automatic water pump (float switch)',
     desc: 'Overhead-tank pump control, drawn as a power circuit (left) and a ladder diagram (right). A tethered float switch (NC) sits in the rung of contactor coil K: it opens when the water rises above 80 % and — because of its 60 % hysteresis — only closes again when the level falls below 20 %, like the classic low/high electrodes with a hold-in contact. Select the float and drag its level knob down below 20 %: coil K pulls in, the main contacts K start the pump and K 13-14 lights RUN; raise the level above 80 % and it stops. The overload relay F1 protects the motor: its 95-96 contact drops the coil, 97-98 lights TRIP.',
     build(b) {
       const yb = 8;
@@ -167,7 +167,7 @@ export const EXAMPLES2 = [
     },
   },
   {
-    id: 'phasefail', cat: 'Industrial Control', title: 'Phase-failure protection relay',
+    id: 'phasefail', cat: 'Industrial Control (Ladder)', title: 'Phase-failure protection relay',
     desc: 'A 3-phase motor must never run on two phases (single-phasing): it overheats within seconds. The phase monitor KP watches L1-L2-L3 after the fuses; while all three phases are present, in the right sequence and balanced, its contact KP 11-14 in the coil rung of the ladder (right) is closed. Press START: coil K pulls in and holds itself with K 13-14, and the main contacts K run the motor. Now open the "blown fuse" switch in L3: KP releases after its delay, KP 11-14 opens, coil K drops and the motor is disconnected, while KP 11-12 lights PHASE FAULT. Close the switch again and restart. F1 is the overload relay (95-96 in the coil rung, 97-98 for TRIP).',
     build(b) {
       const yb = 5;
