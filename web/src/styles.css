@@ -665,11 +665,26 @@ input.toggle:checked::after { transform: translateX(18px); }
 .fs-btn.fs-run.running { color: #fb923c; background: rgba(249, 115, 22, 0.14); }
 .fs-sep { height: 1px; margin: 1px 6px; background: var(--border2); flex: none; }
 
-/* full screen: no bars, a floating tool rail on the left of the board */
+/* full screen: no bars, the board edge to edge; the tools hide behind a small handle */
+:root { --cut-t: 0px; --cut-r: 0px; --cut-b: 0px; --cut-l: 0px; }
+.fs-handle { display: none; }
+.editor.fs .fs-handle { display: grid; place-items: center; position: absolute; left: calc(6px + var(--cut-l)); top: calc(6px + var(--cut-t)); z-index: 12; width: 38px; height: 38px; border-radius: 12px;
+  color: #cbd5e1; background: rgba(10, 16, 32, 0.55); border: 1px solid var(--border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0.75;
+  transition: opacity 0.2s, transform 0.2s; }
+.editor.fs .fs-handle:active { transform: scale(0.9); }
+.editor.fs.fs-ui .fs-handle { opacity: 0; pointer-events: none; transform: scale(0.8); }
+.editor.fs .fs-rail, .editor.fs .fab, .editor.fs .hud-status { transition: transform 0.26s cubic-bezier(.32, .72, 0, 1), opacity 0.2s; }
+.editor.fs:not(.fs-ui) .fs-rail { transform: translateX(calc(-100% - 20px)); opacity: 0; pointer-events: none; }
+.editor.fs:not(.fs-ui) .fab { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
+.editor.fs:not(.fs-ui) .hud-status { opacity: 0; pointer-events: none; transform: translateY(-10px); }
+.editor.fs .fab { right: calc(12px + var(--cut-r)); bottom: calc(12px + var(--cut-b)); }
+.editor.fs .scope-panel { padding-top: var(--cut-t); box-sizing: content-box; }
+.editor.side-scope.fs .scope-panel { padding-top: 0; padding-right: var(--cut-r); }
+.editor.fs .fs-hide { color: var(--muted); }
 .editor.fs .ed-head { display: none !important; }
-.editor.fs .fs-rail { display: flex; flex-direction: column; gap: 3px; position: absolute; left: 8px; top: 8px; z-index: 12; padding: 5px; border-radius: 18px;
+.editor.fs .fs-rail { display: flex; flex-direction: column; gap: 3px; position: absolute; left: calc(8px + var(--cut-l)); top: calc(8px + var(--cut-t)); z-index: 12; padding: 5px; border-radius: 18px;
   background: rgba(10, 16, 32, 0.78); border: 1px solid var(--border2); box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-.editor.fs .hud-status { left: 66px; }
+.editor.fs .hud-status { left: calc(66px + var(--cut-l)); top: calc(10px + var(--cut-t)); }
 .editor.fs .meter-card { left: 66px; }
 .editor.fs .menu { top: 8px; }
 .editor.fs .popover { top: 60px; left: 66px; }
@@ -695,10 +710,11 @@ input.toggle:checked::after { transform: translateX(18px); }
 .editor.wide .quickbar { bottom: 12px; right: 76px; }
 .editor.wide .hud-status { top: 8px; }
 @media (max-height: 520px) {
-  .editor.fs .fs-rail { gap: 1px; padding: 4px; left: 6px; top: 6px; border-radius: 15px; }
-  .fs-btn { width: 36px; height: 36px; border-radius: 10px; }
+  .editor.fs .fs-rail { gap: 0; padding: 3px; left: calc(6px + var(--cut-l)); top: calc(5px + var(--cut-t)); border-radius: 14px; }
+  .fs-btn { width: 35px; height: 35px; border-radius: 10px; }
   .fs-btn svg { width: 18px; height: 18px; }
-  .editor.fs .hud-status, .editor.fs .meter-card { left: 58px; }
+  .fs-sep { margin: 1px 5px; }
+  .editor.fs .hud-status, .editor.fs .meter-card { left: calc(56px + var(--cut-l)); }
 }
 @media (max-width: 800px) {
   .editor.wide .tb span { display: none; }

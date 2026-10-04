@@ -221,12 +221,12 @@ export const CHAPTERS = [
       H('Landscape & full screen', 'ল্যান্ডস্কেপ ও ফুল স্ক্রিন'),
       L([
         'Turn the phone **sideways**: the title, the buttons and the toolbar merge into **one row**, the **oscilloscope sits to the right** of the board instead of above it, and the properties and parts sheets open as a **side panel** on the right, so the circuit keeps its height.',
-        'Tap **Full** in the toolbar for **full screen**: the bars and the phone\'s status and navigation bars disappear and the board gets the whole display. A small **tool rail** on the left gives Exit full screen, Run / Pause, Restart, Oscilloscope, Multimeter, Labels, Undo and Fit. Swipe from the edge to see the phone\'s bars for a moment.',
+        'Tap **Full** in the toolbar for **full screen**: the bars and the phone\'s status and navigation bars disappear and the board gets the whole display, edge to edge. The tools stay out of the way: only a small **☰** handle sits at the top left. Tap it for the **tool rail** (Exit full screen, Run / Pause, Restart, Oscilloscope, Multimeter, Labels, Undo, Fit, Hide), the **+** button and the time chip; they slide away again after a few seconds, when you touch the board, or with **‹** at the bottom of the rail. Swipe from the edge to see the phone\'s bars for a moment.',
         'Leave full screen with the top button of the rail or the phone\'s **Back** button.',
         'Settings → *Landscape & full screen*: lock the **screen rotation** (auto, always landscape or always portrait) and choose whether the **scope sits beside the circuit** in landscape.',
       ], [
         'ফোন **আড়াআড়ি** করুন: টাইটেল, বাটন ও টুলবার **এক লাইনে** চলে আসে, **অসিলোস্কোপ বোর্ডের ডানপাশে** বসে (উপরে নয়), আর প্রপার্টিজ ও পার্টসের শিট ডানদিকে **সাইড প্যানেল** হিসেবে খোলে, তাই সার্কিট পুরো উচ্চতা পায়।',
-        'টুলবারের **Full** চাপলে **ফুল স্ক্রিন**: বারগুলো ও ফোনের স্ট্যাটাস/নেভিগেশন বার লুকিয়ে যায়, বোর্ড পুরো ডিসপ্লে পায়। বাঁদিকের ছোট **টুল রেলে** আছে: ফুল স্ক্রিন বন্ধ, Run / Pause, Restart, অসিলোস্কোপ, মাল্টিমিটার, লেবেল, Undo ও Fit। কিনারা থেকে সোয়াইপ করলে ফোনের বার কিছুক্ষণ দেখা যায়।',
+        'টুলবারের **Full** চাপলে **ফুল স্ক্রিন**: বারগুলো ও ফোনের স্ট্যাটাস/নেভিগেশন বার লুকিয়ে যায়, বোর্ড কিনারা থেকে কিনারা পুরো ডিসপ্লে পায়। টুলগুলো সরে থাকে: শুধু বাঁ-উপরে ছোট একটি **☰** হ্যান্ডেল থাকে। সেটা ট্যাপ করলে **টুল রেল** (ফুল স্ক্রিন বন্ধ, Run / Pause, Restart, অসিলোস্কোপ, মাল্টিমিটার, লেবেল, Undo, Fit, লুকান), **+** বাটন ও সময়ের চিপ আসে; কয়েক সেকেন্ড পরে, বোর্ড ছুঁলে, বা রেলের নিচের **‹** চাপলে আবার সরে যায়। কিনারা থেকে সোয়াইপ করলে ফোনের বার কিছুক্ষণ দেখা যায়।',
         'রেলের উপরের বাটন বা ফোনের **Back** চাপলে ফুল স্ক্রিন বন্ধ হয়।',
         'Settings → *Landscape & full screen*: **স্ক্রিন রোটেশন** লক করুন (অটো, সবসময় ল্যান্ডস্কেপ বা সবসময় পোর্ট্রেট) আর ল্যান্ডস্কেপে **স্কোপ সার্কিটের পাশে** থাকবে কিনা বাছুন।',
       ]),

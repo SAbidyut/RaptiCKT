@@ -163,7 +163,7 @@ The editor is where you build and run circuits. From top to bottom:
 #### Landscape & full screen
 
 - Turn the phone **sideways**: the title, the buttons and the toolbar merge into **one row**, the **oscilloscope sits to the right** of the board instead of above it, and the properties and parts sheets open as a **side panel** on the right, so the circuit keeps its height.
-- Tap **Full** in the toolbar for **full screen**: the bars and the phone's status and navigation bars disappear and the board gets the whole display. A small **tool rail** on the left gives Exit full screen, Run / Pause, Restart, Oscilloscope, Multimeter, Labels, Undo and Fit. Swipe from the edge to see the phone's bars for a moment.
+- Tap **Full** in the toolbar for **full screen**: the bars and the phone's status and navigation bars disappear and the board gets the whole display, edge to edge. The tools stay out of the way: only a small **☰** handle sits at the top left. Tap it for the **tool rail** (Exit full screen, Run / Pause, Restart, Oscilloscope, Multimeter, Labels, Undo, Fit, Hide), the **+** button and the time chip; they slide away again after a few seconds, when you touch the board, or with **‹** at the bottom of the rail. Swipe from the edge to see the phone's bars for a moment.
 - Leave full screen with the top button of the rail or the phone's **Back** button.
 - Settings → *Landscape & full screen*: lock the **screen rotation** (auto, always landscape or always portrait) and choose whether the **scope sits beside the circuit** in landscape.
 

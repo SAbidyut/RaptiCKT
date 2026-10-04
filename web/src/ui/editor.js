@@ -96,7 +96,9 @@ export class Editor {
           <i class="fs-sep"></i>
           <button class="fs-btn" data-a="undo" title="Undo">${icon('undo', 19)}</button>
           <button class="fs-btn" data-a="fit" title="Fit">${icon('fit', 19)}</button>
+          <button class="fs-btn fs-hide" data-a="fsui" title="Hide the tools">${icon('chevLeft', 19)}</button>
         </div>
+        <button class="fs-handle" data-a="fsui" title="Show the tools">${icon('menu', 20)}</button>
         <button class="hud-status" data-a="speed"></button>
         <button class="stage-fs" data-a="fullscreen" title="Full screen">${icon('fullscreen', 19)}</button>
         <div class="hud-error"></div>
@@ -120,6 +122,7 @@ export class Editor {
       const b = ev.target.closest('[data-a]');
       if (!b || !this.root.contains(b) || b.closest('.inspector,.palette,.analysis,.meter-card,.more-menu,.speed-pop,.scope-panel,.selbar,.quickbar')) return;
       this.command(b.dataset.a, b);
+      if (this.fsTools && b.closest('.fs-rail') && b.dataset.a !== 'fsui') this.showFsTools(true); // still in use: keep them up
     });
   }
 
@@ -140,6 +143,7 @@ export class Editor {
       case 'redo': this.redo(); break;
       case 'fit': this.fit(); break;
       case 'fullscreen': this.setFullscreen(!this.fullscreen); break;
+      case 'fsui': this.showFsTools(!this.fsTools); break;
       case 'add': this.palette.open(); break;
       case 'speed': this.openSpeed(); break;
       default:
@@ -210,6 +214,7 @@ export class Editor {
     if (!!on === !!this.fullscreen) return;
     this.fullscreen = !!on;
     this.root.classList.toggle('fs', this.fullscreen);
+    this.showFsTools(this.fullscreen, 2600); // shown at first, then out of the way
     this.app.bridge.setImmersive(this.fullscreen);
     this.haptic(8);
     this.updateToolbar();
@@ -217,7 +222,19 @@ export class Editor {
     requestAnimationFrame(relayout);
     setTimeout(relayout, 120);
     setTimeout(relayout, 450); // after the system bars have gone
-    if (this.fullscreen && !store.flag('fsTip')) { store.setFlag('fsTip'); this.toast('Full screen: the button at the top left (or Back) exits'); }
+    if (this.fullscreen && !store.flag('fsTip2')) { store.setFlag('fsTip2'); this.toast('Full screen: tap ☰ at the top left for the tools · Back exits'); }
+  }
+
+  /**
+   * Full screen keeps the whole display for the board: the tool rail, the + button and the
+   * time chip slide away and only a small ☰ handle stays. Tapping it brings them back; they
+   * hide again after a few idle seconds or when the board is touched.
+   */
+  showFsTools(on, ms = 4500) {
+    this.fsTools = !!on && !!this.fullscreen;
+    this.root.classList.toggle('fs-ui', this.fsTools);
+    clearTimeout(this.fsToolsT);
+    if (this.fsTools) this.fsToolsT = setTimeout(() => this.showFsTools(false), ms);
   }
 
   fit() {
@@ -1258,6 +1275,7 @@ export class Editor {
     this.pointers.set(ev.pointerId, [sx, sy]);
     this.q('.speed-pop').classList.remove('open');
     this.zoomAnim = (this.zoomAnim || 0) + 1; // a finger on the board stops a double-tap zoom in flight
+    if (this.fsTools) this.showFsTools(false);
     if (this.pointers.size === 2) {
       this.cancelGesture();
       const [a, b] = [...this.pointers.values()];

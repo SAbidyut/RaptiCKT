@@ -52,6 +52,8 @@ public class MainActivity extends Activity {
     private static final int BG = Color.parseColor("#0B1120");
 
     private WebView web;
+    private FrameLayout root;
+    private String lastCut = "";
     private byte[] pendingSave;
     private String pendingOpenName;
     private String pendingOpenText;
@@ -66,7 +68,7 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
 
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setBackgroundColor(BG);
         web = new WebView(this);
         web.setBackgroundColor(BG);
@@ -77,8 +79,17 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         // Edge-to-edge (enforced on Android 15): pad content away from system bars, cutouts and the keyboard.
+        // In full screen the page runs edge to edge, under the camera cutout too; the cutout size is
+        // handed to the page (--cut-t/r/b/l) so it can keep its own buttons clear of it.
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             int l, t, r, b;
+            if (immersive) {
+                int imeB = Build.VERSION.SDK_INT >= 30 ? insets.getInsets(WindowInsets.Type.ime()).bottom : 0;
+                v.setPadding(0, 0, 0, imeB);
+                sendCutout(insets);
+                return insets;
+            }
+            sendCutout(null);
             if (Build.VERSION.SDK_INT >= 30) {
                 Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                 Insets ime = insets.getInsets(WindowInsets.Type.ime());
@@ -124,6 +135,8 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
+                lastCut = "";
+                root.requestApplyInsets();
                 ui.postDelayed(MainActivity.this::deliverPendingOpen, 600);
             }
         });
@@ -165,6 +178,21 @@ public class MainActivity extends Activity {
         if (hasFocus && immersive) applyImmersive(true); // bars come back after dialogs and pickers
     }
 
+    /** Tells the page how far the camera cutout reaches into each edge (CSS px), or 0 outside full screen. */
+    private void sendCutout(WindowInsets insets) {
+        float d = getResources().getDisplayMetrics().density;
+        int t = 0, r = 0, b = 0, l = 0;
+        if (insets != null && Build.VERSION.SDK_INT >= 28 && insets.getDisplayCutout() != null) {
+            android.view.DisplayCutout c = insets.getDisplayCutout();
+            t = Math.round(c.getSafeInsetTop() / d); r = Math.round(c.getSafeInsetRight() / d);
+            b = Math.round(c.getSafeInsetBottom() / d); l = Math.round(c.getSafeInsetLeft() / d);
+        }
+        String js = "(function(s){s.setProperty('--cut-t','" + t + "px');s.setProperty('--cut-r','" + r + "px');s.setProperty('--cut-b','" + b + "px');s.setProperty('--cut-l','" + l + "px')})(document.documentElement.style)";
+        if (js.equals(lastCut)) return;
+        lastCut = js;
+        if (web != null) web.evaluateJavascript(js, null);
+    }
+
     /** Full screen: hide the status and navigation bars (a swipe from the edge shows them briefly). */
     @SuppressWarnings("deprecation")
     private void applyImmersive(boolean on) {
@@ -195,6 +223,7 @@ public class MainActivity extends Activity {
                     | View.SYSTEM_UI_FLAG_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : View.SYSTEM_UI_FLAG_VISIBLE);
         }
+        if (root != null) root.post(root::requestApplyInsets); // re-pad: edge to edge in full screen
     }
 
     @Override

@@ -43,7 +43,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - DC sweep
   - Operating point
   - SPICE netlist
-- **Landscape & full screen** (like RaptiAuto): sideways the bars merge into one row, the oscilloscope sits beside the circuit and sheets open as a side panel; **Full** hides every bar (and Android's status and navigation bars) and leaves a small tool rail. Screen rotation can be locked in Settings.
+- **Landscape & full screen** (like RaptiAuto): sideways the bars merge into one row, the oscilloscope sits beside the circuit and sheets open as a side panel; **Full** hides every bar (and Android's status and navigation bars) so the board runs edge to edge; the tool rail and + button hide behind a small ☰ handle until you need them. Screen rotation can be locked in Settings.
 - **Interaction**:
   - Drag from a terminal to wire, and wires follow moved parts
   - Tap switches and buttons live
