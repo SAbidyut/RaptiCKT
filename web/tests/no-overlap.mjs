@@ -49,6 +49,8 @@ await page.evaluate(() => { const ed = app.editor; ed.doc.elements.length = 0; e
   const a = ed.makeEl('resistor', 0, 0), b = ed.makeEl('resistor', 0, 100); ed.doc.add(a); ed.doc.add(b); ed.doc.assignNames(); ed.topologyChanged(); ed.renderer.scale = 2; ed.renderer.ox = 200; ed.renderer.oy = 300; ed.dirtyDraw = true; });
 await page.waitForTimeout(200);
 const sig0 = await page.evaluate(() => netSig());
+ok('no floating full-screen button on the board', (await page.locator('.stage-fs').count()) === 0);
+await page.evaluate(() => { const ed = app.editor; window.TOASTS = []; const t = ed.toast.bind(ed); ed.toast = (m) => { TOASTS.push(m); t(m); }; });
 await drag([0, 100], [0, 0]); // straight onto R1
 ok('dragged part does not sit on the other part', (await hits()) === '');
 ok('no terminals joined', (await page.evaluate(() => netSig())) === sig0);
@@ -63,6 +65,8 @@ ok('a move into free space works', (await page.evaluate(() => app.editor.doc.ele
 await page.evaluate(() => { const e = app.editor.doc.elements; e[0].x = 0; e[0].y = 0; e[1].x = 0; e[1].y = 100; app.editor.topologyChanged(); });
 await drag([0, 100], [0, -100]);
 ok('a part can be dragged over another into free space', (await page.evaluate(() => app.editor.doc.elements[1].y)) === -100 && (await hits()) === '');
+const tips = await page.evaluate(() => TOASTS.filter((m) => m.includes('cannot sit')).length);
+ok('the overlap message is shown only once (' + tips + ')', tips === 1);
 // duplicate goes to a free spot
 await page.evaluate(() => { const ed = app.editor; ed.select(ed.doc.elements[0]); ed.duplicateSelection(); });
 ok('duplicate lands on a free spot', (await hits()) === '' && (await page.evaluate(() => app.editor.doc.elements.length)) === 3);

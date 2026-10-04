@@ -657,10 +657,6 @@ input.toggle:checked::after { transform: translateX(18px); }
 .ed-head { flex: none; z-index: 20; }
 .ed-main { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 .fs-rail { display: none; }
-.stage-fs { position: absolute; right: 10px; top: 10px; z-index: 6; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: var(--text2);
-  background: var(--glass); border: 1px solid var(--border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-.stage-fs:active { transform: scale(0.9); }
-.editor.fs .stage-fs, .editor.wide .stage-fs { display: none; }
 .fs-btn { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: #b9c5da; transition: background 0.15s, transform 0.1s; }
 .fs-btn:active { transform: scale(0.9); background: var(--surface3); }
 .fs-btn.on { color: var(--accent); background: rgba(34, 211, 238, 0.12); }

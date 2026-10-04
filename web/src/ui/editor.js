@@ -100,7 +100,6 @@ export class Editor {
         </div>
         <button class="fs-handle" data-a="fsui" title="Show the tools">${icon('menu', 20)}</button>
         <button class="hud-status" data-a="speed"></button>
-        <button class="stage-fs" data-a="fullscreen" title="Full screen">${icon('fullscreen', 19)}</button>
         <div class="hud-error"></div>
         <div class="hint"></div>
         <div class="selbar"></div>
@@ -795,12 +794,14 @@ export class Editor {
     if (this.connSig() !== sig) this.doc.wires = keep.map(([w, pts]) => { w.pts = pts; return w; });
   }
 
-  blockedToast(why) {
+  blockedToast() {
     this.haptic(18);
-    this.toast(why === 'part' ? 'Parts cannot sit on top of each other'
-      : why === 'route' ? 'Its wire would run over another terminal here'
-        : 'A terminal cannot be dropped on another terminal or wire — connect them with a wire');
+    // explained once in the app's lifetime; after that the part just stops (with a buzz)
+    if (store.flag('noOverlapTip')) return;
+    store.setFlag('noOverlapTip');
+    this.toast('Parts cannot sit on top of each other or join by touching — connect them with a wire');
   }
+
 
   duplicateSelection() {
     if (!this.selection.size && !this.selWires.size) return;
