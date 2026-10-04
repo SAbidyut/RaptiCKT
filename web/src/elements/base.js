@@ -5,7 +5,11 @@ import { fmtQty } from '../engine/units.js';
 export const GRID = 20;
 
 const REGISTRY = new Map();
-export function register(cls) { REGISTRY.set(cls.type, cls); return cls; }
+export function register(cls) {
+  if (REGISTRY.has(cls.type)) throw new Error(`duplicate component type '${cls.type}'`); // a second part must never silently replace the first
+  REGISTRY.set(cls.type, cls);
+  return cls;
+}
 export function getType(t) { return REGISTRY.get(t); }
 export function allTypes() { return [...REGISTRY.values()]; }
 

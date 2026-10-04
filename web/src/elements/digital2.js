@@ -8,11 +8,11 @@ import { Digital, DIGI_PROPS } from './digital.js';
 import { withChip } from './kit.js';
 
 const G = GRID;
-const bits = (v, n) => Array.from({ length: n }, (_, b) => !!((v >> b) & 1));
-const val = (arr) => arr.reduce((a, b, i) => a | ((b ? 1 : 0) << i), 0);
+export const bits = (v, n) => Array.from({ length: n }, (_, b) => !!((v >> b) & 1));
+export const val = (arr) => arr.reduce((a, b, i) => a | ((b ? 1 : 0) << i), 0);
 
 /** IC-style digital part: pins = [[label, side, 'i'|'o'], ...] */
-class Chip extends withChip(Digital) {
+export class Chip extends withChip(Digital) {
   static keywords = 'logic ic 74hc cmos ttl';
   inputs() { return this.constructor.pins.map((p, i) => (p[2] === 'i' ? i : -1)).filter((i) => i >= 0); }
   outputs() { return this.constructor.pins.map((p, i) => (p[2] === 'o' ? i : -1)).filter((i) => i >= 0); }
@@ -39,7 +39,7 @@ class Chip extends withChip(Digital) {
     return t !== '' ? [['Value', t, ''], ...r] : r;
   }
 }
-const P = (lab, side, kind) => [lab, side, kind];
+export const P = (lab, side, kind) => [lab, side, kind];
 
 // ------------------------------------------------------------ N-input gates
 const FN = { and: (a) => a.every(Boolean), or: (a) => a.some(Boolean), nand: (a) => !a.every(Boolean), nor: (a) => !a.some(Boolean) };
@@ -96,7 +96,7 @@ export class TriState extends Digital {
 register(TriState);
 
 // ------------------------------------------------------------- combinational
-function chip(type, title, chipName, pins, compute, keywords, desc, extra = {}) {
+export function chip(type, title, chipName, pins, compute, keywords, desc, extra = {}) {
   const C = class extends Chip {};
   Object.assign(C, { type, title, chip: chipName, pins, keywords, description: desc, ...extra });
   C.prototype.compute = compute;
@@ -131,11 +131,11 @@ chip('parity', 'Parity Generator (4-bit)', 'PAR', [P('D0', 'L', 'i'), P('D1', 'L
   (i) => { const o = i.filter(Boolean).length % 2 === 1; return [o, !o]; }, 'parity generator checker even odd 74280 error detection', 'EVEN = parity bit that makes the total count of 1s even; ODD is its complement.');
 
 // --------------------------------------------------------------- sequential
-class SeqChip extends Chip {
+export class SeqChip extends Chip {
   resetState() { this.st = 0; this.prevClk = false; }
   edge(clk, settle) { const e = !settle && clk && !this.prevClk; this.prevClk = clk; return e; }
 }
-function seq(type, title, chipName, pins, compute, keywords, desc, extra = {}) {
+export function seq(type, title, chipName, pins, compute, keywords, desc, extra = {}) {
   const C = class extends SeqChip {};
   Object.assign(C, { type, title, chip: chipName, pins, keywords, description: desc });
   if (extra.chipOpts) C.chipOpts = extra.chipOpts;
