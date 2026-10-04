@@ -152,7 +152,7 @@ register(TiltSwitch);
  * VCC / OUT / GND module: Vout − Vgnd = r·(Vcc − Vgnd) + c through Rout
  * (r: ratiometric part, c: fixed part), drawing a small supply current.
  */
-class Module extends ThreePinSensor {
+export class Module extends ThreePinSensor {
   static category = 'Sensors';
   rout() { return 100; }
   outFn() { return { r: 0, c: 0 }; }
@@ -173,7 +173,7 @@ class Module extends ThreePinSensor {
   draw(g) { this.drawBox(g, this.constructor.tag || 'SENS'); }
 }
 
-function mod(type, title, tag, knob, outFn, keywords, desc, extra = []) {
+export function mod(type, title, tag, knob, outFn, keywords, desc, extra = []) {
   const C = class extends Module {};
   Object.assign(C, { type, title, tag, keywords, description: desc, props: [knob, ...extra] });
   C.prototype.outFn = outFn;

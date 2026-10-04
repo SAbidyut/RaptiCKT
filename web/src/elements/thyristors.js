@@ -303,10 +303,10 @@ export class GateDriver extends withChip(Element) {
 register(GateDriver);
 
 // ------------------------------------------------- averaged DC-DC modules
-const smin = (a, b, w) => { const d = a - b, r = Math.sqrt(d * d + w * w); return { y: (a + b - r) / 2, da: (1 - d / r) / 2, db: (1 + d / r) / 2 }; };
-const smax = (a, b, w) => { const m = smin(-a, -b, w); return { y: -m.y, da: m.da, db: m.db }; };
+export const smin = (a, b, w) => { const d = a - b, r = Math.sqrt(d * d + w * w); return { y: (a + b - r) / 2, da: (1 - d / r) / 2, db: (1 + d / r) / 2 }; };
+export const smax = (a, b, w) => { const m = smin(-a, -b, w); return { y: -m.y, da: m.da, db: m.db }; };
 
-class DCDC extends withChip(Element) {
+export class DCDC extends withChip(Element) {
   static category = 'Thyristors & Power';
   static prefix = 'U';
   nonlinear = true;
