@@ -43,6 +43,29 @@ function niceScale(lo, hi, divs, unit) {
   return { d, c: Math.round(mid / d) * d };
 }
 
+/**
+ * Scales for several units with their 0 lines on one shared grid line: picks
+ * the grid line (z divisions above the bottom) and a 1-2-5 step per unit so
+ * that every signal fits and fills its share of the screen as well as possible.
+ */
+function alignedScale(range) {
+  const M = 0.15; // room left at the edges, in divisions
+  let best = null;
+  for (let z = 0; z <= DIV_Y; z++) {
+    const d = {};
+    let cost = Math.abs(z - DIV_Y / 2) * 1e-3, ok = true;
+    for (const [u, r] of range) {
+      const up = r.mx > 1e-9 ? r.mx / (DIV_Y - z - M) : 0, dn = r.mn < -1e-9 ? -r.mn / (z - M) : 0;
+      if ((r.mx > 1e-9 && DIV_Y - z - M <= 0) || (r.mn < -1e-9 && z - M <= 0)) { ok = false; break; }
+      const need = Math.max(up, dn);
+      d[u] = need > 0 ? nice125(need) : u === 'A' ? 1e-3 : 1;
+      if (need > 0) cost += d[u] / Math.max(r.mx - r.mn, Math.abs(r.mx), Math.abs(r.mn));
+    }
+    if (ok && (!best || cost < best.cost)) best = { z, d, cost };
+  }
+  return best || { z: DIV_Y / 2, d: Object.fromEntries([...range].map(([u, r]) => [u, nice125(Math.max(Math.abs(r.mn), Math.abs(r.mx), 1e-9) / 3.8)])) };
+}
+
 /** the next 1-2-5 step up (dir 1) or down (dir −1) from x */
 function step125(x, dir) {
   const n = nice125(x * 0.999);
@@ -72,6 +95,8 @@ export class Scope {
     this.mode = 'time';
     this.frozen = false;
     this.trigOn = true; // trigger on CH1 rising edges so periodic signals stand still
+    this.ac = false; // AC coupling: the mean of each trace is removed
+    this.meas = 'basic'; // readout set: basic (pp, rms, f) or timing (mean, duty, rise, fall, phase)
     this.cursor = null; // x (CSS px) of the touch read-out cursor
     this.scales = new Map(); // unit → shared scale of all channels in that unit
     this.build();
@@ -85,6 +110,8 @@ export class Scope {
           <button class="icon-btn sm" data-a="zin" title="Zoom in time">${icon('plus', 18)}</button>
           <button class="icon-btn sm" data-a="zout" title="Zoom out time"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
           <button class="icon-btn sm on" data-a="trig" title="Trigger on CH1 (steady picture)">${TRIG_SVG}</button>
+          <button class="scope-mode sm" data-a="cpl" title="Input coupling: DC / AC">DC</button>
+          <button class="scope-mode sm" data-a="meas" title="Measurements: basic / timing">Σ</button>
           <button class="scope-mode" data-a="mode" title="Time / FFT / XY">TIME</button>
           <button class="icon-btn sm" data-a="freeze" title="Freeze">${icon('pause', 16)}</button>
           <button class="icon-btn sm" data-a="csv" title="Export CSV">${icon('download', 18)}</button>
@@ -111,6 +138,14 @@ export class Scope {
         this.mode = this.mode === 'time' ? 'fft' : this.mode === 'fft' ? (this.channels.length >= 2 ? 'xy' : 'time') : 'time';
         b.textContent = this.mode.toUpperCase();
         this.ed.toast(this.mode === 'fft' ? 'Spectrum (FFT) view' : this.mode === 'xy' ? 'XY view: CH1 → X, CH2 → Y' : 'Time view');
+      }
+      if (a === 'cpl') {
+        this.ac = !this.ac; b.textContent = this.ac ? 'AC' : 'DC'; b.classList.toggle('on', this.ac); this.scales.clear();
+        this.ed.toast(this.ac ? 'AC coupling: the DC level is blocked, only the variation is shown' : 'DC coupling: the full signal is shown');
+      }
+      if (a === 'meas') {
+        this.meas = this.meas === 'basic' ? 'timing' : 'basic'; b.classList.toggle('on', this.meas === 'timing'); this.lastMeas = null;
+        this.ed.toast(this.meas === 'timing' ? 'Timing: mean, duty cycle, rise / fall time (10–90 %), phase vs CH1' : 'Basic: now, V/div, peak-peak, RMS, frequency');
       }
       if (a === 'freeze') { this.frozen = !this.frozen; b.innerHTML = icon(this.frozen ? 'play' : 'pause', 16); b.classList.toggle('on', this.frozen); }
       if (a === 'csv') this.exportCSV();
@@ -204,7 +239,49 @@ export class Scope {
       if (armed && v > avg + hy) { armed = false; const t = this.tbuf[i]; if (first === null) first = t; else { last = t; cnt++; } }
     }
     const freq = cnt > 0 && mx - mn > 1e-9 ? cnt / (last - first) : 0;
-    return { mn, mx, avg, rms, freq, pp: mx - mn };
+    return { mn, mx, avg, rms, freq, pp: mx - mn, ...this.timing(c, idxs, mn, mx) };
+  }
+
+  /**
+   * Pulse timing over the window: duty cycle (time above the 50 % level),
+   * average 10–90 % rise and 90–10 % fall times, and the times of the rising
+   * 50 % crossings (interpolated) for the phase between channels.
+   */
+  timing(c, idxs, mn, mx) {
+    const pp = mx - mn;
+    if (!(pp > 1e-9) || idxs.length < 4) return { duty: null, rise: null, fall: null, xs: [] };
+    const l10 = mn + 0.1 * pp, l50 = mn + 0.5 * pp, l90 = mn + 0.9 * pp, hy = 0.05 * pp;
+    const at = (i0, i1, lvl) => { const v0 = c.buf[i0], v1 = c.buf[i1], t0 = this.tbuf[i0], t1 = this.tbuf[i1]; return v1 === v0 ? t1 : t0 + ((lvl - v0) / (v1 - v0)) * (t1 - t0); };
+    let hiT = 0, tot = 0, prev = null, st = null, t10 = null, t90 = null;
+    const rises = [], falls = [], xs = [];
+    for (const i of idxs) {
+      const v = c.buf[i];
+      if (prev !== null) {
+        const dt = this.tbuf[i] - this.tbuf[prev];
+        tot += dt; if ((c.buf[prev] + v) / 2 > l50) hiT += dt;
+        const pv = c.buf[prev];
+        if (pv < l10 && v >= l10) t10 = at(prev, i, l10);
+        if (pv < l50 && v >= l50 && st !== 'hi') xs.push(at(prev, i, l50));
+        if (pv < l90 && v >= l90) { if (t10 !== null) rises.push(at(prev, i, l90) - t10); t10 = null; }
+        if (pv > l90 && v <= l90) t90 = at(prev, i, l90);
+        if (pv > l10 && v <= l10) { if (t90 !== null) falls.push(at(prev, i, l10) - t90); t90 = null; }
+        if (v > l50 + hy) st = 'hi'; else if (v < l50 - hy) st = 'lo';
+      }
+      prev = i;
+    }
+    const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    return { duty: tot > 0 ? hiT / tot : null, rise: mean(rises), fall: mean(falls), xs };
+  }
+
+  /** phase of channel st relative to ref (degrees, −180…180) from their rising crossings */
+  phase(ref, st) {
+    if (!ref || !st || !ref.freq || !ref.xs.length || !st.xs.length) return null;
+    const T = 1 / ref.freq, tr = ref.xs[ref.xs.length - 1];
+    let best = null;
+    for (const t of st.xs) { const d = t - tr; if (best === null || Math.abs(d) < Math.abs(best)) best = d; }
+    let ph = (-best / T) * 360;
+    ph = ((ph + 180) % 360 + 360) % 360 - 180;
+    return ph;
   }
 
   /**
@@ -238,22 +315,44 @@ export class Scope {
   }
 
   /**
-   * One scale for every channel of a unit (all the volts share one V/div and
-   * one 0 V line, set by the biggest signal), with hysteresis so the picture
-   * does not jump about while it runs.
+   * Keep a scale while the signal still fits it, so the picture does not jump
+   * about while it runs; a better fit (smaller signal, settled level) is taken
+   * once it has lasted a moment.
    */
-  autoScale(unit, mn, mx) {
-    const g = this.scales.get(unit) || {};
-    this.scales.set(unit, g);
-    const want = niceScale(mn, mx, DIV_Y, unit), sc = g.sc, now = performance.now();
-    if (!sc) { g.sc = want; return want; }
-    const eps = sc.d * 0.02, fits = mn >= sc.c - 4 * sc.d - eps && mx <= sc.c + 4 * sc.d + eps;
-    if (!fits) { g.sc = want; g.refitT = 0; return want; }
-    if (Math.abs(want.d - sc.d) > sc.d * 0.01 || Math.abs(want.c - sc.c) > sc.d * 0.01) { // a better fit (smaller signal, settled level): follow it once that has lasted a moment
+  hold(key, want, fits, same) {
+    const g = this.scales.get(key) || {};
+    this.scales.set(key, g);
+    if (!g.sc || !fits(g.sc)) { g.sc = want; g.refitT = 0; return want; }
+    if (!same(g.sc, want)) {
+      const now = performance.now();
       if (!g.refitT) g.refitT = now;
       else if (now - g.refitT > 450) { g.sc = want; g.refitT = 0; }
     } else g.refitT = 0;
     return g.sc;
+  }
+
+  /**
+   * Scales for the channels on screen. Channels of the same unit share one
+   * scale (all the volts one V/div and one 0 V line, set by the biggest
+   * signal). When volts and amps are shown together each unit keeps its own
+   * per-division value but both 0 lines sit on the same grid line, so a
+   * voltage and its current read against one zero.
+   */
+  scalesFor(range) {
+    const close = (a, b, d) => Math.abs(a - b) <= d * 0.01;
+    if (range.size === 1) {
+      const [[u, r]] = [...range];
+      const eps = (sc) => sc.d * 0.02;
+      return new Map([[u, this.hold(u, niceScale(r.mn, r.mx, DIV_Y, u),
+        (sc) => r.mn >= sc.c - 4 * sc.d - eps(sc) && r.mx <= sc.c + 4 * sc.d + eps(sc),
+        (a, b) => close(a.d, b.d, a.d) && close(a.c, b.c, a.d))]]);
+    }
+    const units = [...range.keys()];
+    const fitsAt = (z, u, d) => { const r = range.get(u), e = d * 0.02; return r.mn >= -z * d - e && r.mx <= (DIV_Y - z) * d + e; };
+    const j = this.hold(units.join('+'), alignedScale(range),
+      (sc) => units.every((u) => fitsAt(sc.z, u, sc.d[u])),
+      (a, b) => a.z === b.z && units.every((u) => close(a.d[u], b.d[u], a.d[u])));
+    return new Map(units.map((u) => [u, { d: j.d[u], c: (DIV_Y / 2 - j.z) * j.d[u], z: j.z }]));
   }
 
   /** [left, top, right, bottom] of the graticule in CSS px */
@@ -262,8 +361,7 @@ export class Scope {
     const rows = !this.channels.length ? 0 : this.mode === 'xy' ? 1 : this.channels.length + 1;
     const meas = rows ? rows * ROW + 9 : 0;
     const bot = Math.min(H - 6, Math.max(HEAD + 90, H - meas - 6));
-    const units = new Set(this.channels.map((c) => c.probe.unit)).size;
-    return [units > 1 ? GUT_L + 8 : GUT_L, HEAD, W - GUT_R, bot]; // room for '0V' / '0A' tags
+    return [GUT_L, HEAD, W - GUT_R, bot];
   }
 
   /** the screen: bezel, CRT-style face, 10 × 8 divisions with fine ticks on the centre axes */
@@ -340,30 +438,31 @@ export class Scope {
     // channels of the same unit share one scale and one 0 line, set by the biggest signal
     const sts = this.channels.map((c) => this.stats(c, idxs));
     const range = new Map();
+    const offs = sts.map((st) => (this.ac && st ? st.avg : 0)); // AC coupling removes each trace's mean
     this.channels.forEach((c, ci) => {
       const st = sts[ci], u = c.probe.unit;
       if (!st) return;
-      const r = range.get(u);
-      if (r) { r.mn = Math.min(r.mn, st.mn); r.mx = Math.max(r.mx, st.mx); r.chans.push(ci); } else range.set(u, { mn: st.mn, mx: st.mx, chans: [ci] });
+      const r = range.get(u), mn = st.mn - offs[ci], mx = st.mx - offs[ci];
+      if (r) { r.mn = Math.min(r.mn, mn); r.mx = Math.max(r.mx, mx); r.chans.push(ci); } else range.set(u, { mn, mx, chans: [ci] });
     });
-    const scaleOf = new Map([...range].map(([u, r]) => [u, this.autoScale(u, r.mn, r.mx)]));
+    const scaleOf = this.scalesFor(range);
     this.channels.forEach((c, ci) => {
       const st = sts[ci];
       if (!st) return;
       const { d, c: mid } = scaleOf.get(c.probe.unit);
-      const lo = mid - 4 * d, ky = ph / (8 * d), col = c.probe.color;
-      const yOf = (v) => B - (v - lo) * ky;
+      const lo = mid - 4 * d, ky = ph / (8 * d), col = c.probe.color, off = offs[ci];
+      const yOf = (v) => B - (v - off - lo) * ky;
       // min/max decimation: at most two vertices per pixel column keeps the path short
       ctx.beginPath();
       let col0 = null, mn = 0, mx = 0, started = false;
       const flush = () => {
         if (col0 === null) return;
-        const ymn = yOf(mn), ymx = yOf(mx);
+        const ymn = yOf(mn + off), ymx = yOf(mx + off);
         if (!started) { ctx.moveTo(col0, ymn); started = true; } else ctx.lineTo(col0, ymn);
         if (ymx !== ymn) ctx.lineTo(col0, ymx);
       };
       for (const i of idxs) {
-        const x = Math.round((L + (this.tbuf[i] - t0) * kx) * 2) / 2, v = c.buf[i];
+        const x = Math.round((L + (this.tbuf[i] - t0) * kx) * 2) / 2, v = c.buf[i] - off;
         if (x !== col0) { flush(); col0 = x; mn = v; mx = v; } else { if (v < mn) mn = v; if (v > mx) mx = v; }
       }
       flush();
@@ -374,29 +473,36 @@ export class Scope {
         ctx.beginPath(); ctx.arc(L + (this.tbuf[li] - t0) * kx, ly, 3.2, 0, Math.PI * 2);
         ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 8; ctx.fill(); ctx.shadowBlur = 0;
       }
-      plots.push({ c, ci, lo, ky, d, mid, yOf, st });
+      plots.push({ c, ci, lo, ky, d, mid, yOf, st, off });
       const u = c.probe.unit;
-      rows.push([col, ci + 1, c.probe.label, fmtSI(c.buf[li], u, 4), fmtSI(d, u, 2), fmtSI(st.pp, u, 3), fmtSI(st.rms, u, 3), st.freq ? fmtSI(st.freq, 'Hz', 4) : '—']);
+      if (this.meas === 'timing') {
+        const phs = ci > 0 ? this.phase(sts[0], st) : null, pct = (x) => (x == null ? '—' : `${(x * 100).toFixed(1)}%`);
+        rows.push([col, ci + 1, c.probe.label, fmtSI(st.avg, u, 4), pct(st.duty), st.rise != null ? fmtSI(st.rise, 's', 3) : '—', st.fall != null ? fmtSI(st.fall, 's', 3) : '—', ci === 0 ? 'ref' : phs == null ? '—' : `${phs.toFixed(1)}°`]);
+      } else rows.push([col, ci + 1, c.probe.label, fmtSI(c.buf[li] - off, u, 4), fmtSI(d, u, 2), fmtSI(st.pp, u, 3), fmtSI(this.ac ? Math.sqrt(Math.max(0, st.rms * st.rms - st.avg * st.avg)) : st.rms, u, 3), st.freq ? fmtSI(st.freq, 'Hz', 4) : '—']);
     });
     ctx.restore();
     this.plots = { list: plots, t0, kx, L, T, R, B, trig, idxs, tNow };
 
-    // one reference per scale: its 0 level in the left gutter (an arrow at the edge when it is off screen),
-    // and the top / bottom value of the screen at the right edge
+    // the 0 level in the left gutter (one line for every unit; an arrow at the edge when it is off screen)
     const groups = [...range].map(([u, r]) => ({ u, sc: scaleOf.get(u), chans: r.chans }));
-    const multi = groups.length > 1;
     const colOf = (g) => (g.chans.length === 1 ? this.channels[g.chans[0]].probe.color : '#e2e8f0');
+    const g0 = groups[0], y0 = B - (0 - (g0.sc.c - 4 * g0.sc.d)) * (ph / (8 * g0.sc.d));
     ctx.font = 'bold 9px ui-sans-serif, system-ui, sans-serif';
-    const tags = groups.map((g) => { const y0 = B - (0 - (g.sc.c - 4 * g.sc.d)) * (ph / (8 * g.sc.d)); return { g, off: y0 < T + 2 ? -1 : y0 > B - 2 ? 1 : 0, y: Math.max(T + 7, Math.min(B - 7, y0)) }; });
-    tags.sort((a, b) => a.y - b.y);
-    for (let k = 1; k < tags.length; k++) tags[k].y = Math.max(tags[k].y, tags[k - 1].y + 14); // never stacked on top of each other
-    for (let k = tags.length - 1; k >= 0; k--) { const lim = k === tags.length - 1 ? B - 7 : tags[k + 1].y - 14; if (tags[k].y > lim) tags[k].y = lim; }
-    for (const t of tags) this.marker(L - 2, t.y, colOf(t.g), multi ? '0' + t.g.u : '0', t.off);
+    this.marker(L - 2, Math.max(T + 7, Math.min(B - 7, y0)), groups.length > 1 ? '#e2e8f0' : colOf(g0), '0', y0 < T + 2 ? -1 : y0 > B - 2 ? 1 : 0);
     ctx.font = FONT;
-    groups.forEach((g, gi) => {
-      this.plate(fmtSI(g.sc.c + 4 * g.sc.d, g.u, 3), R - 6, T + 14 + gi * 15, colOf(g), 'right');
-      this.plate(fmtSI(g.sc.c - 4 * g.sc.d, g.u, 3), R - 6, B - 6 - (groups.length - 1 - gi) * 15, colOf(g), 'right');
-    });
+    if (groups.length === 1) { // top / bottom value of the screen at the right edge
+      this.plate(fmtSI(g0.sc.c + 4 * g0.sc.d, g0.u, 3), R - 6, T + 14, colOf(g0), 'right');
+      this.plate(fmtSI(g0.sc.c - 4 * g0.sc.d, g0.u, 3), R - 6, B - 6, colOf(g0), 'right');
+    } else { // volts and amps: values every other division, first unit along the left edge, the next along the right
+      const z = g0.sc.z;
+      groups.forEach((g, gi) => {
+        for (let k = 1; k < DIV_Y; k++) {
+          if ((k - z) % 2) continue;
+          const y = B - (k * ph) / DIV_Y + 3.5, txt = fmtSI((k - z) * g.sc.d, g.u, 3);
+          if (gi === 0) this.plate(txt, L + 6, y, colOf(g)); else this.plate(txt, R - 6, y + (gi - 1) * 15, colOf(g), 'right');
+        }
+      });
+    }
     // trigger point (top edge) and level (right edge)
     if (trig && plots[0]) {
       const x = L + PRE * pw, col = plots[0].c.probe.color, ty = plots[0].yOf(trig.level);
@@ -405,13 +511,13 @@ export class Scope {
       if (ty > T && ty < B) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(R, ty); ctx.lineTo(R + GUT_R, ty - 4); ctx.lineTo(R + GUT_R, ty + 4); ctx.closePath(); ctx.fill(); }
     }
     // status: timebase, trigger state
-    const status = `${fmtSI(Wt / DIV_X, 's', 3)}/div`;
+    const status = `${fmtSI(Wt / DIV_X, 's', 3)}/div${this.ac ? ' · AC' : ''}`;
     const mode = this.frozen ? 'STOP' : trig ? 'TRIG ↑ CH1' : this.trigOn ? 'AUTO' : 'ROLL';
     const sw = ctx.measureText(status).width;
     this.plate(status, L + 6, B - 6, '#dbe5f5');
     this.plate(mode, L + 6 + sw + 12, B - 6, this.frozen ? '#f87171' : trig ? '#4ade80' : '#94a3b8');
     if (this.cursor !== null) this.drawCursor();
-    this.setMeas(this.table(['CH', 'now', '/div', 'pp', 'rms', 'f'], rows));
+    this.setMeas(this.table(this.meas === 'timing' ? ['CH', 'mean', 'duty', 'rise', 'fall', 'φ'] : ['CH', 'now', '/div', 'pp', this.ac ? 'ac rms' : 'rms', 'f'], rows));
   }
 
   /** ground tag pointing at a scale's 0 level (off = −1 above, +1 below the screen) */
@@ -445,9 +551,9 @@ export class Scope {
     const ref = P.trig ? P.trig.t : P.tNow;
     const lines = [[`t ${fmtSI(this.tbuf[best] - ref, 's', 4)}`, '#e8eef8']];
     for (const p of P.list) {
-      const v = p.c.buf[best], y = p.yOf(v), col = p.c.probe.color;
+      const v = p.c.buf[best], y = p.yOf(v), col = p.c.probe.color, vo = v - (p.off || 0);
       if (y >= P.T && y <= P.B) { ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fillStyle = '#05080f'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = col; ctx.stroke(); }
-      lines.push([`${p.ci + 1}  ${fmtSI(v, p.c.probe.unit, 4)}`, col]);
+      lines.push([`${p.ci + 1}  ${fmtSI(vo, p.c.probe.unit, 4)}`, col]);
     }
     const bw = Math.max(...lines.map(([s]) => ctx.measureText(s).width)) + 16, bh = lines.length * 14 + 8;
     const bx = x + 12 + bw > P.R ? x - 12 - bw : x + 12, by = P.T + 8;

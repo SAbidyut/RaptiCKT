@@ -10,11 +10,11 @@ import { fmtShort, fmtQty } from '../engine/units.js';
 
 const G = GRID;
 
-function stampSw(s, a, b, k, closed, ron) {
+export function stampSw(s, a, b, k, closed, ron) {
   s.addBranchKCL(a, b, k);
   if (closed) { s.addA(k, a - 1, 1); s.addA(k, b - 1, -1); s.addA(k, k, -Math.max(ron, 1e-6)); } else s.addA(k, k, 1);
 }
-function stampSwAC(ac, a, b, k, closed, ron) {
+export function stampSwAC(ac, a, b, k, closed, ron) {
   ac.addBranchKCL(a, b, k);
   if (closed) { ac.addA(k, a - 1, 1); ac.addA(k, b - 1, -1); ac.addA(k, k, -Math.max(ron, 1e-6)); } else ac.addA(k, k, 1);
 }
@@ -23,7 +23,7 @@ function stampSwAC(ac, a, b, k, closed, ron) {
  * Generic multi-contact switch: `paths()` lists [postA, postB] pairs, `closedSet()`
  * returns which of them conduct in the current state.
  */
-class MultiSwitch extends Element {
+export class MultiSwitch extends Element {
   static category = 'Switches';
   static prefix = 'S';
   interactive = true;
@@ -375,7 +375,7 @@ register(Thermostat);
  * coil current (τ ≈ 5 ms), so AC coils hold in through current zero crossings.
  * Pull-in at 70 % and drop-out at 35 % of the rated coil current.
  */
-class CoilRelay extends withChip(Element) {
+export class CoilRelay extends withChip(Element) {
   static category = 'Switches';
   static prefix = 'K';
   static coil = [0, 1];

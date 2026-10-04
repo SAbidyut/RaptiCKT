@@ -5,7 +5,11 @@ import { fmtQty } from '../engine/units.js';
 export const GRID = 20;
 
 const REGISTRY = new Map();
-export function register(cls) { REGISTRY.set(cls.type, cls); return cls; }
+export function register(cls) {
+  if (REGISTRY.has(cls.type)) throw new Error(`duplicate component type '${cls.type}'`); // a second part must never silently replace the first
+  REGISTRY.set(cls.type, cls);
+  return cls;
+}
 export function getType(t) { return REGISTRY.get(t); }
 export function allTypes() { return [...REGISTRY.values()]; }
 
@@ -106,6 +110,7 @@ export class Element {
     for (const pr of this.constructor.props) if (this.p[pr.key] !== pr.def) p[pr.key] = this.p[pr.key];
     if (Object.keys(p).length) out.p = p;
     if (this.label) out.l = this.label;
+    if (this.fault && this.fault.m && this.fault.m !== 'none') out.fl = { ...this.fault };
     return out;
   }
 
@@ -117,6 +122,7 @@ export class Element {
     e.flip = !!o.f;
     if (o.p) Object.assign(e.p, o.p);
     if (o.l) e.label = o.l;
+    if (o.fl) e.fault = { ...o.fl };
     e.onParamChange();
     return e;
   }

@@ -19,6 +19,7 @@ class App {
     // Android pads the WebView for system bars natively; don't add CSS safe-area insets on top.
     if (bridge.isAndroid()) document.documentElement.classList.add('android');
     this.settings = store.settings();
+    if (this.settings.orientation !== 'auto') bridge.setOrientation(this.settings.orientation);
     // smooth or simple motion, decided before anything is drawn
     motion.init(this.settings.animations, bridge.version());
     motion.probe();

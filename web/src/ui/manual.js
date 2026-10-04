@@ -52,20 +52,22 @@ const card = (nav, lead, title, sub, extra = '') => `
 /** Pages of a chapter: [{ id, title, count?, icon?, html(lang) }], after the intro text. */
 function sectionsOf(ch) {
   if (ch.generated === 'library') {
-    return libraryData().map((cat) => ({
-      id: cat.id, title: { en: cat.id, bn: cat.id }, count: cat.items.length, icon: catIcon(cat.id), generated: true,
+    const bn = libraryData('bn');
+    return libraryData().map((cat, k) => ({
+      id: cat.id, title: { en: cat.title, bn: bn[k].title }, count: cat.items.length, icon: catIcon(cat.id), generated: true,
       html: (lang) => `${cat.note ? `<p class="man-b">${inline(cat.note[lang], lang)}</p>` : ''}
-        <div class="man-items">${cat.items.map((it) => `
-          <div class="man-item"><b>${esc(it.title)}</b><p>${esc(it.desc)}</p>
+        <div class="man-items">${(lang === 'bn' ? bn[k] : cat).items.map((it) => `
+          <div class="man-item"><b>${esc(it.title)}</b><p>${inline(it.desc, lang)}</p>
           ${it.props.length ? `<small><span>${esc(UI_TEXT.props[lang])}:</span> ${esc(it.props.join(' · '))}</small>` : ''}</div>`).join('')}</div>
         <p class="man-small">${esc(UI_TEXT.note[lang])}</p>`,
     }));
   }
   if (ch.generated === 'examples') {
-    return exampleData().map((cat) => ({
-      id: cat.id, title: { en: cat.id, bn: cat.id }, count: cat.items.length, icon: 'book', generated: true,
-      html: (lang) => `<div class="man-items">${cat.items.map((it) => `
-        <div class="man-item"><b>${esc(it.title)}</b><p>${esc(it.desc)}</p>
+    const bn = exampleData('bn');
+    return exampleData().map((cat, k) => ({
+      id: cat.id, title: { en: cat.title, bn: bn[k].title }, count: cat.items.length, icon: 'book', generated: true,
+      html: (lang) => `<div class="man-items">${(lang === 'bn' ? bn[k] : cat).items.map((it) => `
+        <div class="man-item"><b>${esc(it.title)}</b><p>${inline(it.desc, lang)}</p>
         <button class="btn sm" data-ex="${esc(it.id)}">${icon('play', 14)} ${esc(UI_TEXT.tryIt[lang])}</button></div>`).join('')}</div>`,
     }));
   }
@@ -80,9 +82,9 @@ function buildIndex(lang) {
     const { intro } = chapterParts(ch);
     out.push({ nav: `ch:${ch.id}`, label: ch.title[lang], sub: `${lang === 'bn' ? 'অধ্যায়' : 'Chapter'} ${digits(n + 1, lang)}`, text: `${ch.title[lang]} ${SUMMARY[ch.id][lang]} ${intro.map((b) => blockText(b, lang)).join(' ')}` });
     if (ch.generated === 'library') {
-      libraryData().forEach((cat) => cat.items.forEach((it) => out.push({ nav: `sec:${ch.id}/${cat.id}`, label: it.title, sub: cat.id, text: `${it.title} ${it.desc} ${cat.id} ${it.props.join(' ')}`, snip: it.desc })));
+      libraryData(lang).forEach((cat) => cat.items.forEach((it) => out.push({ nav: `sec:${ch.id}/${cat.id}`, label: it.title, sub: cat.title, text: `${it.title} ${it.desc} ${it.descEn} ${cat.title} ${it.props.join(' ')}`, snip: plain(it.desc) })));
     } else if (ch.generated === 'examples') {
-      exampleData().forEach((cat) => cat.items.forEach((it) => out.push({ nav: `sec:${ch.id}/${cat.id}`, label: it.title, sub: cat.id, text: `${it.title} ${it.desc} ${cat.id}`, snip: it.desc })));
+      exampleData(lang).forEach((cat) => cat.items.forEach((it) => out.push({ nav: `sec:${ch.id}/${cat.id}`, label: it.title, sub: cat.title, text: `${it.title} ${it.desc} ${it.descEn} ${cat.title}`, snip: plain(it.desc) })));
     } else {
       const parts = chapterParts(ch);
       parts.sections.forEach((s, i) => out.push({ nav: `sec:${ch.id}/${i}`, label: s.title[lang], sub: ch.title[lang], text: `${s.title[lang]} ${s.blocks.map((b) => blockText(b, lang)).join(' ')}` }));

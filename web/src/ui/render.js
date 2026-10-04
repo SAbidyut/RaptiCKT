@@ -336,6 +336,11 @@ export class Renderer {
       e.draw(g);
       ctx.restore();
       g.rot = 0; g.flip = false;
+      if (e.fault && e.fault.m && e.fault.m !== 'none') { // fault badge at the top-right corner
+        const [, y1, x2] = e.worldBox();
+        g.circle(x2 + 2, y1 - 2, 7, { fill: '#ef4444', stroke: th.bg, width: 1.5 });
+        g.text('⚡', x2 + 2, y1 - 1.5, { size: 9, color: '#fff', bold: true });
+      }
     }
 
     // current dots

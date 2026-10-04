@@ -255,6 +255,8 @@ input.toggle:checked::after { transform: translateX(18px); }
 .scope-tools .icon-btn { color: #b9c5da; width: 28px; height: 28px; }
 .scope-tools .icon-btn.on { color: #4ade80; background: rgba(74, 222, 128, 0.12); }
 .scope-mode { height: 24px; min-width: 38px; padding: 0 6px; margin: 0 2px; border-radius: 7px; font: 700 10px/24px var(--mono); letter-spacing: 0.06em; color: #22d3ee; background: rgba(34, 211, 238, 0.12); border: 1px solid rgba(34, 211, 238, 0.3); }
+.scope-mode.sm { min-width: 0; padding: 0 5px; margin: 0 1px; }
+.scope-mode.on { color: #4ade80; background: rgba(74, 222, 128, 0.12); border-color: rgba(74, 222, 128, 0.35); }
 .chip { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 4px 0 4px; border-radius: 13px; font: 600 11px var(--mono); color: #e8eef8;
   background: rgba(12, 20, 36, 0.9); border: 1px solid color-mix(in srgb, var(--c) 55%, transparent); white-space: nowrap; }
 .chip i { width: 17px; height: 17px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 70%, transparent); color: #05080f; font: 800 10px/17px ui-sans-serif, system-ui, sans-serif; font-style: normal; text-align: center; }
@@ -389,6 +391,8 @@ input.toggle:checked::after { transform: translateX(18px); }
 .num-in em { font-style: normal; color: var(--muted); font-size: 13px; min-width: 16px; }
 .prop input[type=range] { width: 100%; accent-color: var(--accent); height: 26px; }
 .insp-desc { color: var(--muted); font-size: 12.5px; margin: 12px 0 0; }
+.insp-fault { margin-top: 10px; padding: 2px 10px; border-radius: 10px; border: 1px dashed rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.06); }
+.insp-fault .prop > span { color: #f87171; }
 
 /* palette */
 .palette { height: min(56%, 500px); max-height: none; }
@@ -647,6 +651,93 @@ input.toggle:checked::after { transform: translateX(18px); }
 @media (max-height: 600px) {
   .knob { transform: scale(0.78); bottom: calc(76px + var(--safe-b)); }
   .modal-card { max-height: 92vh; }
+}
+
+/* ------------------------------------------- editor layout, landscape, full screen */
+.ed-head { flex: none; z-index: 20; }
+.ed-main { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.fs-rail { display: none; }
+.stage-fs { position: absolute; right: 10px; top: 10px; z-index: 6; width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; color: var(--text2);
+  background: var(--glass); border: 1px solid var(--border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.stage-fs:active { transform: scale(0.9); }
+.editor.fs .stage-fs, .editor.wide .stage-fs { display: none; }
+.fs-btn { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; color: #b9c5da; transition: background 0.15s, transform 0.1s; }
+.fs-btn:active { transform: scale(0.9); background: var(--surface3); }
+.fs-btn.on { color: var(--accent); background: rgba(34, 211, 238, 0.12); }
+.fs-btn:disabled { opacity: 0.35; }
+.fs-btn.fs-run { color: #4ade80; }
+.fs-btn.fs-run.running { color: #fb923c; background: rgba(249, 115, 22, 0.14); }
+.fs-sep { height: 1px; margin: 1px 6px; background: var(--border2); flex: none; }
+
+/* full screen: no bars, the board edge to edge; the tools hide behind a small handle */
+:root { --cut-t: 0px; --cut-r: 0px; --cut-b: 0px; --cut-l: 0px; }
+.fs-handle { display: none; }
+.editor.fs .fs-handle { display: grid; place-items: center; position: absolute; left: calc(6px + var(--cut-l)); top: calc(6px + var(--stage-t)); z-index: 12; width: 38px; height: 38px; border-radius: 12px;
+  color: #cbd5e1; background: rgba(10, 16, 32, 0.55); border: 1px solid var(--border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); opacity: 0.75;
+  transition: opacity 0.2s, transform 0.2s; }
+.editor.fs .fs-handle:active { transform: scale(0.9); }
+.editor.fs.fs-ui .fs-handle { opacity: 0; pointer-events: none; transform: scale(0.8); }
+.editor.fs .fs-rail, .editor.fs .fab, .editor.fs .hud-status { transition: transform 0.26s cubic-bezier(.32, .72, 0, 1), opacity 0.2s; }
+.editor.fs:not(.fs-ui) .fs-rail { transform: translateX(calc(-100% - 20px)); opacity: 0; pointer-events: none; }
+.editor.fs:not(.fs-ui) .fab { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
+.editor.fs:not(.fs-ui) .hud-status { opacity: 0; pointer-events: none; transform: translateY(-10px); }
+.editor.fs .fab { right: calc(12px + var(--cut-r)); bottom: calc(12px + var(--cut-b)); }
+/* an open scope keeps clear of the camera cutout with a border in its own colour (padding would
+   not move its absolutely placed contents, and on a closed, zero-size panel would show a strip) */
+.editor.fs.with-scope:not(.side-scope) .scope-panel { border-top: var(--cut-t) solid #04070d; }
+.editor.fs.side-scope.with-scope .scope-panel { border-right: var(--cut-r) solid #04070d; }
+/* the board's own buttons clear the cutout only when the board reaches the top edge */
+.editor.fs { --stage-t: var(--cut-t); }
+.editor.fs.with-scope:not(.side-scope) { --stage-t: 0px; }
+.editor.fs .fs-hide { color: var(--muted); }
+.editor.fs .ed-head { display: none !important; }
+.editor.fs .fs-rail { display: flex; flex-direction: column; gap: 3px; position: absolute; left: calc(8px + var(--cut-l)); top: calc(8px + var(--stage-t)); z-index: 12; padding: 5px; border-radius: 18px;
+  background: rgba(10, 16, 32, 0.78); border: 1px solid var(--border2); box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.editor.fs .hud-status { left: calc(66px + var(--cut-l)); top: calc(10px + var(--stage-t)); }
+.editor.fs .meter-card { left: 66px; }
+.editor.fs .menu { top: 8px; }
+.editor.fs .popover { top: 60px; left: 66px; }
+
+/* phone sideways: one header row, oscilloscope beside the circuit, sheets as a side panel */
+.editor.wide .ed-head { display: flex; align-items: center; gap: 2px; min-height: calc(50px + var(--safe-t)); padding: var(--safe-t) 4px 0; background: var(--bg2); border-bottom: 1px solid var(--border); }
+.editor.wide .topbar { display: contents; }
+.editor.wide .topbar > .icon-btn { order: 3; flex: none; }
+.editor.wide .topbar > [data-a=home] { order: 0; }
+.editor.wide .topbar .title { order: 1; flex: 0 1 200px; min-width: 70px; }
+.editor.wide .topbar .title b { font-size: 14.5px; }
+.editor.wide .toolbar { order: 2; flex: 1 1 auto; min-width: 0; padding: 3px 4px; border: 0; background: none; }
+.editor.wide .tb { min-width: 46px; padding: 3px 5px; font-size: 9.5px; }
+.editor.wide .toolbar .sep { height: 26px; }
+.editor.side-scope .ed-main { flex-direction: row-reverse; }
+.editor.side-scope .scope-panel { height: auto !important; min-height: 0 !important; max-height: none !important; width: 0; border-bottom: 0; border-left: 1px solid var(--border); }
+.editor.side-scope.with-scope .scope-panel { width: clamp(300px, 44%, 580px); }
+.editor.wide .sheet { left: auto; right: 8px; top: calc(8px + var(--safe-t)); bottom: 8px; width: min(440px, 58%); height: auto; max-height: none; border-radius: 20px; border: 1px solid var(--border2);
+  transform: translate3d(110%, 0, 0); padding-bottom: 0; }
+.editor.wide .sheet.open { transform: translate3d(0, 0, 0); }
+.editor.wide .fab { width: 52px; height: 52px; border-radius: 17px; right: 12px; bottom: 12px; }
+.editor.wide .knob { bottom: 72px; right: 8px; }
+.editor.wide .quickbar { bottom: 12px; right: 76px; }
+.editor.wide .hud-status { top: 8px; }
+@media (max-height: 520px) {
+  .editor.fs .fs-rail { gap: 0; padding: 3px; left: calc(6px + var(--cut-l)); top: calc(5px + var(--stage-t)); border-radius: 14px; }
+  .fs-btn { width: 35px; height: 35px; border-radius: 10px; }
+  .fs-btn svg { width: 18px; height: 18px; }
+  .fs-sep { margin: 1px 5px; }
+  .editor.fs .hud-status, .editor.fs .meter-card { left: calc(56px + var(--cut-l)); }
+}
+@media (max-width: 800px) {
+  .editor.wide .tb span { display: none; }
+  .editor.wide .tb { min-width: 38px; padding: 7px 5px; }
+  .editor.wide .topbar .title { flex-basis: 150px; }
+}
+
+/* home, settings and manual with the phone sideways: slimmer bars */
+@media (orientation: landscape) and (max-height: 520px) {
+  .home-head { padding-top: calc(4px + var(--safe-t)); padding-bottom: 4px; }
+  .bottom-nav { padding: 3px 8px calc(3px + var(--safe-b)); }
+  .bottom-nav button { flex-direction: row; gap: 7px; padding: 6px 14px; }
+  .home-scroll { padding-bottom: calc(60px + var(--safe-b)); }
+  .modal-card { max-height: 94vh; }
 }
 
 /* ------------------------------------------------------------ user manual */

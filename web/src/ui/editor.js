@@ -49,6 +49,7 @@ export class Editor {
     this.last = performance.now();
     this.loop = this.loop.bind(this);
     window.addEventListener('resize', () => this.onResize());
+    this.updateLayout();
   }
 
   q(s) { return this.root.querySelector(s); }
@@ -58,6 +59,7 @@ export class Editor {
   // ------------------------------------------------------------------ DOM
   buildDOM() {
     this.root.innerHTML = `
+      <div class="ed-head">
       <header class="topbar">
         <button class="icon-btn" data-a="home" title="Back">${icon('back', 22)}</button>
         <div class="title" data-a="rename"><b class="doc-name">Untitled</b><small class="doc-sub">Tap to rename</small></div>
@@ -76,11 +78,29 @@ export class Editor {
         <button class="tb" data-a="undo">${icon('undo', 20)}<span>Undo</span></button>
         <button class="tb" data-a="redo">${icon('redo', 20)}<span>Redo</span></button>
         <button class="tb" data-a="fit">${icon('fit', 20)}<span>Fit</span></button>
+        <button class="tb" data-a="fullscreen">${icon('fullscreen', 20)}<span>Full</span></button>
       </nav>
+      </div>
+      <div class="ed-main">
       <div class="scope-panel"></div>
       <div class="stage">
         <canvas class="board"></canvas>
+        <div class="fs-rail">
+          <button class="fs-btn" data-a="fullscreen" title="Exit full screen">${icon('fullscreenExit', 20)}</button>
+          <button class="fs-btn fs-run" data-a="run" title="Run / Pause">${icon('play', 20)}</button>
+          <button class="fs-btn" data-a="restart" title="Restart">${icon('reset', 19)}</button>
+          <i class="fs-sep"></i>
+          <button class="fs-btn" data-a="scope" title="Oscilloscope">${icon('scope', 20)}</button>
+          <button class="fs-btn" data-a="meter" title="Multimeter">${icon('meter', 20)}</button>
+          <button class="fs-btn" data-a="values" title="Labels">${icon('eye', 20)}</button>
+          <i class="fs-sep"></i>
+          <button class="fs-btn" data-a="undo" title="Undo">${icon('undo', 19)}</button>
+          <button class="fs-btn" data-a="fit" title="Fit">${icon('fit', 19)}</button>
+          <button class="fs-btn fs-hide" data-a="fsui" title="Hide the tools">${icon('chevLeft', 19)}</button>
+        </div>
+        <button class="fs-handle" data-a="fsui" title="Show the tools">${icon('menu', 20)}</button>
         <button class="hud-status" data-a="speed"></button>
+        <button class="stage-fs" data-a="fullscreen" title="Full screen">${icon('fullscreen', 19)}</button>
         <div class="hud-error"></div>
         <div class="hint"></div>
         <div class="selbar"></div>
@@ -89,6 +109,7 @@ export class Editor {
         <div class="meter-card"></div>
         <button class="fab" data-a="add" title="Add component">${icon('plus', 28)}</button>
         <div class="toast"></div>
+      </div>
       </div>
       <div class="scrim"></div>
       <div class="sheet inspector"></div>
@@ -101,6 +122,7 @@ export class Editor {
       const b = ev.target.closest('[data-a]');
       if (!b || !this.root.contains(b) || b.closest('.inspector,.palette,.analysis,.meter-card,.more-menu,.speed-pop,.scope-panel,.selbar,.quickbar')) return;
       this.command(b.dataset.a, b);
+      if (this.fsTools && b.closest('.fs-rail') && b.dataset.a !== 'fsui') this.showFsTools(true); // still in use: keep them up
     });
   }
 
@@ -120,6 +142,8 @@ export class Editor {
       case 'undo': this.undo(); break;
       case 'redo': this.redo(); break;
       case 'fit': this.fit(); break;
+      case 'fullscreen': this.setFullscreen(!this.fullscreen); break;
+      case 'fsui': this.showFsTools(!this.fsTools); break;
       case 'add': this.palette.open(); break;
       case 'speed': this.openSpeed(); break;
       default:
@@ -159,6 +183,7 @@ export class Editor {
 
   close() {
     this.active = false;
+    if (this.fullscreen) this.setFullscreen(false);
     this.setRunning(false);
     this.stopSound();
     this.palette.close(); this.analysis.close();
@@ -166,9 +191,50 @@ export class Editor {
   }
 
   onResize() {
+    this.updateLayout();
     this.renderer.resize();
     this.scope.resize();
     this.dirtyDraw = true;
+  }
+
+  /**
+   * Phone sideways (landscape): the bars merge into one row and the
+   * oscilloscope sits beside the circuit instead of above it (Settings →
+   * Landscape & full screen), so the board keeps its height.
+   */
+  updateLayout() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const wide = w > h * 1.15 && h <= 640;
+    this.root.classList.toggle('wide', wide);
+    this.root.classList.toggle('side-scope', wide && this.settings.scopeSide !== false);
+  }
+
+  /** Full screen, as in RaptiAuto: no bars, no system UI, a small tool rail on the left. */
+  setFullscreen(on) {
+    if (!!on === !!this.fullscreen) return;
+    this.fullscreen = !!on;
+    this.root.classList.toggle('fs', this.fullscreen);
+    this.showFsTools(this.fullscreen, 2600); // shown at first, then out of the way
+    this.app.bridge.setImmersive(this.fullscreen);
+    this.haptic(8);
+    this.updateToolbar();
+    const relayout = () => { this.onResize(); if (this.scopeOpen) this.scope.draw(); };
+    requestAnimationFrame(relayout);
+    setTimeout(relayout, 120);
+    setTimeout(relayout, 450); // after the system bars have gone
+    if (this.fullscreen && !store.flag('fsTip2')) { store.setFlag('fsTip2'); this.toast('Full screen: tap ☰ at the top left for the tools · Back exits'); }
+  }
+
+  /**
+   * Full screen keeps the whole display for the board: the tool rail, the + button and the
+   * time chip slide away and only a small ☰ handle stays. Tapping it brings them back; they
+   * hide again after a few idle seconds or when the board is touched.
+   */
+  showFsTools(on, ms = 4500) {
+    this.fsTools = !!on && !!this.fullscreen;
+    this.root.classList.toggle('fs-ui', this.fsTools);
+    clearTimeout(this.fsToolsT);
+    if (this.fsTools) this.fsToolsT = setTimeout(() => this.showFsTools(false), ms);
   }
 
   fit() {
@@ -181,7 +247,7 @@ export class Editor {
   // ------------------------------------------------------------- simulator
   simOptions() {
     const s = this.settings;
-    return { method: s.method, initialDC: s.initialDC, reltol: s.reltol, vntol: s.vntol, abstol: s.abstol, gmin: s.gmin, maxIter: s.maxIter };
+    return { method: s.method, initialDC: this.doc.simSettings.initialDC ?? s.initialDC, reltol: s.reltol, vntol: s.vntol, abstol: s.abstol, gmin: s.gmin, maxIter: s.maxIter };
   }
 
   topologyChanged() {
@@ -296,6 +362,7 @@ export class Editor {
       if (!ok) { this.showError(); this.paused = true; this.updateToolbar(); break; }
       if (this.rms) this.rms.sample(sim, sim.t - t0s);
       this.scope.sample(sim);
+      if (this.meter.open) this.meter.sample(sim);
       if ((n & 7) === 0 && performance.now() - t0 > budgetMs) break;
     }
     const done = simTime > 0 ? Math.min(1, (sim.t - (target - simTime)) / simTime) : 1;
@@ -403,6 +470,12 @@ export class Editor {
     const playing = this.running && !this.paused;
     run.innerHTML = `${icon(playing ? 'pause' : 'play', 20)}<span>${playing ? 'Pause' : this.running ? 'Resume' : 'Run'}</span>`;
     run.classList.toggle('on', playing);
+    const fr = this.q('.fs-rail .fs-run');
+    fr.innerHTML = icon(playing ? 'pause' : 'play', 20);
+    fr.classList.toggle('running', playing);
+    this.q('.fs-rail [data-a=undo]').disabled = !this.undoStack.length;
+    this.q('.fs-rail [data-a=scope]').classList.toggle('on', !!this.scopeOpen);
+    this.q('.fs-rail [data-a=meter]').classList.toggle('on', this.meter.open);
     this.q('[data-a=undo]').disabled = !this.undoStack.length;
     this.q('[data-a=redo]').disabled = !this.redoStack.length;
     this.q('[data-a=multi]').classList.toggle('on', this.multi);
@@ -1087,6 +1160,7 @@ export class Editor {
     if (this.inspector.sheetOpen) { this.inspector.closeSheet(); return true; }
     if (this.selection.size || this.selWires.size) { this.select(null); return true; }
     if (this.meter.open) { this.toggleMeter(false); return true; }
+    if (this.fullscreen) { this.setFullscreen(false); return true; }
     return false;
   }
 
@@ -1201,6 +1275,8 @@ export class Editor {
     const [sx, sy] = this.local(ev);
     this.pointers.set(ev.pointerId, [sx, sy]);
     this.q('.speed-pop').classList.remove('open');
+    this.zoomAnim = (this.zoomAnim || 0) + 1; // a finger on the board stops a double-tap zoom in flight
+    if (this.fsTools) this.showFsTools(false);
     if (this.pointers.size === 2) {
       this.cancelGesture();
       const [a, b] = [...this.pointers.values()];
@@ -1210,7 +1286,14 @@ export class Editor {
     }
     if (this.pointers.size > 2) return;
     const hit = this.hitTest(sx, sy);
-    this.gesture = { type: 'pending', hit, sx, sy, w: this.renderer.toWorld(sx, sy), t0: performance.now() };
+    // Google Maps one-finger zoom: a second tap on the board that stays down, then slide
+    const lt = this.lastTap, t0 = performance.now();
+    if (lt && t0 - lt.t < 320 && Math.hypot(sx - lt.sx, sy - lt.sy) < 44 && (hit.kind === 'none' || hit.kind === 'wire')) {
+      this.lastTap = null;
+      this.gesture = { type: 'dzoom', sx, sy, s0: this.renderer.scale, w: this.renderer.toWorld(sx, sy), moved: false };
+      return;
+    }
+    this.gesture = { type: 'pending', hit, sx, sy, w: this.renderer.toWorld(sx, sy), t0 };
     if (hit.kind === 'element' && hit.el.onPress && !this.multi) {
       if (hit.el.onPress()) { this.gesture.pressed = hit.el; this.pressChanged(hit.el); }
     }
@@ -1283,6 +1366,16 @@ export class Editor {
       const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       R.scale = Math.min(6, Math.max(0.15, (g.s0 * d) / g.d0));
       R.ox = mid[0] - g.w[0] * R.scale; R.oy = mid[1] - g.w[1] * R.scale;
+      this.dirtyDraw = true;
+      return;
+    }
+    if (g.type === 'dzoom') {
+      const dy = sy - g.sy;
+      if (!g.moved && Math.abs(dy) < 6) return;
+      if (!g.moved) { g.moved = true; this.haptic(6); }
+      // slide down = zoom in, up = zoom out, around the point that was tapped
+      R.scale = Math.min(6, Math.max(0.15, g.s0 * Math.exp(dy * 0.009)));
+      R.ox = g.sx - g.w[0] * R.scale; R.oy = g.sy - g.w[1] * R.scale;
       this.dirtyDraw = true;
       return;
     }
@@ -1392,10 +1485,18 @@ export class Editor {
     const g = this.gesture;
     if (!g) return;
     if (g.type === 'pinch') { if (this.pointers.size === 0) this.gesture = null; else this.gesture = { type: 'done' }; return; }
+    if (g.type === 'dzoom') { // a plain double tap (no slide) zooms in one step, like Maps
+      this.gesture = null;
+      if (!g.moved && !cancelled) this.animateZoom(g.sx, g.sy, 2);
+      return;
+    }
     if (g.pressed) { g.pressed.onRelease(); this.pressChanged(g.pressed); }
     if (cancelled) { this.cancelGesture(); return; }
     switch (g.type) {
-      case 'pending': this.tap(g); break;
+      case 'pending':
+        this.tap(g);
+        this.lastTap = g.hit.kind === 'none' || g.hit.kind === 'wire' ? { t: performance.now(), sx: g.sx, sy: g.sy } : null;
+        break;
       case 'move':
         // a bridge wire whose part came back to where it was is not needed
         for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
@@ -1419,6 +1520,21 @@ export class Editor {
     this.preview = null; this.marquee = null; this.marqueePick = null; this.hoverPost = null; this.drag = false;
     this.gesture = null;
     this.dirtyDraw = true;
+  }
+
+  /** smooth zoom by `factor` around a screen point (double tap) */
+  animateZoom(sx, sy, factor) {
+    const R = this.renderer, s0 = R.scale, s1 = Math.min(6, Math.max(0.15, s0 * factor)), w = R.toWorld(sx, sy), t0 = performance.now();
+    const id = this.zoomAnim = (this.zoomAnim || 0) + 1;
+    const step = (now) => {
+      if (id !== this.zoomAnim) return; // a newer gesture took over
+      const k = Math.min(1, (now - t0) / 220), e = 1 - Math.pow(1 - k, 3);
+      R.scale = s0 * Math.pow(s1 / s0, e);
+      R.ox = sx - w[0] * R.scale; R.oy = sy - w[1] * R.scale;
+      this.dirtyDraw = true;
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   tap(g) {
