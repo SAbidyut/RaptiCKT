@@ -394,6 +394,7 @@ export class LadderCart extends Mechanism {
     this.r = this.p.mode === 'cyl' ? null : findMaster(s, this, String(this.p.rev || '').trim());
   }
   pos() { return this.travel ?? clamp(+this.p.pos || 0, 0, 100); }
+  iconBox() { this.travel = 50; return [-2.4 * G, -1.4 * G, 2.4 * G, 1.1 * G]; } // parts-menu icon: the carriage, mid-track
   dir() {
     const f = !!(this.f && this.f.operated()), r = this.p.mode === 'cyl' ? !f : !!(this.r && this.r.operated());
     return f && !r ? 1 : r && !f ? -1 : 0;
@@ -410,12 +411,12 @@ export class LadderCart extends Mechanism {
       g.box(px + 3.6 * G, -0.45 * G, px + 3.9 * G, 0.45 * G, { fill: g.text2 });
       g.line(-3.4 * G, 0.75 * G, -3.4 * G + 0.6 * G, 0.75 * G, g.muted, g.lw * 0.5);
     } else {
-      g.line(L, 0.45 * G, R, 0.45 * G, g.body, g.lw * 0.8);
-      g.line(L, 0.1 * G, L, 0.8 * G, g.body, g.lw * 0.8); g.line(R, 0.1 * G, R, 0.8 * G, g.body, g.lw * 0.8);
-      const cx = L + 0.6 * G + (R - L - 1.2 * G) * (x / 100), d = g.running ? this.dir() : 0;
-      g.box(cx - 0.6 * G, -0.5 * G, cx + 0.6 * G, 0.3 * G, { stroke: d ? g.accent : g.body, width: g.lw * 0.8, fill: g.fill, r: 3 });
-      g.circle(cx - 0.35 * G, 0.38 * G, 2.2, { fill: g.body }); g.circle(cx + 0.35 * G, 0.38 * G, 2.2, { fill: g.body });
-      if (d) g.text(d > 0 ? '▶' : '◀', cx, -0.12 * G, { size: 7, color: g.accent, follow: false });
+      g.line(L, 0.55 * G, R, 0.55 * G, g.body, g.lw);
+      g.line(L, 0.05 * G, L, 0.9 * G, g.body, g.lw); g.line(R, 0.05 * G, R, 0.9 * G, g.body, g.lw);
+      const cx = L + 0.9 * G + (R - L - 1.8 * G) * (x / 100), d = g.running ? this.dir() : 0;
+      g.box(cx - 0.9 * G, -0.75 * G, cx + 0.9 * G, 0.3 * G, { stroke: d ? g.accent : g.body, width: g.lw, fill: g.fill, r: 4 });
+      g.circle(cx - 0.5 * G, 0.4 * G, 3.2, { fill: g.body }); g.circle(cx + 0.5 * G, 0.4 * G, 3.2, { fill: g.body });
+      if (d) g.text(d > 0 ? '▶' : '◀', cx, -0.22 * G, { size: 8, color: g.accent, follow: false });
     }
     g.text(tagOf(this) || '?', 0, -1.0 * G, { size: 8.5, color: g.text1, bold: true, follow: false });
   }

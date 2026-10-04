@@ -521,13 +521,14 @@ export class Renderer {
       const [sx, sy] = e.labelSide();
       const sides = [[sx, sy], [-sx, -sy], [sy, sx], [-sy, -sx]];
       let best = null, bestScore = Infinity;
-      sides.forEach((sd, k) => {
-        const r = e.labelRect(txt, sd);
+      // keep the part's usual side unless it collides; then try the other sides, then a step further out
+      for (const extra of [0, 12, 24]) sides.forEach(([a, b], k) => {
+        const sd = [a, b, extra], r = e.labelRect(txt, sd);
         if (!r) return;
-        const sc = hit(r, i) + k * 4; // keep the part's usual side unless it collides
+        const sc = hit(r, i) + k * 4 + extra * 1.5;
         if (sc < bestScore) { bestScore = sc; best = sd; }
       });
-      if (best && (best[0] !== sx || best[1] !== sy)) e.chosenSide = best;
+      if (best && (best[0] !== sx || best[1] !== sy || best[2])) e.chosenSide = best;
       const r = e.labelRect(txt);
       if (r) placed.push(r);
     });
@@ -630,6 +631,15 @@ export class Renderer {
     const overlap = (r) => {
       let a = 0;
       for (const o of obs) {
+        const w = Math.min(r[2], o[2]) - Math.max(r[0], o[0]), h = Math.min(r[3], o[3]) - Math.max(r[1], o[1]);
+        if (w > 0 && h > 0) a += w * h;
+      }
+      return a;
+    };
+    const bodies = doc.elements.map((e) => e.worldBox());
+    const onBody = (r) => {
+      let a = 0;
+      for (const o of bodies) {
         const w = Math.min(r[2], o[2]) - Math.max(r[0], o[0]), h = Math.min(r[3], o[3]) - Math.max(r[1], o[1]);
         if (w > 0 && h > 0) a += w * h;
       }
@@ -750,7 +760,7 @@ export class Renderer {
       }
       // nowhere free near the net (pins wired straight into a crowded block): leave the
       // reading out rather than print it over a part or another label; a probe still reads it
-      if (!best || best.ov > VW * VH * 0.35) continue;
+      if (!best || best.ov > VW * VH * 0.35 || onBody(best.r) > 18) continue;
       box(best.r, 2);
       volts.push({ node: n, x: best.x, y: best.y, align: best.align, base: best.base });
     }
@@ -788,7 +798,7 @@ export class Renderer {
     cv.width = size * dpr; cv.height = size * dpr;
     const ctx = cv.getContext('2d');
     const e = new C(0, 0);
-    const [a, b, c, d] = e.localBox();
+    const [a, b, c, d] = e.iconBox ? e.iconBox() : e.localBox(); // a very wide part may show just its middle
     const w = c - a, h = d - b;
     const sc = Math.min((size - 10) / w, (size - 10) / h, 1.1);
     ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (size / 2 - ((a + c) / 2) * sc), dpr * (size / 2 - ((b + d) / 2) * sc));

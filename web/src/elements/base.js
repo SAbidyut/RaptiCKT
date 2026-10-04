@@ -157,11 +157,11 @@ export class Element {
 
   /** World anchor for the value label: [x, y, align, baseline]. */
   labelAnchor(side = this.chosenSide || this.labelSide()) {
-    const [sx, sy] = side;
+    const [sx, sy, extra = 0] = side; // extra: further out, when the spot next to the part is taken
     const [ox, oy] = this.toWorld(0, 0), [px, py] = this.toWorld(sx, sy);
     const dx = Math.round(px - ox), dy = Math.round(py - oy);
     const [x1, y1, x2, y2] = this.worldBox();
-    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, m = 7;
+    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, m = 7 + extra;
     if (dx > 0) return [x2 + m, cy, 'left', 'middle'];
     if (dx < 0) return [x1 - m, cy, 'right', 'middle'];
     if (dy > 0) return [cx, y2 + m, 'center', 'top'];
