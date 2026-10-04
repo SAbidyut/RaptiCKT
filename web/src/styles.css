@@ -376,7 +376,13 @@ input.toggle:checked::after { transform: translateX(18px); }
 .insp-read { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; padding: 0 14px 8px; }
 .read { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 6px 9px; }
 .read span { display: block; color: var(--muted); font-size: 10.5px; }
-.read b { font: 600 13px var(--mono); color: var(--accent); white-space: nowrap; }
+.read { min-width: 0; }
+.read b { display: block; font: 600 13px var(--mono); color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.read.wide { grid-column: 1 / -1; }
+.read.wide b { white-space: normal; font-size: 12px; line-height: 1.35; }
+.prop-sug { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 10px; margin-top: -4px; }
+.tag-chip { height: 28px; padding: 0 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg2); color: var(--accent); font: 600 12px var(--mono); }
+.tag-chip:active { transform: scale(0.95); }
 .read.muted { grid-column: 1 / -1; text-align: center; font-size: 12.5px; }
 .insp-actions { display: flex; gap: 4px; padding: 0 10px 8px; overflow-x: auto; flex: none; }
 .insp-actions::-webkit-scrollbar { display: none; }

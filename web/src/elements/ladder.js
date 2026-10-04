@@ -10,8 +10,33 @@ import { OverloadRelay3, PhaseRelay } from './switches3.js';
 import { fmtShort } from '../engine/units.js';
 
 const G = GRID;
-const TAG = (def) => ({ key: 'tag', label: 'Tag (contacts with this tag follow it)', type: 'text', def });
+const TAG = (def) => ({ key: 'tag', label: 'Tag (contacts with this tag follow it)', type: 'text', def, structural: true });
 const tagOf = (e) => String(e.p.tag || '').trim();
+
+const COILS = new Set(['lcoil', 'ltimer', 'lcounter', 'llevel']);
+const KIND = {
+  master: (e) => !['lcart', 'ltank'].includes(e.constructor.type), // coils, overload relay, MPCB, phase monitor, level relay
+  coil: (e) => COILS.has(e.constructor.type),
+  counter: (e) => e.constructor.type === 'lcounter',
+  cart: (e) => e.constructor.type === 'lcart',
+  tank: (e) => e.constructor.type === 'ltank',
+};
+/** Tags in `doc` that a part of this kind can follow (for the tag field's suggestions and new parts). */
+export function tagChoices(doc, kind) {
+  const out = [];
+  for (const e of doc?.elements || []) {
+    const t = e.linkTag ? e.linkTag() : '';
+    if (t && KIND[kind](e) && !out.includes(t)) out.push(t);
+  }
+  return out;
+}
+/** The tag field of a part that follows another one: suggests the tags that exist in the circuit. */
+const FOLLOW = (def, kind = 'master', label = 'Follows (tag of its coil / relay)') => ({ key: 'tag', label, type: 'text', def, structural: true, suggest: (doc) => tagChoices(doc, kind) });
+/** A newly added follower takes the tag of the last matching part already in the circuit. */
+function adoptTag(el, doc, kind, key = 'tag') {
+  const c = tagChoices(doc, kind);
+  if (c.length) el.p[key] = c[c.length - 1];
+}
 
 /** A horizontal coil: A1 on the left, A2 on the right, the tag written in the box. */
 function asLadderCoil(Base) {
@@ -83,7 +108,9 @@ function findMaster(s, me, tag) {
 /** Shared behaviour of contacts that follow a tagged master. */
 class Linked extends CoilRelay {
   static noName = true;
-  static props = [TAG('K1')];
+  static follows = 'master';
+  static props = [FOLLOW('K1')];
+  onAdd(doc) { adoptTag(this, doc, this.constructor.follows); }
   constructor(x, y) { super(x, y); this.master = null; }
   connectivity() { return this.constructor.paths.map(([a, b]) => [a, b]); }
   branchCount() { return this.constructor.paths.length; }
@@ -101,8 +128,13 @@ class Linked extends CoilRelay {
   }
   digitalSettle() { return false; }
   valueLabel() { return ''; }
+  /** Tag text and colour: amber with "?" while running if no coil carries the tag. */
+  tagText(g, on) {
+    const t = tagOf(this) || '?';
+    return g.running && !this.master ? [t + ' ?', '#f59e0b'] : [t, on ? g.accent : g.text1];
+  }
   readings() {
-    return [['Follows', this.master ? `${tagOf(this)} (${this.master.constructor.title})` : `nothing — no coil or relay is tagged "${tagOf(this)}"`, ''],
+    return [['Follows', this.master ? `${tagOf(this)} — ${this.master.constructor.title}` : `NOTHING: no coil is tagged "${tagOf(this)}" — set the tag`, ''],
       ['State', this.closedAt(0) ? 'Closed' : 'Open', ''], ['Current', this.i || 0, 'A']];
   }
 }
@@ -122,7 +154,8 @@ class LadderContact extends Linked {
       g.line(0.7 * G, -0.42 * G, 0.7 * G, 0.02 * G, g.body, g.lw);
       g.line(-G, 0, c ? G : 0.75 * G, c ? 0 : 0.36 * G, col, g.lw * 1.3);
     } else g.line(-G, 0, c ? G : 0.85 * G, c ? 0 : -0.55 * G, col, g.lw * 1.3);
-    g.text(tagOf(this) || '?', 0, -0.78 * G, { size: 8.5, color: c ? g.accent : g.text1, bold: true, follow: false });
+    const [tt, tc] = this.tagText(g, c);
+    g.text(tt, 0, -0.78 * G, { size: 8.5, color: tc, bold: true, follow: false });
     if (this.p.terms) g.text(this.p.terms, 0, 0.62 * G, { size: 6, color: g.muted, follow: false });
   }
 }
@@ -130,7 +163,7 @@ class LadderContact extends Linked {
 export class LadderNO extends LadderContact {
   static type = 'lno'; static title = 'NO Contact (ladder)'; static category = 'Switches';
   static keywords = 'no contact normally open auxiliary contact hold in seal in 13 14 ladder diagram linked contact';
-  static props = [TAG('K1'), { key: 'terms', label: 'Terminal numbers', type: 'text', def: '13-14' }];
+  static props = [FOLLOW('K1'), { key: 'terms', label: 'Terminal numbers', type: 'text', def: '13-14' }];
   static paths = [[0, 1, 'NO']];
   static description = 'Normally-open contact of the coil or relay with the same tag: it closes when that coil pulls in (or the timer runs out, or the overload relay trips). Use it as the hold-in (seal-in) contact across START, or to switch a pilot lamp.';
 }
@@ -139,7 +172,7 @@ register(LadderNO);
 export class LadderNC extends LadderContact {
   static type = 'lnc'; static title = 'NC Contact (ladder)'; static category = 'Switches';
   static keywords = 'nc contact normally closed auxiliary contact interlock 21 22 95 96 overload contact ladder diagram linked contact';
-  static props = [TAG('K1'), { key: 'terms', label: 'Terminal numbers', type: 'text', def: '21-22' }];
+  static props = [FOLLOW('K1'), { key: 'terms', label: 'Terminal numbers', type: 'text', def: '21-22' }];
   static paths = [[0, 1, 'NC']];
   static description = 'Normally-closed contact of the coil or relay with the same tag: it opens when that coil pulls in. Use it for electrical interlocking (forward/reverse, star/delta) or, tagged like an overload relay (95-96), to drop the coil when the motor is overloaded.';
 }
@@ -150,6 +183,8 @@ export class LadderMain3 extends Linked {
   static keywords = 'main contacts power contacts contactor 3 pole l1 t1 power circuit ladder diagram linked km';
   static pins = [['L1', 'T'], ['L2', 'T'], ['L3', 'T'], ['T1', 'B'], ['T2', 'B'], ['T3', 'B']];
   static paths = [[0, 3, 'NO'], [1, 4, 'NO'], [2, 5, 'NO']];
+  static follows = 'coil';
+  static props = [FOLLOW('K1', 'coil', 'Follows (tag of its contactor coil)')];
   static description = 'The three main (power) contacts L1–T1, L2–T2, L3–T3 of the contactor whose coil has the same tag. Draw them in the power circuit; they close together when the coil in the control ladder pulls in.';
   localPosts() { return [[-G, -2 * G], [0, -2 * G], [G, -2 * G], [-G, 2 * G], [0, 2 * G], [G, 2 * G]]; }
   localBox() { return [-1.5 * G, -2 * G, 1.6 * G, 2 * G]; }
@@ -165,7 +200,8 @@ export class LadderMain3 extends Linked {
     }
     const ym = c ? 0 : 0.1 * G; // mechanical link: the three poles move together
     g.poly([[-G - (c ? 0 : 0.25 * G), ym], [G - (c ? 0 : 0.25 * G), ym]], { stroke: g.muted, width: g.lw * 0.6, dash: [3, 3] });
-    g.text(tagOf(this) || '?', 1.35 * G, -0.9 * G, { size: 9, color: c ? g.accent : g.text1, bold: true, align: 'left', follow: false });
+    const [tt, tc] = this.tagText(g, c);
+    g.text(tt, 1.35 * G, -0.9 * G, { size: 9, color: tc, bold: true, align: 'left', follow: false });
   }
 }
 register(LadderMain3);
@@ -294,7 +330,8 @@ register(LadderCounter);
 export class LadderCounterReset extends asLadderCoil(CoilRelay) {
   static type = 'lcreset'; static title = 'Counter Reset Coil (ladder)'; static category = 'Switches';
   static keywords = 'counter reset coil reset input preset counter ladder diagram';
-  static props = [TAG('C1'), ...CoilRelay.props.map((p) => ({ ...p, def: { vcoil: 230, rcoil: 4000, lcoil: 5, ac: true }[p.key] ?? p.def }))];
+  static props = [FOLLOW('C1', 'counter', 'Resets the counter (tag)'), ...CoilRelay.props.map((p) => ({ ...p, def: { vcoil: 230, rcoil: 4000, lcoil: 5, ac: true }[p.key] ?? p.def }))];
+  onAdd(doc) { adoptTag(this, doc, 'counter'); }
   static description = 'Reset input of the Counter Coil with the same tag: energising it sets the count back to zero and returns the counter contacts to normal.';
   linkTag() { return ''; }
   reset(s) { super.reset(s); if (s) this.counter = findMaster(s, this, tagOf(this)); }
@@ -331,8 +368,8 @@ export class LadderCart extends Mechanism {
   static keywords = 'carriage trolley conveyor travel cylinder pneumatic piston actuator limit switch auto forward reverse electro pneumatic';
   static props = [TAG('CART'),
     { key: 'mode', label: 'Type', type: 'select', def: 'motor', options: [['motor', 'Carriage: driven forward / back by two coils'], ['cyl', 'Cylinder: extends while its valve coil is on, springs back']] },
-    { key: 'fwd', label: 'Forward / extend coil tag', type: 'text', def: 'KF' },
-    { key: 'rev', label: 'Reverse coil tag', type: 'text', def: 'KR' },
+    { key: 'fwd', label: 'Forward / extend coil tag', type: 'text', def: 'KF', structural: true, suggest: (doc) => tagChoices(doc, 'coil') },
+    { key: 'rev', label: 'Reverse coil tag', type: 'text', def: 'KR', structural: true, suggest: (doc) => tagChoices(doc, 'coil') },
     { key: 'speed', label: 'Travel speed', unit: '%/s', def: 25, min: 0.1, max: 1000, log: true },
     { key: 'pos', label: 'Start position', unit: '%', def: 0, min: 0, max: 100, knob: true }];
   static description = 'A moving machine part for ladder-diagram examples: a carriage (or conveyor table) that travels forward while the coil tagged "Forward" is energised and back while the "Reverse" coil is, or a single-acting pneumatic cylinder that extends while its solenoid-valve coil is on and springs back when it is off. Limit Switch contacts with its tag operate at set positions (0 % = home, 100 % = far end).';
@@ -375,7 +412,8 @@ register(LadderCart);
 
 /** Limit switch operated by the carriage or cylinder with the same tag at a set position. */
 class LadderLimit extends LadderContact {
-  static props = [TAG('CART'), { key: 'name', label: 'Name', type: 'text', def: 'LS1' },
+  static follows = 'cart';
+  static props = [FOLLOW('CART', 'cart', 'Operated by carriage / cylinder (tag)'), { key: 'name', label: 'Name', type: 'text', def: 'LS1' },
     { key: 'at', label: 'Operates at position', unit: '%', def: 100, min: 0, max: 100 },
     { key: 'side', label: 'Operated when the position is', type: 'select', def: 'high', options: [['high', 'at or beyond it (far end)'], ['low', 'at or below it (home end)']] }];
   interactive = true;
@@ -430,8 +468,8 @@ export class LadderTank extends Mechanism {
   static type = 'ltank'; static title = 'Water Tank (ladder)';
   static keywords = 'water tank overhead tank sump reservoir level pump fill water level control automation';
   static props = [TAG('TANK'),
-    { key: 'fill', label: 'Filled while this coil is on (tag; empty = always)', type: 'text', def: 'K' },
-    { key: 'from', label: 'Draws its water from tank (tag; empty = mains line)', type: 'text', def: '' },
+    { key: 'fill', label: 'Filled while this coil is on (tag; empty = always)', type: 'text', def: 'K', structural: true, suggest: (doc) => tagChoices(doc, 'coil') },
+    { key: 'from', label: 'Draws its water from tank (tag; empty = mains line)', type: 'text', def: '', structural: true, suggest: (doc) => tagChoices(doc, 'tank') },
     { key: 'inflow', label: 'Filling rate', unit: '%/s', def: 10, min: 0, max: 1000 },
     { key: 'outflow', label: 'Water use (outflow)', unit: '%/s', def: 3, min: 0, max: 1000, knob: true },
     { key: 'level', label: 'Start level', unit: '%', def: 50, min: 0, max: 100 }];
@@ -468,7 +506,7 @@ register(LadderTank);
 export class LadderLevel extends asLadderCoil(CoilRelay) {
   static type = 'llevel'; static title = 'Floatless Level Relay (ladder)'; static category = 'Switches';
   static keywords = 'floatless level relay level controller water level relay electrode probe pump control dry run protection 61f';
-  static props = [TAG('KL'), { key: 'tank', label: 'Tank it watches (tag)', type: 'text', def: 'TANK' },
+  static props = [TAG('KL'), { key: 'tank', label: 'Tank it watches (tag)', type: 'text', def: 'TANK', structural: true, suggest: (doc) => tagChoices(doc, 'tank') },
     { key: 'mode', label: 'Function', type: 'select', def: 'fill', options: [['fill', 'Fill: operated below LOW until HIGH (pump on)'], ['dry', 'Dry-run: operated while water is above LOW (resets above HIGH)']] },
     { key: 'low', label: 'LOW probe', unit: '%', def: 20, min: 0, max: 100 },
     { key: 'high', label: 'HIGH probe', unit: '%', def: 90, min: 0, max: 100 },

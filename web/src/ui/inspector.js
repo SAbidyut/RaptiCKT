@@ -130,6 +130,13 @@ export class Inspector {
     this.host.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this.action(b.dataset.a)));
     this.host.querySelectorAll('.prop[data-k]').forEach((row) => this.bindRow(row));
     this.host.querySelectorAll('[data-fk]').forEach((row) => this.bindFault(row));
+    // tapping a suggested tag links the part to that coil / relay
+    this.host.querySelectorAll('.prop-sug').forEach((d) => d.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-tag]');
+      if (!b) return;
+      this.ed.setParam(this.el, d.dataset.k, b.dataset.tag);
+      this.render();
+    }));
     this.readKey = null;
     this.updateReadings();
   }
@@ -180,7 +187,10 @@ export class Inspector {
       return `<label class="prop" data-k="${p.key}"><span>${esc(p.label)}</span><input type="checkbox" class="toggle" ${v ? 'checked' : ''}></label>`;
     }
     if (p.type === 'text') {
-      return `<label class="prop" data-k="${p.key}"><span>${esc(p.label)}</span><input type="text" value="${esc(v)}"></label>`;
+      // tag fields offer the coil / relay tags that exist in the circuit
+      const sug = typeof p.suggest === 'function' ? p.suggest(this.ed.doc).filter((t) => t !== v) : [];
+      const id = sug.length ? `sug-${p.key}-${this.el.id}` : '';
+      return `<label class="prop" data-k="${p.key}"><span>${esc(p.label)}</span><input type="text" value="${esc(v)}" ${id ? `list="${id}"` : ''}>${id ? `<datalist id="${id}">${sug.map((t) => `<option value="${esc(t)}"></option>`).join('')}</datalist>` : ''}</label>${sug.length ? `<div class="prop-sug" data-k="${p.key}">${sug.map((t) => `<button class="tag-chip" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</div>` : ''}`;
     }
     const hasRange = p.min !== undefined && p.max !== undefined;
     return `<div class="prop num" data-k="${p.key}"><span>${esc(p.label)}</span>
@@ -269,7 +279,8 @@ export class Inspector {
     }
     const key = r.map((x) => x[0]).join('|');
     if (key !== this.readKey) {
-      box.innerHTML = r.map(([k]) => `<div class="read"><span>${esc(k)}</span><b></b></div>`).join('');
+      // long text values (e.g. what a contact follows) get a full-width card instead of spilling over
+      box.innerHTML = r.map(([k, v]) => `<div class="read${typeof v === 'string' && v.length > 13 ? ' wide' : ''}"><span>${esc(k)}</span><b></b></div>`).join('');
       this.readKey = key;
     }
     const bs = box.querySelectorAll('b');

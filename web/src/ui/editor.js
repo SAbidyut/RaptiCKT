@@ -611,6 +611,7 @@ export class Editor {
     const [cx, cy] = this.renderer.toWorld(this.renderer.cw / 2, palH ? visH * 0.55 : this.renderer.ch * 0.42);
     const e = makeElement(type, snap(cx), snap(cy));
     if (!e) return;
+    e.onAdd?.(this.doc); // e.g. a new ladder contact follows the last coil already in the circuit
     const boxes = this.doc.elements.map((o) => o.worldBox());
     const pad = GRID;
     const ctx = this.placementCtx([e], [], true);
