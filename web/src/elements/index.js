@@ -22,6 +22,8 @@ import './digital2.js';
 import './sensors2.js';
 import './outputs.js';
 import './meters2.js';
+import './machines2.js';
+import './switches3.js';
 import './digital3.js';
 import './analog3.js';
 import './semis3.js';
@@ -35,11 +37,11 @@ export const CATEGORIES = [
   { id: 'Batteries', icon: 'battery', items: ['cellaa', 'bat9v', 'coincell', 'nimh', 'liion', 'lipo2s', 'leadacid', 'supercap'] },
   { id: 'Passive', icon: 'wave', items: ['resistor', 'shuntr', 'fusibler', 'rheostat', 'pot', 'trimpot', 'capacitor', 'ecap', 'npecap', 'tantalum', 'varcap', 'realcap', 'ceramiccap', 'filmcap', 'polyestercap', 'ppcap', 'micacap', 'inductor', 'varind', 'coreind', 'ferrite', 'crystal', 'ceramicres', 'tline', 'memristor'] },
   { id: 'Transformers', icon: 'coil', items: ['transformer', 'txstepdown', 'txstepup', 'isotx', 'xfmrct', 'xfmr2s', 'autotx', 'ct', 'pt', 'tx3ph', 'coupledl'] },
-  { id: 'Protection', icon: 'shield', items: ['fuse', 'hrcfuse', 'polyfuse', 'mcb', 'mcb2p', 'mcb3p', 'mccb', 'rccb', 'rcbo', 'olr', 'idmt', 'mov', 'arrester', 'gdt', 'tvs', 'tvsbi'] },
-  { id: 'Switches & Relays', icon: 'switch', items: ['switch', 'oneway', 'twoway', 'threeway', 'intermediate', 'spdt', 'dpst', 'dpdt', 'pushno', 'pushnc', 'latchbtn', 'estop', 'limitsw', 'rotary4', 'selector3', 'isolator', 'changeover', 'reed', 'floatsw', 'pressw', 'thermostat', 'relay', 'relaydpdt', 'reedrelay', 'contactor', 'tdr', 'ssr'] },
+  { id: 'Protection', icon: 'shield', items: ['fuse', 'hrcfuse', 'polyfuse', 'mcb', 'mcb2p', 'mcb3p', 'mccb', 'rccb', 'rcbo', 'olr', 'olr3', 'phaserelay', 'voltrelay', 'idmt', 'mov', 'arrester', 'gdt', 'tvs', 'tvsbi'] },
+  { id: 'Switches & Relays', icon: 'switch', items: ['switch', 'togglesw', 'slidesw', 'rockersw', 'keysw', 'oneway', 'twoway', 'threeway', 'intermediate', 'spdt', 'dpst', 'dpdt', 'pushno', 'pushnc', 'footsw', 'latchbtn', 'estop', 'limitsw', 'rotary4', 'dipsw', 'selector3', 'isolator', 'changeover', 'reed', 'floatsw', 'pressw', 'thermostat', 'vcsw', 'ccsw', 'relay', 'relayspst', 'relaydpst', 'relaydpdt', 'reedrelay', 'latchrelay', 'auxrelay', 'contactor', 'contactor2', 'tdr', 'ssr'] },
   { id: 'Electrical', icon: 'home', items: ['bulb', 'lamp', 'tube', 'ballast', 'starter', 'ledbulb', 'neon', 'fan', 'heater', 'socket', 'dimmer', 'fanregres', 'fanregcap', 'bell', 'earthrod'] },
   { id: 'Power Systems', icon: 'tower', items: ['rload', 'rlload', 'rcload', 'load3y', 'load3d', 'pfcap', 'sline', 'piline'] },
-  { id: 'Machines', icon: 'motor', items: ['motor', 'dcsep', 'dcshunt', 'dcseries', 'dcgen', 'im3', 'im1', 'alternator'] },
+  { id: 'Machines', icon: 'motor', items: ['motor', 'dcsep', 'dcshunt', 'dcseries', 'dcgen', 'im3', 'im1', 'alternator', 'im3d', 'dccompound', 'universal', 'syncmotor', 'pmsm', 'bldc', 'stepper', 'acgen1'] },
   { id: 'Diodes', icon: 'diode', items: ['diode', 'diodeq', 'fastdiode', 'ufdiode', 'powerdiode', 'sicdiode', 'avalanche', 'zener', 'schottky', 'varactor', 'tunnel', 'crd', 'pindiode', 'gunn', 'impatt', 'bridge', 'rect3'] },
   { id: 'Transistors', icon: 'transistor', items: ['npn', 'pnp', 'darlnpn', 'darlpnp', 'nmos', 'pmos', 'depnmos', 'njfet', 'pjfet', 'igbt', 'hemt', 'ujt', 'opto'] },
   { id: 'Thyristors & Power', icon: 'thyristor', items: ['scr', 'triac', 'diac', 'sidac', 'scs', 'lascr', 'igct', 'igbtmod', 'ipm', 'gto', 'put', 'optotriac', 'gatedrv', 'buckmod', 'boostmod'] },

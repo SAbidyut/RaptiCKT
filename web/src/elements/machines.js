@@ -16,7 +16,7 @@ const G = GRID;
 const TAU = 2 * Math.PI;
 const rpm = (w) => (w * 60) / TAU;
 
-function drawMotor(g, label, ang, running, r = G) {
+export function drawMotor(g, label, ang, running, r = G) {
   g.circle(0, 0, r, { stroke: g.body, width: g.lw * 0.9, fill: g.fill });
   if (running) {
     const ctx = g.ctx;
@@ -29,7 +29,7 @@ function drawMotor(g, label, ang, running, r = G) {
 // ------------------------------------------------------------ DC machines
 const FIELD = (i, ir) => { const x = i / Math.max(ir, 1e-9); return Math.tanh(1.2 * x) / Math.tanh(1.2); };
 
-class DCMachine extends Element {
+export class DCMachine extends Element {
   static category = 'Machines';
   static prefix = 'M';
   static conn = 'sep'; // sep | shunt | series
@@ -70,7 +70,9 @@ class DCMachine extends Element {
     s.addBranchKCL(f1, f2, kf); s.addA(kf, f1 - 1, 1); s.addA(kf, f2 - 1, -1);
     s.addA(kf, kf, -(p.rf + be * p.lf));
     // mechanics: J·dω/dt = K·ia − b·ω − T
-    s.addA(kw, kw, be * p.j + Math.max(p.b, 1e-9)); s.addA(kw, ka, -K);
+    // operating point: the rotor is at rest when the supply is applied
+    if (s.mode === 'dc') s.addA(kw, kw, 1);
+    else { s.addA(kw, kw, be * p.j + Math.max(p.b, 1e-9)); s.addA(kw, ka, -K); }
   }
   stampStep(s) {
     const [ka, kf, kw] = this.branches, p = this.p;
@@ -78,8 +80,8 @@ class DCMachine extends Element {
       s.b[ka] += -(p.la / s.dt) * this.ia;
       s.b[kf] += -(p.lf / s.dt) * this.if;
       s.b[kw] += (p.j / s.dt) * this.w;
+      s.b[kw] -= p.load;
     }
-    s.b[kw] -= p.load;
   }
   accept(s) {
     const [ka, kf, kw] = this.branches;
@@ -113,7 +115,7 @@ class DCMachine extends Element {
   }
 }
 
-function dcm(type, title, conn, defs, keywords, desc) {
+export function dcm(type, title, conn, defs, keywords, desc) {
   const C = class extends DCMachine {};
   Object.assign(C, { type, title, conn, keywords, description: desc });
   C.props = DCMachine.props.map((p) => ({ ...p, def: defs[p.key] ?? p.def }));
@@ -168,7 +170,7 @@ register(DCGenerator);
  * Stator + rotor(αβ) windings: flux ψ = L·i, voltage v = Rm(ω)·i + dψ/dt, where
  * Rm contains the resistances and the speed-voltage terms of the rotor.
  */
-class InductionBase extends Element {
+export class InductionBase extends Element {
   static category = 'Machines';
   static prefix = 'M';
   constructor(x, y) { super(x, y); this.postCurrents = new Array(this.localPosts().length).fill(0); this.wm = 0; this.ang = 0; this.te = 0; }
