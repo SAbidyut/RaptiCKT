@@ -35,6 +35,55 @@ test('house wiring: a leaking appliance trips the RCCB, a short trips only its M
   }
 });
 
+test('2-storey house: service main to earthing behaves like the real installation', () => {
+  // normal evening load: a few amps; with geyser, AC, pump, microwave and iron on it rises past 25 A without tripping anything
+  {
+    const { doc, sim, of, run } = open('house');
+    run(0.2, 4.1667e-5);
+    const meter = of('acamp')[0], i0 = meter.display(0);
+    assert.ok(i0 > 3 && i0 < 10, 'evening load ' + i0);
+    assert.ok(of('kwh')[0].P() > 600, 'meter power ' + of('kwh')[0].P());
+    for (const e of of('oneway')) e.p.on = true;
+    sim.dirty = true;
+    run(0.3, 4.1667e-5);
+    const i1 = meter.display(0);
+    assert.ok(i1 > 25 && i1 < 45, 'full load ' + i1);
+    assert.deepEqual(doc.elements.filter((e) => e.tripped || e.blown || e.damaged).map((e) => e.name), [], 'nothing trips at full load');
+    // the service drop and tails keep the voltage drop small even at full load
+    const v = of('kwh')[0], vrms = v.P() / Math.max(1e-9, i1);
+    assert.ok(vrms > 200, 'voltage at the meter ' + vrms);
+  }
+  // a leaking appliance trips the RCCB through the earth electrodes; a short trips only its own MCB
+  for (const [app, expect] of [['fault', ['rccb']], ['short', ['mcb']]]) {
+    const { doc, sim, of, run } = open('house');
+    run(0.2, 4.1667e-5);
+    const so = of('socket').find((e) => e.p.app === 'tv');
+    so.p.app = app; sim.dirty = true;
+    run(0.3, 4.1667e-5);
+    const tripped = doc.elements.filter((e) => e.tripped).map((e) => e.constructor.type);
+    assert.deepEqual(tripped, expect, app);
+    if (app === 'fault') assert.ok(Math.abs(of('earthrod').reduce((a, e) => a + Math.abs(e.i), 0)) < 0.2, 'earth path carried the leak, then nothing');
+  }
+});
+
+test('2-storey house: staircase (2 places) and corridor (3 places) lamps follow every switch', () => {
+  const { doc, sim, of, run } = open('house');
+  const lit = (lamp) => { run(0.2, 4.1667e-5); return lamp.T > 2000; };
+  const bulbs = of('bulb'), stair = bulbs.find((e) => e.p.w === 40), corridor = bulbs.find((e) => e.p.w === 60);
+  const [gf, ff, c1, c2] = of('twoway'), [mid] = of('intermediate');
+  let s0 = lit(stair);
+  for (const t of [gf, ff, gf]) { t.onTap(); sim.dirty = true; const s1 = lit(stair); assert.notEqual(s1, s0, 'stair lamp follows ' + t.name); s0 = s1; }
+  let c0 = lit(corridor);
+  for (const t of [c1, mid, c2, mid]) { t.onTap(); sim.dirty = true; const s1 = lit(corridor); assert.notEqual(s1, c0, 'corridor lamp follows ' + t.name); c0 = s1; }
+  // the verandah light is on at night and goes off in daylight
+  const [pc] = of('photocell');
+  assert.equal(pc.on, true, 'verandah light on at night');
+  pc.p.lux = 2000; pc.p.delay = 0.05; sim.dirty = true;
+  run(0.2, 4.1667e-5);
+  assert.equal(pc.on, false, 'off in daylight');
+  void doc;
+});
+
 test('house wiring: either staircase switch toggles the stair lamp', () => {
   const { doc, sim, of, run } = open('flat');
   const lamp = doc.elements.find((e) => e.name === 'LP3');

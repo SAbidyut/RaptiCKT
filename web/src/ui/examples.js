@@ -537,6 +537,123 @@ const BASE = [
 
   // ------------------------------------------------------------ big projects
   {
+    id: 'house', cat: 'Projects', title: 'Complete house wiring: service main to earthing (2-storey house)',
+    desc: 'A whole two-storey house, from the street pole to the earth pits, as one ladder diagram. ① Service main: the pole transformer (neutral earthed at the substation) feeds a 25 m overhead service drop of 2 × 16 mm² aluminium. ② Service cut-out: a 63 A HRC fuse in the phase and a solid neutral link. ③ Energy meter (kWh). ④ Double-pole main switch. ⑤ 30 mA RCCB. ⑥ Distribution board: an ammeter shows the total current, the L busbar feeds ten MCBs (B6 for lights and fans, C16 for sockets and the pump, C20 for the kitchen, geyser and air conditioner) and every circuit returns to the N bar. Ground floor: LED and CFL lights, a dusk-to-dawn verandah light, the staircase lamp on two 2-way switches (one on each floor), calling bell, two fans with regulators, TV and fridge sockets, kitchen sockets, water pump. First floor: bedroom and bathroom lights, a corridor lamp switched from three places (2-way – intermediate – 2-way), fans, study and bedroom sockets, 2 kW geyser and a 1.5-ton air conditioner. ⑦ Earthing: every 3-pin socket\'s earth pin goes over the green earth continuity conductor to the earth bar and on to two earth electrodes (pipe earthing, ≈5 Ω each). Press Run (the board switches to ✋ Operate) and tap switches to watch the total current, the kWh meter and the cables; switch on the geyser, AC, pump and microwave together to load the house. Set a socket to "Faulty appliance" and the RCCB trips through the earth path; set one to "Short circuit" and only its MCB trips. Tap ✋ Operate / Wire at the top right to edit while it runs.',
+    build(b) {
+      const cu = (size) => ({ type: 'housewire', size, shape: size >= 10 ? 'RM' : 'RE', inst: 'B1' });
+      const L = 10, N = 50, PE = 54; // the L busbar, N bar and earth bar of the distribution board (x)
+      // ---------------------------------------------------------------- ① – ⑤ incomer
+      // phase on the lower line (y = −5), neutral on the upper line (y = −7)
+      b.cable = cu(16);
+      b.vr('mains', -30, -6, { zs: 0.05 });
+      b.el('cable', -24, -6, { len: 25, size: '16', mat: 'al', temp: 40 }, 0, true);
+      b.w([-30, -4], [-28, -4], [-28, -5], [-26, -5]); b.w([-30, -8], [-28, -8], [-28, -7], [-26, -7]);
+      b.h('hrcfuse', -18, -5, { rating: 63 });
+      b.w([-22, -5], [-20, -5]); b.w([-22, -7], [-12, -7]);
+      b.cable = cu(10);
+      b.el('kwh', -12, -5, {}, 0, true);
+      b.w([-16, -5], [-14, -5]); b.w([-12, -7], [-8, -7]);
+      b.el('dpst', -6, -6, { on: true }, 0, true);
+      b.w([-10, -5], [-8, -5]);
+      b.el('rccb', 0, -6, { in: 63, idn: 0.03 }, 0, true);
+      b.w([-4, -5], [-2, -5]); b.w([-4, -7], [-2, -7]);
+      b.h('acamp', 6, -5);
+      b.w([2, -5], [4, -5]);
+      // L busbar down the left (after the ammeter), N bar down the right
+      b.w([8, -5], [L, -5], [L, 115]);
+      b.w([2, -7], [N, -7], [N, 115]);
+      // ---------------------------------------------------------------- ⑥ final circuits
+      const mcb = (y, p) => { b.h('mcb', 14, y, p); b.w([L, y], [12, y]); };
+      const feed = (y0, y1) => b.w([16, y0], [18, y0], [18, y1]); // MCB → the circuit's own L run
+      const sw = (y, on) => b.h('oneway', 20, y, { on });
+      const load = (y, type, p, from = 22) => { const e = b.h(type, 44, y, p); b.w([from, y], [42, y]); b.w([46, y], [N, y]); return e; };
+      const socket = (y, app, on = true) => {
+        sw(y, on);
+        const e = b.el('socket', 44, y + 2, { app }, 1, true); // L (43, y), N (45, y), E (46, y + 2)
+        b.w([22, y], [43, y]); b.w([45, y], [N, y]);
+        b.cable = cu(1.5); b.w([46, y + 2], [PE, y + 2]); // green earth continuity conductor
+        return e;
+      };
+      const fan = (y, step) => { sw(y, true); b.h('fanregcap', 26, y, { step }); b.w([22, y], [24, y]); return load(y, 'fan', {}, 28); };
+      // Ground floor – lights (B6, 1.5 mm²)
+      b.cable = cu(1.5);
+      mcb(2, { in: 6, curve: 'B' }); feed(2, 25);
+      sw(2, true); load(2, 'ledbulb', { w: 15 });
+      sw(6, true); load(6, 'cfl', { w: 20 });
+      sw(10, true); load(10, 'ledbulb', { w: 18 });
+      b.el('photocell', 21, 15, { lux: 5 }); // dusk-to-dawn: it is night (5 lx)
+      b.w([18, 14], [19, 14]); load(14, 'ledbulb', { w: 12 }, 23);
+      b.w([19, 16], [19, 17], [N, 17]); // the photocell's own supply (N), clear of its body
+      b.h('twoway', 20, 20); b.el('twoway', 26, 20, {}, 2);
+      b.w([22, 19], [24, 19]); b.w([22, 21], [24, 21]);
+      load(20, 'bulb', { w: 40 }, 28);
+      b.h('pushno', 20, 25); load(25, 'bell');
+      // Ground floor – fans (B6)
+      mcb(30, { in: 6, curve: 'B' }); feed(30, 34);
+      fan(30, 4); fan(34, 3);
+      // Ground floor – sockets (C16, 2.5 mm²)
+      b.cable = cu(2.5);
+      mcb(39, { in: 16, curve: 'C' }); feed(39, 45);
+      socket(39, 'tv'); b.cable = cu(2.5); socket(45, 'fridge');
+      // Kitchen power (C20, 4 mm²)
+      b.cable = cu(4);
+      mcb(51, { in: 20, curve: 'C' }); feed(51, 57);
+      socket(51, 'ricecooker'); b.cable = cu(4); socket(57, 'microwave', false);
+      // Water pump (C16, 2.5 mm²)
+      b.cable = cu(2.5);
+      mcb(63, { in: 16, curve: 'C' }); b.w([16, 63], [18, 63]);
+      socket(63, 'motor', false);
+      // First floor – lights (B6)
+      b.cable = cu(1.5);
+      mcb(69, { in: 6, curve: 'B' }); feed(69, 82);
+      sw(69, true); load(69, 'ledbulb', { w: 12 });
+      sw(73, false); load(73, 'ledbulb', { w: 12 });
+      sw(77, true); load(77, 'ledbulb', { w: 9 });
+      // corridor lamp from three places: 2-way – intermediate – 2-way
+      b.h('twoway', 20, 82); b.h('intermediate', 26, 82); b.el('twoway', 32, 82, {}, 2);
+      b.w([22, 81], [24, 81]); b.w([22, 83], [24, 83]); b.w([28, 81], [30, 81]); b.w([28, 83], [30, 83]);
+      load(82, 'bulb', { w: 60 }, 34);
+      // First floor – fans (B6)
+      mcb(88, { in: 6, curve: 'B' }); feed(88, 92);
+      fan(88, 5); fan(92, 2);
+      // First floor – sockets (C16, 2.5 mm²)
+      b.cable = cu(2.5);
+      mcb(97, { in: 16, curve: 'C' }); feed(97, 103);
+      socket(97, 'computer'); b.cable = cu(2.5); socket(103, 'iron', false);
+      // Geyser (C20, 4 mm²), switched off
+      b.cable = cu(4);
+      mcb(109, { in: 20, curve: 'C' }); b.w([16, 109], [18, 109]);
+      sw(109, false); load(109, 'heater', { w: 2000 });
+      // Air conditioner (C20, 4 mm²) on its own earthed socket, switched off
+      mcb(114, { in: 20, curve: 'C' }); b.w([16, 114], [18, 114]);
+      socket(114, 'ac', false);
+      // ---------------------------------------------------------------- ⑦ earthing
+      b.cable = cu(6);
+      b.w([PE, 41], [PE, 122]);
+      b.w([PE, 122], [48, 122], [48, 124]); b.w([PE, 122], [60, 122], [60, 124]);
+      b.el('earthrod', 48, 124, { r: 5 }); b.el('earthrod', 60, 124, { r: 5 });
+      b.cable = null;
+      // ---------------------------------------------------------------- labels
+      [[-30, -10.5, '① Service main'], [-24, -10.5, 'Service drop'], [-18, -9.5, '② Cut-out'], [-12, -10.5, '③ Energy meter'], [-6, -10.5, '④ Main switch'], [0, -10.5, '⑤ RCCB 30 mA'], [6, -9.5, 'Total']]
+        .forEach(([x, y, t]) => b.label(x, y, t, 10));
+      b.label(-24, -2.2, '2×16 mm² Al, 25 m', 9);
+      b.label(-18, -7.9, 'N link', 9);
+      b.label(-30, -1.8, 'Pole transformer', 9);
+      b.label(30, -2.5, '⑥ Distribution board: L bar → MCBs → loads → N bar', 10);
+      [[0, 'GROUND FLOOR · lights (B6)'], [28, 'GROUND FLOOR · fans (B6)'], [36.6, 'GROUND FLOOR · sockets (C16)'], [48.6, 'Kitchen (C20)'], [60.6, 'Water pump (C16)'],
+        [66.6, 'FIRST FLOOR · lights (B6)'], [86, 'FIRST FLOOR · fans (B6)'], [94.6, 'FIRST FLOOR · sockets (C16)'], [106.6, 'Geyser (C20)'], [111.6, 'Air conditioner (C20)']]
+        .forEach(([y, t]) => b.label(32, y, t, 10));
+      [[2, 'Drawing room'], [6, 'Dining'], [10, 'Kitchen'], [14, 'Verandah'], [20, 'Staircase'], [25, 'Calling bell'], [30, 'Drawing fan'], [34, 'Dining fan'],
+        [39, 'TV'], [45, 'Fridge'], [51, 'Rice cooker'], [57, 'Microwave'], [63, 'Pump'], [69, 'Bedroom 1'], [73, 'Bedroom 2'], [77, 'Bathroom'], [82, 'Corridor'],
+        [88, 'Bed 1 fan'], [92, 'Bed 2 fan'], [97, 'Study PC'], [103, 'Iron'], [109, 'Geyser 2 kW'], [114, 'AC 1.5 ton']]
+        .forEach(([y, t]) => b.label(4, y, t, 10));
+      b.label(20, 22.6, 'GF', 9); b.label(26, 22.6, '1F', 9);
+      b.label(PE + 4, 40, 'Earth bar', 10);
+      b.label(54, 128, '⑦ Earth electrodes (2 pits, ≈5 Ω each)', 10);
+      b.doc.simSettings.speed = 0.1;
+    },
+  },
+  {
     id: 'flat', cat: 'Projects', title: 'Complete house wiring (2-room flat)',
     desc: 'A whole flat as a ladder diagram. Incomer: energy meter → double-pole main switch → 30 mA RCCB. The L bus feeds one MCB per circuit and every load returns to the N bus: lights (bedroom and drawing-room lamps, a staircase lamp on two 2-way switches, calling bell), fan with regulator, 2 kW geyser and two earthed sockets. Tap switches to watch the total current and kWh change; set a socket to "Faulty appliance" to trip the RCCB or to "Short circuit" to trip its MCB. Every wire is a real cable sized like a real installation: 10 mm² meter tails and buses, 1.5 mm² lights and fan, 4 mm² geyser, 2.5 mm² sockets (tap a wire → Cable to see or change it).',
     build(b) {

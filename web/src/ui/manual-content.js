@@ -46,11 +46,11 @@ export const CHAPTERS = [
         'Build analog, digital and mixed circuits on an unlimited canvas.',
         'Pick from **520 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
         'Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.',
-        'Tap switches and push buttons while the circuit is running, and turn a knob to change any value live.',
+        'Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.',
         'Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).',
         'Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.',
         'Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.',
-        'Learn from **100 ready-made examples**, including 7 big build-along **projects** (complete house wiring, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
+        'Learn from **101 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
         'Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).',
       ]),
       H('Who it is for'),
@@ -162,10 +162,22 @@ export const CHAPTERS = [
         'Leave full screen with the top button of the rail or the phone\'s **Back** button.',
         'Settings → *Landscape & full screen*: lock the **screen rotation** (auto, always landscape or always portrait) and choose whether the **scope sits beside the circuit** in landscape.',
       ]),
+      H('Operate and Wire mode'),
+      P('As in RaptiAuto, the board has two modes. The switch at the top right of the board shows which one is on and changes it with one tap; it stays there in full screen too.'),
+      T(['Mode', 'What a finger does'], [
+        ['Wire (amber)', 'Tap two terminals to draw a wire, drag a part to move it, tap a part to select it. Switches are **not** flipped, so you can edit a running circuit without changing it. This is the mode while the circuit is not running.'],
+        ['✋ Operate (green)', 'Tap switches, push buttons, breakers, keypads and sensors to work them (hold a push button down). Dragging only **pans** the board, so nothing gets moved or wired by accident. Tap any other part to see its readings.'],
+      ]),
+      L([
+        'Pressing **Run** (or Resume) switches to **Operate** by itself; **Pause** goes back to **Wire**.',
+        'Pick either mode by hand at any time: **Wire** while it runs to edit, or **✋ Operate** before Run to set the switches first.',
+        'A long press on a part opens its properties in both modes. With a keyboard: **O** = Operate, **W** = Wire.',
+      ]),
       H('The board'),
       L([
         'The big area with the grid is your **canvas**. It is unlimited: pan and zoom freely.',
         'The round **+** button (bottom right) adds a component.',
+        'The **✋ Operate | Wire** switch at the top right of the board picks what a finger does ({{ch:editor}}, *Operate and Wire mode*).',
         'The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed ({{ch:running}}). It says **CPU-limited** when the phone cannot keep up.',
         'A red or yellow bar appears at the top when the circuit has a problem ({{ch:troubleshooting}}).',
         'When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.',
@@ -651,7 +663,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 16 (examples: generated)
   {
     id: 'examples', icon: 'book', generated: 'examples',
-    title: 'Examples (all 100)',
+    title: 'Examples (all 101)',
     blocks: [
       P('Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.'),
     ],

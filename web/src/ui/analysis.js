@@ -231,7 +231,7 @@ export class Analysis {
     if (!el || !key) return this.ed.toast('Choose a component and parameter');
     if (!probes.length) return this.ed.toast('Select at least one scope probe to measure');
     if (!Number.isFinite(from) || !Number.isFinite(to)) return this.ed.toast('Check the sweep range');
-    const wasRunning = this.ed.running;
+    const wasRunning = this.ed.running, wasMode = this.ed.mode;
     if (wasRunning) this.ed.setRunning(false);
     this.ed.rebuildNow();
     const sim = this.ed.sim;
@@ -244,7 +244,7 @@ export class Analysis {
     this.last = { kind: 'dc', series, xlabel: `${el.name} ${pdef.label}`, xunit: pdef.unit || '', ms: performance.now() - t0 };
     this.plotXY(this.last);
     this.ed.rebuildNow(true);
-    if (wasRunning) this.ed.setRunning(true);
+    if (wasRunning) { this.ed.setRunning(true); this.ed.setMode(wasMode); } // keep the board mode the user had
   }
 
   plotXY(data) {
@@ -329,7 +329,7 @@ export class Analysis {
   // ------------------------------------------------------- shared helpers
   /** run a fresh transient from t = 0 and record probes; restores the editor afterwards */
   transient(tEnd, dt, probes, keep = () => true, each) {
-    const ed = this.ed, wasRunning = ed.running;
+    const ed = this.ed, wasRunning = ed.running, wasMode = ed.mode;
     if (wasRunning) ed.setRunning(false);
     ed.rebuildNow(true);
     const sim = ed.sim;
@@ -344,7 +344,7 @@ export class Analysis {
       }
     }
     ed.rebuildNow(true);
-    if (wasRunning) ed.setRunning(true);
+    if (wasRunning) { ed.setRunning(true); ed.setMode(wasMode); } // keep the board mode the user had
     return out;
   }
 
@@ -567,7 +567,7 @@ export class Analysis {
     if (!parts.length) return ed.toast('No resistors, capacitors or inductors to vary');
     const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
     const dev = () => (dist === 'u' ? 2 * Math.random() - 1 : dist === 'w' ? (Math.random() < 0.5 ? -1 : 1) : Math.max(-1, Math.min(1, gauss() / 3)));
-    const wasRunning = ed.running;
+    const wasRunning = ed.running, wasMode = ed.mode;
     if (wasRunning) ed.setRunning(false);
     const vals = [], t0 = performance.now();
     const solve = () => { ed.rebuildNow(true); const sim = ed.sim; sim.opt.initialDC = true; return sim.start() ? ed.probeValue(probe, sim) : NaN; };
@@ -584,7 +584,7 @@ export class Analysis {
     } finally {
       for (const q of parts) { q.e.p[q.k] = q.v; q.e.onParamChange(q.k); }
       ed.rebuildNow(true);
-      if (wasRunning) ed.setRunning(true);
+      if (wasRunning) { ed.setRunning(true); ed.setMode(wasMode); } // keep the board mode the user had
     }
     if (!vals.length) return ed.toast('No run converged');
     this.plotMC(this.last);

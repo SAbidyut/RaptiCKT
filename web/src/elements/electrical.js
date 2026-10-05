@@ -466,6 +466,12 @@ const APPLIANCES = {
   heater: { name: 'Heater 1 kW', w: 1000, pf: 1 },
   iron: { name: 'Iron 1.2 kW', w: 1200, pf: 1 },
   motor: { name: 'Pump motor 750 W (PF 0.8)', w: 750, pf: 0.8 },
+  fridge: { name: 'Refrigerator 150 W (PF 0.8)', w: 150, pf: 0.8 },
+  computer: { name: 'Computer 200 W (PF 0.95)', w: 200, pf: 0.95 },
+  washer: { name: 'Washing machine 500 W (PF 0.85)', w: 500, pf: 0.85 },
+  ricecooker: { name: 'Rice cooker 700 W', w: 700, pf: 1 },
+  microwave: { name: 'Microwave oven 1.2 kW (PF 0.95)', w: 1200, pf: 0.95 },
+  ac: { name: 'Air conditioner 1.5 ton, 1.5 kW (PF 0.9)', w: 1500, pf: 0.9 },
   fault: { name: 'Faulty appliance: 30 W + 50 mA L–E leak', w: 30, pf: 1, leak: 0.05 },
   short: { name: 'Short circuit L–N', short: true },
 };

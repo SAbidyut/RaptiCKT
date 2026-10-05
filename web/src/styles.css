@@ -866,3 +866,29 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 
 .selbar { max-width: calc(100vw - 20px); overflow-x: auto; scrollbar-width: none; }
 .selbar::-webkit-scrollbar { display: none; }
+
+/* Operate / Wire board mode (as in RaptiAuto): top right of the board, always within reach */
+.mode-seg { position: absolute; right: 10px; top: 10px; z-index: 5; display: flex; gap: 2px; padding: 3px; border-radius: 13px;
+  background: var(--glass); border: 1px solid var(--border2); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.mseg { display: flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px; border-radius: 10px; color: var(--muted); font-size: 12.5px; font-weight: 700; transition: background 0.15s, color 0.15s, transform 0.1s; }
+.mseg:active { transform: scale(0.94); }
+.mseg.active { background: var(--surface3); color: var(--text); box-shadow: inset 0 0 0 1px var(--border2); }
+.editor.mode-operate .mseg.active { color: #4ade80; background: rgba(34, 197, 94, 0.16); box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.35); }
+.editor.mode-wire .mseg.active { color: #fbbf24; background: rgba(245, 158, 11, 0.15); box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.35); }
+:root[data-theme=light] .editor.mode-operate .mseg.active { color: #15803d; }
+:root[data-theme=light] .editor.mode-wire .mseg.active { color: #b45309; }
+.editor.fs .mode-seg { right: calc(8px + var(--cut-r)); top: calc(8px + var(--stage-t)); }
+.editor.wide .mode-seg { top: 8px; }
+.editor.sheet-open.wide .mode-seg { opacity: 0; pointer-events: none; }
+/* the time chip gives way to the mode switch: it is cut short (…) instead of running under it */
+.hud-status { max-width: calc(100% - 222px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.editor.fs .hud-status { max-width: calc(100% - 288px - var(--cut-l) - var(--cut-r)); }
+@media (max-width: 400px) {
+  .hud-status { max-width: calc(100% - 116px); }
+  .editor.fs .hud-status { max-width: calc(100% - 172px - var(--cut-l) - var(--cut-r)); }
+  .mseg { padding: 0 9px; }
+  .mseg span { display: none; } /* icons only on narrow phones: the time chip keeps its room */
+}
+/* the selection bar sits under the time chip / mode row instead of covering it */
+.editor .selbar { top: 52px; }
+.editor.fs .selbar { top: calc(50px + var(--stage-t)); }

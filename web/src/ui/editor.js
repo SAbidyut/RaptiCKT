@@ -51,6 +51,9 @@ export class Editor {
     this.last = performance.now();
     this.loop = this.loop.bind(this);
     window.addEventListener('resize', () => this.onResize());
+    // the board follows its own size (bars hiding in full screen, the scope opening, Android's
+    // system bars going away) the moment layout changes, before the frame is painted
+    if (window.ResizeObserver) new ResizeObserver(() => { if (this.app.current === 'editor') this.onResize(); }).observe(this.canvas);
     this.updateLayout();
   }
 
@@ -103,6 +106,10 @@ export class Editor {
         </div>
         <button class="fs-handle" data-a="fsui" title="Show the tools">${icon('menu', 20)}</button>
         <button class="hud-status" data-a="speed"></button>
+        <div class="mode-seg" role="radiogroup" aria-label="Board mode">
+          <button class="mseg" data-a="mode-operate" data-mode="operate" role="radio" title="Operate: tap switches and buttons">${icon('hand', 16)}<span>Operate</span></button>
+          <button class="mseg" data-a="mode-wire" data-mode="wire" role="radio" title="Wire: draw wires, move and edit parts">${icon('wire', 16)}<span>Wire</span></button>
+        </div>
         <div class="hud-error"></div>
         <div class="hint"></div>
         <div class="selbar"></div>
@@ -148,6 +155,8 @@ export class Editor {
       case 'fsui': this.showFsTools(!this.fsTools); break;
       case 'add': this.palette.open(); break;
       case 'speed': this.openSpeed(); break;
+      case 'mode-operate': this.setMode('operate', true); break;
+      case 'mode-wire': this.setMode('wire', true); break;
       default:
     }
   }
@@ -162,6 +171,7 @@ export class Editor {
     this.running = false; this.paused = false;
     this.meterProbes = null;
     this.wireFrom = null;
+    this.setMode('wire');
     this.renderer.maxDpr = undefined;
     this.q('.doc-name').textContent = doc.name;
     this.q('.doc-sub').textContent = doc.description ? doc.description.slice(0, 60) : `${doc.elements.length} components`;
@@ -172,8 +182,10 @@ export class Editor {
     for (const p of this.doc.probes) if (!p.label) this.labelProbe(p);
     this.scope.setProbes(this.doc.probes);
     this.toggleScope(this.doc.probes.length > 0);
+    this.boardRect = null; // a new circuit: nothing on the screen to hold still
     this.onResize();
     this.fit();
+    this.noGlideUntil = performance.now() + 400; // the scope opening right after fits without a glide
     this.updateToolbar();
     this.updateHint();
     if (autoRun && doc.elements.length) this.setRunning(true);
@@ -194,8 +206,44 @@ export class Editor {
 
   onResize() {
     this.updateLayout();
-    this.renderer.resize();
+    const R = this.renderer, prev = this.boardRect;
+    const cleared = R.resize();
+    const r = this.canvas.getBoundingClientRect();
+    this.boardRect = { left: r.left, top: r.top, width: r.width, height: r.height };
+    if (prev && prev.width > 0 && r.width > 0 && (prev.left !== r.left || prev.top !== r.top || prev.width !== r.width || prev.height !== r.height)) {
+      // The board changed size (full screen in / out, the scope, the system bars): first hold the
+      // circuit exactly where it is on the screen, then glide it so the middle stays in the middle.
+      // Without this it jumped by the height of the bars in one frame.
+      const g = this.glide;
+      const tx = (g ? g.tx : R.ox) + (r.width - prev.width) / 2, ty = (g ? g.ty : R.oy) + (r.height - prev.height) / 2;
+      const fx = R.ox + prev.left - r.left, fy = R.oy + prev.top - r.top;
+      const now = performance.now();
+      this.glide = this.active && now >= (this.noGlideUntil || 0) ? { fx, fy, tx, ty, t0: now } : null;
+      R.ox = this.glide ? fx : tx; R.oy = this.glide ? fy : ty;
+    }
     this.scope.resize();
+    this.dirtyDraw = true;
+    // a resized canvas is blank: draw it again now so no empty frame is ever shown
+    if (cleared && this.active && this.sim && this.graph) this.renderer.draw(this.drawState());
+    if (this.scopeOpen) this.scope.draw();
+  }
+
+  /** Step the post-resize glide (see onResize). */
+  stepGlide(now) {
+    const g = this.glide, R = this.renderer;
+    if (!g) return;
+    const k = Math.min(1, Math.max(0, now - g.t0) / 300), e = 1 - Math.pow(1 - k, 3);
+    R.ox = g.fx + (g.tx - g.fx) * e; R.oy = g.fy + (g.ty - g.fy) * e;
+    this.dirtyDraw = true;
+    if (k >= 1) this.glide = null;
+  }
+
+  /** Something else takes over the view (a finger, a zoom, Fit): put the glide at its end. */
+  endGlide() {
+    const g = this.glide;
+    if (!g) return;
+    this.renderer.ox = g.tx; this.renderer.oy = g.ty;
+    this.glide = null;
     this.dirtyDraw = true;
   }
 
@@ -217,13 +265,13 @@ export class Editor {
     this.fullscreen = !!on;
     this.root.classList.toggle('fs', this.fullscreen);
     this.showFsTools(this.fullscreen, 2600); // shown at first, then out of the way
+    // re-lay the board out in this same frame (the bars just appeared / went), so the circuit
+    // never shows a frame at the old place; later changes (Android's own system bars sliding
+    // away) reach onResize through the ResizeObserver
+    this.onResize();
     this.app.bridge.setImmersive(this.fullscreen);
     this.haptic(8);
     this.updateToolbar();
-    const relayout = () => { this.onResize(); if (this.scopeOpen) this.scope.draw(); };
-    requestAnimationFrame(relayout);
-    setTimeout(relayout, 120);
-    setTimeout(relayout, 450); // after the system bars have gone
     if (this.fullscreen && !store.flag('fsTip2')) { store.setFlag('fsTip2'); this.toast('Full screen: tap ☰ at the top left for the tools · Back exits'); }
   }
 
@@ -240,6 +288,7 @@ export class Editor {
   }
 
   fit() {
+    this.glide = null;
     const top = 0;
     const bottom = 80;
     this.renderer.fit(this.doc.bounds(), 50, top, bottom);
@@ -461,6 +510,7 @@ export class Editor {
       this.showError();
       this.app.bridge.keepScreenOn(true);
       this.ensureAudio();
+      this.setMode('operate');
     } else {
       this.running = false;
       this.paused = false;
@@ -468,6 +518,7 @@ export class Editor {
       this.stopSound();
       for (const e of this.doc.elements) { e.postCurrents.fill?.(0); e.i = 0; }
       this.showError();
+      this.setMode('wire');
     }
     this.updateToolbar();
     this.inspector.updateReadings();
@@ -479,6 +530,7 @@ export class Editor {
     if (!this.running) { if (!this.doc.elements.length) { this.toast('Add some components first'); return; } this.setRunning(true); return; }
     this.paused = !this.paused;
     if (!this.paused && this.sim.fatal) this.setRunning(true);
+    this.setMode(this.paused ? 'wire' : 'operate'); // Run → Operate, Pause → back to Wire
     this.updateToolbar();
   }
 
@@ -548,6 +600,7 @@ export class Editor {
     const dtReal = Math.min(0.05, Math.max(0, (ts - this.last) / 1000));
     this.adaptResolution(ts - this.last);
     this.last = ts;
+    this.stepGlide(ts);
     if (this.needRebuild && !this.drag) this.rebuildNow();
     let frac = 1;
     const live = this.running && this.sim && this.sim.ready;
@@ -745,6 +798,30 @@ export class Editor {
     }
     return [...w.pts[0]];
   }
+
+  /**
+   * Board mode, as in RaptiAuto. Wire (the default while the circuit is not running): tap two
+   * terminals to draw a wire, drag parts to move them, tap to select. Operate (switched on by Run):
+   * tap switches, buttons and breakers to work them; dragging only pans, so nothing gets moved or
+   * wired by accident. Either one can be picked at any time with the switch on the board.
+   */
+  setMode(m, byUser) {
+    const changed = m !== this.mode;
+    this.mode = m;
+    this.root.classList.toggle('mode-operate', m === 'operate');
+    this.root.classList.toggle('mode-wire', m === 'wire');
+    this.root.querySelectorAll('.mseg').forEach((b) => { const on = b.dataset.mode === m; b.classList.toggle('active', on); b.setAttribute('aria-checked', on); });
+    if (m === 'operate') this.cancelTapWire();
+    if (!changed) return;
+    this.dirtyDraw = true;
+    if (byUser) {
+      this.haptic(8);
+      this.toast(m === 'operate' ? '✋ Operate: tap switches and buttons · drag to pan' : '🔌 Wire: tap two terminals to wire · drag parts to move them', 1800);
+    }
+  }
+
+  /** Has this part something to work with a finger (a switch, button, breaker reset…)? */
+  operable(e) { return !!e && (e.onTap !== Element.prototype.onTap || e.onPress !== Element.prototype.onPress); }
 
   setMulti(on) {
     const changed = on !== this.multi;
@@ -1480,6 +1557,7 @@ export class Editor {
     cv.addEventListener('pointercancel', (e) => this.onUp(e, true));
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
+      this.endGlide();
       const r = cv.getBoundingClientRect();
       this.renderer.zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
       this.dirtyDraw = true;
@@ -1489,6 +1567,8 @@ export class Editor {
       if (!this.active || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
       if (e.key === 'Delete' || e.key === 'Backspace') this.deleteSelection();
       else if (e.key === 'r') this.rotateSelection();
+      else if (e.key === 'o') this.setMode('operate', true);
+      else if (e.key === 'w') this.setMode('wire', true);
       else if (e.key === ' ') { e.preventDefault(); this.togglePlay(); }
       else if ((e.ctrlKey || e.metaKey) && e.key === 'z') this.undo();
       else if ((e.ctrlKey || e.metaKey) && e.key === 'y') this.redo();
@@ -1553,6 +1633,7 @@ export class Editor {
     this.pointers.set(ev.pointerId, [sx, sy]);
     this.q('.speed-pop').classList.remove('open');
     this.zoomAnim = (this.zoomAnim || 0) + 1; // a finger on the board stops a double-tap zoom in flight
+    this.endGlide();
     if (this.fsTools) this.showFsTools(false);
     if (this.pointers.size === 2) {
       this.cancelGesture();
@@ -1562,7 +1643,9 @@ export class Editor {
       return;
     }
     if (this.pointers.size > 2) return;
-    const hit = this.hitTest(sx, sy);
+    let hit = this.hitTest(sx, sy);
+    // Operate: no wiring, so a finger near a part's terminal means the part itself
+    if (this.mode === 'operate' && hit.kind === 'post' && hit.el) hit = { kind: 'element', el: hit.el };
     // Google Maps one-finger zoom: a second tap on the board that stays down, then slide
     const lt = this.lastTap, t0 = performance.now();
     if (lt && t0 - lt.t < 320 && Math.hypot(sx - lt.sx, sy - lt.sy) < 44 && (hit.kind === 'none' || hit.kind === 'wire')) {
@@ -1571,7 +1654,7 @@ export class Editor {
       return;
     }
     this.gesture = { type: 'pending', hit, sx, sy, w: this.renderer.toWorld(sx, sy), t0 };
-    if (hit.kind === 'element' && hit.el.onPress && !this.multi) {
+    if (hit.kind === 'element' && hit.el.onPress && !this.multi && this.mode === 'operate') {
       if (hit.el.onPress()) { this.gesture.pressed = hit.el; this.pressChanged(hit.el); }
     }
     clearTimeout(this.lpT);
@@ -1670,6 +1753,12 @@ export class Editor {
     this.drag = true;
     if (h.kind !== 'none') this.cancelTapWire(); // panning keeps a pending tap-wire; other drags replace it
     if (h.kind === 'pin') { g.type = 'pin'; return; }
+    if (this.mode === 'operate') { // nothing is moved while operating: the finger pans the board
+      g.type = this.multi && h.kind === 'none' ? 'marquee' : 'pan';
+      if (g.type === 'marquee') this.marquee = [g.sx, g.sy, g.sx, g.sy];
+      g.ox = this.renderer.ox; g.oy = this.renderer.oy;
+      return;
+    }
     // wires are drawn by tapping two terminals; dragging a terminal moves its part, dragging a wire pans
     if (h.kind === 'post' && h.el) { h.kind = 'element'; }
     if (h.kind === 'element' || (h.kind === 'wire' && this.multi)) {
@@ -1829,12 +1918,17 @@ export class Editor {
     const h = g.hit;
     this.lastTapWorld = g.w;
     // EveryCircuit-style wiring: tap a terminal, then tap another terminal (or a wire) to connect them
+    const operate = this.mode === 'operate';
     if (!this.multi && this.wireFrom) { this.finishTapWire(h, g.w); return; }
-    if (!this.multi && h.kind === 'post') { this.startTapWire(h.pos); return; }
+    if (!this.multi && h.kind === 'post' && !operate) { this.startTapWire(h.pos); return; }
     if (h.kind === 'element') {
       const e = h.el;
       if (this.multi) { this.select(e, { add: true }); return; }
-      if (!g.pressed && e.onTap && e.onTap()) { this.pressChanged(e); this.checkpointQuiet(); }
+      if (operate) {
+        // work the switch / button; it stays unselected so the circuit is not covered by bars
+        if (g.pressed) return;
+        if (e.onTap && e.onTap()) { this.pressChanged(e); this.checkpointQuiet(); if (this.selected() === e) this.inspector.updateReadings(); return; }
+      } else if (this.operable(e)) this.modeHint();
       if (this.selected() !== e) this.select(e);
       else this.inspector.updateReadings();
       return;
@@ -1850,6 +1944,14 @@ export class Editor {
   }
 
   checkpointQuiet() { this.scheduleAutosave(); }
+
+  /** A switch tapped in Wire mode: say once in a while how to work it. */
+  modeHint() {
+    const now = performance.now();
+    if (now - (this.modeHintT || -1e9) < 8000) return;
+    this.modeHintT = now;
+    this.toast('Wire mode: tap ✋ Operate (top right) to flip switches · Run turns it on', 2600);
+  }
 
   /** First tap of a tap-tap wire: remember the terminal and mark it on the board. */
   startTapWire(pos) {
