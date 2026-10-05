@@ -300,8 +300,10 @@ export class Regulator extends Element {
   branchCount() { return 1; }
   labelSide() { return [0, -1]; }
   valueLabel() { return this.adj ? '' : fmtShort(this.p.vout, 'V'); }
-  vset() { return this.adj ? 1.25 : this.p.vout; }
-  reset() { this.postCurrents = [0, 0, 0]; this.ioIter = 0; this.limiting = false; }
+  vset() { return this.tsd ? 0 : this.adj ? 1.25 : this.p.vout; }
+  reset() { this.postCurrents = [0, 0, 0]; this.ioIter = 0; this.limiting = false; this.tj = 25; this.tsd = false; }
+  /** junction-to-ambient thermal resistance (°C/W) for the chosen heatsink */
+  rth() { return { none: 50, small: 15, large: 5 }[this.p.hs] ?? 50; }
   /** current above the limit, smoothed (softplus): the output droops 50 V per amp of it */
   overload(io) {
     const w = 0.01 + 0.01 * this.p.ilim, u = (io - this.p.ilim) / w;
@@ -346,6 +348,14 @@ export class Regulator extends Element {
     const limiting = 50 * this.overload(io).over > 0.05;
     if (s.mode !== 'dc' && limiting !== !!this.limiting) s.markEvent();
     this.limiting = limiting;
+    if (s.mode === 'dc') return;
+    // thermal protection: the junction heats with (Vin − Vout)·Iout; at 150 °C the regulator
+    // shuts its output off and turns it back on after cooling to 130 °C — it cycles, like a real 78xx
+    const [inp, out] = this.nodes, pd = Math.max(0, (s.v(inp) - s.v(out)) * io);
+    this.tj = (this.tj ?? 25) + (25 + pd * this.rth() - (this.tj ?? 25)) * Math.min(1, s.heatDt() / 20);
+    this.stress = Math.max(0, Math.min(1, (this.tj - 110) / 40));
+    const tsd = this.tsd ? this.tj > 130 : this.tj > 150;
+    if (tsd !== !!this.tsd) { this.tsd = tsd; s.markEvent(); }
   }
   stampAC(ac) {
     const [inp, out, gnd] = this.nodes, k = this.branches[0];
@@ -355,7 +365,8 @@ export class Regulator extends Element {
   }
   readings(s) {
     const [inp, out, gnd] = this.nodes;
-    return [['Vin', s.v(inp) - s.v(gnd), 'V'], ['Vout', s.v(out) - s.v(gnd), 'V'], ['Iout', this.i, 'A'], ['Dissipation', (s.v(inp) - s.v(out)) * this.i, 'W']];
+    return [['Vin', s.v(inp) - s.v(gnd), 'V'], ['Vout', s.v(out) - s.v(gnd), 'V'], ['Iout', this.i, 'A'], ['Dissipation', (s.v(inp) - s.v(out)) * this.i, 'W'],
+      ['Junction temperature', this.tj ?? 25, '°C'], ['State', this.tsd ? 'THERMAL SHUTDOWN — too hot (add a heatsink or lower Vin)' : 'Regulating', '']];
   }
   draw(g) {
     g.box(-1.4 * G, -G, 1.4 * G, G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 4 });

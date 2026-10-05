@@ -351,7 +351,7 @@ export class Editor {
     if (!sim) return;
     const clock = set.heatClock || 'real';
     sim.heatScale = clock === 'sim' ? 1 : Math.max(1, (clock === 'fast' ? 10 : 1) / Math.max(1e-9, this.speed || 1));
-    sim.damageOn = set.damage !== false;
+    sim.damageOn = set.damage !== false && !this.doc.simSettings.noDamage; // a time-compressed demo can opt out
   }
 
   /**

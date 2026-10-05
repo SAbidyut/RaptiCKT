@@ -241,7 +241,7 @@ export class Reg79 extends Regulator {
   stampNL(s) {
     const [inp, out, gnd] = this.nodes, k = this.branches[0];
     const u = s.v(gnd) - s.v(inp), io = -s.x[k];
-    const over = Math.max(0, io - this.p.ilim), vs = this.p.vout - over * 50;
+    const over = Math.max(0, io - this.p.ilim), vs = (this.tsd ? 0 : this.p.vout) - over * 50;
     const m1 = smin(vs, u - this.p.vdo, 0.05), m2 = smin(-m1.y, 0.02, 0.02), y = -m2.y, dyu = m2.da * m1.db;
     const dio = over > 0 ? -50 * m2.da * m1.da : 0; // dy/d(io)
     // row: v_out − v_g + y(u, io) = 0 with u = v_g − v_in and io = −k

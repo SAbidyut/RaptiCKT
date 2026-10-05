@@ -917,3 +917,5 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .mode-seg { transition: top 0.32s cubic-bezier(.32, .72, 0, 1), right 0.32s cubic-bezier(.32, .72, 0, 1); }
 :root.lite .editor .ed-head, :root.lite .editor .fs-rail, :root.lite .editor .fs-handle, :root.lite .editor .fab { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .editor .ed-head, .editor .fs-rail { animation: none !important; } }
+.insp-rate { margin: 6px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--border); font-size: 12.5px; line-height: 1.45; color: var(--text2); }
+.insp-rate b { display: block; color: var(--accent); font-size: 12px; margin-bottom: 2px; }

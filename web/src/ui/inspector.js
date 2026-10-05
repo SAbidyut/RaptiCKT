@@ -134,6 +134,7 @@ export class Inspector {
           ${props.map((p) => this.propRow(p)).join('')}
           ${this.faultRows()}
           <p class="insp-desc">${esc(C.description || '')}</p>
+          ${(() => { const t = e.ratingText ? e.ratingText() : ''; return t ? `<p class="insp-rate"><b>Real-life ratings</b> ${esc(t)}. Go beyond them and it is destroyed, like the real part.</p>` : ''; })()}
         </div>
       </div>`;
     this.host.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this.action(b.dataset.a)));
@@ -270,6 +271,8 @@ export class Inspector {
     const live = this.ed.running && sim && sim.ready;
     let r = [];
     if (live) { try { r = this.el.readings(sim); } catch { r = []; } }
+    // how close a rated part is to failing (its wear or temperature towards the limit)
+    if (live && !this.el.damaged && (this.el.stress || 0) > 0.02) r = [...r, ['Stress (towards failure)', Math.min(100, this.el.stress * 100), '%']];
     const fmt = ([, v, u]) => (typeof v !== 'number' ? String(v) : isPlainUnit(u) ? fmtQty(v, u) : fmtSI(v, u, 4));
     // quick bar: value label + first two readings, updated via textContent (no relayout of the bar)
     const q = this.quick.querySelector('.qb-read');
@@ -359,7 +362,7 @@ export class Inspector {
             <button data-a="setdef">${icon('check', 18)}<span>Make default</span></button>
             <button data-a="delwire" class="danger">${icon('trash', 18)}<span>Delete</span></button>
           </div>
-          <p class="insp-desc">Every drawn wire can be given a real cable. It has no resistance in the schematic, but it heats with the current through it: above its rating Iz it overheats (orange glow), far above it the insulation smokes, catches fire and the wire burns through — the circuit opens. Fit an MCB or fuse no bigger than the cable's Iz to protect it. RE = solid round, RM = stranded round, SM = stranded sector-shaped, RF = flexible. For voltage drop over a real length use the Cable parts (Wires & Cables).</p>
+          <p class="insp-desc">Every drawn wire can be given a real cable. It has no resistance in the schematic, but it heats with the current through it: above its rating Iz it overheats (orange glow), far above it the insulation smokes, catches fire and the wire burns through — the circuit opens. Fit an MCB or fuse no bigger than the cable's Iz to protect it. RE = solid round, RM = stranded round, SM = stranded sector-shaped, RF = flexible. For voltage drop over a real length use the Cable parts (Power Systems → Cable).</p>
         </div>
       </div>`;
     this.host.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this.wireAction(b.dataset.a)));
