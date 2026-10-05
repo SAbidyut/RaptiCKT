@@ -84,6 +84,21 @@ check(!s.paused && s.mode === 'operate', 'Resume → Operate');
 await page.evaluate(() => window.app.editor.setFullscreen(true)); await page.waitForTimeout(500);
 const vis = await page.evaluate(() => { const r = document.querySelector('.mode-seg').getBoundingClientRect(); return r.width > 40 && r.top >= 0 && r.right <= innerWidth; });
 check(vis, 'the mode switch is on screen in full screen');
+// a selected wire's bar never covers the ☰ handle or the mode switch, and once hidden it is fully gone
+const clash = () => page.evaluate(() => {
+  const r = (s) => document.querySelector('.editor ' + s).getBoundingClientRect();
+  const hit = (a, b) => a.width && b.width && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const sb = r('.selbar');
+  return { over: hit(sb, r('.mode-seg')) || hit(sb, r('.fs-handle')) || hit(sb, r('.hud-status')), out: sb.left < 0 || sb.right > innerWidth, vis: getComputedStyle(document.querySelector('.editor .selbar')).visibility };
+});
+for (const fsOn of [true, false]) {
+  await page.evaluate((on) => { const ed = window.app.editor; ed.setFullscreen(on); ed.selectWire(ed.doc.wires[0]); }, fsOn); await page.waitForTimeout(500);
+  let c = await clash();
+  check(!c.over && !c.out && c.vis === 'visible', `${fsOn ? 'full screen' : 'normal'}: the wire bar stays clear of the top controls ${JSON.stringify(c)}`);
+  await page.evaluate(() => window.app.editor.select(null)); await page.waitForTimeout(500);
+  c = await clash();
+  check(c.vis === 'hidden', `${fsOn ? 'full screen' : 'normal'}: the hidden wire bar leaves nothing on screen`);
+}
 await page.evaluate(() => window.app.editor.setFullscreen(false));
 check(!errs.length, `no page errors ${errs.join(' | ')}`);
 await browser.close(); server.close();
