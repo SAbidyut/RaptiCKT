@@ -55,19 +55,20 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Power / efficiency table
   - SPICE netlist
 - **Fault simulation**: break a terminal, short two terminals or add leakage to any part from its properties sheet, or place a timed fault to watch protection trip.
-- **Landscape & full screen** (like RaptiAuto): sideways the bars merge into one row, the oscilloscope sits beside the circuit and sheets open as a side panel; **Full** hides every bar (and Android's status and navigation bars) so the board runs edge to edge; the tool rail and + button hide behind a small ☰ handle until you need them. Screen rotation can be locked in Settings.
+- **Landscape & full screen** (like RaptiAuto): sideways the bars merge into one row, the oscilloscope sits beside the circuit and sheets open as a side panel; **Full** hides every bar (and Android's status and navigation bars) so the board runs edge to edge, with the circuit gliding smoothly into place instead of jumping; the tool rail and + button hide behind a small ☰ handle until you need them. Screen rotation can be locked in Settings.
 - **Interaction**:
   - Drag from a terminal to wire, and wires follow moved parts; parts never land on each other or join by touching
-  - Tap switches and buttons live
+  - **✋ Operate / Wire** board modes (like RaptiAuto): Wire while stopped (draw wires, move parts), Operate as soon as you press Run (tap switches and buttons; dragging only pans); switch either way at any time from the top right of the board
   - Rotary knob for any value
   - Pinch to zoom, or one finger like Google Maps: double-tap, hold and slide down (in) or up (out)
   - Undo/redo and multi-select
-- **7 big build-along projects** (first chip in Examples → *Projects*), each explained stage by stage:
+- **8 big build-along projects** (first chip in Examples → *Projects*), each explained stage by stage:
+  - **Complete house wiring: service main to earthing (2-storey house)**: pole transformer → 25 m overhead service drop (2 × 16 mm² Al) → 63 A HRC cut-out and neutral link → energy meter → DP main switch → 30 mA RCCB → distribution board with an ammeter and ten MCBs → ground-floor and first-floor lights (LED, CFL, dusk-to-dawn verandah light, staircase lamp on 2-way switches, corridor lamp from three places with an intermediate switch), calling bell, fans with regulators, TV / fridge / study sockets, kitchen sockets, water pump, 2 kW geyser and a 1.5-ton air conditioner → green earth continuity conductors → earth bar → two earth electrodes. Load it up to ≈35 A, trip the RCCB with a leaking appliance or one MCB with a short.
   - **Complete house wiring (2-room flat)**: energy meter → DP main switch → 30 mA RCCB → one MCB per circuit (lights with one-way and staircase 2-way switches, calling bell, fan with regulator, 2 kW geyser, earthed sockets). Set a socket to *Faulty appliance* to trip the RCCB or *Short circuit* to trip its MCB. Wired with real cables: 10 mm² tails and buses, 1.5 mm² lights, 2.5 mm² sockets, 4 mm² geyser.
   - **16-bit RAM (4 words × 4 bits)**: 16 D-latch memory cells, an address decoder driving the word lines, bit lines from a hex keypad and a read multiplexer per column — write a digit at each address and read it back.
   - **Mains to 5 V regulated power supply**: fuse → transformer → bridge → smoothing capacitor → 7805, with the ripple and the flat 5 V side by side on the scope.
   - **Traffic light controller** (CD4017 + diode-OR logic), **4-bit binary adder** (two hex keypads, sum + carry), **digital seconds counter 00–59** (cascaded BCD counters, mod-60 reset, 7-segment displays) and an **automatic street light** (LDR → transistor → 12 V relay → 230 V lamp).
-- **100 explained examples** in all: also tube light, staircase wiring, house wiring, dimmer, power-factor correction, a DOL motor starter and a 1-bit NOR-latch memory cell, plus
+- **101 explained examples** in all: also tube light, staircase wiring, house wiring, dimmer, power-factor correction, a DOL motor starter and a 1-bit NOR-latch memory cell, plus
   - **Industrial control (ladder diagrams)**, following an industrial control course, each with the power circuit on the left and the control circuit as a ladder diagram on the right: push-button (inching) and self-holding DOL control, HAND-OFF-AUTO selector, emergency stop, thermal overload relay, MPCB, complete motor protection, relay logic (AND/OR/NOT), motor control through a 24 V relay, phase-failure and phase-sequence protection, floatless level relay and sump + overhead tank automation, ON-delay / OFF-delay / twin timers, sequential motor start, an automatic machine cycle (cylinder, timer, counter), jog with push buttons and with a selector, multiple-location start/stop, electrical interlocking, forward/reverse, ATS, limit-switch and automatic forward-reverse control, SSR and sensor load control, production and stroke counters, temperature and pressure control, electro-pneumatic cylinder, star-delta and a complete control panel
   - **Industrial control**: automatic star-delta starter, forward/reverse with interlocks, automatic water pump, conveyor bottle counter, phase-failure protection, 4–20 mA loop, fire-alarm zone
   - **Power electronics**: VFD for an induction motor, H-bridge DC motor control, SPWM sine inverter, flyback converter, SCR bridge with firing unit, BLDC and stepper drives
@@ -78,7 +79,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## User manual
 
-A complete, step-by-step manual is built into the app: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 519 components and 100 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
+A complete, step-by-step manual is built into the app: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 520 components and 101 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
 
 The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md). It is generated from `web/src/ui/manual-content.js` with `cd web && npm run manual`; re-run it after editing the manual. `web/tests/manual-content.test.js` fails if a component, example, setting or menu item is added to the app without being covered by the manual.
 

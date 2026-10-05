@@ -22,7 +22,7 @@ Everything in the app, explained step by step.
 14. [Saving, opening and sharing](#ch-saving)
 15. [Settings reference](#ch-settings)
 16. [Component library (all 520)](#ch-library)
-17. [Examples (all 100)](#ch-examples)
+17. [Examples (all 101)](#ch-examples)
 18. [Quick reference: formulas and units](#ch-formulas)
 19. [Troubleshooting and FAQ](#ch-troubleshooting)
 20. [About RAPTI and contact](#ch-about)
@@ -38,11 +38,11 @@ Everything in the app, explained step by step.
 - Build analog, digital and mixed circuits on an unlimited canvas.
 - Pick from **520 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
 - Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.
-- Tap switches and push buttons while the circuit is running, and turn a knob to change any value live.
+- Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
-- Learn from **100 ready-made examples**, including 7 big build-along **projects** (complete house wiring, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
+- Learn from **101 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
 
 #### Who it is for
@@ -167,10 +167,24 @@ The editor is where you build and run circuits. From top to bottom:
 - Leave full screen with the top button of the rail or the phone's **Back** button.
 - Settings → *Landscape & full screen*: lock the **screen rotation** (auto, always landscape or always portrait) and choose whether the **scope sits beside the circuit** in landscape.
 
+#### Operate and Wire mode
+
+As in RaptiAuto, the board has two modes. The switch at the top right of the board shows which one is on and changes it with one tap; it stays there in full screen too.
+
+| Mode | What a finger does |
+| --- | --- |
+| Wire (amber) | Tap two terminals to draw a wire, drag a part to move it, tap a part to select it. Switches are **not** flipped, so you can edit a running circuit without changing it. This is the mode while the circuit is not running. |
+| ✋ Operate (green) | Tap switches, push buttons, breakers, keypads and sensors to work them (hold a push button down). Dragging only **pans** the board, so nothing gets moved or wired by accident. Tap any other part to see its readings. |
+
+- Pressing **Run** (or Resume) switches to **Operate** by itself; **Pause** goes back to **Wire**.
+- Pick either mode by hand at any time: **Wire** while it runs to edit, or **✋ Operate** before Run to set the switches first.
+- A long press on a part opens its properties in both modes. With a keyboard: **O** = Operate, **W** = Wire.
+
 #### The board
 
 - The big area with the grid is your **canvas**. It is unlimited: pan and zoom freely.
 - The round **+** button (bottom right) adds a component.
+- The **✋ Operate | Wire** switch at the top right of the board picks what a finger does (chapter 4, *Operate and Wire mode*).
 - The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). It says **CPU-limited** when the phone cannot keep up.
 - A red or yellow bar appears at the top when the circuit has a problem (chapter 19).
 - When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.
@@ -1377,7 +1391,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="ch-examples"></a>
 
-## 17. Examples (all 100)
+## 17. Examples (all 101)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1448,6 +1462,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 ### Projects
 
+- **Complete house wiring: service main to earthing (2-storey house)**: A whole two-storey house, from the street pole to the earth pits, as one ladder diagram. ① Service main: the pole transformer (neutral earthed at the substation) feeds a 25 m overhead service drop of 2 × 16 mm² aluminium. ② Service cut-out: a 63 A HRC fuse in the phase and a solid neutral link. ③ Energy meter (kWh). ④ Double-pole main switch. ⑤ 30 mA RCCB. ⑥ Distribution board: an ammeter shows the total current, the L busbar feeds ten MCBs (B6 for lights and fans, C16 for sockets and the pump, C20 for the kitchen, geyser and air conditioner) and every circuit returns to the N bar. Ground floor: LED and CFL lights, a dusk-to-dawn verandah light, the staircase lamp on two 2-way switches (one on each floor), calling bell, two fans with regulators, TV and fridge sockets, kitchen sockets, water pump. First floor: bedroom and bathroom lights, a corridor lamp switched from three places (2-way – intermediate – 2-way), fans, study and bedroom sockets, 2 kW geyser and a 1.5-ton air conditioner. ⑦ Earthing: every 3-pin socket's earth pin goes over the green earth continuity conductor to the earth bar and on to two earth electrodes (pipe earthing, ≈5 Ω each). Press Run (the board switches to ✋ Operate) and tap switches to watch the total current, the kWh meter and the cables; switch on the geyser, AC, pump and microwave together to load the house. Set a socket to "Faulty appliance" and the RCCB trips through the earth path; set one to "Short circuit" and only its MCB trips. Tap ✋ Operate / Wire at the top right to edit while it runs.
 - **Complete house wiring (2-room flat)**: A whole flat as a ladder diagram. Incomer: energy meter → double-pole main switch → 30 mA RCCB. The L bus feeds one MCB per circuit and every load returns to the N bus: lights (bedroom and drawing-room lamps, a staircase lamp on two 2-way switches, calling bell), fan with regulator, 2 kW geyser and two earthed sockets. Tap switches to watch the total current and kWh change; set a socket to "Faulty appliance" to trip the RCCB or to "Short circuit" to trip its MCB. Every wire is a real cable sized like a real installation: 10 mm² meter tails and buses, 1.5 mm² lights and fan, 4 mm² geyser, 2.5 mm² sockets (tap a wire → Cable to see or change it).
 - **16-bit RAM (4 words × 4 bits)**: A small static RAM built like a real memory chip: 16 D-latch cells in 4 rows (words) × 4 columns (bits). To write: set DATA IN on the hex keypad, choose the address with A1 A0 and hold WRITE — the address decoder raises one word line and that row of cells copies the bit lines. To read: the multiplexer under each column picks the cell of the addressed row, so DATA OUT shows the word stored at A1 A0. Store a different digit at each of the four addresses, then step through them.
 - **Mains to 5 V regulated power supply**: Every stage of a linear DC supply: 230 V mains → fuse → 230 V : 12 V transformer → bridge rectifier → 1000 µF smoothing capacitor → 7805 regulator → steady 5 V with a power LED and a 100 Ω load. The scope compares the rippling ≈15 V on the capacitor with the flat 5 V output. Lower the mains voltage or the capacitor to watch the ripple dip below 7 V and the regulator drop out.

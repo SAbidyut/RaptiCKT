@@ -200,9 +200,14 @@ public class MainActivity extends Activity {
         Window w = getWindow();
         if (Build.VERSION.SDK_INT >= 28) {
             WindowManager.LayoutParams lp = w.getAttributes();
-            lp.layoutInDisplayCutoutMode = on ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            int mode = on ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
                     : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
-            w.setAttributes(lp);
+            // setAttributes re-lays the whole window out (a visible flash): only when it really changes,
+            // not again on every focus change while the app stays in full screen
+            if (lp.layoutInDisplayCutoutMode != mode) {
+                lp.layoutInDisplayCutoutMode = mode;
+                w.setAttributes(lp);
+            }
         }
         if (Build.VERSION.SDK_INT >= 30) {
             WindowInsetsController c = w.getInsetsController();
@@ -223,7 +228,7 @@ public class MainActivity extends Activity {
                     | View.SYSTEM_UI_FLAG_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : View.SYSTEM_UI_FLAG_VISIBLE);
         }
-        if (root != null) root.post(root::requestApplyInsets); // re-pad: edge to edge in full screen
+        if (root != null) root.requestApplyInsets(); // re-pad in this same frame: edge to edge in full screen
     }
 
     @Override

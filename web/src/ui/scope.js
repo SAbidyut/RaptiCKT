@@ -220,8 +220,9 @@ export class Scope {
   resize() {
     const r = this.cv.getBoundingClientRect();
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    this.cv.width = Math.max(1, Math.round(r.width * dpr));
-    this.cv.height = Math.max(1, Math.round(r.height * dpr));
+    const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+    if (this.cv.width !== w) this.cv.width = w; // reassigning clears it: only when the size really changed
+    if (this.cv.height !== h) this.cv.height = h;
     this.w = r.width; this.h = r.height; this.dpr = dpr;
   }
 

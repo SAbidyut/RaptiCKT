@@ -316,12 +316,15 @@ export class Renderer {
     this.dpr = 1;
   }
 
+  /** Match the backing store to the canvas size. Returns true when it changed (the canvas was cleared). */
   resize() {
     const r = this.canvas.getBoundingClientRect();
     this.dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr || MAX_DPR);
     this.cw = r.width; this.ch = r.height;
-    this.canvas.width = Math.max(1, Math.round(r.width * this.dpr));
-    this.canvas.height = Math.max(1, Math.round(r.height * this.dpr));
+    const w = Math.max(1, Math.round(r.width * this.dpr)), h = Math.max(1, Math.round(r.height * this.dpr));
+    if (w === this.canvas.width && h === this.canvas.height) return false;
+    this.canvas.width = w; this.canvas.height = h;
+    return true;
   }
 
   toWorld(sx, sy) { return [(sx - this.ox) / this.scale, (sy - this.oy) / this.scale]; }
