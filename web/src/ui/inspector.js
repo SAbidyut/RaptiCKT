@@ -123,13 +123,59 @@ export class Inspector {
         </div>
         <div class="insp-body">
           ${props.map((p) => this.propRow(p)).join('')}
+          ${this.faultRows()}
           <p class="insp-desc">${esc(C.description || '')}</p>
         </div>
       </div>`;
     this.host.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this.action(b.dataset.a)));
-    this.host.querySelectorAll('.prop').forEach((row) => this.bindRow(row));
+    this.host.querySelectorAll('.prop[data-k]').forEach((row) => this.bindRow(row));
+    this.host.querySelectorAll('[data-fk]').forEach((row) => this.bindFault(row));
+    // tapping a suggested tag links the part to that coil / relay
+    this.host.querySelectorAll('.prop-sug').forEach((d) => d.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-tag]');
+      if (!b) return;
+      this.ed.setParam(this.el, d.dataset.k, b.dataset.tag);
+      this.render();
+    }));
     this.readKey = null;
     this.updateReadings();
+  }
+
+  /** terminal names for the fault selector */
+  pinLabels() {
+    const e = this.el, n = e.localPosts().length, t = e.constructor.type;
+    const fam = /^(npn|pnp|darl|photot)/.test(t) ? ['Base', 'Collector', 'Emitter'] : /^(nmos|pmos|depnmos|hemt)$/.test(t) ? ['Gate', 'Drain', 'Source'] : /^(njfet|pjfet)$/.test(t) ? ['Gate', 'Drain', 'Source']
+      : t === 'igbt' ? ['Gate', 'Collector', 'Emitter'] : /^(scr|gto|lascr)$/.test(t) ? ['Anode', 'Cathode', 'Gate'] : null;
+    const names = fam || (e.pinNames ? e.pinNames() : null);
+    return Array.from({ length: n }, (_, i) => (names && names[i] ? names[i] : n === 2 ? `Terminal ${i + 1}` : `Pin ${i + 1}`));
+  }
+
+  /** fault injection: open terminal, short or leakage between two terminals */
+  faultRows() {
+    const e = this.el, C = e.constructor, n = e.localPosts().length;
+    if (n < 2 || C.noFault || /^(ground|earth|chassis|netlabel|label|testpoint)$/.test(C.type)) return '';
+    const f = e.fault || { m: 'none' }, pins = this.pinLabels();
+    const opt = (v, t, cur) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(t)}</option>`;
+    const pinSel = (k, label, cur) => `<label class="prop" data-fk="${k}"><span>${label}</span><select>${pins.map((p, i) => opt(i, p, cur)).join('')}</select></label>`;
+    let h = `<div class="insp-fault"><label class="prop" data-fk="m"><span>⚡ Fault</span><select>${[['none', 'None (healthy)'], ['open', 'Open circuit (broken terminal)'], ['short', 'Short circuit'], ['res', 'Leakage / partial short']].map(([v, t]) => opt(v, t, f.m)).join('')}</select></label>`;
+    if (f.m === 'open') h += pinSel('a', 'Broken terminal', f.a ?? 0);
+    if (f.m === 'short' || f.m === 'res') { h += pinSel('a', 'Between', f.a ?? 0) + pinSel('b', 'and', f.b ?? 1); }
+    if (f.m === 'res') h += `<div class="prop num" data-fk="r"><span>Fault resistance</span><div class="num-in"><input type="text" inputmode="decimal" value="${esc(fmtSI(f.r ?? 1000, '', 4).trim())}"><em>Ω</em></div></div>`;
+    return h + '</div>';
+  }
+
+  bindFault(row) {
+    const k = row.dataset.fk, inp = row.querySelector('select, input');
+    inp.addEventListener('change', () => {
+      const e = this.el, f = { m: 'none', a: 0, b: 1, ...(e.fault || {}) };
+      if (k === 'r') { const v = parseSI(inp.value); if (!(v > 0)) { this.ed.toast('Invalid resistance'); return; } f.r = v; } else if (k === 'm') f.m = inp.value; else f[k] = +inp.value;
+      if (f.m !== 'open' && f.a === f.b) f.b = f.a === 0 ? 1 : 0;
+      this.ed.checkpoint();
+      e.fault = f.m === 'none' ? null : f;
+      this.ed.topologyChanged();
+      this.ed.toast(f.m === 'none' ? `${e.name}: fault cleared` : `${e.name}: fault injected — run the simulation to see its effect`);
+      this.render();
+    });
   }
 
   propRow(p) {
@@ -141,7 +187,10 @@ export class Inspector {
       return `<label class="prop" data-k="${p.key}"><span>${esc(p.label)}</span><input type="checkbox" class="toggle" ${v ? 'checked' : ''}></label>`;
     }
     if (p.type === 'text') {
-      return `<label class="prop" data-k="${p.key}"><span>${esc(p.label)}</span><input type="text" value="${esc(v)}"></label>`;
+      // tag fields offer the coil / relay tags that exist in the circuit
+      const sug = typeof p.suggest === 'function' ? p.suggest(this.ed.doc).filter((t) => t !== v) : [];
+      const id = sug.length ? `sug-${p.key}-${this.el.id}` : '';
+      return `<label class="prop" data-k="${p.key}"><span>${esc(p.label)}</span><input type="text" value="${esc(v)}" ${id ? `list="${id}"` : ''}>${id ? `<datalist id="${id}">${sug.map((t) => `<option value="${esc(t)}"></option>`).join('')}</datalist>` : ''}</label>${sug.length ? `<div class="prop-sug" data-k="${p.key}">${sug.map((t) => `<button class="tag-chip" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</div>` : ''}`;
     }
     const hasRange = p.min !== undefined && p.max !== undefined;
     return `<div class="prop num" data-k="${p.key}"><span>${esc(p.label)}</span>
@@ -230,7 +279,8 @@ export class Inspector {
     }
     const key = r.map((x) => x[0]).join('|');
     if (key !== this.readKey) {
-      box.innerHTML = r.map(([k]) => `<div class="read"><span>${esc(k)}</span><b></b></div>`).join('');
+      // long text values (e.g. what a contact follows) get a full-width card instead of spilling over
+      box.innerHTML = r.map(([k, v]) => `<div class="read${typeof v === 'string' && v.length > 13 ? ' wide' : ''}"><span>${esc(k)}</span><b></b></div>`).join('');
       this.readKey = key;
     }
     const bs = box.querySelectorAll('b');

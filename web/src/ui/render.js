@@ -336,6 +336,11 @@ export class Renderer {
       e.draw(g);
       ctx.restore();
       g.rot = 0; g.flip = false;
+      if (e.fault && e.fault.m && e.fault.m !== 'none') { // fault badge at the top-right corner
+        const [, y1, x2] = e.worldBox();
+        g.circle(x2 + 2, y1 - 2, 7, { fill: '#ef4444', stroke: th.bg, width: 1.5 });
+        g.text('⚡', x2 + 2, y1 - 1.5, { size: 9, color: '#fff', bold: true });
+      }
     }
 
     // current dots
@@ -516,13 +521,14 @@ export class Renderer {
       const [sx, sy] = e.labelSide();
       const sides = [[sx, sy], [-sx, -sy], [sy, sx], [-sy, -sx]];
       let best = null, bestScore = Infinity;
-      sides.forEach((sd, k) => {
-        const r = e.labelRect(txt, sd);
+      // keep the part's usual side unless it collides; then try the other sides, then a step further out
+      for (const extra of [0, 12, 24]) sides.forEach(([a, b], k) => {
+        const sd = [a, b, extra], r = e.labelRect(txt, sd);
         if (!r) return;
-        const sc = hit(r, i) + k * 4; // keep the part's usual side unless it collides
+        const sc = hit(r, i) + k * 4 + extra * 1.5;
         if (sc < bestScore) { bestScore = sc; best = sd; }
       });
-      if (best && (best[0] !== sx || best[1] !== sy)) e.chosenSide = best;
+      if (best && (best[0] !== sx || best[1] !== sy || best[2])) e.chosenSide = best;
       const r = e.labelRect(txt);
       if (r) placed.push(r);
     });
@@ -630,6 +636,15 @@ export class Renderer {
       }
       return a;
     };
+    const bodies = doc.elements.map((e) => e.worldBox());
+    const onBody = (r) => {
+      let a = 0;
+      for (const o of bodies) {
+        const w = Math.min(r[2], o[2]) - Math.max(r[0], o[0]), h = Math.min(r[3], o[3]) - Math.max(r[1], o[1]);
+        if (w > 0 && h > 0) a += w * h;
+      }
+      return a;
+    };
     const rectOf = (x, y, w, h, align, base) => {
       const x1 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
       const y1 = base === 'top' ? y : base === 'bottom' ? y - h : y - h / 2;
@@ -666,11 +681,21 @@ export class Renderer {
       else if (vb === 'middle') { push(vx, vy + 14, va, 'middle', 3); push(vx, vy - 14, va, 'middle', 4); }
       else if (vb === 'top') push(vx, vy + 14, va, 'top', 4);
       else push(vx, vy - 14, va, 'bottom', 5);
+      // crowded (a text label, a tag or a neighbour right where the reading would go):
+      // step further out on every side rather than settle on top of something
+      const out = { left: [1, 0], right: [-1, 0], top: [0, 1], alphabetic: [0, -1] };
+      [[-sx, -sy], [sx, sy], [sy, sx], [-sy, -sx]].forEach((sd, j) => {
+        const [x, y, a, bl] = e.labelAnchor(sd);
+        const [ux, uy] = bl === 'middle' ? out[a] : out[bl];
+        for (let k = 1; k <= 3; k++) push(x + ux * 13 * k, y + uy * 13 * k, a, bl, 10 + j * 3 + k * 4);
+        if (bl === 'middle') for (const d of [-26, 26]) push(x, y + d, a, bl, 14 + j * 3);
+        else for (const d of [-1, 1]) push(x + d * (AW / 2 + 8), y, a, bl, 14 + j * 3);
+      });
       let best = null, bestScore = Infinity;
       for (const c of cands) {
         const r = rectOf(c.x, c.y, AW, VH, c.align, c.base);
         const sc = overlap(r) * 2 + c.pen;
-                if (sc < bestScore) { bestScore = sc; best = { ...c, r }; }
+        if (sc < bestScore) { bestScore = sc; best = { ...c, r }; }
       }
       const [p0, p1] = e.getPosts();
       const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
@@ -699,33 +724,43 @@ export class Renderer {
       const cands = [];
       for (const [a, b] of segs) {
         const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-        if (len < GRID * 0.9) continue;
+        if (len < 1) continue;
+        const short = len < GRID * 0.9 ? 20 : 0; // a stub between two pins: only if nothing better
         const horiz = a[1] === b[1];
-        for (const t of [0.5, 0.3, 0.7, 0.15, 0.85]) {
+        for (const t of short ? [0.5] : [0.5, 0.3, 0.7, 0.15, 0.85]) {
           const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
           if (horiz) {
-            const room = len >= VW + 8 ? 0 : 12; // prefer stretches wide enough for the text
+            const room = (len >= VW + 8 ? 0 : 12) + short; // prefer stretches wide enough for the text
             cands.push({ x, y: y - 5, align: 'center', base: 'bottom', pen: room + Math.abs(t - 0.5) * 6 });
             cands.push({ x, y: y + 5, align: 'center', base: 'top', pen: room + 4 + Math.abs(t - 0.5) * 6 });
+            // one line further out, for when the spot next to the wire is taken
+            cands.push({ x, y: y - 19, align: 'center', base: 'bottom', pen: room + 40 + Math.abs(t - 0.5) * 6 });
+            cands.push({ x, y: y + 19, align: 'center', base: 'top', pen: room + 44 + Math.abs(t - 0.5) * 6 });
           } else {
-            cands.push({ x: x + 6, y, align: 'left', base: 'middle', pen: 10 + Math.abs(t - 0.5) * 6 });
-            cands.push({ x: x - 6, y, align: 'right', base: 'middle', pen: 12 + Math.abs(t - 0.5) * 6 });
+            const pen = 10 + short + Math.abs(t - 0.5) * 6;
+            cands.push({ x: x + 6, y, align: 'left', base: 'middle', pen });
+            cands.push({ x: x - 6, y, align: 'right', base: 'middle', pen: pen + 2 });
+            cands.push({ x: x + 20, y, align: 'left', base: 'middle', pen: pen + 38 });
+            cands.push({ x: x - 20, y, align: 'right', base: 'middle', pen: pen + 40 });
           }
         }
       }
-      for (const [x, y] of posts) {
-        cands.push({ x: x + 5, y: y - 5, align: 'left', base: 'bottom', pen: 30 });
-        cands.push({ x: x - 5, y: y - 5, align: 'right', base: 'bottom', pen: 32 });
-        cands.push({ x: x + 5, y: y + 5, align: 'left', base: 'top', pen: 34 });
-        cands.push({ x: x - 5, y: y + 5, align: 'right', base: 'top', pen: 36 });
+      for (const [x, y] of posts) for (const [d, p] of [[5, 30], [16, 50]]) {
+        cands.push({ x: x + 5, y: y - d, align: 'left', base: 'bottom', pen: p });
+        cands.push({ x: x - 5, y: y - d, align: 'right', base: 'bottom', pen: p + 2 });
+        cands.push({ x: x + 5, y: y + d, align: 'left', base: 'top', pen: p + 4 });
+        cands.push({ x: x - 5, y: y + d, align: 'right', base: 'top', pen: p + 6 });
       }
       let best = null, bestScore = Infinity;
       for (const c of cands) {
         const r = rectOf(c.x, c.y, VW, VH, c.align, c.base);
-        const sc = overlap(r) * 2 + c.pen;
-        if (sc < bestScore) { bestScore = sc; best = { ...c, r }; }
+        const ov = overlap(r);
+        const sc = ov * 2 + c.pen;
+        if (sc < bestScore) { bestScore = sc; best = { ...c, r, ov }; }
       }
-      if (!best) continue;
+      // nowhere free near the net (pins wired straight into a crowded block): leave the
+      // reading out rather than print it over a part or another label; a probe still reads it
+      if (!best || best.ov > VW * VH * 0.35 || onBody(best.r) > 18) continue;
       box(best.r, 2);
       volts.push({ node: n, x: best.x, y: best.y, align: best.align, base: best.base });
     }
@@ -763,7 +798,7 @@ export class Renderer {
     cv.width = size * dpr; cv.height = size * dpr;
     const ctx = cv.getContext('2d');
     const e = new C(0, 0);
-    const [a, b, c, d] = e.localBox();
+    const [a, b, c, d] = e.iconBox ? e.iconBox() : e.localBox(); // a very wide part may show just its middle
     const w = c - a, h = d - b;
     const sc = Math.min((size - 10) / w, (size - 10) / h, 1.1);
     ctx.setTransform(dpr * sc, 0, 0, dpr * sc, dpr * (size / 2 - ((a + c) / 2) * sc), dpr * (size / 2 - ((b + d) / 2) * sc));

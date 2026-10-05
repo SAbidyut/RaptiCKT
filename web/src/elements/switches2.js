@@ -10,11 +10,11 @@ import { fmtShort, fmtQty } from '../engine/units.js';
 
 const G = GRID;
 
-function stampSw(s, a, b, k, closed, ron) {
+export function stampSw(s, a, b, k, closed, ron) {
   s.addBranchKCL(a, b, k);
   if (closed) { s.addA(k, a - 1, 1); s.addA(k, b - 1, -1); s.addA(k, k, -Math.max(ron, 1e-6)); } else s.addA(k, k, 1);
 }
-function stampSwAC(ac, a, b, k, closed, ron) {
+export function stampSwAC(ac, a, b, k, closed, ron) {
   ac.addBranchKCL(a, b, k);
   if (closed) { ac.addA(k, a - 1, 1); ac.addA(k, b - 1, -1); ac.addA(k, k, -Math.max(ron, 1e-6)); } else ac.addA(k, k, 1);
 }
@@ -23,7 +23,7 @@ function stampSwAC(ac, a, b, k, closed, ron) {
  * Generic multi-contact switch: `paths()` lists [postA, postB] pairs, `closedSet()`
  * returns which of them conduct in the current state.
  */
-class MultiSwitch extends Element {
+export class MultiSwitch extends Element {
   static category = 'Switches';
   static prefix = 'S';
   interactive = true;
@@ -375,7 +375,7 @@ register(Thermostat);
  * coil current (τ ≈ 5 ms), so AC coils hold in through current zero crossings.
  * Pull-in at 70 % and drop-out at 35 % of the rated coil current.
  */
-class CoilRelay extends withChip(Element) {
+export class CoilRelay extends withChip(Element) {
   static category = 'Switches';
   static prefix = 'K';
   static coil = [0, 1];
@@ -440,9 +440,44 @@ class CoilRelay extends withChip(Element) {
     this.drawChip(g, title);
     const { bw } = this.geom();
     const on = this.contactsClosed();
-    g.box(-bw + 0.35 * G, -0.35 * G, -bw + 0.95 * G, 0.45 * G, { stroke: g.body, width: g.lw * 0.7, fill: on ? 'rgba(90,170,255,0.35)' : null });
-    g.line(-bw + 0.35 * G, 0.45 * G, -bw + 0.95 * G, -0.35 * G, g.body, g.lw * 0.5);
+    g.box(-bw + 0.75 * G, -0.35 * G, -bw + 1.3 * G, 0.45 * G, { stroke: g.body, width: g.lw * 0.7, fill: on ? 'rgba(90,170,255,0.35)' : null });
+    g.line(-bw + 0.75 * G, 0.45 * G, -bw + 1.3 * G, -0.35 * G, g.body, g.lw * 0.5);
     g.circle(bw - 0.4 * G, this.geom().top + 0.4 * G, 3, { fill: on ? g.hi : g.lo });
+  }
+}
+
+/**
+ * A contactor drawn like its symbol: the coil between A1 and A2, the three main poles running
+ * from L1–L3 down to T1–T3 with a dashed mechanical link from the coil, and the auxiliary
+ * contacts `aux` ([postA, postB, 'NO'|'NC']) beside their terminal numbers.
+ */
+export function drawContactor(el, g, title, aux) {
+  const { bw, top, bot, posts } = el.geom();
+  const on = el.contactsClosed(), hot = on ? g.accent : g.body;
+  el.drawChip(g, null);
+  g.text(title, -bw + 0.22 * G, top + 0.45 * G, { size: 8.5, color: g.accent, bold: true, align: 'left' });
+  // coil
+  const [c1, c2] = el.constructor.coil.map((k) => posts[k][1]);
+  const cx = -1.36 * G, hw = 0.15 * G, cy1 = Math.min(c1, c2) - 0.15 * G, cy2 = Math.max(c1, c2) + 0.15 * G;
+  g.box(cx - hw, cy1, cx + hw, cy2, { stroke: hot, width: g.lw * 0.75, fill: on ? 'rgba(90,170,255,0.35)' : null });
+  g.line(cx - hw, cy2, cx + hw, cy1, hot, g.lw * 0.5);
+  // main poles
+  const y0 = top + 0.75 * G, y3 = bot - 0.75 * G, yf = (y0 + y3) / 2 - 0.45 * G, yp = yf + 0.9 * G;
+  for (const x of [-G, 0, G]) {
+    g.line(x, y0, x, yf, g.body, g.lw * 0.75);
+    g.line(x, yp, x, y3, g.body, g.lw * 0.75);
+    g.line(x, yp, on ? x : x + 0.34 * G, on ? yf : yf + 0.1 * G, hot, g.lw * 0.9);
+  }
+  g.poly([[cx + hw, (yf + yp) / 2], [G + (on ? 0 : 0.17 * G), (yf + yp) / 2]], { stroke: g.muted, width: g.lw * 0.5, dash: [3, 3] });
+  // auxiliary contacts, drawn vertically just inside their terminal numbers
+  const ax = 1.55 * G;
+  for (const [a, b, t] of aux) {
+    const ya = posts[a][1], yb = posts[b][1], closed = t === 'NO' ? on : !on;
+    const fa = ya + 0.28 * G, pb = yb - 0.28 * G;
+    g.line(ax, ya, 1.68 * G, ya, g.body, g.lw * 0.5); g.line(ax, yb, 1.68 * G, yb, g.body, g.lw * 0.5);
+    g.line(ax, ya, ax, fa, g.body, g.lw * 0.6); g.line(ax, pb, ax, yb, g.body, g.lw * 0.6);
+    g.line(ax, pb, closed ? ax : ax - 0.22 * G, closed ? fa : fa + 0.06 * G, closed ? g.accent : g.body, g.lw * 0.75);
+    if (t === 'NC') g.line(ax - 0.16 * G, fa, ax, fa, g.body, g.lw * 0.6);
   }
 }
 
@@ -475,12 +510,8 @@ export class Contactor extends CoilRelay {
   static contacts = [[2, 5, 'NO'], [3, 6, 'NO'], [4, 7, 'NO'], [8, 9, 'NO']];
   static description = 'Three-pole power contactor with 230 V AC coil (A1–A2), main contacts L1–T1, L2–T2, L3–T3 and an auxiliary NO contact 13–14 for the hold-in (self-latching) circuit of a DOL starter.';
   draw(g) {
-    this.drawCoilAndContacts(g, 'KM');
-    const on = this.contactsClosed(), { posts } = this.geom();
-    for (let p = 0; p < 3; p++) {
-      const x = posts[2 + p][0];
-      g.line(x, -0.5 * G, x + (on ? 0 : 0.25 * G), 0.35 * G, g.body, g.lw * 0.8);
-    }
+    drawContactor(this, g, 'KM', [[8, 9, 'NO']]);
+    g.circle(this.geom().bw - 0.4 * G, this.geom().top + 0.4 * G, 3, { fill: this.contactsClosed() ? g.hi : g.lo });
   }
 }
 register(Contactor);

@@ -49,6 +49,7 @@ export class Editor {
     this.last = performance.now();
     this.loop = this.loop.bind(this);
     window.addEventListener('resize', () => this.onResize());
+    this.updateLayout();
   }
 
   q(s) { return this.root.querySelector(s); }
@@ -58,6 +59,7 @@ export class Editor {
   // ------------------------------------------------------------------ DOM
   buildDOM() {
     this.root.innerHTML = `
+      <div class="ed-head">
       <header class="topbar">
         <button class="icon-btn" data-a="home" title="Back">${icon('back', 22)}</button>
         <div class="title" data-a="rename"><b class="doc-name">Untitled</b><small class="doc-sub">Tap to rename</small></div>
@@ -76,10 +78,28 @@ export class Editor {
         <button class="tb" data-a="undo">${icon('undo', 20)}<span>Undo</span></button>
         <button class="tb" data-a="redo">${icon('redo', 20)}<span>Redo</span></button>
         <button class="tb" data-a="fit">${icon('fit', 20)}<span>Fit</span></button>
+        <button class="tb" data-a="fullscreen">${icon('fullscreen', 20)}<span>Full</span></button>
       </nav>
+      </div>
+      <div class="ed-main">
       <div class="scope-panel"></div>
       <div class="stage">
         <canvas class="board"></canvas>
+        <div class="fs-rail">
+          <button class="fs-btn" data-a="fullscreen" title="Exit full screen">${icon('fullscreenExit', 20)}</button>
+          <button class="fs-btn fs-run" data-a="run" title="Run / Pause">${icon('play', 20)}</button>
+          <button class="fs-btn" data-a="restart" title="Restart">${icon('reset', 19)}</button>
+          <i class="fs-sep"></i>
+          <button class="fs-btn" data-a="scope" title="Oscilloscope">${icon('scope', 20)}</button>
+          <button class="fs-btn" data-a="meter" title="Multimeter">${icon('meter', 20)}</button>
+          <button class="fs-btn" data-a="values" title="Labels">${icon('eye', 20)}</button>
+          <i class="fs-sep"></i>
+          <button class="fs-btn" data-a="multi" title="Select">${icon('select', 19)}</button>
+          <button class="fs-btn" data-a="undo" title="Undo">${icon('undo', 19)}</button>
+          <button class="fs-btn" data-a="fit" title="Fit">${icon('fit', 19)}</button>
+          <button class="fs-btn fs-hide" data-a="fsui" title="Hide the tools">${icon('chevLeft', 19)}</button>
+        </div>
+        <button class="fs-handle" data-a="fsui" title="Show the tools">${icon('menu', 20)}</button>
         <button class="hud-status" data-a="speed"></button>
         <div class="hud-error"></div>
         <div class="hint"></div>
@@ -89,6 +109,7 @@ export class Editor {
         <div class="meter-card"></div>
         <button class="fab" data-a="add" title="Add component">${icon('plus', 28)}</button>
         <div class="toast"></div>
+      </div>
       </div>
       <div class="scrim"></div>
       <div class="sheet inspector"></div>
@@ -101,6 +122,7 @@ export class Editor {
       const b = ev.target.closest('[data-a]');
       if (!b || !this.root.contains(b) || b.closest('.inspector,.palette,.analysis,.meter-card,.more-menu,.speed-pop,.scope-panel,.selbar,.quickbar')) return;
       this.command(b.dataset.a, b);
+      if (this.fsTools && b.closest('.fs-rail') && b.dataset.a !== 'fsui') this.showFsTools(true); // still in use: keep them up
     });
   }
 
@@ -120,6 +142,8 @@ export class Editor {
       case 'undo': this.undo(); break;
       case 'redo': this.redo(); break;
       case 'fit': this.fit(); break;
+      case 'fullscreen': this.setFullscreen(!this.fullscreen); break;
+      case 'fsui': this.showFsTools(!this.fsTools); break;
       case 'add': this.palette.open(); break;
       case 'speed': this.openSpeed(); break;
       default:
@@ -159,6 +183,7 @@ export class Editor {
 
   close() {
     this.active = false;
+    if (this.fullscreen) this.setFullscreen(false);
     this.setRunning(false);
     this.stopSound();
     this.palette.close(); this.analysis.close();
@@ -166,9 +191,50 @@ export class Editor {
   }
 
   onResize() {
+    this.updateLayout();
     this.renderer.resize();
     this.scope.resize();
     this.dirtyDraw = true;
+  }
+
+  /**
+   * Phone sideways (landscape): the bars merge into one row and the
+   * oscilloscope sits beside the circuit instead of above it (Settings →
+   * Landscape & full screen), so the board keeps its height.
+   */
+  updateLayout() {
+    const w = window.innerWidth, h = window.innerHeight;
+    const wide = w > h * 1.15 && h <= 640;
+    this.root.classList.toggle('wide', wide);
+    this.root.classList.toggle('side-scope', wide && this.settings.scopeSide !== false);
+  }
+
+  /** Full screen, as in RaptiAuto: no bars, no system UI, a small tool rail on the left. */
+  setFullscreen(on) {
+    if (!!on === !!this.fullscreen) return;
+    this.fullscreen = !!on;
+    this.root.classList.toggle('fs', this.fullscreen);
+    this.showFsTools(this.fullscreen, 2600); // shown at first, then out of the way
+    this.app.bridge.setImmersive(this.fullscreen);
+    this.haptic(8);
+    this.updateToolbar();
+    const relayout = () => { this.onResize(); if (this.scopeOpen) this.scope.draw(); };
+    requestAnimationFrame(relayout);
+    setTimeout(relayout, 120);
+    setTimeout(relayout, 450); // after the system bars have gone
+    if (this.fullscreen && !store.flag('fsTip2')) { store.setFlag('fsTip2'); this.toast('Full screen: tap ☰ at the top left for the tools · Back exits'); }
+  }
+
+  /**
+   * Full screen keeps the whole display for the board: the tool rail, the + button and the
+   * time chip slide away and only a small ☰ handle stays. Tapping it brings them back; they
+   * hide again after a few idle seconds or when the board is touched.
+   */
+  showFsTools(on, ms = 4500) {
+    this.fsTools = !!on && !!this.fullscreen;
+    this.root.classList.toggle('fs-ui', this.fsTools);
+    clearTimeout(this.fsToolsT);
+    if (this.fsTools) this.fsToolsT = setTimeout(() => this.showFsTools(false), ms);
   }
 
   fit() {
@@ -181,7 +247,7 @@ export class Editor {
   // ------------------------------------------------------------- simulator
   simOptions() {
     const s = this.settings;
-    return { method: s.method, initialDC: s.initialDC, reltol: s.reltol, vntol: s.vntol, abstol: s.abstol, gmin: s.gmin, maxIter: s.maxIter };
+    return { method: s.method, initialDC: this.doc.simSettings.initialDC ?? s.initialDC, reltol: s.reltol, vntol: s.vntol, abstol: s.abstol, gmin: s.gmin, maxIter: s.maxIter };
   }
 
   topologyChanged() {
@@ -296,6 +362,7 @@ export class Editor {
       if (!ok) { this.showError(); this.paused = true; this.updateToolbar(); break; }
       if (this.rms) this.rms.sample(sim, sim.t - t0s);
       this.scope.sample(sim);
+      if (this.meter.open) this.meter.sample(sim);
       if ((n & 7) === 0 && performance.now() - t0 > budgetMs) break;
     }
     const done = simTime > 0 ? Math.min(1, (sim.t - (target - simTime)) / simTime) : 1;
@@ -403,9 +470,15 @@ export class Editor {
     const playing = this.running && !this.paused;
     run.innerHTML = `${icon(playing ? 'pause' : 'play', 20)}<span>${playing ? 'Pause' : this.running ? 'Resume' : 'Run'}</span>`;
     run.classList.toggle('on', playing);
+    const fr = this.q('.fs-rail .fs-run');
+    fr.innerHTML = icon(playing ? 'pause' : 'play', 20);
+    fr.classList.toggle('running', playing);
+    this.q('.fs-rail [data-a=undo]').disabled = !this.undoStack.length;
+    this.q('.fs-rail [data-a=scope]').classList.toggle('on', !!this.scopeOpen);
+    this.q('.fs-rail [data-a=meter]').classList.toggle('on', this.meter.open);
     this.q('[data-a=undo]').disabled = !this.undoStack.length;
     this.q('[data-a=redo]').disabled = !this.redoStack.length;
-    this.q('[data-a=multi]').classList.toggle('on', this.multi);
+    this.root.querySelectorAll('[data-a=multi]').forEach((b) => b.classList.toggle('on', this.multi));
     this.q('[data-a=scope]').classList.toggle('on', !!this.scopeOpen);
     this.q('[data-a=meter]').classList.toggle('on', this.meter.open);
     this.updateStatus();
@@ -538,11 +611,13 @@ export class Editor {
     const [cx, cy] = this.renderer.toWorld(this.renderer.cw / 2, palH ? visH * 0.55 : this.renderer.ch * 0.42);
     const e = makeElement(type, snap(cx), snap(cy));
     if (!e) return;
+    e.onAdd?.(this.doc); // e.g. a new ladder contact follows the last coil already in the circuit
     const boxes = this.doc.elements.map((o) => o.worldBox());
     const pad = GRID;
+    const ctx = this.placementCtx([e], [], true);
     const free = () => {
       const [a, b, c, d] = e.worldBox();
-      return !boxes.some(([p, q, r, t]) => a - pad < r && c + pad > p && b - pad < t && d + pad > q);
+      return !boxes.some(([p, q, r, t]) => a - pad < r && c + pad > p && b - pad < t && d + pad > q) && !this.placementBlocked(ctx);
     };
     // spiral search for a free spot near the view centre
     const x0 = e.x, y0 = e.y;
@@ -640,17 +715,117 @@ export class Editor {
       || this.doc.elements.some((e) => e.getPosts().some((q) => same(p, q)));
   }
 
+  /**
+   * What a move of `els` (and the selected `movedWires`) must not run into, taken before the
+   * move. Parts never join by being dropped on each other: a part may not sit on another part,
+   * and its terminals may not land on a terminal or wire they were not already connected to.
+   * `fresh`: the parts are new (duplicate, add), so nothing counts as connected or overlapping yet.
+   */
+  placementCtx(els, movedWires = [], fresh = false) {
+    const moving = new Set(els), moved = new Set(movedWires);
+    const solid = (e) => e.constructor.type !== 'label'; // a text note is not a part
+    const still = this.doc.elements.filter((e) => !moving.has(e) && solid(e));
+    const stillBoxes = still.map((e) => [e, e.worldBox()]);
+    const stillPosts = new Set(this.doc.elements.filter((e) => !moving.has(e)).flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
+    const touches = (w, p) => w.pts.some((q, i) => same(p, q) || (i && onSeg(p, w.pts[i - 1], q)));
+    const stillPts = [...stillPosts].map((k) => k.split(',').map(Number));
+    // terminals of the parts that stay put, and points of other wires, lying on a wire now
+    // (a T-joint is a connection); the moving parts' own terminals do not count
+    const onWire = (w) => {
+      const mine = new Set(els.flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
+      const pts = stillPts.concat(...this.doc.wires.filter((o) => o !== w).map((o) => o.pts));
+      return new Set(pts.filter((p) => touches(w, p)).map((p) => p[0] + ',' + p[1]).filter((k) => !mine.has(k)));
+    };
+    const wireHad = new Map(fresh ? [] : this.doc.wires.map((w) => [w, onWire(w)]));
+    const before = new Map(), attached = new Map();
+    for (const e of els) {
+      const B = e.worldBox();
+      before.set(e, new Set(fresh ? [] : stillBoxes.filter(([, b]) => boxesHit(B, b)).map(([o]) => o)));
+      attached.set(e, e.getPosts().map((p) => new Set(fresh ? [] : this.doc.wires.filter((w) => touches(w, p)))));
+    }
+    return { els, solid, moved, stillBoxes, stillPosts, touches, before, attached, onWire, wireHad };
+  }
+
+  /** Why the parts in `c` may not stay where they are now ('part', 'terminal', 'wire'), or null. */
+  placementBlocked(c, okWires = [], followed = []) {
+    // a wire that follows the part must not be bent across a terminal it did not touch before
+    for (const w of followed) {
+      if (okWires.includes(w)) continue;
+      const had = c.wireHad.get(w) || new Set();
+      for (const k of c.onWire(w)) if (!had.has(k)) return 'route';
+    }
+    for (const e of c.els) {
+      if (c.solid(e)) {
+        const B = e.worldBox(), was = c.before.get(e);
+        for (const [o, b] of c.stillBoxes) if (!was.has(o) && boxesHit(B, b)) return 'part';
+      }
+      const att = c.attached.get(e);
+      const posts = e.getPosts();
+      for (let k = 0; k < posts.length; k++) {
+        const p = posts[k];
+        if (c.stillPosts.has(p[0] + ',' + p[1])) return 'terminal';
+        for (const w of this.doc.wires) {
+          if (c.moved.has(w) || att[k]?.has(w) || okWires.includes(w)) continue;
+          if (c.touches(w, p)) return 'wire';
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Which terminals share a net, as a string: wires join their own points and anything lying on them. */
+  connSig() {
+    const par = new Map();
+    const k = (p) => p[0] + ',' + p[1];
+    const f = (x) => { if (!par.has(x)) par.set(x, x); while (par.get(x) !== x) { par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
+    const pts = [];
+    for (const w of this.doc.wires) w.pts.forEach((p, i) => { pts.push(p); if (i) par.set(f(k(w.pts[i - 1])), f(k(p))); });
+    for (const e of this.doc.elements) for (const p of e.getPosts()) { pts.push(p); f(k(p)); }
+    for (const w of this.doc.wires) for (let i = 1; i < w.pts.length; i++) {
+      for (const p of pts) if (onSeg(p, w.pts[i - 1], w.pts[i])) par.set(f(k(p)), f(k(w.pts[i])));
+    }
+    const lab = new Map();
+    return this.doc.elements.map((e) => e.getPosts().map((p) => { const r = f(k(p)); if (!lab.has(r)) lab.set(r, lab.size); return lab.get(r); }).join('.')).join(' ');
+  }
+
+  /** Tidy the wires a move bent, unless tidying would join or split a net: then keep them as they are. */
+  safeTidy(follow) {
+    const keep = this.doc.wires.map((w) => [w, w.pts.map((p) => [...p])]);
+    const sig = this.connSig();
+    this.tidyWires(follow);
+    if (this.connSig() !== sig) this.doc.wires = keep.map(([w, pts]) => { w.pts = pts; return w; });
+  }
+
+  blockedToast() {
+    this.haptic(18);
+    // explained once in the app's lifetime; after that the part just stops (with a buzz)
+    if (store.flag('noOverlapTip')) return;
+    store.setFlag('noOverlapTip');
+    this.toast('Parts cannot sit on top of each other or join by touching — connect them with a wire');
+  }
+
+
   duplicateSelection() {
     if (!this.selection.size && !this.selWires.size) return;
     this.checkpoint();
-    const off = GRID * 2;
     const newEls = [], newWires = [];
     for (const e of this.selection) {
-      const o = e.toJSON(); o.x += off; o.y += off;
-      const c = Element.fromJSON(o);
+      const c = Element.fromJSON(e.toJSON());
       this.doc.add(c); newEls.push(c);
     }
-    for (const w of this.selWires) newWires.push(this.doc.addWire(w.pts.map(([x, y]) => [x + off, y + off])));
+    const wirePts = [...this.selWires].map((w) => w.pts);
+    for (const pts of wirePts) newWires.push(this.doc.addWire(pts.map((p) => [...p])));
+    // the copy goes to the nearest free spot (down-right first), never on top of anything
+    const home = newEls.map((c) => [c.x, c.y]), live = newWires.filter(Boolean);
+    const ctx = this.placementCtx(newEls, live, true);
+    const offsets = [];
+    for (let r = 1; r <= 12; r++) offsets.push([r, r], [r, 0], [0, r], [r, -r], [-r, r], [-r, 0], [0, -r], [-r, -r]);
+    for (const [ox, oy] of offsets) {
+      const dx = ox * GRID * 2, dy = oy * GRID * 2;
+      newEls.forEach((c, i) => { c.x = home[i][0] + dx; c.y = home[i][1] + dy; });
+      live.forEach((w, i) => { w.pts = wirePts[i].map(([x, y]) => [x + dx, y + dy]); });
+      if (!this.placementBlocked(ctx)) break;
+    }
     this.doc.assignNames();
     this.selection = new Set(newEls); this.selWires = new Set(newWires.filter(Boolean));
     this.afterSelect();
@@ -694,11 +869,24 @@ export class Editor {
     for (const e of this.selection) {
       const old = e.getPosts();
       this.splitAtJunctions();
+      const ctx = this.placementCtx([e]);
       const fixed = new Set(this.doc.elements.filter((x) => x !== e).flatMap((x) => x.getPosts()).map((p) => p[0] + ',' + p[1]));
       const bridges = old.filter((p) => fixed.has(p[0] + ',' + p[1])).map((p) => new Wire([p, p]));
       this.doc.wires.push(...bridges);
       fn(e);
-      this.tidyWires(this.followWires(new Map([[e, old]])));
+      const follow = this.followWires(new Map([[e, old]]));
+      const why = this.placementBlocked(ctx, bridges, follow);
+      if (why) {
+        // turning it would put it on another part or join it to something: leave everything as it was
+        const keep = [...this.selection].map((x) => this.doc.elements.indexOf(x));
+        this.restoreFrom(this.undoStack.pop());
+        this.updateToolbar();
+        this.selection = new Set(keep.map((i) => this.doc.elements[i]).filter(Boolean));
+        this.afterSelect();
+        this.blockedToast(why);
+        return;
+      }
+      this.safeTidy(follow);
       this.doc.wires = this.doc.wires.filter((w) => !bridges.includes(w) || !same(w.pts[0], w.pts[w.pts.length - 1]));
     }
     this.topologyChanged();
@@ -1087,6 +1275,7 @@ export class Editor {
     if (this.inspector.sheetOpen) { this.inspector.closeSheet(); return true; }
     if (this.selection.size || this.selWires.size) { this.select(null); return true; }
     if (this.meter.open) { this.toggleMeter(false); return true; }
+    if (this.fullscreen) { this.setFullscreen(false); return true; }
     return false;
   }
 
@@ -1201,6 +1390,8 @@ export class Editor {
     const [sx, sy] = this.local(ev);
     this.pointers.set(ev.pointerId, [sx, sy]);
     this.q('.speed-pop').classList.remove('open');
+    this.zoomAnim = (this.zoomAnim || 0) + 1; // a finger on the board stops a double-tap zoom in flight
+    if (this.fsTools) this.showFsTools(false);
     if (this.pointers.size === 2) {
       this.cancelGesture();
       const [a, b] = [...this.pointers.values()];
@@ -1210,7 +1401,14 @@ export class Editor {
     }
     if (this.pointers.size > 2) return;
     const hit = this.hitTest(sx, sy);
-    this.gesture = { type: 'pending', hit, sx, sy, w: this.renderer.toWorld(sx, sy), t0: performance.now() };
+    // Google Maps one-finger zoom: a second tap on the board that stays down, then slide
+    const lt = this.lastTap, t0 = performance.now();
+    if (lt && t0 - lt.t < 320 && Math.hypot(sx - lt.sx, sy - lt.sy) < 44 && (hit.kind === 'none' || hit.kind === 'wire')) {
+      this.lastTap = null;
+      this.gesture = { type: 'dzoom', sx, sy, s0: this.renderer.scale, w: this.renderer.toWorld(sx, sy), moved: false };
+      return;
+    }
+    this.gesture = { type: 'pending', hit, sx, sy, w: this.renderer.toWorld(sx, sy), t0 };
     if (hit.kind === 'element' && hit.el.onPress && !this.multi) {
       if (hit.el.onPress()) { this.gesture.pressed = hit.el; this.pressChanged(hit.el); }
     }
@@ -1286,6 +1484,16 @@ export class Editor {
       this.dirtyDraw = true;
       return;
     }
+    if (g.type === 'dzoom') {
+      const dy = sy - g.sy;
+      if (!g.moved && Math.abs(dy) < 6) return;
+      if (!g.moved) { g.moved = true; this.haptic(6); }
+      // slide down = zoom in, up = zoom out, around the point that was tapped
+      R.scale = Math.min(6, Math.max(0.15, g.s0 * Math.exp(dy * 0.009)));
+      R.ox = g.sx - g.w[0] * R.scale; R.oy = g.sy - g.w[1] * R.scale;
+      this.dirtyDraw = true;
+      return;
+    }
     if (g.type === 'pending') {
       if (Math.hypot(sx - g.sx, sy - g.sy) < 7) return;
       clearTimeout(this.lpT);
@@ -1317,7 +1525,8 @@ export class Editor {
       const moving = new Set(els);
       const fixed = new Set(this.doc.elements.filter((e) => !moving.has(e)).flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
       g.bridges = els.flatMap((e) => e.getPosts()).filter((p) => fixed.has(p[0] + ',' + p[1])).map((p) => ({ p: [...p], w: new Wire([p, p]) }));
-      g.dx = 0; g.dy = 0;
+      g.place = this.placementCtx(els, wires);
+      g.dx = 0; g.dy = 0; g.okDx = 0; g.okDy = 0;
       return;
     }
     g.type = this.multi && h.kind === 'none' ? 'marquee' : 'pan';
@@ -1365,16 +1574,13 @@ export class Editor {
         const dx = snap(wx - g.w[0]), dy = snap(wy - g.w[1]);
         if (dx === g.dx && dy === g.dy) break;
         g.dx = dx; g.dy = dy; g.moved = true;
-        // restore original geometry then apply delta
-        const cur = JSON.parse(g.snapshot);
-        this.doc.wires.forEach((w, i) => { if (cur.wires[i]) w.pts = cur.wires[i].map((p) => [...p]); });
-        for (const o of g.els) { o.e.x = o.x + dx; o.e.y = o.y + dy; }
-        const moved = new Set();
-        for (const o of g.wires) { o.w.pts = o.pts.map(([x, y]) => [x + dx, y + dy]); moved.add(o.w); }
-        for (const b of g.bridges || []) { b.w.pts = [[...b.p], [...b.p]]; if (!this.doc.wires.includes(b.w)) this.doc.wires.push(b.w); }
-        g.follow = this.followWires(new Map(g.els.map((o) => [o.e, o.posts])), moved);
-        this.graph = new WireGraph(this.doc);
-        this.dirtyDraw = true;
+        this.applyMove(g, dx, dy);
+        const why = (dx || dy) && this.placementBlocked(g.place, (g.bridges || []).map((b) => b.w), g.follow || []);
+        if (why) {
+          // the part stops at the last free spot until the finger reaches free space again
+          this.applyMove(g, g.okDx, g.okDy);
+          if (g.blocked !== why) { g.blocked = why; this.blockedToast(why); }
+        } else { g.okDx = dx; g.okDy = dy; g.blocked = null; }
         break;
       }
       case 'marquee':
@@ -1386,21 +1592,42 @@ export class Editor {
     }
   }
 
+  /** Put the dragged parts (and selected wires) at offset dx, dy from where the drag began. */
+  applyMove(g, dx, dy) {
+    const cur = JSON.parse(g.snapshot);
+    this.doc.wires.forEach((w, i) => { if (cur.wires[i]) w.pts = cur.wires[i].map((p) => [...p]); });
+    for (const o of g.els) { o.e.x = o.x + dx; o.e.y = o.y + dy; }
+    const moved = new Set();
+    for (const o of g.wires) { o.w.pts = o.pts.map(([x, y]) => [x + dx, y + dy]); moved.add(o.w); }
+    for (const b of g.bridges || []) { b.w.pts = [[...b.p], [...b.p]]; if (!this.doc.wires.includes(b.w)) this.doc.wires.push(b.w); }
+    g.follow = this.followWires(new Map(g.els.map((o) => [o.e, o.posts])), moved);
+    this.graph = new WireGraph(this.doc);
+    this.dirtyDraw = true;
+  }
+
   onUp(ev, cancelled) {
     this.pointers.delete(ev.pointerId);
     clearTimeout(this.lpT);
     const g = this.gesture;
     if (!g) return;
     if (g.type === 'pinch') { if (this.pointers.size === 0) this.gesture = null; else this.gesture = { type: 'done' }; return; }
+    if (g.type === 'dzoom') { // a plain double tap (no slide) zooms in one step, like Maps
+      this.gesture = null;
+      if (!g.moved && !cancelled) this.animateZoom(g.sx, g.sy, 2);
+      return;
+    }
     if (g.pressed) { g.pressed.onRelease(); this.pressChanged(g.pressed); }
     if (cancelled) { this.cancelGesture(); return; }
     switch (g.type) {
-      case 'pending': this.tap(g); break;
+      case 'pending':
+        this.tap(g);
+        this.lastTap = g.hit.kind === 'none' || g.hit.kind === 'wire' ? { t: performance.now(), sx: g.sx, sy: g.sy } : null;
+        break;
       case 'move':
         // a bridge wire whose part came back to where it was is not needed
         for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
         if (g.moved) {
-          this.tidyWires(g.follow || []);
+          this.safeTidy(g.follow || []);
           this.undoStack.push(g.undoSnap || g.snapshot); this.redoStack = []; this.updateToolbar();
           this.topologyChanged();
         }
@@ -1419,6 +1646,21 @@ export class Editor {
     this.preview = null; this.marquee = null; this.marqueePick = null; this.hoverPost = null; this.drag = false;
     this.gesture = null;
     this.dirtyDraw = true;
+  }
+
+  /** smooth zoom by `factor` around a screen point (double tap) */
+  animateZoom(sx, sy, factor) {
+    const R = this.renderer, s0 = R.scale, s1 = Math.min(6, Math.max(0.15, s0 * factor)), w = R.toWorld(sx, sy), t0 = performance.now();
+    const id = this.zoomAnim = (this.zoomAnim || 0) + 1;
+    const step = (now) => {
+      if (id !== this.zoomAnim) return; // a newer gesture took over
+      const k = Math.min(1, (now - t0) / 220), e = 1 - Math.pow(1 - k, 3);
+      R.scale = s0 * Math.pow(s1 / s0, e);
+      R.ox = sx - w[0] * R.scale; R.oy = sy - w[1] * R.scale;
+      this.dirtyDraw = true;
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   tap(g) {
@@ -1491,6 +1733,8 @@ function closestOnSeg(x, y, a, b) {
   t = Math.max(0, Math.min(1, t));
   return [a[0] + t * dx, a[1] + t * dy];
 }
+/** Do two part boxes overlap (more than touching edge to edge)? */
+function boxesHit(a, b) { return a[0] + 2 < b[2] && a[2] - 2 > b[0] && a[1] + 2 < b[3] && a[3] - 2 > b[1]; }
 function onSeg(p, a, b) {
   const c = closestOnSeg(p[0], p[1], a, b);
   return Math.hypot(c[0] - p[0], c[1] - p[1]) < 0.5;

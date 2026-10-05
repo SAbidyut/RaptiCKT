@@ -14,7 +14,7 @@ const G = GRID;
 const TAU = 2 * Math.PI;
 
 // ------------------------------------------------------------- batteries
-const interp = (tbl, x) => {
+export const interp = (tbl, x) => {
   if (x <= tbl[0][0]) return tbl[0][1];
   for (let k = 1; k < tbl.length; k++) {
     if (x <= tbl[k][0]) { const [x0, y0] = tbl[k - 1], [x1, y1] = tbl[k]; return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0); }
@@ -22,7 +22,7 @@ const interp = (tbl, x) => {
   return tbl[tbl.length - 1][1];
 };
 
-const CHEM = {
+export const CHEM = {
   alkaline: [[0, 0.9], [0.1, 1.15], [0.3, 1.25], [0.6, 1.35], [0.9, 1.5], [1, 1.58]],
   liion: [[0, 3.0], [0.05, 3.3], [0.1, 3.45], [0.2, 3.6], [0.3, 3.68], [0.4, 3.73], [0.5, 3.78], [0.6, 3.85], [0.7, 3.92], [0.8, 4.0], [0.9, 4.08], [1, 4.2]],
   leadacid: [[0, 1.93], [0.2, 1.98], [0.5, 2.03], [0.8, 2.08], [1, 2.12]],
@@ -30,7 +30,14 @@ const CHEM = {
   lithium: [[0, 2.0], [0.05, 2.6], [0.15, 2.85], [0.5, 2.95], [0.9, 3.0], [1, 3.2]],
 };
 
-class Battery extends TwoTerm {
+// open-circuit voltage vs state of charge q. Below q = 0 (the rated cut-off) only a sliver of
+// charge remains and the voltage collapses: the curve falls to 0 V at q = −QX, so an
+// exhausted battery cannot keep a load running at its cut-off voltage forever.
+export const QX = 0.03;
+export const socOCV = (tbl, q) => (q >= 0 ? interp(tbl, Math.min(1, q)) : interp(tbl, 0) * Math.max(0, 1 + q / QX));
+export const socStep = (q, dq) => Math.min(1, Math.max(-QX, q + dq));
+
+export class Battery extends TwoTerm {
   static category = 'Sources';
   static prefix = 'BT';
   static chem = 'alkaline'; static cells = 1;
@@ -45,7 +52,7 @@ class Battery extends TwoTerm {
   refNode = 1;
   branchCount() { return 1; }
   reset() { this.q = this.p.soc / 100; this.setCurrent(0); }
-  ocv(q = this.q ?? this.p.soc / 100) { return this.constructor.cells * interp(CHEM[this.constructor.chem], Math.min(1, Math.max(0, q))); }
+  ocv(q = this.q ?? this.p.soc / 100) { return this.constructor.cells * socOCV(CHEM[this.constructor.chem], q); }
   stamp(s) {
     const k = this.branches[0], [a, b] = this.nodes;
     s.addBranchKCL(a, b, k); s.addA(k, a - 1, 1); s.addA(k, b - 1, -1); s.addA(k, k, -this.p.rint);
@@ -55,7 +62,7 @@ class Battery extends TwoTerm {
     const i = s.x[this.branches[0]];
     this.setCurrent(i);
     // branch current > 0 flows into + : charging
-    if (s.mode !== 'dc') this.q = Math.min(1, Math.max(0, this.q + (i * s.dt) / (3600 * this.p.ah)));
+    if (s.mode !== 'dc') this.q = socStep(this.q, (i * s.dt) / (3600 * this.p.ah));
   }
   stampAC(ac) {
     const k = this.branches[0], [a, b] = this.nodes;
@@ -65,7 +72,7 @@ class Battery extends TwoTerm {
   readings(s) {
     const v = this.voltageDiff(s);
     return [['Terminal voltage', v, 'V'], ['Open-circuit voltage', this.ocv(), 'V'], ['Current (out of +)', -this.i, 'A'],
-      ['State of charge', (this.q ?? 0) * 100, '%'], ['Power delivered', -v * this.i, 'W']];
+      ['State of charge', Math.max(0, this.q ?? 0) * 100, '%'], ['Power delivered', -v * this.i, 'W']];
   }
   spice(n) { return `V${this.name} ${n[0]} ${n[1]} DC ${this.ocv()} Rser=${this.p.rint}`; }
   leads() { return [[0, -2 * G, 0, -0.9 * G, 0], [1, 2 * G, 0, 0.9 * G, 0]]; }
@@ -89,7 +96,7 @@ class Battery extends TwoTerm {
   }
 }
 
-function battery(type, title, chem, cells, soc, ah, r, keywords, desc) {
+export function battery(type, title, chem, cells, soc, ah, r, keywords, desc) {
   const C = class extends Battery {};
   Object.assign(C, { type, title, chem, cells, keywords, props: Battery.mkProps(soc, ah, r) });
   if (desc) C.description = desc;
@@ -377,7 +384,7 @@ export class PVModule extends SolarCell {
 register(PVModule);
 
 // ------------------------------------------------------ signal generators
-class SigSource extends VoltageSource {
+export class SigSource extends VoltageSource {
   static category = 'Sources';
   static glyph = '';
   value(s) { return this.f(s.mode === 'dc' ? 0 : s.tNext) * (s.srcScale ?? 1); }

@@ -2,6 +2,8 @@
 
 import { CircuitDoc, makeElement } from './doc.js';
 import { GRID } from '../elements/index.js';
+import { EXAMPLES2, ALLOW_OPEN2 } from './examples2.js';
+import { EXAMPLES3, ALLOW_OPEN3 } from './examples3.js';
 
 const G = GRID;
 
@@ -27,13 +29,16 @@ function builder(name) {
     node(x, y, color) { doc.probes.push({ id: 'e' + pid++, kind: 'node', pos: [x * G, y * G], color, label: '', unit: 'V' }); },
     volt(e, color) { doc.probes.push({ id: 'e' + pid++, kind: 'volt', el: e.id, color, label: '', unit: 'V' }); },
     cur(e, color) { doc.probes.push({ id: 'e' + pid++, kind: 'cur', el: e.id, color, label: '', unit: 'A' }); },
+    /** grid coordinates of post k of element e */
+    pin(e, k) { const p = e.getPosts()[k]; return [p[0] / G, p[1] / G]; },
+    label(x, y, text, size = 10) { return b.el('label', x, y, { text, size }); },
   };
   return b;
 }
 
 const C = ['#facc15', '#22d3ee', '#f472b6', '#4ade80'];
 
-export const EXAMPLES = [
+const BASE = [
   {
     id: 'led', cat: 'Basics', title: 'LED with switch',
     desc: 'The "hello world" of electronics. Tap the switch to turn the LED on. The resistor limits current to I = (9 V − Vf)/470 Ω ≈ 15 mA.',
@@ -760,8 +765,10 @@ export const EXAMPLES = [
   },
 ];
 
+export const EXAMPLES = [...BASE, ...EXAMPLES2, ...EXAMPLES3];
+
 // unused outputs that are legitimately left open (relay NC contacts, the RAM cells' Q̄, the tens carry)
-export const EXAMPLE_ALLOW_OPEN = { relay: 1, ram16: 16, clock60: 1, streetlight: 1 };
+export const EXAMPLE_ALLOW_OPEN = { relay: 1, ram16: 16, clock60: 1, streetlight: 1, ...ALLOW_OPEN2, ...ALLOW_OPEN3 };
 
 export function buildExample(ex) {
   const b = builder(ex.title);

@@ -14,6 +14,11 @@ const OPAMP_PRESETS = {
   TL071: { a0: 2e5, gbw: 3e6, sr: 13e6, vpos: 15, vneg: -15, drop: 1.5, rout: 50 },
   OPA2134: { a0: 1e6, gbw: 8e6, sr: 20e6, vpos: 15, vneg: -15, drop: 1, rout: 30 },
   'Rail-to-rail 5V': { a0: 1e5, gbw: 10e6, sr: 10e6, vpos: 5, vneg: 0, drop: 0.01, rout: 20 },
+  LM324: { a0: 1e5, gbw: 1.2e6, sr: 0.5e6, vpos: 5, vneg: 0, drop: 0.02, rout: 50 },
+  TL072: { a0: 2e5, gbw: 3e6, sr: 13e6, vpos: 15, vneg: -15, drop: 1.5, rout: 50 },
+  TL082: { a0: 2e5, gbw: 4e6, sr: 13e6, vpos: 15, vneg: -15, drop: 1.5, rout: 50 },
+  NE5532: { a0: 1e5, gbw: 10e6, sr: 9e6, vpos: 15, vneg: -15, drop: 1.2, rout: 30 },
+  'OP07 (precision)': { a0: 5e5, gbw: 0.6e6, sr: 0.3e6, vpos: 15, vneg: -15, drop: 1.5, rout: 60 },
 };
 
 /** smooth symmetric saturation with unity slope near 0 */
@@ -30,7 +35,7 @@ function sat(u, h) {
 
 export class OpAmp extends Element {
   static type = 'opamp'; static title = 'Op-Amp'; static category = 'Analog ICs';
-  static prefix = 'U'; static keywords = 'operational amplifier opamp lm741 lm358 tl071 amplifier';
+  static prefix = 'U'; static keywords = 'operational amplifier opamp lm741 lm358 lm324 tl071 tl072 tl082 ne5532 op07 precision amplifier';
   static props = [
     { key: 'model', label: 'Model', type: 'select', def: 'Ideal', options: Object.keys(OPAMP_PRESETS).map((k) => [k, k]).concat([['custom', 'Custom']]), preset: OPAMP_PRESETS },
     { key: 'a0', label: 'Open-loop gain A₀', unit: 'V/V', def: 1e6, min: 1, max: 1e9, log: true },

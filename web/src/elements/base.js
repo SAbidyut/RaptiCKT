@@ -5,7 +5,11 @@ import { fmtQty } from '../engine/units.js';
 export const GRID = 20;
 
 const REGISTRY = new Map();
-export function register(cls) { REGISTRY.set(cls.type, cls); return cls; }
+export function register(cls) {
+  if (REGISTRY.has(cls.type)) throw new Error(`duplicate component type '${cls.type}'`); // a second part must never silently replace the first
+  REGISTRY.set(cls.type, cls);
+  return cls;
+}
 export function getType(t) { return REGISTRY.get(t); }
 export function allTypes() { return [...REGISTRY.values()]; }
 
@@ -106,6 +110,7 @@ export class Element {
     for (const pr of this.constructor.props) if (this.p[pr.key] !== pr.def) p[pr.key] = this.p[pr.key];
     if (Object.keys(p).length) out.p = p;
     if (this.label) out.l = this.label;
+    if (this.fault && this.fault.m && this.fault.m !== 'none') out.fl = { ...this.fault };
     return out;
   }
 
@@ -117,6 +122,7 @@ export class Element {
     e.flip = !!o.f;
     if (o.p) Object.assign(e.p, o.p);
     if (o.l) e.label = o.l;
+    if (o.fl) e.fault = { ...o.fl };
     e.onParamChange();
     return e;
   }
@@ -151,11 +157,11 @@ export class Element {
 
   /** World anchor for the value label: [x, y, align, baseline]. */
   labelAnchor(side = this.chosenSide || this.labelSide()) {
-    const [sx, sy] = side;
+    const [sx, sy, extra = 0] = side; // extra: further out, when the spot next to the part is taken
     const [ox, oy] = this.toWorld(0, 0), [px, py] = this.toWorld(sx, sy);
     const dx = Math.round(px - ox), dy = Math.round(py - oy);
     const [x1, y1, x2, y2] = this.worldBox();
-    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, m = 7;
+    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, m = 7 + extra;
     if (dx > 0) return [x2 + m, cy, 'left', 'middle'];
     if (dx < 0) return [x1 - m, cy, 'right', 'middle'];
     if (dy > 0) return [cx, y2 + m, 'center', 'top'];

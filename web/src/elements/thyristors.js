@@ -71,7 +71,11 @@ class Thyristor extends Element {
       const trig = bi ? Math.abs(ig) > p.igt && Math.abs(v) > 0.5 : ig > p.igt && v > 0.5;
       const bo = bi ? Math.abs(v) > p.vbo : v > p.vbo;
       if (trig || bo) { this.on = true; this.mark(s); }
-    } else if ((bi ? Math.abs(ia) : ia) < p.ih) { this.on = false; this.mark(s); }
+    } else if ((bi ? Math.abs(ia) : ia) < p.ih && !(bi ? Math.abs(ig) > p.igt : ig > p.igt)) {
+      // below the holding current it turns off — but not while gate current is still applied
+      // (with an inductive load the anode current needs time to rise past the latching level)
+      this.on = false; this.mark(s);
+    }
   }
   mark(s) { if (s.mode === 'dc') s.dirty = true; else s.markEvent(); }
   digitalSettle(s) { const was = this.on; const [a, k, gt] = this.nodes; this.update(s, s.v(a) - s.v(k), this.main(s.v(a) - s.v(k)).i, this.gate(s.v(gt) - s.v(k)).i); return was !== this.on; }
@@ -303,10 +307,10 @@ export class GateDriver extends withChip(Element) {
 register(GateDriver);
 
 // ------------------------------------------------- averaged DC-DC modules
-const smin = (a, b, w) => { const d = a - b, r = Math.sqrt(d * d + w * w); return { y: (a + b - r) / 2, da: (1 - d / r) / 2, db: (1 + d / r) / 2 }; };
-const smax = (a, b, w) => { const m = smin(-a, -b, w); return { y: -m.y, da: m.da, db: m.db }; };
+export const smin = (a, b, w) => { const d = a - b, r = Math.sqrt(d * d + w * w); return { y: (a + b - r) / 2, da: (1 - d / r) / 2, db: (1 + d / r) / 2 }; };
+export const smax = (a, b, w) => { const m = smin(-a, -b, w); return { y: -m.y, da: m.da, db: m.db }; };
 
-class DCDC extends withChip(Element) {
+export class DCDC extends withChip(Element) {
   static category = 'Thyristors & Power';
   static prefix = 'U';
   nonlinear = true;

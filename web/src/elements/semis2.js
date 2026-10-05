@@ -13,7 +13,7 @@ import { fmtShort } from '../engine/units.js';
 const G = GRID;
 
 /** Two-terminal nonlinear device with a user I–V and simple Newton step limiting. */
-class NL2 extends TwoTerm {
+export class NL2 extends TwoTerm {
   static category = 'Diodes';
   static prefix = 'D';
   nonlinear = true;

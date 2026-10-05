@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.database.Cursor;
@@ -20,7 +21,9 @@ import android.os.Vibrator;
 import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.view.View;
+import android.view.Window;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
@@ -49,10 +52,13 @@ public class MainActivity extends Activity {
     private static final int BG = Color.parseColor("#0B1120");
 
     private WebView web;
+    private FrameLayout root;
+    private String lastCut = "";
     private byte[] pendingSave;
     private String pendingOpenName;
     private String pendingOpenText;
     private boolean pageReady;
+    private boolean immersive;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
@@ -62,7 +68,7 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
 
-        FrameLayout root = new FrameLayout(this);
+        root = new FrameLayout(this);
         root.setBackgroundColor(BG);
         web = new WebView(this);
         web.setBackgroundColor(BG);
@@ -73,8 +79,17 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         // Edge-to-edge (enforced on Android 15): pad content away from system bars, cutouts and the keyboard.
+        // In full screen the page runs edge to edge, under the camera cutout too; the cutout size is
+        // handed to the page (--cut-t/r/b/l) so it can keep its own buttons clear of it.
         root.setOnApplyWindowInsetsListener((v, insets) -> {
             int l, t, r, b;
+            if (immersive) {
+                int imeB = Build.VERSION.SDK_INT >= 30 ? insets.getInsets(WindowInsets.Type.ime()).bottom : 0;
+                v.setPadding(0, 0, 0, imeB);
+                sendCutout(insets);
+                return insets;
+            }
+            sendCutout(null);
             if (Build.VERSION.SDK_INT >= 30) {
                 Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                 Insets ime = insets.getInsets(WindowInsets.Type.ime());
@@ -120,6 +135,8 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
+                lastCut = "";
+                root.requestApplyInsets();
                 ui.postDelayed(MainActivity.this::deliverPendingOpen, 600);
             }
         });
@@ -152,6 +169,61 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         web.onResume();
+        if (immersive) applyImmersive(true);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && immersive) applyImmersive(true); // bars come back after dialogs and pickers
+    }
+
+    /** Tells the page how far the camera cutout reaches into each edge (CSS px), or 0 outside full screen. */
+    private void sendCutout(WindowInsets insets) {
+        float d = getResources().getDisplayMetrics().density;
+        int t = 0, r = 0, b = 0, l = 0;
+        if (insets != null && Build.VERSION.SDK_INT >= 28 && insets.getDisplayCutout() != null) {
+            android.view.DisplayCutout c = insets.getDisplayCutout();
+            t = Math.round(c.getSafeInsetTop() / d); r = Math.round(c.getSafeInsetRight() / d);
+            b = Math.round(c.getSafeInsetBottom() / d); l = Math.round(c.getSafeInsetLeft() / d);
+        }
+        String js = "(function(s){s.setProperty('--cut-t','" + t + "px');s.setProperty('--cut-r','" + r + "px');s.setProperty('--cut-b','" + b + "px');s.setProperty('--cut-l','" + l + "px')})(document.documentElement.style)";
+        if (js.equals(lastCut)) return;
+        lastCut = js;
+        if (web != null) web.evaluateJavascript(js, null);
+    }
+
+    /** Full screen: hide the status and navigation bars (a swipe from the edge shows them briefly). */
+    @SuppressWarnings("deprecation")
+    private void applyImmersive(boolean on) {
+        immersive = on;
+        Window w = getWindow();
+        if (Build.VERSION.SDK_INT >= 28) {
+            WindowManager.LayoutParams lp = w.getAttributes();
+            lp.layoutInDisplayCutoutMode = on ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                    : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+            w.setAttributes(lp);
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController c = w.getInsetsController();
+            if (c != null) {
+                if (on) {
+                    c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                    c.hide(WindowInsets.Type.systemBars());
+                } else {
+                    c.show(WindowInsets.Type.systemBars());
+                }
+            }
+        } else {
+            View decor = w.getDecorView();
+            decor.setSystemUiVisibility(on ? View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : View.SYSTEM_UI_FLAG_VISIBLE);
+        }
+        if (root != null) root.post(root::requestApplyInsets); // re-pad: edge to edge in full screen
     }
 
     @Override
@@ -339,6 +411,19 @@ public class MainActivity extends Activity {
                     Toast.makeText(MainActivity.this, "No file manager available", Toast.LENGTH_SHORT).show();
                 }
             });
+        }
+
+        @JavascriptInterface
+        public void setImmersive(boolean on) {
+            ui.post(() -> applyImmersive(on));
+        }
+
+        /** "landscape", "portrait" or anything else for the phone's own rotation. */
+        @JavascriptInterface
+        public void setOrientation(String mode) {
+            ui.post(() -> setRequestedOrientation("landscape".equals(mode) ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    : "portrait".equals(mode) ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                    : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED));
         }
 
         @JavascriptInterface

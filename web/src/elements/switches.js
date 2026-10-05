@@ -216,11 +216,14 @@ export class DCMotor extends TwoTerm {
     { key: 'b', label: 'Friction b', unit: 'N·m·s', def: 1e-6, min: 0, max: 1 },
     { key: 'load', label: 'Load torque', unit: 'N·m', def: 0, min: -10, max: 10, knob: true },
   ];
-  static description = 'Permanent-magnet DC motor: V = R·i + L·di/dt + K·ω and J·dω/dt = K·i − b·ω − T_load, solved simultaneously.';
+  static description = 'Permanent-magnet DC motor: V = R·i + L·di/dt + K·ω and J·dω/dt = K·i − b·ω − T_load, solved simultaneously. The rotor starts at rest; a positive load torque always opposes the rotation (friction-like: it can stop the shaft but never turn it backwards); a negative one drives the shaft.';
   constructor(x, y) { super(x, y); this.angle = 0; this.w = 0; }
   branchCount() { return 2; } // armature current, angular speed
   valueLabel() { return fmtQty(Math.round((this.w || 0) * 60 / (2 * Math.PI)), 'rpm'); }
-  reset() { this.iPrev = 0; this.w = 0; this.angle = 0; this.setCurrent(0); }
+  reset() { this.iPrev = 0; this.w = 0; this.angle = 0; this.fr = 0; this.setCurrent(0); }
+  // a positive load torque always opposes the motion (friction-like: it cannot drive the
+  // shaft backwards); within ±W0 of standstill it acts as steep damping instead of a step
+  static W0 = 0.5;
   stamp(s) {
     const [a, b] = this.nodes, [ki, kw] = this.branches, p = this.p;
     s.addBranchKCL(a, b, ki);
@@ -228,23 +231,26 @@ export class DCMotor extends TwoTerm {
     s.addA(ki, a - 1, 1); s.addA(ki, b - 1, -1);
     s.addA(ki, ki, -(p.ra + (s.mode === 'dc' ? 0 : p.la / s.dt)));
     s.addA(ki, kw, -p.k);
+    // operating point: the rotor is at rest when the supply is applied
+    if (s.mode === 'dc') { s.addA(kw, kw, 1); return; }
     // mechanical: (J/dt + b) w - K i = J w_prev/dt - T
-    s.addA(kw, kw, (s.mode === 'dc' ? 0 : p.j / s.dt) + Math.max(p.b, 1e-12));
+    s.addA(kw, kw, p.j / s.dt + Math.max(p.b, 1e-12) + (p.load > 0 && this.fr === 0 ? p.load / DCMotor.W0 : 0));
     s.addA(kw, ki, -p.k);
   }
   stampStep(s) {
     const [ki, kw] = this.branches, p = this.p;
-    if (s.mode !== 'dc') {
-      s.b[ki] += -(p.la / s.dt) * this.iPrev;
-      s.b[kw] += (p.j / s.dt) * this.w;
-    }
-    s.b[kw] -= p.load;
+    if (s.mode === 'dc') return;
+    s.b[ki] += -(p.la / s.dt) * this.iPrev;
+    s.b[kw] += (p.j / s.dt) * this.w;
+    if (p.load > 0) s.b[kw] -= p.load * this.fr; else s.b[kw] -= p.load;
   }
   accept(s) {
     const [ki, kw] = this.branches;
     this.iPrev = s.x[ki];
     this.w = s.x[kw];
     if (s.mode !== 'dc') this.angle += this.w * s.dt;
+    const fr = this.w > DCMotor.W0 ? 1 : this.w < -DCMotor.W0 ? -1 : 0;
+    if (fr !== this.fr) { this.fr = fr; s.dirty = true; }
     this.setCurrent(this.iPrev);
   }
   stampAC(ac) {
