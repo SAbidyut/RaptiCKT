@@ -174,6 +174,43 @@ export class LED extends Diode {
     if (this.j) this.j.set(this.p.is, this.p.n, 0); else this.j = new Junction(this.p.is, this.p.n, 0);
   }
   constructor(x, y) { super(x, y); this.onParamChange(); }
+  reset() { super.reset(); this.ifast = 0; }
+  /**
+   * Above 5 × its rated current the die's bulk resistance takes over: the exponential
+   * continues as a straight line of the same slope (Rs = nVt / 5·Imax). An LED put straight
+   * across a battery then draws a large but finite current — and burns out.
+   */
+  knee() { const ik = 5 * this.p.imax; return [ik, this.p.n * VT * Math.log(ik / this.p.is + 1)]; }
+  ledIV(v) {
+    const [ik, vk] = this.knee();
+    if (v <= vk) return diodeIV(v, this.p.is, this.p.n, 0);
+    const g = (ik + this.p.is) / (this.p.n * VT);
+    return { i: ik + (v - vk) * g, g };
+  }
+  stampNL(s) {
+    const [a, b] = this.nodes;
+    if (this.damaged) { s.addG(a, b, 1e-12); return; }
+    let v = s.v(a) - s.v(b);
+    const vk = this.knee()[1];
+    if (v > vk && this.j.vd >= vk) this.j.vd = v; else v = this.j.limit(s, v); // no junction limiting on the straight part
+    const { i, g } = this.ledIV(v);
+    s.addG(a, b, g); s.addI(a, b, i - g * v);
+    this.gd = g;
+  }
+  accept(s) {
+    if (this.damaged) { this.setCurrent(0); return; }
+    const v = this.voltageDiff(s), { i, g } = this.ledIV(v);
+    this.gd = g; this.j.vd = v;
+    this.setCurrent(i);
+    if (s.mode === 'dc') return;
+    // the die heats in milliseconds: far over its rating it dies at once, a moderate overload
+    // within seconds (most LEDs are rated 20 mA continuous, about 30 mA absolute maximum)
+    const r = Math.max(0, this.i) / this.p.imax;
+    this.ifast = (this.ifast || 0) + (r - (this.ifast || 0)) * Math.min(1, s.dt / 0.005);
+    const slow = this.heatAvg(s, r, 2);
+    this.stress = Math.max(0, Math.min(1, (slow - 1.3) / 1.2));
+    if (this.ifast > 10 || slow > 2.5) this.setDamage(s, `Burnt out — ${fmtShort(Math.max(this.i, slow * this.p.imax), 'A')} through an LED rated ${fmtShort(this.p.imax, 'A')} (use a series resistor)`);
+  }
   valueLabel() { return ''; }
   spice(n) { return `${this.name} ${n[0]} ${n[1]} D${this.name}\n.model D${this.name} D(Is=${this.p.is.toExponential(3)} N=${this.p.n})`; }
   localBox() { return [-2 * G, -1.2 * G, 2 * G, 0.75 * G]; }

@@ -14,6 +14,8 @@ import { Analysis } from './analysis.js';
 import { Multimeter } from './meter.js';
 import { store } from './store.js';
 import { RmsTracker, acFrequency } from './rms.js';
+import { WireHeat } from './wireheat.js';
+import { WIRE_PRESETS, cableLabel } from '../elements/cables.js';
 import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore } from './autoroute.js';
 
 // two-terminal parts outside the Sources / Batteries / Diodes / Meters categories that still have a polarity
@@ -261,6 +263,7 @@ export class Editor {
     this.doc.assignNames();
     this.sim = new Simulator(this.simOptions()).build(this.doc.elements, this.doc.wires);
     this.graph = new WireGraph(this.doc);
+    this.wireHeat = new WireHeat(this.doc, this.graph);
     this.resolveProbes();
     this.computeTiming();
     // one supply cycle of RMS history for the live labels and Auto meters
@@ -268,11 +271,157 @@ export class Editor {
     this.sim.acPeriod = fac >= 0.5 ? 1 / fac : 0;
     this.rms = this.sim.acPeriod ? new RmsTracker(this.sim.acPeriod, this.sim.nodeCount, this.doc.elements.filter((e) => e.localPosts().length === 2)) : null;
     if (this.running) {
-      this.sim.start();
+      this.startSim();
       this.scope.reset();
       this.showError();
     }
     this.inspector.updateReadings();
+  }
+
+  /** Start the transient from t = 0: parts and wires cold (burnt parts stay burnt). */
+  startSim() {
+    WireHeat.resetAll(this.doc);
+    this.applyHeatClock();
+    this.sim.start();
+  }
+
+  /**
+   * Thermal effects (trips, cable heating, burning out) follow the real-time clock: the
+   * waveforms are shown slowed down (speed s of simulated time per second), so heat runs
+   * 1/s times faster than simulated time. 'fast' makes it 10× quicker still, 'sim' uses
+   * simulated time throughout.
+   */
+  applyHeatClock() {
+    const sim = this.sim, set = this.settings;
+    if (!sim) return;
+    const clock = set.heatClock || 'real';
+    sim.heatScale = clock === 'sim' ? 1 : Math.max(1, (clock === 'fast' ? 10 : 1) / Math.max(1e-9, this.speed || 1));
+    sim.damageOn = set.damage !== false;
+  }
+
+  /**
+   * Rebuild the circuit while it runs, keeping time and every part's state (a wire just
+   * burnt through or was repaired). Node voltages and branch currents carry over per part.
+   */
+  hotRebuild() {
+    const old = this.sim;
+    if (!old || !this.running || !old.ready) { this.topologyChanged(); return; }
+    const keep = new Map();
+    for (const e of this.doc.elements) {
+      keep.set(e, { n: e.nodes.map((k) => old.v(k)), i: e.inodes.map((k) => old.v(k)), b: e.branches.map((k) => old.x[k]) });
+    }
+    const sim = new Simulator(this.simOptions()).build(this.doc.elements, this.doc.wires);
+    for (const [e, s] of keep) {
+      e.nodes.forEach((k, j) => { if (k > 0) sim.x[k - 1] = s.n[j]; });
+      e.inodes.forEach((k, j) => { if (k > 0) sim.x[k - 1] = s.i[j] ?? 0; });
+      e.branches.forEach((k, j) => { sim.x[k] = s.b[j] ?? 0; });
+    }
+    sim.xPrev.set(sim.x);
+    Object.assign(sim, { t: old.t, acPeriod: old.acPeriod, mode: 'tran', started: true, beSteps: 2, dirty: true });
+    this.sim = sim;
+    this.applyHeatClock();
+    this.graph = new WireGraph(this.doc);
+    this.wireHeat = new WireHeat(this.doc, this.graph);
+    this.resolveProbes();
+    this.rms = sim.acPeriod ? new RmsTracker(sim.acPeriod, sim.nodeCount, this.doc.elements.filter((e) => e.localPosts().length === 2)) : null;
+    this.dirtyDraw = true;
+  }
+
+  // ---------------------------------------------------------- damage
+  /** Parts that burnt out / blew / were destroyed during the last steps. */
+  onDamage(list) {
+    const now = performance.now() / 1000;
+    for (const e of list) {
+      if (!e.damaged) continue;
+      e.damaged.wall = now;
+      this.toast(`🔥 ${e.name} ${e.constructor.title}: ${e.damaged.why}. Select it and tap Replace.`, 4500);
+    }
+    this.haptic(60);
+    this.playBang();
+    const sel = this.inspector.el;
+    if (sel && list.includes(sel)) { this.inspector.renderQuick(); if (this.inspector.sheetOpen) this.inspector.render(); }
+    this.renderSelBar();
+    this.dirtyDraw = true;
+    this.scheduleAutosave();
+  }
+
+  onWiresBurnt(list) {
+    const now = performance.now() / 1000;
+    for (const w of list) {
+      w.burnt = true; w.burntWall = now;
+      const h = w.heat;
+      this.toast(`🔥 Wire burnt! ${cableLabel(w.cable)} (rated ${h.info.iz} A) carried ${fmtSI(h.irms, 'A', 3)}. ${h.why}. Select it and tap Repair, or use a thicker cable.`, 5000);
+    }
+    this.haptic(80);
+    this.playBang();
+    this.hotRebuild();
+    this.renderSelBar();
+    this.scheduleAutosave();
+  }
+
+  /** Fit a new part in place of a burnt one. */
+  replacePart(e) {
+    if (!e || !e.damaged) return;
+    this.checkpoint();
+    e.replace(this.sim);
+    if (this.sim) this.sim.discontinuity();
+    this.toast(`New ${e.constructor.title.toLowerCase()} fitted as ${e.name}`);
+    this.haptic(12);
+    this.inspector.renderQuick();
+    if (this.inspector.sheetOpen) this.inspector.render();
+    this.dirtyDraw = true;
+  }
+
+  /** Re-run a burnt wire (optionally with another cable). */
+  repairWires(ws, cable) {
+    const list = ws.filter((w) => w.burnt || cable !== undefined);
+    if (!list.length) return;
+    this.checkpoint();
+    for (const w of list) {
+      if (cable !== undefined) w.cable = cable ? { ...cable } : null;
+      w.burnt = false; w.burntWall = null;
+      if (w.heat) w.heat.reset();
+    }
+    if (this.running) this.hotRebuild(); else this.topologyChanged();
+    this.renderSelBar();
+    this.dirtyDraw = true;
+  }
+
+  /** Replace every burnt part and repair every burnt wire. */
+  replaceAll() {
+    const els = this.doc.elements.filter((e) => e.damaged), ws = this.doc.wires.filter((w) => w.burnt);
+    if (!els.length && !ws.length) { this.toast('Nothing is burnt — every part is healthy'); return; }
+    this.checkpoint();
+    for (const e of els) e.replace(this.sim);
+    for (const w of ws) { w.burnt = false; w.burntWall = null; if (w.heat) w.heat.reset(); }
+    if (this.sim) this.sim.discontinuity();
+    if (ws.length && this.running) this.hotRebuild(); else if (ws.length) this.topologyChanged();
+    this.toast(`Replaced ${els.length} part${els.length === 1 ? '' : 's'}${ws.length ? ` and ${ws.length} wire${ws.length === 1 ? '' : 's'}` : ''}`);
+    this.inspector.renderQuick?.();
+    this.renderSelBar();
+    this.dirtyDraw = true;
+  }
+
+  /** The cable new wires get (Settings → New wires). */
+  defaultCable() {
+    const k = this.settings.newWire ?? 'hw1.5';
+    const c = k === 'custom' ? this.settings.newWireSpec : WIRE_PRESETS[k];
+    return c ? { ...c } : null;
+  }
+
+  /** A short bang: a part blowing up. */
+  playBang() {
+    if (!this.settings.sound) return;
+    this.ensureAudio();
+    const ac = this.audio;
+    if (!ac) return;
+    try {
+      const n = Math.round(ac.sampleRate * 0.35), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+      for (let k = 0; k < n; k++) d[k] = (Math.random() * 2 - 1) * Math.exp(-k / (ac.sampleRate * 0.045));
+      const src = ac.createBufferSource(), gn = ac.createGain(), lp = ac.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.value = 1800; gn.gain.value = 0.5;
+      src.buffer = buf; src.connect(lp).connect(gn).connect(ac.destination); src.start();
+    } catch { /* no audio */ }
   }
 
   computeTiming() {
@@ -307,7 +456,7 @@ export class Editor {
       this.rebuildNow(true);
       this.running = true;
       this.paused = false;
-      this.sim.start();
+      this.startSim();
       this.scope.reset();
       this.showError();
       this.app.bridge.keepScreenOn(true);
@@ -354,7 +503,8 @@ export class Editor {
     if (!sim || !sim.ready || sim.fatal) return 1;
     const t0 = performance.now();
     const target = sim.t + simTime;
-    let n = 0;
+    this.applyHeatClock();
+    let n = 0, burnt = null;
     while (sim.t < target - this.dt * 1e-6) {
       const t0s = sim.t;
       const ok = sim.step(Math.min(this.dt, target - sim.t) > this.dt * 0.01 ? this.dt : this.dt);
@@ -363,8 +513,11 @@ export class Editor {
       if (this.rms) this.rms.sample(sim, sim.t - t0s);
       this.scope.sample(sim);
       if (this.meter.open) this.meter.sample(sim);
+      if (this.wireHeat && this.wireHeat.active && (burnt = this.wireHeat.step(sim))) break;
       if ((n & 7) === 0 && performance.now() - t0 > budgetMs) break;
     }
+    if (sim.damageLog.length) this.onDamage(sim.damageLog.splice(0));
+    if (burnt) { this.onWiresBurnt(burnt); return 1; }
     const done = simTime > 0 ? Math.min(1, (sim.t - (target - simTime)) / simTime) : 1;
     return done;
   }
@@ -559,9 +712,13 @@ export class Editor {
     const bar = this.q('.selbar');
     const nEl = this.selection.size, nW = this.selWires.size;
     if ((nEl === 0 && nW === 0) || (nEl === 1 && nW === 0)) { bar.classList.remove('show'); return; }
-    const onlyWire = nEl === 0 && nW === 1;
-    bar.innerHTML = `<span>${nEl ? nEl + ' part' + (nEl > 1 ? 's' : '') : ''}${nEl && nW ? ', ' : ''}${nW ? nW + ' wire' + (nW > 1 ? 's' : '') : ''}</span>
-      ${onlyWire ? `<button data-s="probe">${icon('scope', 17)}Scope</button>` : ''}
+    const onlyWire = nEl === 0 && nW === 1, wiresOnly = nEl === 0 && nW > 0;
+    const burnt = [...this.selWires].some((w) => w.burnt);
+    const w1 = onlyWire ? [...this.selWires][0] : null;
+    bar.innerHTML = `<span>${nEl ? nEl + ' part' + (nEl > 1 ? 's' : '') : ''}${nEl && nW ? ', ' : ''}${nW ? nW + ' wire' + (nW > 1 ? 's' : '') : ''}${w1 && !burnt ? ` · ${esc(cableLabel(w1.cable))}` : ''}</span>
+      ${burnt ? `<button data-s="repair" class="hot">${icon('reset', 17)}Repair</button>` : ''}
+      ${wiresOnly ? `<button data-s="cable">${icon('wire', 17)}Cable</button>` : ''}
+      ${onlyWire && !burnt ? `<button data-s="probe">${icon('scope', 17)}Scope</button>` : ''}
       ${nEl ? `<button data-s="rotate">${icon('rotate', 17)}Rotate</button><button data-s="dup">${icon('copy', 17)}Copy</button>` : ''}
       <button data-s="del" class="danger">${icon('trash', 17)}Delete</button>
       <button data-s="x">${icon('x', 17)}</button>`;
@@ -569,6 +726,8 @@ export class Editor {
     bar.querySelectorAll('[data-s]').forEach((b) => b.addEventListener('click', () => {
       const s = b.dataset.s;
       if (s === 'probe') { const w = [...this.selWires][0]; this.addProbe({ kind: 'node', pos: this.wireProbePoint(w) }); }
+      if (s === 'repair') this.repairWires([...this.selWires]);
+      if (s === 'cable') this.inspector.openWires([...this.selWires]);
       if (s === 'rotate') this.rotateSelection();
       if (s === 'dup') this.duplicateSelection();
       if (s === 'del') this.deleteSelection();
@@ -810,11 +969,12 @@ export class Editor {
     this.checkpoint();
     const newEls = [], newWires = [];
     for (const e of this.selection) {
-      const c = Element.fromJSON(e.toJSON());
+      const o = e.toJSON(); delete o.d; // a copy is a new, undamaged part
+      const c = Element.fromJSON(o);
       this.doc.add(c); newEls.push(c);
     }
     const wirePts = [...this.selWires].map((w) => w.pts);
-    for (const pts of wirePts) newWires.push(this.doc.addWire(pts.map((p) => [...p])));
+    for (const w of this.selWires) newWires.push(this.doc.addWire(w.pts.map((p) => [...p]), { cable: w.cable }));
     // the copy goes to the nearest free spot (down-right first), never on top of anything
     const home = newEls.map((c) => [c.x, c.y]), live = newWires.filter(Boolean);
     const ctx = this.placementCtx(newEls, live, true);
@@ -979,7 +1139,7 @@ export class Editor {
       }
       if (!pieces.length) continue;
       w.pts = pieces[0];
-      for (const q of [...pieces.slice(1), pts]) if (q.length >= 2) this.doc.addWire(q);
+      for (const q of [...pieces.slice(1), pts]) if (q.length >= 2) this.doc.addWire(q, w);
     }
   }
 
@@ -1180,6 +1340,7 @@ export class Editor {
       ['save', 'save', 'Save to My Circuits'], ['copy', 'saveas', 'Save as copy'], ['edit', 'info', 'Circuit name & notes'],
       ['download', 'export', 'Export file (.rckt)'], ['upload', 'import', 'Open file…'], ['share', 'share', 'Share circuit'],
       ['code', 'netlist', 'SPICE netlist'], ['camera', 'shot', 'Export image (PNG)'], ['table', 'op', 'Operating point'],
+      ['reset', 'repair', 'Replace burnt parts & wires'],
       ['sliders', 'settings', 'Settings'], ['manual', 'manual', 'User manual'], ['help', 'help', 'Help & gestures'], ['trash', 'clear', 'Clear circuit'],
     ];
     m.innerHTML = items.map(([ic, a, t]) => `<button data-m="${a}">${icon(ic, 18)}<span>${t}</span></button>`).join('');
@@ -1204,6 +1365,7 @@ export class Editor {
       case 'share': app.bridge.share(this.doc.name + ' – RaptiCKT circuit', JSON.stringify(this.doc.toJSON())); break;
       case 'netlist': this.analysis.open('net'); break;
       case 'op': this.analysis.open('op'); break;
+      case 'repair': this.replaceAll(); break;
       case 'shot': app.bridge.saveFile(this.doc.name.replace(/\W+/g, '_') + '.png', 'image/png', this.screenshot(), true); break;
       case 'settings': app.openSettings(); break;
       case 'manual': app.openManual(); break;
@@ -1279,12 +1441,12 @@ export class Editor {
     return false;
   }
 
-  toast(msg) {
+  toast(msg, ms = 2200) {
     const t = this.q('.toast');
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(this.toastT);
-    this.toastT = setTimeout(() => t.classList.remove('show'), 2200);
+    this.toastT = setTimeout(() => t.classList.remove('show'), ms);
   }
 
   haptic(ms) { if (this.settings.haptics) this.app.bridge.vibrate(ms); }
@@ -1719,7 +1881,7 @@ export class Editor {
     let pts = simplify(smart || route(a, b, hFirst));
     if (pts.length < 2) pts = [a, b];
     this.checkpoint();
-    this.doc.addWire(pts);
+    this.doc.addWire(pts, { cable: this.defaultCable() });
     this.wireFrom = null;
     this.topologyChanged();
     this.haptic(12);

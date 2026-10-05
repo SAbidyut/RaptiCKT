@@ -3,6 +3,7 @@
 import { fmtSI, parseSI, fmtQty, isPlainUnit } from '../engine/units.js';
 import { icon } from './icons.js';
 import { Renderer } from './render.js';
+import { CABLE_TYPES, SIZES, SHAPES, INSTALL, WIRE_PRESETS, normSpec, cableInfo, cableLabel } from '../elements/cables.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -42,6 +43,7 @@ export class Inspector {
   show(el) {
     const same = el && el === this.el;
     this.el = el;
+    this.wires = null;
     if (!el) {
       this.closeSheet();
       this.quick.classList.remove('open');
@@ -59,14 +61,17 @@ export class Inspector {
     const e = this.el, C = e.constructor;
     const posts = e.localPosts().length;
     const canScope = posts >= 1 && C.type !== 'ground' && C.type !== 'label';
+    const dmg = e.damaged ? `<button data-q="replace" class="hot" title="Replace with a new one">${icon('reset', 19)}<span>Replace</span></button>` : '';
+    this.quick.classList.toggle('damaged', !!e.damaged);
     this.quick.innerHTML = `
+      ${dmg}
       <button class="qb-main" data-q="edit">
         <img src="${this.icon(C)}" alt="">
         <div><b>${esc(e.name)} <small>${esc(C.title)}</small></b><span class="qb-read"></span></div>
       </button>
-      ${this.ed.constructor.isPolar(e) ? `<button data-q="reverse" title="Reverse polarity">${icon('polarity', 19)}</button>` : ''}
-      <button data-q="rotate" title="Rotate">${icon('rotate', 19)}</button>
-      ${canScope ? `<button data-q="scope" title="Add to oscilloscope">${icon('scope', 19)}</button>` : ''}
+      ${!e.damaged && this.ed.constructor.isPolar(e) ? `<button data-q="reverse" title="Reverse polarity">${icon('polarity', 19)}</button>` : ''}
+      ${e.damaged ? '' : `<button data-q="rotate" title="Rotate">${icon('rotate', 19)}</button>`}
+      ${canScope && !e.damaged ? `<button data-q="scope" title="Add to oscilloscope">${icon('scope', 19)}</button>` : ''}
       <button data-q="edit" title="Edit properties">${icon('sliders', 19)}</button>
       <button data-q="del" class="danger" title="Delete">${icon('trash', 19)}</button>`;
     this.quick.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => {
@@ -76,6 +81,7 @@ export class Inspector {
       if (a === 'reverse') this.ed.reversePolarity();
       if (a === 'del') this.ed.deleteSelection();
       if (a === 'scope') this.ed.addProbe({ kind: posts >= 2 ? 'volt' : 'cur', el: this.el.id });
+      if (a === 'replace') this.ed.replacePart(this.el);
     }));
     this.updateReadings();
   }
@@ -93,6 +99,7 @@ export class Inspector {
   closeSheet() {
     if (!this.sheetOpen) return;
     this.sheetOpen = false;
+    this.wires = null;
     this.host.classList.remove('open');
     this.ed.root.classList.remove('sheet-open');
     this.ed.overlayClosed('inspector');
@@ -101,6 +108,7 @@ export class Inspector {
   }
 
   render() {
+    if (this.wires) { this.renderWires(); return; }
     const e = this.el, C = e.constructor;
     const props = C.props.filter((p) => !p.hidden);
     const posts = e.localPosts().length;
@@ -112,6 +120,7 @@ export class Inspector {
         <button class="icon-btn" data-a="close" title="Done">${icon('check', 22)}</button>
       </div>
       <div class="insp-scroll">
+        ${e.damaged ? `<div class="insp-dmg"><b>🔥 ${esc(e.constructor.title)} is burnt out</b><span>${esc(e.damaged.why)}</span><button class="btn" data-a="replace">${icon('reset', 18)} Replace with a new one</button></div>` : ''}
         <div class="insp-read"></div>
         <div class="insp-actions">
           <button data-a="rotate">${icon('rotate', 18)}<span>Rotate</span></button>
@@ -255,6 +264,7 @@ export class Inspector {
   }
 
   updateReadings() {
+    if (this.wires) { this.updateWireReadings(); return; }
     if (!this.el) return;
     const sim = this.ed.sim;
     const live = this.ed.running && sim && sim.ready;
@@ -267,7 +277,7 @@ export class Inspector {
       const val = this.el.valueLabel();
       // compact: values of the first two readings (e.g. "3.837 V · 816 µA")
       const nums = r.filter((x) => typeof x[1] === 'number').slice(0, 2).map(fmt);
-      q.textContent = live && r.length ? (nums.length ? nums.join(' · ') : fmt(r[0])) : val || 'Tap ⚙ to edit';
+      q.textContent = this.el.damaged ? 'Burnt out — tap Replace' : live && r.length ? (nums.length ? nums.join(' · ') : fmt(r[0])) : val || 'Tap ⚙ to edit';
     }
     if (!this.sheetOpen) return;
     const box = this.host.querySelector('.insp-read');
@@ -297,8 +307,113 @@ export class Inspector {
       case 'del': this.ed.deleteSelection(); break;
       case 'scopeV': this.ed.addProbe({ kind: 'volt', el: e.id }); break;
       case 'scopeI': this.ed.addProbe({ kind: 'cur', el: e.id }); break;
+      case 'replace': this.ed.replacePart(e); break;
       default:
     }
+  }
+
+  // ------------------------------------------------------------ wires
+  /** Cable sheet for one or more selected wires: type, size, conductor, installation, live heat. */
+  openWires(ws) {
+    if (!ws.length) return;
+    this.el = null;
+    this.wires = ws;
+    this.ed.knob.hide();
+    this.quick.classList.remove('open');
+    this.sheetOpen = true;
+    this.render();
+    this.host.classList.add('open');
+    this.ed.root.classList.add('sheet-open');
+    this.ed.overlayOpen('inspector');
+  }
+
+  renderWires() {
+    const ws = this.wires, w = ws[0], sp = w.cable ? normSpec(w.cable) : null;
+    const T = sp ? CABLE_TYPES[sp.type] : null, info = sp ? cableInfo(sp) : null;
+    const opt = (list, v) => list.map(([k, t]) => `<option value="${esc(k)}" ${String(k) === String(v) ? 'selected' : ''}>${esc(t)}</option>`).join('');
+    const burnt = ws.some((x) => x.burnt);
+    this.host.innerHTML = `
+      <div class="sheet-grip" data-a="close"></div>
+      <div class="insp-head">
+        <div class="insp-ico wire-ico">${icon('wire', 30)}</div>
+        <div class="insp-title"><b>${ws.length > 1 ? ws.length + ' wires' : 'Wire'}</b><span>${esc(cableLabel(sp))}${info ? ` · Iz ${info.iz} A` : ''}</span></div>
+        <button class="icon-btn" data-a="close" title="Done">${icon('check', 22)}</button>
+      </div>
+      <div class="insp-scroll">
+        ${burnt ? `<div class="insp-dmg"><b>🔥 Burnt through</b><span>${esc(w.heat?.why || 'Too much current for this cable')}. A thicker cable (or a smaller MCB / fuse in front of it) stops it happening again.</span><button class="btn" data-a="repair">${icon('reset', 18)} Repair (new wire)</button></div>` : ''}
+        <div class="insp-read"></div>
+        <div class="insp-body">
+          <label class="prop" data-w="type"><span>Cable type</span><select>${opt([['ideal', 'Ideal wire (no resistance, no limit)'], ...Object.entries(CABLE_TYPES).map(([k, v]) => [k, v.name])], sp ? sp.type : 'ideal')}</select></label>
+          ${sp ? `
+          <label class="prop" data-w="size"><span>Conductor size</span><select>${opt(SIZES.map((s) => [s, s + ' mm²']), sp.size)}</select></label>
+          <label class="prop" data-w="shape"><span>Conductor (IEC 60228)</span><select>${opt(T.shapes.map((k) => [k, SHAPES[k]]), sp.shape)}</select></label>
+          <label class="prop" data-w="inst"><span>Installation method</span><select>${opt(Object.entries(INSTALL).map(([k, v]) => [k, v.name]), sp.inst)}</select></label>
+          <div class="wire-facts">
+            <div><span>Current rating Iz</span><b>${info.iz} A</b></div>
+            <div><span>Resistance (20 °C)</span><b>${fmtSI(info.r20 * 1000, 'Ω', 3)}/km</b></div>
+            <div><span>Insulation</span><b>${esc(info.ins.name)}</b></div>
+            <div><span>Conductor</span><b>${esc(info.mat.name)}</b></div>
+          </div>` : ''}
+          <div class="insp-actions">
+            <button data-a="allwires">${icon('copy', 18)}<span>Use for all wires</span></button>
+            <button data-a="setdef">${icon('check', 18)}<span>Make default</span></button>
+            <button data-a="delwire" class="danger">${icon('trash', 18)}<span>Delete</span></button>
+          </div>
+          <p class="insp-desc">Every drawn wire can be given a real cable. It has no resistance in the schematic, but it heats with the current through it: above its rating Iz it overheats (orange glow), far above it the insulation smokes, catches fire and the wire burns through — the circuit opens. Fit an MCB or fuse no bigger than the cable's Iz to protect it. RE = solid round, RM = stranded round, SM = stranded sector-shaped, RF = flexible. For voltage drop over a real length use the Cable parts (Wires & Cables).</p>
+        </div>
+      </div>`;
+    this.host.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this.wireAction(b.dataset.a)));
+    this.host.querySelectorAll('[data-w]').forEach((row) => row.querySelector('select').addEventListener('change', (ev) => {
+      const k = row.dataset.w, v = ev.target.value;
+      let c;
+      if (k === 'type') c = v === 'ideal' ? null : normSpec({ ...(sp || { size: 1.5, inst: 'B1' }), type: v, shape: null });
+      else c = normSpec({ ...sp, [k]: k === 'size' ? +v : v });
+      this.ed.repairWires(this.wires, c);
+      this.render();
+    }));
+    this.readKey = null;
+    this.updateWireReadings();
+  }
+
+  wireAction(a) {
+    const ws = this.wires;
+    switch (a) {
+      case 'close': this.closeSheet(); this.wires = null; break;
+      case 'repair': this.ed.repairWires(ws); this.render(); break;
+      case 'allwires': this.ed.repairWires(this.ed.doc.wires.filter((x) => x.pts.length >= 2), ws[0].cable); this.ed.toast(`All wires: ${cableLabel(ws[0].cable)}`); this.render(); break;
+      case 'setdef': {
+        const c = ws[0].cable ? normSpec(ws[0].cable) : null;
+        const hit = Object.entries(WIRE_PRESETS).find(([, p]) => (p ? c && p.type === c.type && p.size === c.size && p.shape === c.shape && p.inst === c.inst : !c));
+        this.ed.settings.newWire = hit ? hit[0] : 'custom';
+        if (!hit) this.ed.settings.newWireSpec = c;
+        this.ed.app.saveSettings();
+        this.ed.toast(`New wires: ${cableLabel(c)}`);
+        break;
+      }
+      case 'delwire': this.closeSheet(); this.wires = null; this.ed.deleteSelection(); break;
+      default:
+    }
+  }
+
+  updateWireReadings() {
+    if (!this.sheetOpen) return;
+    const box = this.host.querySelector('.insp-read');
+    if (!box) return;
+    const w = this.wires[0], sim = this.ed.sim, live = this.ed.running && sim && sim.ready;
+    let r;
+    if (!w.cable) r = [['Ideal wire', 'no resistance and no current limit', '']];
+    else if (!live || !w.heat) r = null;
+    else r = w.heat.readings();
+    if (!r) {
+      if (this.readKey !== 'idle') box.innerHTML = '<div class="read muted">Press ▶ Run to see the current and temperature</div>';
+      this.readKey = 'idle';
+      return;
+    }
+    if (w.burnt) r[0] = ['State', 'BURNT THROUGH (open circuit)', ''];
+    const key = r.map((x) => x[0]).join('|');
+    if (key !== this.readKey) { box.innerHTML = r.map(([k, v]) => `<div class="read${typeof v !== 'number' ? ' wide' : ''}"><span>${esc(k)}</span><b></b></div>`).join(''); this.readKey = key; }
+    const bs = box.querySelectorAll('b');
+    r.forEach(([, v, u], i) => { if (bs[i]) bs[i].textContent = typeof v !== 'number' ? String(v) : isPlainUnit(u) ? fmtQty(v, u) : fmtSI(v, u, 4); });
   }
 }
 

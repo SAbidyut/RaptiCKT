@@ -29,6 +29,9 @@ export const DEFAULT_SETTINGS = {
   gmin: 1e-12,
   maxIter: 60,
   autoStart: true,
+  damage: true,        // parts burn out and cables catch fire when over-stressed
+  heatClock: 'real',   // 'real' | 'fast' | 'sim': clock for trips, heating and burning
+  newWire: 'hw1.5',    // cable given to newly drawn wires (elements/cables.js WIRE_PRESETS)
   animations: 'auto',
 };
 

@@ -633,6 +633,10 @@ export function renderSettings(app, root) {
       <h4>Landscape &amp; full screen</h4>
       ${row('Screen rotation', sel('orientation', [['auto', 'Auto (follow the phone)'], ['landscape', 'Always landscape'], ['portrait', 'Always portrait']]))}
       ${row('Scope beside the circuit', tog('scopeSide'), 'In landscape the oscilloscope sits to the right of the board; off = above it')}
+      <h4>Real-life limits</h4>
+      ${row('Parts burn out', tog('damage'), 'Over-voltage blows bulbs and LEDs, overloads burn cables and resistors, faults destroy breakers. Replace them like real parts.')}
+      ${row('Heating & trip timing', sel('heatClock', [['real', 'Real time (like real life)'], ['fast', '10× faster'], ['sim', 'Simulation time']]), 'Breaker trips, cable heating and burning follow your clock, not the slowed-down waveforms')}
+      ${row('New wires', sel('newWire', [['ideal', 'Ideal wire (no limit)'], ['hw1', '1 mm² Cu PVC (RE)'], ['hw1.5', '1.5 mm² Cu PVC (RE)'], ['hw2.5', '2.5 mm² Cu PVC (RE)'], ['hw4', '4 mm² Cu PVC (RE)'], ['hw6', '6 mm² Cu PVC (RE)'], ['hw10', '10 mm² Cu PVC (RM)'], ['flex0.75', '0.75 mm² flexible cord (RF)'], ['custom', 'Custom (set from a wire)']]), 'Cable for wires you draw; tap a wire → Cable to change one')}
       <h4>Simulation</h4>
       ${row('Integration method', sel('method', [['trap', 'Trapezoidal (accurate)'], ['be', 'Backward Euler (damped)']]))}
       ${row('Start from DC operating point', tog('initialDC'), 'Off = power-on from zero state')}

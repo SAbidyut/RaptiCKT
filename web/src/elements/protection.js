@@ -50,8 +50,8 @@ class Breaker extends Element {
   leads() { const n = this.npoles(); return this.localPosts().map(([x, y], i) => [i, x, y, Math.sign(x) * 0.9 * G, y]); }
   connectivity() { const n = this.npoles(); return Array.from({ length: n }, (_, k) => [k, k + n]); }
   branchCount() { return this.npoles(); }
-  closed() { return !!this.p.on && !this.tripped; }
-  reset() { this.tripped = false; this.theta = 0; this.cause = ''; this.res2 = 0; this.postCurrents.fill(0); this.i = 0; }
+  closed() { return !!this.p.on && !this.tripped && !this.damaged; }
+  reset() { this.tripped = false; this.theta = 0; this.cause = ''; this.res2 = 0; this.opening = 0; this.ipk = 0; this.postCurrents.fill(0); this.i = 0; }
   ratedI() { return this.p.in; }
   stamp(s) {
     const n = this.npoles();
@@ -66,13 +66,32 @@ class Breaker extends Element {
     const n = this.npoles(), is = this.branches.map((k) => s.x[k]);
     is.forEach((i, k) => { this.postCurrents[k] = i; this.postCurrents[k + n] = -i; });
     this.i = is[0];
-    if (s.mode === 'dc' || !this.closed()) return;
+    if (s.mode === 'dc') return;
+    if (!this.closed()) { // open: the bimetal cools down
+      this.theta -= this.theta * Math.min(1, s.heatDt() / this.thermalTau());
+      this.stress = 0;
+      return;
+    }
+    const In = this.ratedI(), imax = Math.max(...is.map(Math.abs));
+    // the bimetal heats on the thermal clock, so overload trips take real seconds
+    this.theta += ((imax / In) ** 2 - this.theta) * Math.min(1, s.heatDt() / this.thermalTau());
+    this.stress = Math.max(0, Math.min(1, (this.theta - 1) / (this.constructor.ocp ? 0.69 : 1.1)));
     if (this.constructor.ocp) {
-      const In = this.ratedI(), imax = Math.max(...is.map(Math.abs));
-      const tau = this.thermalTau();
-      this.theta += ((imax / In) ** 2 - this.theta) * Math.min(1, s.dt / tau);
-      if (imax > Math.SQRT2 * this.magMultiple() * In) this.trip(s, 'Short circuit (magnetic trip)');
+      // magnetic release: the contacts part a few ms after the coil picks up, while the fault
+      // current keeps rising towards its prospective peak — more than the breaking capacity
+      // and the arc cannot be broken: the breaker is destroyed.
+      if (this.opening > 0) {
+        this.ipk = Math.max(this.ipk, imax);
+        this.opening -= s.dt;
+        if (this.opening <= 0) {
+          if (this.p.icn && this.ipk > Math.SQRT2 * this.p.icn) this.setDamage(s, `Destroyed — fault current ${fmtShort(this.ipk / Math.SQRT2, 'A')} RMS is above its breaking capacity Icn ${fmtShort(this.p.icn, 'A')}`);
+          this.trip(s, 'Short circuit (magnetic trip)');
+        }
+      } else if (imax > Math.SQRT2 * this.magMultiple() * In) { this.opening = 0.003; this.ipk = imax; }
       else if (this.theta >= 1.69) this.trip(s, 'Overload (thermal trip)');
+    } else if (this.theta >= 2.1) {
+      // an RCCB has no overcurrent release: a sustained overload cooks it
+      this.setDamage(s, `Burnt — overloaded at about ${fmtShort(In * Math.sqrt(this.theta), 'A')} on a ${fmtShort(In, 'A')} RCCB, which has no overcurrent protection (put an MCB of ≤ ${fmtShort(In, 'A')} before it)`);
     }
     if (this.constructor.rcd) {
       // residual current: sum of all pole currents (should be zero for a healthy circuit)
@@ -84,14 +103,17 @@ class Breaker extends Element {
   thermalTau() { return 60; }
   magMultiple() { return MAG[this.p.curve] || 7.5; }
   onTap() {
+    if (this.damaged) return false;
+    this.opening = 0;
     if (this.tripped) { this.tripped = false; this.theta = 0; this.res2 = 0; this.p.on = true; this.cause = ''; } else this.p.on = !this.p.on;
     return true;
   }
   // residual-current devices also show their trip sensitivity (e.g. "40A 30mA")
   valueLabel() { return `${this.p.curve || ''}${fmtShort(this.p.in, 'A')}${this.constructor.rcd ? ' ' + fmtShort(this.p.idn, 'A') : ''}`; }
   readings() {
-    const r = [['State', this.tripped ? 'TRIPPED — ' + this.cause : this.closed() ? 'ON' : 'OFF', ''], ['Current', this.i, 'A']];
-    if (this.constructor.ocp) r.push(['Thermal load', Math.min(100, (this.theta / 1.69) * 100), '%']);
+    const r = [['State', this.damaged ? 'DESTROYED — ' + this.damaged.why : this.tripped ? 'TRIPPED — ' + this.cause : this.closed() ? 'ON' : 'OFF', ''], ['Current', this.i, 'A']];
+    r.push([this.constructor.ocp ? 'Thermal load' : 'Overload heating', Math.min(100, (this.theta / (this.constructor.ocp ? 1.69 : 2.1)) * 100), '%']);
+    if (this.p.icn) r.push(['Breaking capacity Icn', this.p.icn, 'A']);
     if (this.constructor.rcd) r.push(['Residual current (RMS)', Math.sqrt(this.res2 || 0), 'A']);
     return r;
   }
@@ -121,6 +143,7 @@ class Breaker extends Element {
 const IN = (def) => ({ key: 'in', label: 'Rated current In', unit: 'A', def, min: 0.1, max: 6300, log: true, knob: true });
 const CURVE = { key: 'curve', label: 'Trip curve', type: 'select', def: 'C', options: [['B', 'B (3–5 In) lighting'], ['C', 'C (5–10 In) general'], ['D', 'D (10–20 In) motors']] };
 const ON = { key: 'on', label: 'Switched on', type: 'bool', def: true };
+const ICN = (def) => ({ key: 'icn', label: 'Breaking capacity Icn', unit: 'A', def, min: 1000, max: 2e5, log: true });
 const IDN = { key: 'idn', label: 'Rated residual current IΔn', unit: 'A', def: 0.03, min: 0.006, max: 1, log: true };
 
 function breaker(type, title, poles, props, keywords, desc, extra = {}) {
@@ -130,11 +153,11 @@ function breaker(type, title, poles, props, keywords, desc, extra = {}) {
   return C;
 }
 
-breaker('mcb', 'MCB (1-pole)', 1, [IN(16), CURVE, ON], 'mcb miniature circuit breaker breaker overload short circuit protection',
-  'Miniature circuit breaker (IEC 60898): thermal trip for overloads, magnetic (instantaneous) trip for short circuits. Tap to switch ON/OFF or to reset after a trip.');
-breaker('mcb2p', 'MCB (2-pole)', 2, [IN(32), CURVE, ON], 'mcb double pole dp breaker isolator line neutral',
+breaker('mcb', 'MCB (1-pole)', 1, [IN(16), CURVE, ICN(6000), ON], 'mcb miniature circuit breaker breaker overload short circuit protection',
+  'Miniature circuit breaker (IEC 60898): thermal trip for overloads (runs in real time: about 20 s at 2.5 × In), magnetic (instantaneous) trip for short circuits. A fault current above its breaking capacity Icn destroys it. Tap to switch ON/OFF or to reset after a trip.');
+breaker('mcb2p', 'MCB (2-pole)', 2, [IN(32), CURVE, ICN(6000), ON], 'mcb double pole dp breaker isolator line neutral',
   'Double-pole MCB: both poles open together when either one trips.');
-breaker('mcb3p', 'MCB (3-pole)', 3, [IN(32), CURVE, ON], 'mcb triple pole tp breaker three phase',
+breaker('mcb3p', 'MCB (3-pole)', 3, [IN(32), CURVE, ICN(10000), ON], 'mcb triple pole tp breaker three phase',
   'Triple-pole MCB for three-phase circuits: all poles open together.');
 
 export class MCCB extends Breaker {
@@ -142,7 +165,7 @@ export class MCCB extends Breaker {
   static keywords = 'mccb moulded case circuit breaker adjustable thermal magnetic ir im';
   static props = [IN(100),
     { key: 'ir', label: 'Thermal setting Ir/In', unit: '', def: 1, min: 0.4, max: 1 },
-    { key: 'im', label: 'Magnetic setting Im/Ir', unit: '', def: 10, min: 2, max: 15 }, ON];
+    { key: 'im', label: 'Magnetic setting Im/Ir', unit: '', def: 10, min: 2, max: 15 }, ICN(25000), ON];
   static description = 'Moulded-case circuit breaker with adjustable thermal (Ir) and magnetic (Im) settings.';
   ratedI() { return this.p.in * this.p.ir; }
   magMultiple() { return this.p.im; }
@@ -152,9 +175,9 @@ export class MCCB extends Breaker {
 register(MCCB);
 
 breaker('rccb', 'RCCB / RCD (2-pole)', 2, [{ ...IN(40), knob: false }, { ...IDN, knob: true }, ON], 'rccb rcd elcb earth leakage residual current device shock protection 30ma',
-  'Residual-current device: trips when the current going out on L does not return on N (leakage to earth ≥ IΔn, e.g. 30 mA through a person). No overcurrent protection.',
+  'Residual-current device: trips when the current going out on L does not return on N (leakage to earth ≥ IΔn, e.g. 30 mA through a person). No overcurrent protection: a sustained overload above In burns it out, so always put an MCB before it.',
   { rcd: true, ocp: false });
-breaker('rcbo', 'RCBO (2-pole)', 2, [IN(16), CURVE, IDN, ON], 'rcbo rcd mcb combined earth leakage overcurrent',
+breaker('rcbo', 'RCBO (2-pole)', 2, [IN(16), CURVE, IDN, ICN(6000), ON], 'rcbo rcd mcb combined earth leakage overcurrent',
   'RCBO = RCD + MCB: trips on earth leakage (≥ IΔn) and on overload / short circuit.',
   { rcd: true, ocp: true });
 
@@ -178,7 +201,8 @@ export class PolyFuse extends TwoTerm {
     if (s.mode === 'dc') return;
     // thermal resistance chosen so 1.5·Ihold heats it to the 125 °C switching point
     const rth = 100 / (2.25 * this.p.ih * this.p.ih * this.p.r0), cth = this.p.tau / rth;
-    this.T += ((v * i - (this.T - 25) / rth) / cth) * s.dt;
+    const dt = s.heatDtAt(Math.abs(i) / (2 * this.p.ih));
+    this.T += ((v * i - (this.T - 25) / rth) / cth) * dt;
     this.T = Math.min(400, Math.max(25, this.T));
     const R = this.resist(this.T);
     if (Math.abs(R - this.R) > 0.02 * this.R) { this.R = R; s.dirty = true; }
@@ -361,7 +385,7 @@ export class OverloadRelay extends Element {
     const [k1, k2] = this.branches, i = s.x[k1], ic = s.x[k2];
     this.postCurrents = [i, -i, ic, -ic]; this.i = i;
     if (s.mode === 'dc' || this.tripped) return;
-    this.theta += ((i / this.p.ir) ** 2 - this.theta) * Math.min(1, s.dt / 240);
+    this.theta += ((i / this.p.ir) ** 2 - this.theta) * Math.min(1, s.heatDt() / 240);
     if (this.theta >= 1.3) { this.tripped = true; s.markEvent(); }
   }
   onTap() { this.tripped = false; this.theta = 0; return true; }
@@ -427,14 +451,15 @@ export class IDMTRelay extends Element {
     this.irms = I;
     if (this.p.inst > 0 && I > this.p.inst * this.p.is) this.prog = 1;
     const t = this.opTime(I);
-    if (Number.isFinite(t)) { this.prog += s.dt / t; this.tTrip += s.dt; } else { this.prog = 0; this.tTrip = 0; }
-    if (this.prog >= 1) { this.tripped = true; this.tripAt = s.t; s.markEvent(); }
+    const dt = s.heatDt(); // relay timing runs on the real-time clock
+    if (Number.isFinite(t)) { this.prog += dt / t; this.tTrip += dt; } else { this.prog = 0; this.tTrip = 0; }
+    if (this.prog >= 1) { this.tripped = true; this.tripAt = this.tTrip; s.markEvent(); }
   }
   onTap() { this.tripped = false; this.prog = 0; this.tTrip = 0; return true; }
   valueLabel() { return `${this.p.curve} ${fmtShort(this.p.is, 'A')}`; }
   readings() {
     const t = this.opTime(this.irms || 0);
-    return [['State', this.tripped ? `TRIPPED at t = ${fmtSI(this.tripAt, 's', 4)}` : 'Healthy', ''], ['Current (RMS)', this.irms || 0, 'A'],
+    return [['State', this.tripped ? `TRIPPED after ${fmtSI(this.tripAt, 's', 4)}` : 'Healthy', ''], ['Current (RMS)', this.irms || 0, 'A'],
       ['Multiple of setting', (this.irms || 0) / this.p.is, '×'], ['Operating time at this current', Number.isFinite(t) ? t : Infinity, 's'], ['Progress', Math.min(100, (this.prog || 0) * 100), '%']];
   }
   draw(g) {

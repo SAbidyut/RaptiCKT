@@ -15,16 +15,17 @@ Everything in the app, explained step by step.
 7. [Wiring](#ch-wiring)
 8. [Changing values and the knob](#ch-values)
 9. [Running the simulation](#ch-running)
-10. [Oscilloscope](#ch-scope)
-11. [Multimeter](#ch-meter)
-12. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
-13. [Saving, opening and sharing](#ch-saving)
-14. [Settings reference](#ch-settings)
-15. [Component library (all 519)](#ch-library)
-16. [Examples (all 100)](#ch-examples)
-17. [Quick reference: formulas and units](#ch-formulas)
-18. [Troubleshooting and FAQ](#ch-troubleshooting)
-19. [About RAPTI and contact](#ch-about)
+10. [Real-life limits: burning parts, wires and cables](#ch-limits)
+11. [Oscilloscope](#ch-scope)
+12. [Multimeter](#ch-meter)
+13. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
+14. [Saving, opening and sharing](#ch-saving)
+15. [Settings reference](#ch-settings)
+16. [Component library (all 520)](#ch-library)
+17. [Examples (all 100)](#ch-examples)
+18. [Quick reference: formulas and units](#ch-formulas)
+19. [Troubleshooting and FAQ](#ch-troubleshooting)
+20. [About RAPTI and contact](#ch-about)
 
 <a id="ch-welcome"></a>
 
@@ -35,7 +36,7 @@ Everything in the app, explained step by step.
 #### What you can do with it
 
 - Build analog, digital and mixed circuits on an unlimited canvas.
-- Pick from **519 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
+- Pick from **520 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
 - Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.
 - Tap switches and push buttons while the circuit is running, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
@@ -171,7 +172,7 @@ The editor is where you build and run circuits. From top to bottom:
 - The big area with the grid is your **canvas**. It is unlimited: pan and zoom freely.
 - The round **+** button (bottom right) adds a component.
 - The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). It says **CPU-limited** when the phone cannot keep up.
-- A red or yellow bar appears at the top when the circuit has a problem (chapter 18).
+- A red or yellow bar appears at the top when the circuit has a problem (chapter 19).
 - When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.
 - Messages (toasts) appear briefly at the bottom to confirm what happened.
 
@@ -207,7 +208,7 @@ On a computer browser you can also use: **Delete** (remove), **R** (rotate), **S
 
 > **Tip:** Always add a **Ground** to your circuit (see chapter 7). Many examples show where it goes.
 
-The complete list of all 335 components, with what each one does and which values you can change, is in the chapter **Component library**.
+The complete list of all 520 components, with what each one does and which values you can change, is in the chapter **Component library**.
 
 <a id="ch-editing"></a>
 
@@ -390,7 +391,7 @@ While running you can touch the circuit like a real one:
 | Switches (one-way, two-way, intermediate, DPST, DPDT, isolator, rotary…) | Tap to toggle. |
 | Push buttons (NO / NC) | Hold to press, release to let go. |
 | Latching push button, emergency stop | Tap to press and latch; tap again to release. |
-| MCB, MCCB, RCCB, RCBO | Tap to switch on/off. After a trip, tap once to **reset**. |
+| MCB, MCCB, RCCB, RCBO | Tap to switch on/off. After a trip, tap once to **reset**. A destroyed breaker must be replaced (see chapter 10). |
 | Overload relay, IDMT relay | Tap to reset after a trip. |
 | Logic input, hex input | Tap to flip a bit / step the value. |
 | PIR sensor | Tap to simulate motion. |
@@ -401,9 +402,68 @@ While running you can touch the circuit like a real one:
 
 If the circuit cannot be solved, a bar at the top tells you what and where, for example **"Circuit cannot be solved (singular matrix) near R3. Check for floating current sources or open circuits."** The part concerned is highlighted. A yellow bar is a warning, for example "D1 is short-circuited". See **Troubleshooting** for what to do.
 
+<a id="ch-limits"></a>
+
+## 10. Real-life limits: burning parts, wires and cables
+
+Parts in RaptiCKT have the limits of real parts. Too much voltage or current **burns them out**, an overloaded **wire overheats, smokes, catches fire and burns through**, and a breaker that is asked to break more than it can is **destroyed**. A burnt part stays burnt — also after Restart — until you **replace** it, just like changing a fused bulb at home.
+
+#### What can burn
+
+| Part | Fails when… |
+| --- | --- |
+| Incandescent bulb, lamp | About 1.6 × its rated voltage: the filament melts (a 230 V bulb on 400 V, a 12 V lamp on 24 V). It goes open. |
+| LED | Far above its rated current at once (an LED straight on a battery), or about 2.5 × for a few seconds. Always use a series resistor. |
+| Resistor | Give it a **Power rating** (1/4 W, 1 W…): above about 2.5 × that power it burns open. "Ideal" has no limit. |
+| Electrolytic / tantalum capacitor | Over 1.2 × its rated voltage, or connected the wrong way round: it bursts. Electrolytics fail open, tantalums fail **short**. |
+| Fuse | Blows when its I²t is exceeded, and stays blown until replaced. |
+| MCB, MCCB, RCBO | Trips on overload or short circuit (tap to reset). A fault current above its **breaking capacity Icn** (6 kA for an MCB) destroys it. |
+| RCCB | Has no overcurrent protection: a long overload above its In burns it. Always fit an MCB before it. |
+| Ceiling fan, heater, LED bulb | Too high a supply voltage: the winding, the element or the driver burns. |
+| Wires and cables | Current above the cable rating Iz heats them; far above it they smoke, catch fire and burn through. |
+
+When something burns you see a flash, flames and smoke, hear a bang and get a message saying why. The part turns dark with a red **!** badge.
+
+#### Replacing a burnt part
+
+1. Tap the burnt part. The bar at the bottom shows a red **Replace** button (and the property sheet a **Replace with a new one** button).
+2. Tap it: a new, cold part is fitted in the same place, with the same values.
+3. Fix the cause first (lower the voltage, add a resistor, use a thicker cable), or the new part burns again.
+4. To replace everything at once use **⋮ → Replace burnt parts & wires**.
+
+#### Wires and cables
+
+Every wire you draw is a real cable (Settings → **New wires**, 1.5 mm² copper PVC house wire by default). Select a wire and tap **Cable** to choose:
+
+- **Cable type**: single-core PVC house wire (BYA / H07V-U), flexible cord (H05VV-F), rubber cable (H07RN-F), PVC or XLPE power cables in copper (NYY, N2XY) or aluminium (NAYY, NA2XY), or an **Ideal wire** with no limit.
+- **Conductor size**: 0.5 to 400 mm².
+- **Conductor (IEC 60228)**: **RE** round solid, **RM** round stranded, **SM** sector-shaped stranded, **RF** round flexible.
+- **Installation method**: in conduit in an insulated wall (A1), in conduit on a wall (B1), clipped direct (C), in free air (E) or buried (D) — a cable that can lose heat easily carries more current.
+
+The sheet shows the current rating **Iz** (IEC 60364-5-52), the resistance per km and, while running, the current, the load in % and the conductor temperature. **Use for all wires** gives every wire this cable; **Make default** uses it for the wires you draw next.
+
+| Conductor temperature | What you see |
+| --- | --- |
+| Up to the insulation rating (70 °C PVC, 90 °C XLPE) | Normal. |
+| Above it | Overloaded: the wire glows orange. |
+| Above 160 °C (PVC) | The insulation melts: red glow and smoke. |
+| Above 250 °C (PVC) | It catches fire and burns through after a few seconds: the circuit opens. |
+
+A burnt wire is drawn charred with a red ✕ where it parted. Select it and tap **Repair** (or pick a thicker size, which also repairs it).
+
+> **Tip:** Protect every cable with an MCB or fuse no larger than its Iz: then the breaker trips before the wire gets hot. That is exactly how house wiring is designed — e.g. 1.5 mm² lights on a 10 A MCB, 2.5 mm² sockets on 16–20 A, 4 mm² geyser on 25 A.
+
+Drawn wires have no resistance. To see the **voltage drop** and power loss of a real length of cable, use **Cable (1 core, with length)**, **Cable (2-core, L + N)** or **Cable (4-core, 3-phase + N)** from **Power Systems** and set the length. They heat and burn the same way.
+
+#### Timing: real time
+
+To show 50 Hz waveforms the simulation runs slowed down (for example 40 ms per second). Heating, breaker trips and burning do not: they follow **your clock**, so an MCB at 2.5 × its rating trips after about 20 real seconds and an overloaded cable takes minutes, like in real life. Change it in Settings → **Heating & trip timing** (10× faster, or simulation time). Short circuits are fast in both: a breaker or fuse clears them in milliseconds of circuit time.
+
+> **Warning:** Don't want anything to burn (for example while you are still building)? Switch off Settings → **Parts burn out**. Fuses still blow and breakers still trip.
+
 <a id="ch-scope"></a>
 
-## 10. Oscilloscope
+## 11. Oscilloscope
 
 The oscilloscope draws voltages and currents against time, up to **6 channels** at once, each in its own colour.
 
@@ -448,7 +508,7 @@ Channel colours: yellow, cyan, pink, green, orange, purple. Probes are saved wit
 
 <a id="ch-meter"></a>
 
-## 11. Multimeter
+## 12. Multimeter
 
 Tap the **multimeter** icon in the top bar. A meter card appears on the board with a red (+) and a black (−) probe pin. The simulation must be running.
 
@@ -469,7 +529,7 @@ The display reads smoothly (about a 0.4 s average) so numbers do not flicker. Ta
 
 <a id="ch-analysis"></a>
 
-## 12. Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE
+## 13. Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE
 
 Tap the **Analysis** icon (top bar) or use **⋮ → Operating point / SPICE netlist**. There are nine tabs. These tools solve the circuit by themselves and do not need the simulation to be running.
 
@@ -534,7 +594,7 @@ Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` com
 
 <a id="ch-saving"></a>
 
-## 13. Saving, opening and sharing
+## 14. Saving, opening and sharing
 
 #### Automatic saving
 
@@ -574,7 +634,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 
 <a id="ch-settings"></a>
 
-## 14. Settings reference
+## 15. Settings reference
 
 Open Settings from the sliders icon on Home or from **⋮ → Settings** in the editor. Every change is saved at once.
 
@@ -602,6 +662,14 @@ Open Settings from the sliders icon on Home or from **⋮ → Settings** in the 
 | Screen rotation | **Auto** (follow the phone), **Always landscape** or **Always portrait**. |
 | Scope beside the circuit | On (default): in landscape the oscilloscope sits to the right of the board. Off: above it, as in portrait. |
 
+#### Real-life limits
+
+| Setting | What it does |
+| --- | --- |
+| Parts burn out | On: over-stressed parts burn out, wires catch fire, breakers can be destroyed (see chapter 10). Off: nothing burns; fuses still blow and breakers still trip. |
+| Heating & trip timing | **Real time** (default): heating, breaker and relay trips and burning follow the real clock. **10× faster** for quick demonstrations. **Simulation time**: everything follows the slowed-down circuit time. |
+| New wires | The cable given to wires you draw: Ideal wire, or 1–10 mm² copper PVC house wire, or a flexible cord. |
+
 #### Simulation (for advanced users)
 
 | Setting | What it does |
@@ -622,14 +690,14 @@ These are the same defaults SPICE uses. Change them only if you know why; **Rese
 | Setting | What it does |
 | --- | --- |
 | Haptic feedback | Small vibrations when you add, wire, turn the knob or press a switch. |
-| Sound (buzzer) | Plays a tone when a buzzer, bell or speaker is active. |
+| Sound (buzzer) | Plays a tone when a buzzer, bell or speaker is active, and a bang when a part burns out. |
 | Backup circuits | Saves every circuit in one file. |
 | Restore backup | Loads a backup or circuit file. |
 | Reset settings | Back to defaults (your circuits are not touched). |
 
 <a id="ch-library"></a>
 
-## 15. Component library (all 519)
+## 16. Component library (all 520)
 
 Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.
 
@@ -717,16 +785,16 @@ Resistors, capacitors and inductors, plus variable and real-world versions. The 
 
 | | |
 | --- | --- |
-| **Resistor** | Linear resistor obeying Ohm's law V = I·R. <br>*Settings:* Resistance (Ω), Symbol |
+| **Resistor** | Linear resistor obeying Ohm's law V = I·R. Give it a power rating and it overheats above it and burns open at about 2.5 × its rating (real resistors fail open). <br>*Settings:* Resistance (Ω), Symbol, Power rating |
 | **Shunt / Current-Sense Resistor** | Four-terminal (Kelvin) shunt: the load current flows I+ → I−, the voltage is read between the sense terminals S+ and S−. The sense taps sit on the resistive element itself, so contact and lead resistance in the current path does not add to the reading: I = V(S+,S−) / R. <br>*Settings:* Shunt resistance (Ω), Force lead / contact resistance (each) (Ω), Power rating (W) |
 | **Fusible Resistor** | Resistor that also acts as a fuse: it works as a normal resistor up to its rating, but if the dissipation stays far above it (default 10×) it burns open safely instead of catching fire. Tap a blown one to replace it. <br>*Settings:* Resistance (Ω), Power rating (W), Fuses at (× rating), Thermal time constant (s) |
 | **Rheostat (Variable Resistor)** | Two-terminal variable resistor: R = setting × Rmax. Adjust live with the knob (e.g. field rheostat, current limiting). <br>*Settings:* Setting (%), Maximum resistance (Ω) |
 | **Potentiometer** | Three-terminal variable resistor. Adjust the wiper with the knob while simulating. <br>*Settings:* Wiper position (%), Total resistance (Ω), Taper |
 | **Trimmer Potentiometer** | Preset (trimmer) potentiometer for calibration. Same model as a potentiometer. <br>*Settings:* Wiper position (%), Total resistance (Ω), Taper |
 | **Capacitor** | Ideal capacitor: i = C·dv/dt. Plates show accumulated charge while simulating. <br>*Settings:* Capacitance (F), Initial voltage (V) |
-| **Electrolytic Cap** | Polarised capacitor. Flashes red when reverse-biased or over its rated voltage. <br>*Settings:* Capacitance (F), Initial voltage (V), Rated voltage (V) |
+| **Electrolytic Cap** | Polarised capacitor. Flashes red when reverse-biased or over its rated voltage; kept there (over 1.2 × its rated voltage or more than 1.5 V reversed) it overheats and bursts open. Select it and tap Replace after that. <br>*Settings:* Capacitance (F), Initial voltage (V), Rated voltage (V) |
 | **Non-Polar Electrolytic** | Bipolar (non-polarised) electrolytic / motor-run capacitor: can see AC. Typical fan capacitor 2.5 µF. <br>*Settings:* Capacitance (F), Initial voltage (V) |
-| **Tantalum Capacitor** | Polarised tantalum capacitor: small, low ESR. Flashes red if reverse biased or over-voltage (tantalums fail short!). <br>*Settings:* Capacitance (F), Initial voltage (V), Rated voltage (V) |
+| **Tantalum Capacitor** | Polarised tantalum capacitor: small, low ESR. Flashes red if reverse biased or over-voltage — and if kept there it fails SHORT (and may catch fire), as real tantalums do. <br>*Settings:* Capacitance (F), Initial voltage (V), Rated voltage (V) |
 | **Variable Capacitor** | Tuning capacitor: C varies from Cmin to Cmax with the setting (e.g. 10–365 pF radio gang). <br>*Settings:* Setting (%), Minimum capacitance (F), Maximum capacitance (F) |
 | **Capacitor (ESR, ESL, leakage)** | Capacitor with parasitics: ESR and ESL in series, leakage in parallel. Above its self-resonant frequency f = 1/(2π√(ESL·C)) it behaves like an inductor — see it in a Bode plot. <br>*Settings:* Capacitance (F), ESR (Ω), ESL (H), Leakage resistance (Ω) |
 | **Ceramic Capacitor (MLCC)** | Multilayer ceramic capacitor: very low ESR (≈10 mΩ) and ESL (≈0.5 nH), so it is the best decoupling capacitor at high frequency. X7R/Y5V types lose capacitance with DC bias; C0G/NP0 types are stable. <br>*Settings:* Capacitance (F), ESR (Ω), ESL (H), Leakage resistance (Ω), Voltage rating (V) |
@@ -767,17 +835,17 @@ Fuses, breakers, residual-current devices, surge protectors and relays. They rea
 
 | | |
 | --- | --- |
-| **Fuse** | Blows (opens) when the let-through energy ∫(i² − I²rated)dt exceeds I²t. Reset the simulation to replace it. <br>*Settings:* Current rating (A), Resistance (Ω), Melting I²t (A²s) |
+| **Fuse** | Blows (opens) when the let-through energy ∫(i² − I²rated)dt exceeds I²t. A blown fuse stays blown — select it and tap Replace to put in a new one. <br>*Settings:* Current rating (A), Resistance (Ω), Melting I²t (A²s) |
 | **HRC Fuse** | High-rupturing-capacity cartridge fuse for power circuits. Melts when ∫(i² − I²rated)dt exceeds its I²t. <br>*Settings:* Current rating (A), Resistance (Ω), Melting I²t (A²s) |
 | **Thermal Fuse (TCO)** | One-shot thermal cut-off: conducts (≈5 mΩ) until its body reaches the rated temperature, then opens permanently — the last line of defence in kettles, irons and motors. Tap to replace it after it has opened. <br>*Settings:* Body temperature (°C), Rated functioning temperature (°C) |
 | **Resettable Fuse (PTC)** | Polymer PTC fuse: self-heating raises its resistance by orders of magnitude above the trip current (≈2·Ihold); it resets once the fault is removed and it cools. <br>*Settings:* Hold current (A), Cold resistance (Ω), Thermal time constant (s) |
-| **MCB (1-pole)** | Miniature circuit breaker (IEC 60898): thermal trip for overloads, magnetic (instantaneous) trip for short circuits. Tap to switch ON/OFF or to reset after a trip. <br>*Settings:* Rated current In (A), Trip curve, Switched on |
-| **MCB (2-pole)** | Double-pole MCB: both poles open together when either one trips. <br>*Settings:* Rated current In (A), Trip curve, Switched on |
-| **MCB (3-pole)** | Triple-pole MCB for three-phase circuits: all poles open together. <br>*Settings:* Rated current In (A), Trip curve, Switched on |
-| **MCCB (3-pole, adjustable)** | Moulded-case circuit breaker with adjustable thermal (Ir) and magnetic (Im) settings. <br>*Settings:* Rated current In (A), Thermal setting Ir/In, Magnetic setting Im/Ir, Switched on |
+| **MCB (1-pole)** | Miniature circuit breaker (IEC 60898): thermal trip for overloads (runs in real time: about 20 s at 2.5 × In), magnetic (instantaneous) trip for short circuits. A fault current above its breaking capacity Icn destroys it. Tap to switch ON/OFF or to reset after a trip. <br>*Settings:* Rated current In (A), Trip curve, Breaking capacity Icn (A), Switched on |
+| **MCB (2-pole)** | Double-pole MCB: both poles open together when either one trips. <br>*Settings:* Rated current In (A), Trip curve, Breaking capacity Icn (A), Switched on |
+| **MCB (3-pole)** | Triple-pole MCB for three-phase circuits: all poles open together. <br>*Settings:* Rated current In (A), Trip curve, Breaking capacity Icn (A), Switched on |
+| **MCCB (3-pole, adjustable)** | Moulded-case circuit breaker with adjustable thermal (Ir) and magnetic (Im) settings. <br>*Settings:* Rated current In (A), Thermal setting Ir/In, Magnetic setting Im/Ir, Breaking capacity Icn (A), Switched on |
 | **ACB (air circuit breaker, LSI)** | Air circuit breaker with an electronic LSI trip unit, used as the main incomer of LV switchboards: L — long-time (overload, inverse-time, trips in tr seconds at 6×Ir), S — short-time (fault current above Isd held for tsd, so downstream breakers can clear first: selectivity), I — instantaneous above Ii×In. Tap to switch / reset. <br>*Settings:* Frame rating In (A), Long-time pickup Ir/In, Long-time delay (at 6 Ir) (s), Short-time pickup Isd/Ir, Short-time delay (s), Instantaneous Ii/In, Switched on |
-| **RCCB / RCD (2-pole)** | Residual-current device: trips when the current going out on L does not return on N (leakage to earth ≥ IΔn, e.g. 30 mA through a person). No overcurrent protection. <br>*Settings:* Rated current In (A), Rated residual current IΔn (A), Switched on |
-| **RCBO (2-pole)** | RCBO = RCD + MCB: trips on earth leakage (≥ IΔn) and on overload / short circuit. <br>*Settings:* Rated current In (A), Trip curve, Rated residual current IΔn (A), Switched on |
+| **RCCB / RCD (2-pole)** | Residual-current device: trips when the current going out on L does not return on N (leakage to earth ≥ IΔn, e.g. 30 mA through a person). No overcurrent protection: a sustained overload above In burns it out, so always put an MCB before it. <br>*Settings:* Rated current In (A), Rated residual current IΔn (A), Switched on |
+| **RCBO (2-pole)** | RCBO = RCD + MCB: trips on earth leakage (≥ IΔn) and on overload / short circuit. <br>*Settings:* Rated current In (A), Trip curve, Rated residual current IΔn (A), Breaking capacity Icn (A), Switched on |
 | **Thermal Overload Relay** | Motor overload relay (IEC 60947-4-1, class 10): the heater carries the motor current; when it trips, the NC control contact (95–96) opens. Tap to reset. <br>*Settings:* Current setting Ir (A) |
 | **Thermal Overload Relay (3-pole)** | Three-pole motor overload relay (class 10, IEC 60947-4-1): the three heaters 1–2, 3–4, 5–6 carry the motor currents. On overload — or faster on a lost phase (single phasing) — it trips: the NC contact 95–96 opens (put it in the contactor coil circuit) and the NO contact 97–98 closes (alarm lamp). Tap to reset. <br>*Settings:* Current setting Ir (A) |
 | **Phase Failure / Sequence Relay** | Monitors a 3-phase supply (L1, L2, L3 against N): when all phases are present, in the correct sequence (L1→L2→L3) and balanced, its relay is energised (11–14 closed, 11–12 open). On phase loss, low voltage, reversed sequence or unbalance it releases after the delay — put 11–14 in series with the motor contactor coil. <br>*Settings:* Minimum phase voltage (RMS) (V), Maximum unbalance (%), Trip delay (s) |
@@ -857,7 +925,7 @@ Parts for house wiring and lighting: bulbs, tube light with choke and starter, f
 
 | | |
 | --- | --- |
-| **Incandescent Bulb** | Tungsten filament lamp with a thermal model: the cold filament has ≈1/15 of its hot resistance, so it draws a large inrush current and brightens over tens of milliseconds. R ∝ T^1.2, radiated power ∝ T⁴. <br>*Settings:* Rated voltage (V), Rated power (W), Filament time constant (s) |
+| **Incandescent Bulb** | Tungsten filament lamp with a thermal model: the cold filament has ≈1/15 of its hot resistance, so it draws a large inrush current and brightens over tens of milliseconds. R ∝ T^1.2, radiated power ∝ T⁴. On too high a voltage (about 1.6 × its rating, e.g. a 230 V bulb on 400 V) the filament overheats and burns out — select it and tap Replace. <br>*Settings:* Rated voltage (V), Rated power (W), Filament time constant (s) |
 | **Lamp** | Incandescent lamp modelled at its hot resistance R = V²/P; brightness follows dissipated power. <br>*Settings:* Rated voltage (V), Rated power (W) |
 | **Halogen Lamp** | Tungsten-halogen lamp (e.g. 12 V 50 W MR16): a hotter filament than an ordinary bulb (≈18 lm/W, whiter light) in a quartz envelope; like any filament it draws ≈10–15× inrush current when cold. <br>*Settings:* Rated voltage (V), Rated power (W), Filament time constant (s) |
 | **Fluorescent Tube Light** | Hot-cathode fluorescent tube. Wire: L → ballast → left filament; left & right filaments’ inner ends to the starter; right filament → N. The starter pre-heats the filaments, then opens; the ballast kick strikes the arc, which then runs at ≈100 V. <br>*Settings:* Arc (running) voltage (V), Strike voltage (cold) (V), Strike voltage (pre-heated) (V), Arc resistance (Ω), Filament resistance (each) (Ω), Rated power (W) |
@@ -881,7 +949,7 @@ Parts for house wiring and lighting: bulbs, tube light with choke and starter, f
 | **PIR Light Switch (motion)** | Passive-infrared occupancy switch for corridors and stairs: when it sees motion in the dark (ambient light below the threshold) it closes L → LOAD and keeps the light on for the hold time after the last movement (re-triggerable). Tap it to simulate someone walking past. <br>*Settings:* Motion detected, Ambient light (lx), Works only below (lx), Hold time after last motion (s) |
 | **Emergency Light (battery backup)** | Self-contained emergency luminaire: while the mains is present it trickle-charges its 3.6 V NiCd pack (≈2 W) and the lamp stays off (non-maintained) or on (maintained); when the mains fails the LED lamp lights from the battery until it is flat (autonomy = capacity × 3.6 V ÷ lamp power, typically 1–3 h). <br>*Settings:* Lamp power (W), Battery capacity (3.6 V NiCd) (Ah), Initial battery charge (%), Maintained (lamp also on with mains) |
 
-### Power Systems — 13
+### Power Systems — 14
 
 Rated loads (R-L, R-C, 3-phase star and delta), a power-factor correction capacitor and transmission-line models. Set the load by its power and power factor.
 
@@ -895,6 +963,7 @@ Rated loads (R-L, R-C, 3-phase star and delta), a power-factor correction capaci
 | **PF Correction Capacitor (kVAR)** | Shunt capacitor rated in VAR: C = Q / (2πf·V²). Connect across an inductive load to raise the power factor. <br>*Settings:* Reactive power Q (VAR), Rated voltage (RMS) (V), Frequency (Hz) |
 | **Short Transmission Line** | Short line model (< 80 km): series impedance Z = (r + jx)·length. Shows voltage drop and losses. <br>*Settings:* Length (km), Resistance per km (Ω), Reactance per km (at f) (Ω), Frequency (Hz) |
 | **Medium Line (Nominal-π)** | Nominal-π line: series Z = (r + jx)·ℓ with half the shunt capacitance Y/2 at each end. Sending end on the left, receiving end on the right, common return at the bottom. Try an open receiving end to see the Ferranti effect. <br>*Settings:* Length (km), Resistance per km (Ω), Reactance per km (Ω), Shunt susceptance per km (S), Frequency (Hz) |
+| **Cable (1 core, with length)** | One conductor of a real cable: R = ρ·L/S (IEC 60228) rising with temperature, a current rating Iz from IEC 60364-5-52 for the chosen insulation and installation, and a thermal model. Above Iz it overheats; far above, the insulation smokes, catches fire and the cable burns open. Select a burnt cable and tap Replace to put in a new one. <br>*Settings:* Length (m), Cable type, Conductor size, Conductor (IEC 60228), Installation method |
 | **Cable (2-core, L + N)** | Two-core installation cable (L and N): each conductor has R = ρ·L/A at the operating temperature (copper or aluminium) plus 0.08 mΩ/m reactance. Readings show the RMS current against the current-carrying capacity (IEC 60364-5-52, PVC, clipped direct) and the voltage drop — keep it under ≈5 % (3 % for lighting). Long runs of thin cable dim the lamps! <br>*Settings:* Length (m), Conductor size, Conductor, Conductor temperature (°C) |
 | **Cable (4-core, 3-phase + N)** | Four-core three-phase cable (L1, L2, L3, N): R = ρ·L/A per conductor at the operating temperature plus 0.08 mΩ/m reactance; readings compare the highest line current with the current-carrying capacity for three loaded conductors and show the voltage drop (L1–L2). <br>*Settings:* Length (m), Conductor size, Conductor, Conductor temperature (°C) |
 | **Busbar (6 taps)** | Copper busbar with six tap points: each section between taps has R = ρ·pitch/A (a few µΩ), so the bar distributes current with negligible drop. Readings show the largest section current against the rating. <br>*Settings:* Current rating (A), Bar cross-section (mm²), Tap spacing (m) |
@@ -1308,7 +1377,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="ch-examples"></a>
 
-## 16. Examples (all 100)
+## 17. Examples (all 100)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1379,7 +1448,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 ### Projects
 
-- **Complete house wiring (2-room flat)**: A whole flat as a ladder diagram. Incomer: energy meter → double-pole main switch → 30 mA RCCB. The L bus feeds one MCB per circuit and every load returns to the N bus: lights (bedroom and drawing-room lamps, a staircase lamp on two 2-way switches, calling bell), fan with regulator, 2 kW geyser and two earthed sockets. Tap switches to watch the total current and kWh change; set a socket to "Faulty appliance" to trip the RCCB or to "Short circuit" to trip its MCB.
+- **Complete house wiring (2-room flat)**: A whole flat as a ladder diagram. Incomer: energy meter → double-pole main switch → 30 mA RCCB. The L bus feeds one MCB per circuit and every load returns to the N bus: lights (bedroom and drawing-room lamps, a staircase lamp on two 2-way switches, calling bell), fan with regulator, 2 kW geyser and two earthed sockets. Tap switches to watch the total current and kWh change; set a socket to "Faulty appliance" to trip the RCCB or to "Short circuit" to trip its MCB. Every wire is a real cable sized like a real installation: 10 mm² meter tails and buses, 1.5 mm² lights and fan, 4 mm² geyser, 2.5 mm² sockets (tap a wire → Cable to see or change it).
 - **16-bit RAM (4 words × 4 bits)**: A small static RAM built like a real memory chip: 16 D-latch cells in 4 rows (words) × 4 columns (bits). To write: set DATA IN on the hex keypad, choose the address with A1 A0 and hold WRITE — the address decoder raises one word line and that row of cells copies the bit lines. To read: the multiplexer under each column picks the cell of the addressed row, so DATA OUT shows the word stored at A1 A0. Store a different digit at each of the four addresses, then step through them.
 - **Mains to 5 V regulated power supply**: Every stage of a linear DC supply: 230 V mains → fuse → 230 V : 12 V transformer → bridge rectifier → 1000 µF smoothing capacitor → 7805 regulator → steady 5 V with a power LED and a 100 Ω load. The scope compares the rippling ≈15 V on the capacitor with the flat 5 V output. Lower the mains voltage or the capacitor to watch the ripple dip below 7 V and the regulator drop out.
 - **Traffic light controller (4017)**: A 1 Hz clock steps a CD4017 decade counter through ten states — exactly one output is high at a time. Diodes combine the outputs (diode-OR logic): Q0–Q4 light RED for 5 s, Q5–Q8 GREEN for 4 s and Q9 YELLOW for 1 s, then the cycle repeats. Rewire the diodes to make your own timing.
@@ -1465,7 +1534,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-formulas"></a>
 
-## 17. Quick reference: formulas and units
+## 18. Quick reference: formulas and units
 
 #### Ohm's law and power
 
@@ -1516,7 +1585,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-troubleshooting"></a>
 
-## 18. Troubleshooting and FAQ
+## 19. Troubleshooting and FAQ
 
 #### Nothing happens when I press Run
 
@@ -1594,7 +1663,7 @@ The engine follows SPICE methods and has been checked against textbook answers (
 
 <a id="ch-about"></a>
 
-## 19. About RAPTI and contact
+## 20. About RAPTI and contact
 
 **Resonance Automation Professional Training Institute** (RAPTI) was established in 2019. Established in 2019 with one goal: developing skilled manpower for the automation industry. Courses at RAPTI are designed by experienced, competent engineers so that every student can work independently in any industry after completing a course — with the knowledge and skills that real job positions demand.
 

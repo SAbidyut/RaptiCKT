@@ -25,7 +25,9 @@ function builder(name) {
     h(type, x, y, p) { return b.el(type, x, y, p, 0); },
     v(type, x, y, p) { return b.el(type, x, y, p, 1); },
     vr(type, x, y, p) { return b.el(type, x, y, p, 3); },
-    w(...pts) { doc.addWire(pts.map(([x, y]) => [x * G, y * G])); },
+    /** wires drawn after setting b.cable get that cable (null = ideal wire) */
+    cable: null,
+    w(...pts) { doc.addWire(pts.map(([x, y]) => [x * G, y * G]), b.cable ? { cable: b.cable } : null); },
     node(x, y, color) { doc.probes.push({ id: 'e' + pid++, kind: 'node', pos: [x * G, y * G], color, label: '', unit: 'V' }); },
     volt(e, color) { doc.probes.push({ id: 'e' + pid++, kind: 'volt', el: e.id, color, label: '', unit: 'V' }); },
     cur(e, color) { doc.probes.push({ id: 'e' + pid++, kind: 'cur', el: e.id, color, label: '', unit: 'A' }); },
@@ -536,9 +538,11 @@ const BASE = [
   // ------------------------------------------------------------ big projects
   {
     id: 'flat', cat: 'Projects', title: 'Complete house wiring (2-room flat)',
-    desc: 'A whole flat as a ladder diagram. Incomer: energy meter → double-pole main switch → 30 mA RCCB. The L bus feeds one MCB per circuit and every load returns to the N bus: lights (bedroom and drawing-room lamps, a staircase lamp on two 2-way switches, calling bell), fan with regulator, 2 kW geyser and two earthed sockets. Tap switches to watch the total current and kWh change; set a socket to "Faulty appliance" to trip the RCCB or to "Short circuit" to trip its MCB.',
+    desc: 'A whole flat as a ladder diagram. Incomer: energy meter → double-pole main switch → 30 mA RCCB. The L bus feeds one MCB per circuit and every load returns to the N bus: lights (bedroom and drawing-room lamps, a staircase lamp on two 2-way switches, calling bell), fan with regulator, 2 kW geyser and two earthed sockets. Tap switches to watch the total current and kWh change; set a socket to "Faulty appliance" to trip the RCCB or to "Short circuit" to trip its MCB. Every wire is a real cable sized like a real installation: 10 mm² meter tails and buses, 1.5 mm² lights and fan, 4 mm² geyser, 2.5 mm² sockets (tap a wire → Cable to see or change it).',
     build(b) {
+      const cu = (size) => ({ type: 'housewire', size, shape: size >= 10 ? 'RM' : 'RE', inst: 'B1' });
       // incomer — the neutral runs on the upper line, the phase on the lower one
+      b.cable = cu(10);
       b.vr('mains', -4, -6);
       b.el('kwh', 0, -4, {}, 0, true);
       b.h('dpst', 6, -5, { on: true });
@@ -552,6 +556,7 @@ const BASE = [
       const mcb = (y, p) => { b.h('mcb', 4, y, p); b.w([0, y], [2, y]); };
       const load = (y, type, p) => { const e = b.h(type, 22, y, p); b.w([24, y], [28, y]); return e; };
       // circuit 1 – lighting (B6): one MCB, several points
+      b.cable = cu(1.5);
       mcb(4, { in: 6, curve: 'B' }); b.w([6, 4], [8, 4], [8, 16]);
       b.h('oneway', 10, 4, { on: true }); b.w([12, 4], [20, 4]); load(4, 'bulb', { w: 100 });
       b.h('oneway', 10, 8, { on: true }); b.w([12, 8], [20, 8]); load(8, 'bulb', { w: 40 });
@@ -563,15 +568,18 @@ const BASE = [
       b.h('oneway', 10, 21, { on: true }); b.h('fanregcap', 15, 21, { step: 4 });
       b.w([12, 21], [13, 21]); b.w([17, 21], [20, 21]); load(21, 'fan');
       // circuit 3 – geyser (C20), switched off
+      b.cable = cu(4);
       mcb(26, { in: 20, curve: 'C' }); b.w([6, 26], [8, 26]);
       b.h('oneway', 10, 26, { on: false }); b.w([12, 26], [20, 26]); load(26, 'heater', { w: 2000 });
       // circuit 4 – switched sockets (C16), earth pins bonded to PE
+      b.cable = cu(2.5);
       mcb(31, { in: 16, curve: 'C' }); b.w([6, 31], [8, 31], [8, 37]);
       for (const [y, app] of [[31, 'iron'], [37, 'tv']]) {
         b.h('oneway', 10, y, { on: true }); b.w([12, y], [21, y]);
         b.el('socket', 22, y + 2, { app }, 1, true);
         b.w([23, y], [28, y]); b.w([24, y + 2], [25, y + 2]); b.el('earth', 25, y + 2);
       }
+      b.cable = null;
       b.el('label', 6, -2.2, { text: 'Main switch', size: 10 });
       [[4, 'Bedroom'], [8, 'Drawing room'], [12, 'Staircase'], [16, 'Calling bell'], [21, 'Ceiling fan'], [26, 'Geyser'], [31, 'Kitchen socket'], [37, 'TV socket']]
         .forEach(([y, text]) => b.el('label', -4, y, { text, size: 11 }));

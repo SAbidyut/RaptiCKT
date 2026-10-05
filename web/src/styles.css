@@ -849,3 +849,20 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .man-tab .man-hero { margin-top: 4px; }
 .man-tab[lang='bn'] { line-height: 1.7; }
 .man-tab .man-hero { display: none; }
+
+/* ---- burnt parts, wires & cables */
+.quickbar > button.hot { width: auto; padding: 0 10px; gap: 4px; display: flex; align-items: center; background: var(--danger); color: #fff; font-size: 12.5px; font-weight: 700; }
+.quickbar.damaged { box-shadow: 0 0 0 2px var(--danger), 0 8px 28px rgba(0,0,0,0.35); }
+.selbar button.hot { background: var(--danger); color: #fff; }
+.insp-dmg { margin: 0 14px 10px; padding: 10px 12px; border-radius: 12px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.45); display: flex; flex-direction: column; gap: 6px; }
+.insp-dmg b { color: var(--danger); font-size: 14px; }
+.insp-dmg span { color: var(--text2); font-size: 12.5px; line-height: 1.4; }
+.insp-dmg .btn { align-self: flex-start; display: flex; align-items: center; gap: 6px; background: var(--danger); color: #fff; border: none; }
+.wire-ico { display: grid; place-items: center; color: var(--accent); }
+.wire-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 10px; }
+.wire-facts div { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 6px 9px; }
+.wire-facts span { display: block; color: var(--muted); font-size: 10.5px; }
+.wire-facts b { font: 600 13px var(--mono); color: var(--accent); }
+
+.selbar { max-width: calc(100vw - 20px); overflow-x: auto; scrollbar-width: none; }
+.selbar::-webkit-scrollbar { display: none; }

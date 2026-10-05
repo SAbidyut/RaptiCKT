@@ -16,7 +16,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## Features
 
-- **519 components** in 22 categories, each with a physical simulation model:
+- **520 components** in 22 categories, each with a physical simulation model:
   - Sources (34): DC/AC/pulse/triangle/saw/noise/chirp, AM/FM, PWM, step, ramp, exponential, damped sine, PWL, f(t) expression, single-phase mains presets, 3-phase star/delta supply, bench PSU (CV/CC), dual PSU, PV module, rails, net labels, controlled sources, earth/chassis
   - Batteries (16): AA, 9 V, coin cell, NiMH, NiCd, Li-ion, 2S Li-Po, LiFePO₄ cell and 12.8 V battery, lead-acid, AGM, gel, configurable S/P pack, supercapacitor, BMS protection board, CC-CV charger — all with state-of-charge models that collapse when exhausted
   - Renewables (7): PV array, MPPT and PWM solar charge controllers, off-grid and grid-tie (anti-islanding) inverters, wind turbine, PEM fuel cell
@@ -25,7 +25,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Protection (24): fuse, HRC fuse, thermal fuse, PTC polyfuse, MCB 1P/2P/3P (B/C/D curves), MCCB, ACB (LSI), RCCB, RCBO, overload relays (1- and 3-pole), phase-failure/sequence and over/under-voltage relays, IDMT relay, MOV, arrester, GDT, TVS, and ladder-diagram overload heaters, phase monitor and MPCB
   - Switches & Relays (52): house-wiring switches, toggle/slide/rocker/key/DIP/foot switches, push buttons, emergency stop, limit, reed, float, pressure, thermostat, isolator, changeover, voltage/current-controlled switches, relays (SPST/DPST/DPDT, reed, latching, control relay 2NO+2NC), contactors with auxiliary contacts, timer relay, SSR, and ladder-diagram parts (contactor coil, ON/OFF/twin timer coil, counter and counter-reset coils, floatless level relay, NO and NC contacts, 3-pole main contacts, limit switches, a moving carriage / pneumatic cylinder and a water tank) whose contacts follow the coil with the same tag
   - Electrical (23): incandescent, halogen, CFL, LED bulb, LED strip/panel/driver, tube light with choke and starter, neon, fan, heater, socket + appliance, dimmer, fan regulators, bell, earth electrode, photocell and PIR light switches, emergency light
-  - Power Systems (13): rated R/L/C and 3-phase loads, PF-correction capacitor, short and π lines, 2- and 4-core cables (resistance from length, size, copper/aluminium), busbar, junction box, timed fault
+  - Power Systems (14): rated R/L/C and 3-phase loads, PF-correction capacitor, short and π lines, single-core (IEC 60228 / 60364-5-52, RE/RM/SM/RF, Cu/Al, PVC/XLPE) and 2- and 4-core cables that heat and can burn (resistance from length, size, copper/aluminium), busbar, junction box, timed fault
   - Machines (16): DC motors (PM, separately excited, shunt, series, compound, universal), DC generator, 3-phase induction motor (3- and 6-terminal for star-delta), capacitor motor, synchronous motor, PMSM, BLDC with Hall sensors, stepper, alternators
   - Diodes, Transistors (30): tunnel, CRD, varactor, bridge and 3-phase rectifiers, BJTs, MOSFETs, JFETs, Darlington, IGBT, depletion MOSFET, UJT, optocoupler and more
   - Thyristors & Power (30): SCR, TRIAC, DIAC, SIDAC, SCS, LASCR, GTO, IGCT, PUT, opto-TRIAC/SCR, gate driver, IGBT half-bridge and IPM, H-bridge and 3-phase inverter bridges, SPWM (V/f) modulator, BLDC and stepper drivers, SCR firing unit, buck/boost/buck-boost/Ćuk/SEPIC/flyback/forward/push-pull/half- and full-bridge converters
@@ -36,6 +36,10 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Sensors (58): light, temperature, strain/load/force, Hall, current, voltage, accelerometer, gyro, IMU, magnetometer, PIR, IR, ultrasonic (incl. HC-SR04), gas, CO₂, smoke, humidity, soil, rain, water level, pressure, flame, UV, wind, flow, encoders, inductive/capacitive proximity, photo-eye, 4–20 mA transmitters and more
   - Output (23): LEDs (RGB, bicolour, IR, laser), 7- and 14-segment, dot matrix, hex display, bar graph, buzzers, speaker, headphone, preamp, tone control, equaliser, solenoid, servo, Peltier, DC fan, electromagnet
   - Vacuum Tubes (3) and Meters (21): voltmeter, ammeter, ohmmeter, wattmeter, true-RMS meters, frequency, phase, power-factor, VAR, kWh, dB, peak, LCR, megger, panel meter, moving-coil meters, test point
+- **Real-life limits — parts burn, wires catch fire**:
+  - Over-stressed parts are destroyed and stay that way (also after Restart) until you select them and tap **Replace**: a bulb on 1.6 × its voltage (230 V bulb on 400 V), an LED without a resistor, a resistor above its power rating (1/8 W … 100 W), an electrolytic capacitor over-voltaged or reversed (a tantalum fails short), a fan / heater / LED bulb on too high a voltage, an RCCB overloaded without an MCB, an MCB / MCCB / RCBO whose fault current exceeds its breaking capacity Icn. Fuses stay blown until replaced. Each failure shows a flash, flames and smoke, a bang and a message saying why.
+  - Every drawn wire is a real cable: choose house wire (BYA / H07V), flexible cord, rubber cable or NYY / N2XY / NAYY / NA2XY power cable, 0.5–400 mm², **RE / RM / SM / RF** conductor (IEC 60228) and the installation method (A1, B1, C, E, D). Its current rating Iz follows IEC 60364-5-52; a conductor-temperature model (calibrated to the rated temperature at Iz and the adiabatic I²t = k²S² limit) makes an overloaded wire glow, smoke, catch fire and burn through, opening the circuit. **⋮ → Replace burnt parts & wires** repairs everything at once.
+  - Breaker trips, relay timing, cable heating and burning run on the **real-time clock** while the waveforms are shown slowed down, so an MCB at 2.5 × In trips after about 20 real seconds, like a real one (Settings → *Heating & trip timing*: real time, 10× faster or simulation time; *Parts burn out* switches damage off; *New wires* sets the default cable).
 - **AC readings like a real meter**: in circuits with a sinusoidal supply (mains, AC sources, 3-phase), live labels show the RMS over one supply cycle (e.g. `12 V~` on a 230 V : 12-0-12 V transformer) and DC nets show their average. Voltmeters and ammeters default to *Auto* (RMS in AC circuits). Switch to instantaneous values in Settings → AC readings.
 - **Live readings on the schematic**: while the simulation runs, every net shows its voltage (blue) and every two-terminal part shows its current with a direction arrow (green), placed so they never overlap one another, a part or a text label (when a crowded net has no free spot, its reading is left out; a probe still reads it). Value labels step further out when the spot next to their part is taken. Both can be switched off in Settings.
 - **Oscilloscope**: 6 channels on a real 10 × 8 graticule with one shared 1-2-5 V/div scale and 0 V line for all voltage channels (currents on their own A/div with 0 A on the same line), 1-2-5 time/div, CH1 edge trigger (off by default; turn it on for a steady picture), ground markers, a touch cursor read-out, frequency/RMS/p-p, FFT spectrum, XY mode, AC/DC input coupling, timing measurements (mean, duty cycle, rise/fall time, phase) and CSV export.
@@ -59,7 +63,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Pinch to zoom, or one finger like Google Maps: double-tap, hold and slide down (in) or up (out)
   - Undo/redo and multi-select
 - **7 big build-along projects** (first chip in Examples → *Projects*), each explained stage by stage:
-  - **Complete house wiring (2-room flat)**: energy meter → DP main switch → 30 mA RCCB → one MCB per circuit (lights with one-way and staircase 2-way switches, calling bell, fan with regulator, 2 kW geyser, earthed sockets). Set a socket to *Faulty appliance* to trip the RCCB or *Short circuit* to trip its MCB.
+  - **Complete house wiring (2-room flat)**: energy meter → DP main switch → 30 mA RCCB → one MCB per circuit (lights with one-way and staircase 2-way switches, calling bell, fan with regulator, 2 kW geyser, earthed sockets). Set a socket to *Faulty appliance* to trip the RCCB or *Short circuit* to trip its MCB. Wired with real cables: 10 mm² tails and buses, 1.5 mm² lights, 2.5 mm² sockets, 4 mm² geyser.
   - **16-bit RAM (4 words × 4 bits)**: 16 D-latch memory cells, an address decoder driving the word lines, bit lines from a hex keypad and a read multiplexer per column — write a digit at each address and read it back.
   - **Mains to 5 V regulated power supply**: fuse → transformer → bridge → smoothing capacitor → 7805, with the ripple and the flat 5 V side by side on the scope.
   - **Traffic light controller** (CD4017 + diode-OR logic), **4-bit binary adder** (two hex keypads, sum + carry), **digital seconds counter 00–59** (cascaded BCD counters, mod-60 reset, 7-segment displays) and an **automatic street light** (LDR → transistor → 12 V relay → 230 V lamp).
@@ -86,6 +90,7 @@ The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md). It is 
 - DC operating point with gmin stepping and source stepping, and automatic referencing of galvanically isolated islands. Logic feedback loops (latches made of gates) are settled one gate at a time, so they power up in a stable state.
 - Small-signal AC analysis: devices are linearised at the operating point and solved with complex MNA.
 - SPICE-default tolerances: RELTOL 1e-3, VNTOL 1 µV, ABSTOL 1 nA, GMIN 1e-12. All are adjustable in Settings.
+- Thermal clock: slow thermal effects (bimetals, cable conductor temperature, parts overheating) integrate with `dt · heatScale`, where the editor sets `heatScale = 1 / simulation speed` so they happen in wall-clock time. Fault currents above 8 × a cable's rating heat in circuit time, so a breaker clearing a short in milliseconds still protects the cable. A wire that burns through is removed from the netlist and the circuit is rebuilt mid-run, keeping time and every part's state.
 
 `web/tests` checks the engine against analytic results:
 - RC/RL time constants and LC resonance
@@ -93,6 +98,8 @@ The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md). It is 
 - Op-amp gain, GBW and saturation
 - RC −3 dB/−45°, transformer ratio, logic truth tables
 - 555 frequency, 7805/LM317, motor steady state, solar Voc, relay, counter
+
+`tests/limits.test.js` checks the real-life limits: bulbs, LEDs, resistors, capacitors and RCCBs burning, the real-time MCB trip, the breaking capacity, IEC cable ratings and resistances, the k = 115 adiabatic limit, voltage drop over a cable, a breaker protecting its cable, and wires and cables burning through.
 
 It also builds every example and checks that it is fully wired, solvable and gives the expected values; `tests/projects.test.js` runs the big projects like the real circuits (RCCB/MCB trips, RAM write/read-back, 59 → 00 roll-over, traffic-light timing, 5 V regulation, day/night switching).
 

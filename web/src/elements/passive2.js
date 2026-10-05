@@ -85,7 +85,8 @@ export class TantalumCap extends ElectrolyticCap {
   static type = 'tantalum'; static title = 'Tantalum Capacitor';
   static keywords = 'tantalum capacitor polarized smd decoupling';
   static props = ElectrolyticCap.props.map((p) => ({ ...p, def: { c: 10e-6, vmax: 16 }[p.key] ?? p.def }));
-  static description = 'Polarised tantalum capacitor: small, low ESR. Flashes red if reverse biased or over-voltage (tantalums fail short!).';
+  static description = 'Polarised tantalum capacitor: small, low ESR. Flashes red if reverse biased or over-voltage — and if kept there it fails SHORT (and may catch fire), as real tantalums do.';
+  static failShort = true;
   draw(g) { super.draw(g); g.upright(() => g.text('Ta', 0, 0, { size: 6.5, color: g.muted, bold: true }), 0.7 * G, -0.9 * G); }
 }
 register(TantalumCap);
