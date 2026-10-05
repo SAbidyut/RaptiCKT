@@ -866,3 +866,6 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 
 .selbar { max-width: calc(100vw - 20px); overflow-x: auto; scrollbar-width: none; }
 .selbar::-webkit-scrollbar { display: none; }
+
+.insp-rate { margin: 6px 0 0; padding: 8px 10px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--border); font-size: 12.5px; line-height: 1.45; color: var(--text2); }
+.insp-rate b { display: block; color: var(--accent); font-size: 12px; margin-bottom: 2px; }

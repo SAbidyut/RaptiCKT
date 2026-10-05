@@ -69,6 +69,7 @@ export class IRLED extends LED {
 register(IRLED);
 
 export class LaserDiode extends LED {
+  static lifeT2 = 0.2; static lifeM = 8; static lifeInst = 2.5; // optical damage: lasers die almost at once above their rating
   static type = 'laser'; static title = 'Laser Diode'; static keywords = 'laser diode 650nm red laser module pointer threshold current';
   static props = [...LED.props.map((p) => (p.key === 'color' ? { ...p, def: 'red', hidden: true } : p.key === 'imax' ? { ...p, def: 0.03 } : p)),
     { key: 'ith', label: 'Threshold current', unit: 'A', def: 0.02, min: 1e-4, max: 1, log: true }];

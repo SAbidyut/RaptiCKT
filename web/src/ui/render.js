@@ -538,8 +538,9 @@ export class Renderer {
         g.glow(cx, cy, r * 1.1, '30,20,12', 0.75); // soot
         const age = t - (e.damaged.wall ?? -99);
         if (age < 0.35) g.glow(cx, cy, r * 2.4, '255,240,180', 1 - age / 0.35); // the flash as it goes
-        if (age < 6) drawSmoke(ctx, cx, cy - r * 0.3, t, 1 - age / 6, e.id);
-        if (age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, cx + k * r * 0.4, cy, (e.fire !== undefined ? 9 : 7) * (1 - age / 3), t, e.id * 3 + k);
+        const burn = e.damaged.flame ? 12 : 3; // a lithium cell in thermal runaway burns for a while
+        if (age < burn * 2) drawSmoke(ctx, cx, cy - r * 0.3, t, 1 - age / (burn * 2), e.id);
+        if (age < burn) for (let k = -1; k <= 1; k++) drawFlames(ctx, cx + k * r * 0.4, cy, (e.fire !== undefined || e.damaged.flame ? 10 : 7) * Math.min(1, 1.6 * (1 - age / burn)), t, e.id * 3 + k);
         this.badge(cx + r * 0.7, y1 - 2, '#ef4444');
         continue;
       }

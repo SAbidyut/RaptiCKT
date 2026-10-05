@@ -333,14 +333,16 @@ export class NeonLamp extends TwoTerm {
     { key: 'vstrike', label: 'Striking voltage', unit: 'V', def: 90, min: 20, max: 1000, knob: true },
     { key: 'vm', label: 'Maintaining voltage', unit: 'V', def: 60, min: 10, max: 1000 },
     { key: 'r', label: 'Internal resistance', unit: 'Ω', def: 1000, min: 1, max: 1e6, log: true },
+    { key: 'rb', label: 'Built-in series resistor (panel indicator)', unit: 'Ω', def: 0, min: 0, max: 1e7 },
   ];
-  static description = 'Neon glow lamp: strikes at ≈90 V, then maintains ≈60 V. Use a series resistor (e.g. 100 kΩ on 230 V). Classic relaxation oscillator element.';
+  static description = 'Neon glow lamp (NE-2): strikes at ≈90 V, then maintains ≈60 V and must be fed through a series resistor (e.g. 100 kΩ on 230 V) — directly on the mains it burns out. Panel pilot lamps have the resistor built in (set it, e.g. 150 kΩ). Classic relaxation oscillator element.';
+  rtot() { return this.p.r + (this.p.rb || 0); }
   nonlinear = true;
   constructor(x, y) { super(x, y); this.gd = new Discharge(); }
   reset() { this.gd.reset(); this.setCurrent(0); }
-  stampNL(s) { const [a, b] = this.nodes, v = s.v(a) - s.v(b), { i, g } = this.gd.iv(v, this.p.vm, this.p.r); s.addG(a, b, g); s.addI(a, b, i - g * v); }
+  stampNL(s) { const [a, b] = this.nodes, v = s.v(a) - s.v(b), { i, g } = this.gd.iv(v, this.p.vm, this.rtot()); s.addG(a, b, g); s.addI(a, b, i - g * v); }
   accept(s) {
-    const v = this.voltageDiff(s), { i } = this.gd.iv(v, this.p.vm, this.p.r);
+    const v = this.voltageDiff(s), { i } = this.gd.iv(v, this.p.vm, this.rtot());
     this.setCurrent(i);
     this.gd.update(s, v, i, this.p.vstrike, 1e-5, 1e-4);
   }
@@ -370,12 +372,20 @@ export class CeilingFan extends TwoTerm {
     { key: 'pf', label: 'Power factor', unit: '', def: 0.9, min: 0.2, max: 1 },
     { key: 'rpm', label: 'Rated speed', unit: 'rpm', def: 330, min: 10, max: 3000 },
     { key: 'freq', label: 'Rated frequency', unit: 'Hz', def: 50, min: 1, max: 400 },
+    { key: 'cv', label: 'Capacitor rating (AC)', unit: 'V', def: 440, min: 50, max: 1000 },
   ];
-  static description = 'Ceiling fan as an equivalent series R–L load (from rated power and power factor). Speed follows the winding current (its share of the rated current equals the share of rated voltage reaching the fan) with the fan load curve and the blade inertia; stalls below ≈35 % — try it with a regulator. Switched off, it carries no current and runs down.';
-  constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.ang = 0; }
+  static description = 'Ceiling fan (permanent-split capacitor motor) as an equivalent series R–L load from rated power and power factor. Speed follows the winding current with the fan load curve and the blade inertia; stalls below ≈35 % — try it with a regulator. Over-voltage saturates the iron core, so the current rises much faster than the voltage; the run capacitor (≈1.2 × the supply voltage across it) bursts above its rating and the fan then only hums, drawing locked-rotor current; the winding (class B, ≈100 °C at rated load) burns at ≈180 °C.';
+  constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.ang = 0; this.sat = 1; }
   branchCount() { return 1; }
-  rl0() { if (this.damaged) return [1e9, 0]; const S = this.p.w / this.p.pf, Z = (this.p.v * this.p.v) / S, R = Z * this.p.pf, X = Z * Math.sqrt(1 - this.p.pf ** 2); return [R, X / (TAU * this.p.freq)]; }
-  reset() { this.rl.reset(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.setCurrent(0); }
+  capGone() { return !!(this.damaged && this.damaged.partial); }
+  rl0() {
+    if (this.damaged && !this.damaged.partial) return [1e9, 0];
+    const S = this.p.w / this.p.pf, Z = (this.p.v * this.p.v) / S, R = Z * this.p.pf, X = Z * Math.sqrt(1 - this.p.pf ** 2);
+    // a saturated core and a stalled rotor both lower the impedance
+    const k = (this.sat || 1) * (this.capGone() ? 1.8 : 1);
+    return [R / k, X / (TAU * this.p.freq) / k];
+  }
+  reset() { this.rl.reset(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.sat = 1; this.tw = 40; this.capWear = 0; this.setCurrent(0); }
   irated() { return this.p.w / (this.p.pf * this.p.v); }
   /** spinning on its own inertia with (almost) no current: switched off or stalled by the regulator */
   coasting() { return (this.speed || 0) >= 1 && this.icyc.v < 0.05 * this.irated(); }
@@ -391,20 +401,36 @@ export class CeilingFan extends TwoTerm {
     // (and an inductive kick across the open switch must not spin it up)
     const vr = this.irms.push(this.rl.i, s.dt) / this.irated();
     this.icyc.push(this.rl.i, s.dt);
-    if (!this.damaged) {
-      // winding temperature follows I²: about 1.5 × its rated current for a minute burns the insulation
-      const th = this.heatAvg(s, vr * vr, 40);
-      this.stress = Math.max(0, Math.min(1, (th - 1.2) / 1.05));
-      if (th > 2.25) this.setDamage(s, `Winding burnt — ${fmtShort(this.irms.v, 'A')} for too long (rated ${fmtShort(this.irated(), 'A')}); check the supply voltage`);
+    if (!this.damaged || this.damaged.partial) {
+      // iron saturation above ≈1.15 × rated voltage: the magnetising current climbs steeply
+      const x = this.rms.v / this.p.v, sat = 1 + 2 * Math.max(0, x - 1.15) ** 2;
+      if (Math.abs(sat - this.sat) > 0.02 * this.sat) { this.sat = sat; s.dirty = true; }
+      // run capacitor: ≈1.2 × the supply across it; above ≈1.2 × its rating it breaks down in seconds
+      const rc = (1.2 * this.rms.v) / this.p.cv;
+      if (!this.capGone() && rc > 1.2) {
+        this.capWear = (this.capWear || 0) + s.heatDt() / (5 * Math.pow(1.4 / rc, 10));
+        if (this.capWear >= 1 && this.setDamage(s, `Run capacitor burst — ${fmtShort(1.2 * this.rms.v, 'V')} across a ${fmtShort(this.p.cv, 'V')} capacitor. The fan only hums and draws locked-rotor current: switch it off!`)) { this.damaged.partial = true; s.dirty = true; }
+      }
+      // winding temperature (class B insulation): ≈100 °C at rated current, time constant ≈6 min
+      const r2 = vr * vr;
+      this.tw = (this.tw ?? 40) + (40 + 60 * r2 - (this.tw ?? 40)) * Math.min(1, s.heatDt() / 345);
+      this.stress = Math.max(this.capGone() ? 0 : Math.min(1, this.capWear || 0), Math.min(1, Math.max(0, (this.tw - 110) / 70)));
+      if (this.tw > 180) {
+        if (this.damaged) this.damaged = null;
+        this.setDamage(s, `Winding burnt — insulation charred at ${Math.round(this.tw)} °C (${fmtShort(this.irms.v, 'A')}, rated ${fmtShort(this.irated(), 'A')})${this.sat > 1.3 ? ': over-voltage saturated the core' : this.capGone() ? ': it was left humming with a dead capacitor' : ''}`);
+      }
     }
-    const target = vr < 0.35 ? 0 : this.p.rpm * Math.min(1.05, Math.pow((vr - 0.35) / 0.65, 0.6));
+    const target = vr < 0.35 || this.capGone() ? 0 : this.p.rpm * Math.min(1.05, Math.pow((vr - 0.35) / 0.65, 0.6));
     this.speed += (target - this.speed) * Math.min(1, s.dt / 0.3); // quick spin-up, so it settles at mains simulation speeds
     if (target === 0 && this.speed < 1) this.speed = 0; // bearing friction: it does stop
     this.ang += (this.speed / 60) * TAU * s.dt;
   }
   stampAC(ac) { const [R, L] = this.rl0(); this.rl.ac(ac, this.nodes[0], this.nodes[1], this.branches[0], R, L); }
   valueLabel() { return fmtQty(Math.round(this.speed || 0), 'rpm') + (this.coasting() ? ' coasting' : ''); }
-  readings(s) { return [['Speed', this.speed || 0, 'rpm'], ['State', this.coasting() ? 'Coasting (no current)' : this.speed >= 1 ? 'Running' : 'Stopped', ''], ['Voltage (RMS)', this.rms.v, 'V'], ['Current (RMS)', this.irms.v, 'A'], ['Voltage', this.voltageDiff(s), 'V']]; }
+  readings(s) {
+    const st = this.damaged && !this.damaged.partial ? 'BURNT — ' + this.damaged.why : this.capGone() ? 'Capacitor burst — humming, not turning' : this.coasting() ? 'Coasting (no current)' : this.speed >= 1 ? 'Running' : 'Stopped';
+    return [['Speed', this.speed || 0, 'rpm'], ['State', st, ''], ['Voltage (RMS)', this.rms.v, 'V'], ['Current (RMS)', this.irms.v, 'A'], ['Winding temperature', this.tw ?? 40, '°C'], ['Voltage', this.voltageDiff(s), 'V']];
+  }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
   localBox() { return [-2 * G, -1.1 * G, 2 * G, 1.1 * G]; }
   draw(g) {

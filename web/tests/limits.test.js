@@ -262,3 +262,147 @@ test('the 2-core installation cable heats and burns open too', () => {
   assert.equal(c2.damaged, null, 'a 2 kW load on 2.5 mm² is fine');
   assert.equal(c2.heat.state, 'ok');
 });
+
+// ------------------------------------------------- every part has real ratings
+test('transistor: over-current kills a 2N3904 and it fails short (collector–emitter)', () => {
+  const { el, run } = net();
+  el('dcv', [1, 0], { amp: 5 }); el('resistor', [1, 4], { r: 1000 });
+  const q = el('npn', [4, 2, 0]);
+  el('resistor', [3, 2], { r: 10 }); el('dcv', [3, 0], { amp: 12 });
+  const sim = run(0.3, 1e-4, { scale: 25 });
+  assert.ok(q.damaged && /collector/.test(q.damaged.why), q.damaged?.why);
+  assert.ok(sim.v(2) < 1, 'the shorted transistor holds the collector low: ' + sim.v(2));
+});
+
+test('a base or a zener straight across a supply burns instead of breaking the solver', () => {
+  let { el, run } = net();
+  el('dcv', [1, 0], { amp: 5 });
+  const q = el('npn', [1, 2, 0]);
+  el('resistor', [3, 2], { r: 100 }); el('dcv', [3, 0], { amp: 12 });
+  run(0.02, 1e-5);
+  assert.ok(q.damaged, 'transistor');
+  ({ el, run } = net());
+  el('dcv', [1, 0], { amp: 12 });
+  const z = el('zener', [0, 1]);
+  run(0.02, 1e-5);
+  assert.ok(z.damaged && /zener/.test(z.damaged.why));
+});
+
+test('MOSFET gate oxide punctures above ±20 V', () => {
+  const { el, run } = net();
+  el('dcv', [1, 0], { amp: 30 });
+  const m = el('nmos', [1, 2, 0]);
+  el('resistor', [3, 2], { r: 100 }); el('dcv', [3, 0], { amp: 12 });
+  run(0.005, 1e-5);
+  assert.ok(m.damaged && /Gate oxide/.test(m.damaged.why));
+});
+
+test('ICs: 555 on 24 V, 7805 on 40 V, 74HC on VDD 12 V and an op-amp on ±25 V are destroyed', () => {
+  const cases = [
+    [(el) => { el('dcv', [1, 0], { amp: 24 }); return el('timer555', [0, 1, 0, 1, 0, 0, 0, 1]); }, /555/],
+    [(el) => { el('dcv', [1, 0], { amp: 40 }); const r = el('reg78', [1, 2, 0]); el('resistor', [2, 0], { r: 100 }); return r; }, /78xx/],
+    [(el) => { el('dcv', [1, 0], { amp: 5 }); const g = el('not', [1, 2], { vdd: 12 }); el('resistor', [2, 0], { r: 1e4 }); return g; }, /74HC/],
+    [(el) => { el('dcv', [1, 0], { amp: 1 }); const o = el('opamp', [1, 0, 2], { model: 'custom', vpos: 25, vneg: -25 }); el('resistor', [2, 0], { r: 1e4 }); return o; }, /supply/],
+  ];
+  for (const [mk, re] of cases) {
+    const { el, run } = net();
+    const p = mk(el);
+    run(0.005, 1e-5);
+    assert.ok(p.damaged && re.test(p.damaged.why), `${p.constructor.type}: ${p.damaged?.why}`);
+  }
+});
+
+test('7805 without a big enough heatsink cycles in thermal shutdown instead of burning', () => {
+  const { el, run } = net();
+  el('dcv', [1, 0], { amp: 24 });
+  const r = el('reg78', [1, 2, 0]);
+  el('resistor', [2, 0], { r: 10 });
+  let shut = 0, back = 0, was = false;
+  run(4, 1e-3, { scale: 25, each: () => { if (r.tsd && !was) shut++; if (!r.tsd && was) back++; was = r.tsd; } });
+  assert.ok(shut >= 2 && back >= 1, `shut ${shut}, back ${back}`);
+  assert.equal(r.damaged, null);
+});
+
+test('ammeter across the mains blows its fuse; speaker over-driven burns its voice coil', () => {
+  let { el, run } = net();
+  el('mains', [1, 0]);
+  const a = el('ammeter', [1, 0]);
+  run(0.02, 1e-5);
+  assert.ok(a.damaged && /series/.test(a.damaged.why));
+  ({ el, run } = net());
+  el('acv', [1, 0], { amp: 20, freq: 1000 });
+  const sp = el('speaker', [1, 0]);
+  run(0.5, 2e-5, { scale: 25 });
+  assert.ok(sp.damaged && /Voice coil/.test(sp.damaged.why));
+});
+
+test('a stalled motor burns its winding in real seconds; a Li-ion short catches fire', () => {
+  let { el, run } = net();
+  el('dcv', [1, 0], { amp: 12 });
+  const m = el('motor', [1, 0], { load: 1 });
+  let at = null;
+  run(4, 1e-4, { scale: 25, each: (s) => { if (m.damaged && at === null) at = s.t * 25; } });
+  assert.ok(at > 5 && at < 100, 'burnt after ' + at + ' s');
+  ({ el, run } = net());
+  const b = el('liion', [1, 0]);
+  el('resistor', [1, 0], { r: 0.01 });
+  run(2, 1e-4, { scale: 25 });
+  assert.ok(b.damaged && b.damaged.flame && /fire/.test(b.damaged.why));
+});
+
+test('230 V fan on 500 V: the capacitor bursts first, then the winding burns within half a minute', () => {
+  const { el, run } = net();
+  el('mains', [1, 0], { vrms: 500 });
+  const f = el('fan', [1, 0]);
+  let cap = null, burnt = null;
+  run(4, 1e-4, { scale: 25, each: (s) => { if (f.capGone() && cap === null) cap = s.t * 25; if (f.damaged && !f.damaged.partial && burnt === null) burnt = s.t * 25; } });
+  assert.ok(cap !== null && burnt !== null && cap < burnt, `capacitor ${cap} s, winding ${burnt} s`);
+  assert.ok(burnt < 40, 'winding burnt after ' + burnt + ' s');
+  const ok = net();
+  ok.el('mains', [1, 0]);
+  const f2 = ok.el('fan', [1, 0]);
+  ok.run(4, 1e-4, { scale: 25 });
+  assert.equal(f2.damaged, null);
+  assert.ok(f2.tw < 110, 'rated winding temperature ' + f2.tw);
+});
+
+test('transformer on 1.7 × its voltage burns; a neon straight on the mains burns, a panel neon does not', () => {
+  let { el, run } = net();
+  el('mains', [1, 0], { vrms: 400 });
+  const t = el('txstepdown', [1, 0, 2, 3]);
+  el('resistor', [2, 3], { r: 100 });
+  run(2, 1e-4, { scale: 25 });
+  assert.ok(t.damaged && /saturates/.test(t.damaged.why));
+  for (const [rb, burns] of [[0, true], [150e3, false]]) {
+    ({ el, run } = net());
+    el('mains', [1, 0]);
+    const n = el('neon', [1, 0], { rb });
+    run(0.3, 1e-5, { scale: 25 });
+    assert.equal(!!n.damaged, burns, 'rb ' + rb);
+  }
+});
+
+test('a contactor carrying a short circuit welds shut and keeps conducting', () => {
+  const { el, run } = net();
+  el('mains', [1, 0], { vrms: 230 });
+  // coil A1–A2 on the mains, L1 → T1 into a dead short
+  const k = el('contactor', [1, 0, 1, 5, 6, 2, 7, 8, 9, 10]);
+  el('resistor', [2, 0], { r: 0.05 });
+  for (const n of [5, 6, 7, 8, 9, 10]) el('resistor', [n, 0], { r: 1e6 });
+  const sim = run(0.3, 2e-5, { scale: 25 });
+  assert.ok(k.damaged && /welded/.test(k.damaged.why), k.damaged?.why);
+  assert.ok(k.damaged.fail.some(([a, b]) => a === 2 && b === 5), 'L1–T1 welded');
+  void sim;
+});
+
+test('a destroyed part keeps its failure in the saved file', () => {
+  const { el, run } = net();
+  el('dcv', [1, 0], { amp: 30 });
+  const m = el('nmos', [1, 2, 0]);
+  el('resistor', [3, 2], { r: 100 }); el('dcv', [3, 0], { amp: 12 });
+  run(0.005, 1e-5);
+  const back = Element.fromJSON(JSON.parse(JSON.stringify(m.toJSON())));
+  assert.deepEqual(back.damaged.fail, m.damaged.fail);
+  back.replace();
+  assert.equal(back.damaged, null);
+});

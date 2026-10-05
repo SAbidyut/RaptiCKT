@@ -36,6 +36,7 @@ import './semis3.js';
 import './passive3.js';
 import './ladder.js';
 import './cables.js';
+import './limits.js';
 
 import { getType } from './base.js';
 export { getType, allTypes, Element, GRID } from './base.js';
