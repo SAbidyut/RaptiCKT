@@ -86,14 +86,16 @@ export class Bulb extends TwoTerm {
     { key: 'w', label: 'Rated power', unit: 'W', def: 60, min: 0.1, max: 5000, log: true, knob: true },
     { key: 'tau', label: 'Filament time constant', unit: 's', def: 0.08, min: 1e-3, max: 5, log: true },
   ];
-  static description = 'Tungsten filament lamp with a thermal model: the cold filament has ≈1/15 of its hot resistance, so it draws a large inrush current and brightens over tens of milliseconds. R ∝ T^1.2, radiated power ∝ T⁴.';
+  static description = 'Tungsten filament lamp with a thermal model: the cold filament has ≈1/15 of its hot resistance, so it draws a large inrush current and brightens over tens of milliseconds. R ∝ T^1.2, radiated power ∝ T⁴. On too high a voltage (about 1.6 × its rating, e.g. a 230 V bulb on 400 V) the filament overheats and burns out — select it and tap Replace.';
+  static TBURN = 3350;
   static T0 = 300; static TH = 2800;
   get Rhot() { return (this.p.v * this.p.v) / this.p.w; }
   resist(T) { return this.Rhot * Math.pow(T / Bulb.TH, 1.2); }
   reset() { this.T = Bulb.T0; this.R = this.resist(this.T); this.setCurrent(0); }
-  stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1 / (this.R || this.Rhot)); }
-  stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / (this.R || this.Rhot)); }
+  stamp(s) { s.addG(this.nodes[0], this.nodes[1], this.damaged ? 1e-9 : 1 / (this.R || this.Rhot)); }
+  stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], this.damaged ? 1e-9 : 1 / (this.R || this.Rhot)); }
   accept(s) {
+    if (this.damaged) { this.setCurrent(0); this.T = Bulb.T0; return; }
     const v = this.voltageDiff(s), R = this.R || this.Rhot, i = v / R;
     this.setCurrent(i);
     if (s.mode === 'dc') return;
@@ -103,10 +105,13 @@ export class Bulb extends TwoTerm {
     this.T = Math.min(3600, Math.max(T0, this.T + ((v * i - prad) / cth) * s.dt));
     const Rn = this.resist(this.T);
     if (Math.abs(Rn - this.R) > 0.004 * this.R) { this.R = Rn; s.dirty = true; }
+    this.stress = Math.max(0, Math.min(1, (this.T - 3000) / (Bulb.TBURN - 3000)));
+    if (this.T >= Bulb.TBURN) this.setDamage(s, `Filament burnt out — over-voltage (${fmtShort(Math.abs(v), 'V')} across a ${fmtShort(this.p.v, 'V')} bulb)`);
   }
   bright() { return Math.max(0, Math.pow(((this.T || 300) - 900) / (Bulb.TH - 900), 3)); }
   valueLabel() { return `${fmtQty(this.p.w, 'W').replace(' ', '')}`; }
   readings(s) {
+    if (this.damaged) return [['State', 'BURNT OUT — ' + this.damaged.why, ''], ['Voltage', this.voltageDiff(s), 'V'], ['Current', 0, 'A']];
     return [['Filament temperature', (this.T || 300) - 273, '°C'], ['Resistance', this.R || this.Rhot, 'Ω'], ['Cold resistance', this.resist(300), 'Ω'],
       ['Current', this.i, 'A'], ['Voltage', this.voltageDiff(s), 'V'], ['Light output', 13 * this.p.w * this.bright(), 'lm']];
   }
@@ -121,6 +126,10 @@ export class Bulb extends TwoTerm {
     for (let k = 0; k <= 6; k++) ctx.lineTo(-0.35 * G + k * 0.117 * G, -0.1 * G - (k % 2 ? 0.25 : 0) * G);
     ctx.lineTo(0.7 * G, 0.3 * G);
     ctx.strokeStyle = b > 0.05 ? '#ffd27a' : g.body; ctx.lineWidth = g.lw * 0.7; ctx.stroke();
+    if (this.damaged) { // broken filament and a blackened glass
+      g.circle(0, -0.2 * G, 0.85 * G, { fill: 'rgba(40,30,20,0.45)' });
+      g.line(-0.05 * G, -0.42 * G, 0.12 * G, -0.18 * G, '#ef4444', g.lw * 0.7);
+    }
   }
 }
 register(Bulb);
@@ -287,6 +296,7 @@ export class LEDBulb extends TwoTerm {
   constructor(x, y) { super(x, y); this.onParamChange(); }
   reset() { this.onParamChange(); this.pavg = 0; this.setCurrent(0); }
   iv(v) {
+    if (this.damaged) return { i: v * 1e-9, g: 1e-9 };
     const w = 0.5, u = (Math.abs(v) - this.vt) / w;
     const sp = u > 30 ? u : Math.log1p(Math.exp(u)), sg = 1 / (1 + Math.exp(-u));
     return { i: (Math.sign(v) * sp * w) / this.R + v * 1e-9, g: sg / this.R + 1e-9 };
@@ -295,7 +305,12 @@ export class LEDBulb extends TwoTerm {
   accept(s) {
     const v = this.voltageDiff(s), { i } = this.iv(v);
     this.setCurrent(i);
-    if (s.mode !== 'dc') this.pavg += (v * i - this.pavg) * Math.min(1, s.dt / 0.05);
+    if (s.mode === 'dc' || this.damaged) return;
+    this.pavg += (v * i - this.pavg) * Math.min(1, s.dt / 0.05);
+    // the driver and its LEDs are sized for the rated voltage: well above it they cook
+    const over = this.heatAvg(s, this.pavg / this.p.w, 1.5);
+    this.stress = Math.max(0, Math.min(1, (over - 1.3) / 0.9));
+    if (over > 2.2) this.setDamage(s, `Burnt out — over-voltage: drawing ${fmtShort(this.pavg, 'W')} instead of ${fmtShort(this.p.w, 'W')}`);
   }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1e-9); }
   valueLabel() { return fmtQty(this.p.w, 'W').replace(' ', ''); }
@@ -359,7 +374,7 @@ export class CeilingFan extends TwoTerm {
   static description = 'Ceiling fan as an equivalent series R–L load (from rated power and power factor). Speed follows the winding current (its share of the rated current equals the share of rated voltage reaching the fan) with the fan load curve and the blade inertia; stalls below ≈35 % — try it with a regulator. Switched off, it carries no current and runs down.';
   constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.ang = 0; }
   branchCount() { return 1; }
-  rl0() { const S = this.p.w / this.p.pf, Z = (this.p.v * this.p.v) / S, R = Z * this.p.pf, X = Z * Math.sqrt(1 - this.p.pf ** 2); return [R, X / (TAU * this.p.freq)]; }
+  rl0() { if (this.damaged) return [1e9, 0]; const S = this.p.w / this.p.pf, Z = (this.p.v * this.p.v) / S, R = Z * this.p.pf, X = Z * Math.sqrt(1 - this.p.pf ** 2); return [R, X / (TAU * this.p.freq)]; }
   reset() { this.rl.reset(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.setCurrent(0); }
   irated() { return this.p.w / (this.p.pf * this.p.v); }
   /** spinning on its own inertia with (almost) no current: switched off or stalled by the regulator */
@@ -376,6 +391,12 @@ export class CeilingFan extends TwoTerm {
     // (and an inductive kick across the open switch must not spin it up)
     const vr = this.irms.push(this.rl.i, s.dt) / this.irated();
     this.icyc.push(this.rl.i, s.dt);
+    if (!this.damaged) {
+      // winding temperature follows I²: about 1.5 × its rated current for a minute burns the insulation
+      const th = this.heatAvg(s, vr * vr, 40);
+      this.stress = Math.max(0, Math.min(1, (th - 1.2) / 1.05));
+      if (th > 2.25) this.setDamage(s, `Winding burnt — ${fmtShort(this.irms.v, 'A')} for too long (rated ${fmtShort(this.irated(), 'A')}); check the supply voltage`);
+    }
     const target = vr < 0.35 ? 0 : this.p.rpm * Math.min(1.05, Math.pow((vr - 0.35) / 0.65, 0.6));
     this.speed += (target - this.speed) * Math.min(1, s.dt / 0.3); // quick spin-up, so it settles at mains simulation speeds
     if (target === 0 && this.speed < 1) this.speed = 0; // bearing friction: it does stop
@@ -410,14 +431,18 @@ export class Heater extends TwoTerm {
     { key: 'tau', label: 'Thermal time constant', unit: 's', def: 5, min: 0.01, max: 1000, log: true },
   ];
   static description = 'Resistive heating element (R = V²/P) with a first-order thermal model: temperature rises towards ΔT ∝ P.';
-  get R() { return (this.p.v * this.p.v) / this.p.w; }
+  get R() { return this.damaged ? 1e9 : (this.p.v * this.p.v) / this.p.w; }
   reset() { this.T = 25; this.setCurrent(0); }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1 / this.R); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / this.R); }
   accept(s) {
     const v = this.voltageDiff(s);
     this.setCurrent(v / this.R);
-    if (s.mode !== 'dc') this.T += ((25 + 300 * ((v * v) / this.R) / this.p.w - this.T) * Math.min(1, s.dt / this.p.tau));
+    if (s.mode === 'dc' || this.damaged) return;
+    this.T += ((25 + 300 * ((v * v) / this.R) / this.p.w - this.T) * Math.min(1, s.heatDt() / this.p.tau));
+    // nichrome runs at ≈ 325 °C at its rating; past ≈ 1.8 × rated power it melts open
+    this.stress = Math.max(0, Math.min(1, (this.T - 400) / 165));
+    if (this.T > 565) this.setDamage(s, `Element burnt open — ${fmtShort(Math.round(this.T), '°C')} (over-voltage: too much power for its rating)`);
   }
   valueLabel() { return fmtQty(this.p.w, 'W').replace(' ', ''); }
   readings(s) { const v = this.voltageDiff(s); return [['Element temperature', this.T ?? 25, '°C'], ['Power (inst.)', (v * v) / this.R, 'W'], ['Resistance', this.R, 'Ω'], ['Current', this.i, 'A']]; }

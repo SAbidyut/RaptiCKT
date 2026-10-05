@@ -44,7 +44,7 @@ export const CHAPTERS = [
       H('What you can do with it'),
       L([
         'Build analog, digital and mixed circuits on an unlimited canvas.',
-        'Pick from **519 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
+        'Pick from **520 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
         'Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.',
         'Tap switches and push buttons while the circuit is running, and turn a knob to change any value live.',
         'Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).',
@@ -203,7 +203,7 @@ export const CHAPTERS = [
       ]),
       TIP('The **Recent** tab remembers the parts you used last, so common parts are one tap away.'),
       TIP('Always add a **Ground** to your circuit (see {{ch:wiring}}). Many examples show where it goes.'),
-      P('The complete list of all 335 components, with what each one does and which values you can change, is in the chapter **Component library**.'),
+      P('The complete list of all 520 components, with what each one does and which values you can change, is in the chapter **Component library**.'),
     ],
   },
 
@@ -371,7 +371,7 @@ export const CHAPTERS = [
         ['Switches (one-way, two-way, intermediate, DPST, DPDT, isolator, rotary…)', 'Tap to toggle.'],
         ['Push buttons (NO / NC)', 'Hold to press, release to let go.'],
         ['Latching push button, emergency stop', 'Tap to press and latch; tap again to release.'],
-        ['MCB, MCCB, RCCB, RCBO', 'Tap to switch on/off. After a trip, tap once to **reset**.'],
+        ['MCB, MCCB, RCCB, RCBO', 'Tap to switch on/off. After a trip, tap once to **reset**. A destroyed breaker must be replaced (see {{ch:limits}}).'],
         ['Overload relay, IDMT relay', 'Tap to reset after a trip.'],
         ['Logic input, hex input', 'Tap to flip a bit / step the value.'],
         ['PIR sensor', 'Tap to simulate motion.'],
@@ -380,6 +380,56 @@ export const CHAPTERS = [
       ]),
       H('Errors and warnings'),
       P('If the circuit cannot be solved, a bar at the top tells you what and where, for example **"Circuit cannot be solved (singular matrix) near R3. Check for floating current sources or open circuits."** The part concerned is highlighted. A yellow bar is a warning, for example "D1 is short-circuited". See **Troubleshooting** for what to do.'),
+    ],
+  },
+
+  // ------------------------------------------------------------------ 9b
+  {
+    id: 'limits', icon: 'shield',
+    title: 'Real-life limits: burning parts, wires and cables',
+    blocks: [
+      P('Parts in RaptiCKT have the limits of real parts. Too much voltage or current **burns them out**, an overloaded **wire overheats, smokes, catches fire and burns through**, and a breaker that is asked to break more than it can is **destroyed**. A burnt part stays burnt — also after Restart — until you **replace** it, just like changing a fused bulb at home.'),
+      H('What can burn'),
+      T(['Part', 'Fails when…'], [
+        ['Incandescent bulb, lamp', 'About 1.6 × its rated voltage: the filament melts (a 230 V bulb on 400 V, a 12 V lamp on 24 V). It goes open.'],
+        ['LED', 'Far above its rated current at once (an LED straight on a battery), or about 2.5 × for a few seconds. Always use a series resistor.'],
+        ['Resistor', 'Give it a **Power rating** (1/4 W, 1 W…): above about 2.5 × that power it burns open. "Ideal" has no limit.'],
+        ['Electrolytic / tantalum capacitor', 'Over 1.2 × its rated voltage, or connected the wrong way round: it bursts. Electrolytics fail open, tantalums fail **short**.'],
+        ['Fuse', 'Blows when its I²t is exceeded, and stays blown until replaced.'],
+        ['MCB, MCCB, RCBO', 'Trips on overload or short circuit (tap to reset). A fault current above its **breaking capacity Icn** (6 kA for an MCB) destroys it.'],
+        ['RCCB', 'Has no overcurrent protection: a long overload above its In burns it. Always fit an MCB before it.'],
+        ['Ceiling fan, heater, LED bulb', 'Too high a supply voltage: the winding, the element or the driver burns.'],
+        ['Wires and cables', 'Current above the cable rating Iz heats them; far above it they smoke, catch fire and burn through.'],
+      ]),
+      P('When something burns you see a flash, flames and smoke, hear a bang and get a message saying why. The part turns dark with a red **!** badge.'),
+      H('Replacing a burnt part'),
+      S([
+        'Tap the burnt part. The bar at the bottom shows a red **Replace** button (and the property sheet a **Replace with a new one** button).',
+        'Tap it: a new, cold part is fitted in the same place, with the same values.',
+        'Fix the cause first (lower the voltage, add a resistor, use a thicker cable), or the new part burns again.',
+        'To replace everything at once use **⋮ → Replace burnt parts & wires**.',
+      ]),
+      H('Wires and cables'),
+      P('Every wire you draw is a real cable (Settings → **New wires**, 1.5 mm² copper PVC house wire by default). Select a wire and tap **Cable** to choose:'),
+      L([
+        '**Cable type**: single-core PVC house wire (BYA / H07V-U), flexible cord (H05VV-F), rubber cable (H07RN-F), PVC or XLPE power cables in copper (NYY, N2XY) or aluminium (NAYY, NA2XY), or an **Ideal wire** with no limit.',
+        '**Conductor size**: 0.5 to 400 mm².',
+        '**Conductor (IEC 60228)**: **RE** round solid, **RM** round stranded, **SM** sector-shaped stranded, **RF** round flexible.',
+        '**Installation method**: in conduit in an insulated wall (A1), in conduit on a wall (B1), clipped direct (C), in free air (E) or buried (D) — a cable that can lose heat easily carries more current.',
+      ]),
+      P('The sheet shows the current rating **Iz** (IEC 60364-5-52), the resistance per km and, while running, the current, the load in % and the conductor temperature. **Use for all wires** gives every wire this cable; **Make default** uses it for the wires you draw next.'),
+      T(['Conductor temperature', 'What you see'], [
+        ['Up to the insulation rating (70 °C PVC, 90 °C XLPE)', 'Normal.'],
+        ['Above it', 'Overloaded: the wire glows orange.'],
+        ['Above 160 °C (PVC)', 'The insulation melts: red glow and smoke.'],
+        ['Above 250 °C (PVC)', 'It catches fire and burns through after a few seconds: the circuit opens.'],
+      ]),
+      P('A burnt wire is drawn charred with a red ✕ where it parted. Select it and tap **Repair** (or pick a thicker size, which also repairs it).'),
+      TIP('Protect every cable with an MCB or fuse no larger than its Iz: then the breaker trips before the wire gets hot. That is exactly how house wiring is designed — e.g. 1.5 mm² lights on a 10 A MCB, 2.5 mm² sockets on 16–20 A, 4 mm² geyser on 25 A.'),
+      P('Drawn wires have no resistance. To see the **voltage drop** and power loss of a real length of cable, use **Cable (1 core, with length)**, **Cable (2-core, L + N)** or **Cable (4-core, 3-phase + N)** from **Power Systems** and set the length. They heat and burn the same way.'),
+      H('Timing: real time'),
+      P('To show 50 Hz waveforms the simulation runs slowed down (for example 40 ms per second). Heating, breaker trips and burning do not: they follow **your clock**, so an MCB at 2.5 × its rating trips after about 20 real seconds and an overloaded cable takes minutes, like in real life. Change it in Settings → **Heating & trip timing** (10× faster, or simulation time). Short circuits are fast in both: a breaker or fuse clears them in milliseconds of circuit time.'),
+      WARN('Don\'t want anything to burn (for example while you are still building)? Switch off Settings → **Parts burn out**. Fuses still blow and breakers still trip.'),
     ],
   },
 
@@ -560,6 +610,12 @@ export const CHAPTERS = [
         ['Screen rotation', '**Auto** (follow the phone), **Always landscape** or **Always portrait**.'],
         ['Scope beside the circuit', 'On (default): in landscape the oscilloscope sits to the right of the board. Off: above it, as in portrait.'],
       ]),
+      H('Real-life limits'),
+      T(['Setting', 'What it does'], [
+        ['Parts burn out', 'On: over-stressed parts burn out, wires catch fire, breakers can be destroyed (see {{ch:limits}}). Off: nothing burns; fuses still blow and breakers still trip.'],
+        ['Heating & trip timing', '**Real time** (default): heating, breaker and relay trips and burning follow the real clock. **10× faster** for quick demonstrations. **Simulation time**: everything follows the slowed-down circuit time.'],
+        ['New wires', 'The cable given to wires you draw: Ideal wire, or 1–10 mm² copper PVC house wire, or a flexible cord.'],
+      ]),
       H('Simulation (for advanced users)'),
       T(['Setting', 'What it does'], [
         ['Integration method', '**Trapezoidal** (accurate, default) or **Backward Euler** (more damped, can calm a circuit that rings badly).'],
@@ -575,7 +631,7 @@ export const CHAPTERS = [
       H('Interaction and data'),
       T(['Setting', 'What it does'], [
         ['Haptic feedback', 'Small vibrations when you add, wire, turn the knob or press a switch.'],
-        ['Sound (buzzer)', 'Plays a tone when a buzzer, bell or speaker is active.'],
+        ['Sound (buzzer)', 'Plays a tone when a buzzer, bell or speaker is active, and a bang when a part burns out.'],
         ['Backup circuits', 'Saves every circuit in one file.'],
         ['Restore backup', 'Loads a backup or circuit file.'],
         ['Reset settings', 'Back to defaults (your circuits are not touched).'],
@@ -586,7 +642,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 15 (library: generated)
   {
     id: 'library', icon: 'chip', generated: 'library',
-    title: 'Component library (all 519)',
+    title: 'Component library (all 520)',
     blocks: [
       P('Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.'),
     ],
@@ -714,6 +770,7 @@ export const CATEGORY_NOTES = {
 export const SUMMARY = {
   welcome: 'What the app does and who it is for',
   quickstart: 'Build and run your first circuit in 2 minutes',
+  limits: 'Parts that burn out, wires that catch fire, and replacing them',
   screens: 'The main pages and how to move between them',
   editor: 'Top bar, toolbar, board and gestures',
   adding: 'Find components and place them on the board',

@@ -40,6 +40,37 @@ function dotSprite(color) {
 }
 export const MAX_DPR = 2;
 
+/** Drawn wire thickness grows (gently) with the conductor size. */
+export function cableWidth(c) { return Math.min(2.4, 0.85 + 0.35 * Math.log2(1 + (+c.size || 1.5))); }
+
+/** Flickering flame (world units); seed keeps neighbouring flames out of step. */
+export function drawFlames(ctx, x, y, s, t, seed = 0) {
+  if (s <= 0.3) return;
+  for (const [k, col0, col1] of [[1, 'rgba(255,90,20,0.9)', 'rgba(255,40,0,0)'], [0.55, 'rgba(255,230,120,0.95)', 'rgba(255,170,40,0)']]) {
+    const f = 0.8 + 0.2 * Math.sin(t * 13 + seed * 1.7) + 0.12 * Math.sin(t * 29 + seed * 3.1);
+    const h = s * 2.1 * f * k, w = s * 0.62 * k, sway = s * 0.25 * Math.sin(t * 7 + seed);
+    const gr = ctx.createLinearGradient(x, y, x, y - h);
+    gr.addColorStop(0, col0); gr.addColorStop(1, col1);
+    ctx.beginPath();
+    ctx.moveTo(x - w, y);
+    ctx.quadraticCurveTo(x - w * 1.1, y - h * 0.45, x + sway, y - h);
+    ctx.quadraticCurveTo(x + w * 1.1, y - h * 0.45, x + w, y);
+    ctx.quadraticCurveTo(x, y + w * 0.6, x - w, y);
+    ctx.fillStyle = gr; ctx.fill();
+  }
+}
+
+/** Rising grey puffs; amount 0 … 1. */
+export function drawSmoke(ctx, x, y, t, amount = 1, seed = 0) {
+  if (amount <= 0.02) return;
+  for (let k = 0; k < 5; k++) {
+    const ph = (t * 0.55 + k / 5 + (seed % 7) * 0.13) % 1;
+    const px = x + Math.sin(ph * 5 + seed + k) * 7 * ph, py = y - ph * 46;
+    ctx.beginPath(); ctx.arc(px, py, 3.5 + ph * 11, 0, 2 * Math.PI);
+    ctx.fillStyle = `rgba(150,150,156,${(0.5 * (1 - ph) * amount).toFixed(3)})`; ctx.fill();
+  }
+}
+
 // -------------------------------------------------------------- wire graph
 /** Graph of wire sub-segments used for current animation (KCL on each node's wire tree). */
 export class WireGraph {
@@ -47,11 +78,12 @@ export class WireGraph {
     this.edges = [];
     const pointsOf = [];
     for (const e of doc.elements) for (const p of e.getPosts()) pointsOf.push(p);
-    for (const w of doc.wires) for (const p of w.pts) pointsOf.push(p);
+    const live = doc.wires.filter((w) => !w.burnt); // a burnt-through wire carries nothing
+    for (const w of live) for (const p of w.pts) pointsOf.push(p);
     const uniq = new Map();
     for (const p of pointsOf) uniq.set(key(p[0], p[1]), p);
     const pts = [...uniq.values()];
-    for (const w of doc.wires) {
+    for (const w of live) {
       for (let s = 1; s < w.pts.length; s++) {
         const a = w.pts[s - 1], b = w.pts[s];
         const dx = b[0] - a[0], dy = b[1] - a[1], len2 = dx * dx + dy * dy;
@@ -107,6 +139,37 @@ export class WireGraph {
     this.junctions = [];
     for (const [k, d] of deg) if (d >= 3) this.junctions.push(uniq.get(k));
     this.degree = deg;
+  }
+
+  /**
+   * Index-based copy of solveCurrents for use after every simulation step (wire heating):
+   * prepareFast once per topology, then fastCurrents() fills this.fI (one value per edge).
+   */
+  prepareFast(doc) {
+    const N = this.order.length, vid = new Map();
+    this.order.forEach(([k], n) => vid.set(k, n));
+    this.fEdge = new Int32Array(N); this.fParent = new Int32Array(N); this.fSign = new Int8Array(N);
+    this.order.forEach(([k, pe, pk], n) => {
+      this.fEdge[n] = pe; this.fParent[n] = pe < 0 ? -1 : vid.get(pk);
+      this.fSign[n] = pe < 0 ? 0 : this.edges[pe].ka === k ? 1 : -1;
+    });
+    this.fPosts = [];
+    for (const e of doc.elements) {
+      (e._posts || e.getPosts()).forEach((p, i) => { const v = vid.get(key(p[0], p[1])); if (v !== undefined) this.fPosts.push([e, i, v]); });
+    }
+    this.fInj = new Float64Array(N);
+    this.fI = new Float64Array(this.edges.length);
+  }
+  fastCurrents() {
+    const inj = this.fInj, I = this.fI;
+    inj.fill(0);
+    for (const [e, i, v] of this.fPosts) inj[v] -= e.postCurrents[i] || 0;
+    for (let n = inj.length - 1; n >= 0; n--) {
+      const pe = this.fEdge[n];
+      if (pe < 0) continue;
+      I[pe] = this.fSign[n] * inj[n];
+      inj[this.fParent[n]] += inj[n];
+    }
   }
 
   /** compute edge currents from element terminal currents */
@@ -309,12 +372,17 @@ export class Renderer {
     const vs = st.sim && st.sim.wireNodes && st.sim.wireNodes.length === st.doc.wires.length ? st.sim.wireNodes : null;
     st.doc.wires.forEach((w, i) => {
       const sel = st.selWires && st.selWires.has(w);
-      const col = vs ? g.vc(nodeV(vs[i])) : th.body;
+      const col = vs && !w.burnt ? g.vc(nodeV(vs[i])) : th.body;
       ctx.beginPath();
       w.pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       if (sel) { ctx.strokeStyle = th.select; ctx.globalAlpha = 0.35; ctx.lineWidth = wireW * 4; ctx.stroke(); ctx.globalAlpha = 1; }
-      ctx.strokeStyle = col; ctx.lineWidth = wireW; ctx.stroke();
+      if (w.burnt) { this.drawBurntWire(w, wireW, st.t); return; }
+      const hs = running && w.heat ? w.heat.stress() : 0;
+      if (hs > 0.02) { // overloaded: the insulation glows from orange to red
+        ctx.strokeStyle = `rgba(255,${Math.round(150 - 110 * hs)},30,${0.25 + 0.5 * hs})`; ctx.lineWidth = wireW * (2.2 + 1.5 * hs); ctx.stroke();
+      }
+      ctx.strokeStyle = col; ctx.lineWidth = w.cable ? wireW * cableWidth(w.cable) : wireW; ctx.stroke();
     });
 
     // elements
@@ -342,6 +410,9 @@ export class Renderer {
         g.text('⚡', x2 + 2, y1 - 1.5, { size: 9, color: '#fff', bold: true });
       }
     }
+
+    // heat, smoke, fire and burnt parts
+    this.drawDamage(st, g, running);
 
     // current dots
     if (running && st.settings.currentDots !== false) this.drawDots(st, g);
@@ -414,6 +485,76 @@ export class Renderer {
         ctx.fillText(crossing ? 'Crossing' : 'Window', crossing ? rx + rw - 6 : rx + 6, ry + 5);
       }
     }
+  }
+
+  /** A wire that burnt through: charred, with the gap where it parted. */
+  drawBurntWire(w, wireW, t) {
+    const ctx = this.ctx, pts = w.pts;
+    let len = 0;
+    for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+    ctx.setLineDash([5, 3]);
+    ctx.strokeStyle = '#8b5a3c'; ctx.lineWidth = wireW * 1.4; ctx.stroke();
+    ctx.setLineDash([]);
+    // the break, half way along
+    let d = len / 2;
+    for (let k = 1; k < pts.length; k++) {
+      const [ax, ay] = pts[k - 1], [bx, by] = pts[k], l = Math.hypot(bx - ax, by - ay);
+      if (d > l) { d -= l; continue; }
+      const x = ax + ((bx - ax) * d) / l, y = ay + ((by - ay) * d) / l;
+      this.g.circle(x, y, wireW * 2.2, { fill: 'rgba(20,14,10,0.85)' });
+      this.g.line(x - 4, y - 4, x + 4, y + 4, '#ef4444', 1.4);
+      this.g.line(x - 4, y + 4, x + 4, y - 4, '#ef4444', 1.4);
+      const age = t - (w.burntWall || -99);
+      if (age < 8) drawSmoke(ctx, x, y, t, 1 - age / 8, w.id);
+      if (age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, x + k * 9, y, 7 * (1 - age / 3), t, w.id * 3 + k);
+      break;
+    }
+  }
+
+  /** Warning glow on over-stressed parts, flames and smoke, soot on burnt parts. */
+  drawDamage(st, g, running) {
+    const ctx = this.ctx, t = st.t;
+    if (running) {
+      for (const w of st.doc.wires) {
+        const h = w.heat;
+        if (!h || w.burnt || (h.state !== 'hot' && h.state !== 'fire')) continue;
+        // along the wire, every ~26 units
+        let k = 0;
+        for (let s = 1; s < w.pts.length; s++) {
+          const [ax, ay] = w.pts[s - 1], [bx, by] = w.pts[s], l = Math.hypot(bx - ax, by - ay);
+          for (let u = 13; u < l; u += 26, k++) {
+            const x = ax + ((bx - ax) * u) / l, y = ay + ((by - ay) * u) / l;
+            if (h.state === 'fire') drawFlames(ctx, x, y, 9, t, w.id * 7 + k);
+            drawSmoke(ctx, x, y, t, h.state === 'fire' ? 1 : 0.6, w.id * 7 + k);
+          }
+        }
+      }
+    }
+    for (const e of st.doc.elements) {
+      const st2 = running ? e.stressLevel() : 0;
+      if (!e.damaged && !e.fire && !e.smoke && st2 < 0.04) continue;
+      const [x1, y1, x2, y2] = e.worldBox(), cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, r = Math.max(x2 - x1, y2 - y1) / 2;
+      if (e.damaged) {
+        g.glow(cx, cy, r * 1.1, '30,20,12', 0.75); // soot
+        const age = t - (e.damaged.wall ?? -99);
+        if (age < 0.35) g.glow(cx, cy, r * 2.4, '255,240,180', 1 - age / 0.35); // the flash as it goes
+        if (age < 6) drawSmoke(ctx, cx, cy - r * 0.3, t, 1 - age / 6, e.id);
+        if (age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, cx + k * r * 0.4, cy, (e.fire !== undefined ? 9 : 7) * (1 - age / 3), t, e.id * 3 + k);
+        this.badge(cx + r * 0.7, y1 - 2, '#ef4444');
+        continue;
+      }
+      if (st2 >= 0.04) g.glow(cx, cy, r * (1.2 + 0.6 * st2), '255,90,30', 0.2 + 0.55 * st2 * (0.85 + 0.15 * Math.sin(t * 9)));
+      if (e.fire) for (let k = -1; k <= 1; k++) drawFlames(ctx, cx + k * r * 0.45, cy, 11, t, e.id * 3 + k);
+      if (e.smoke || e.fire) drawSmoke(ctx, cx, cy - r * 0.2, t, 1, e.id);
+    }
+  }
+
+  /** small round warning badge (a burnt part) */
+  badge(x, y, col) {
+    const g = this.g, s = Math.max(5, 4.5 / this.scale);
+    g.circle(x, y, s, { fill: col, stroke: '#fff', width: Math.max(1, 1 / this.scale) });
+    g.line(x, y - s * 0.5, x, y + s * 0.1, '#fff', Math.max(1.2, 1.2 / this.scale));
+    g.circle(x, y + s * 0.45, Math.max(0.8, 0.8 / this.scale), { fill: '#fff' });
   }
 
   drawGrid(th, style) {

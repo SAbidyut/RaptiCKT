@@ -2,6 +2,7 @@
 // transformer, fuse, lamp.
 
 import { Element, TwoTerm, register, GRID } from './base.js';
+import { fmtShort } from '../engine/units.js';
 
 const G = GRID;
 
@@ -31,11 +32,21 @@ export class Resistor extends TwoTerm {
   static props = [
     { key: 'r', label: 'Resistance', unit: 'Ω', def: 1000, min: 1e-3, max: 1e9, log: true, knob: true },
     { key: 'style', label: 'Symbol', type: 'select', def: 'zigzag', options: [['zigzag', 'IEEE (zigzag)'], ['box', 'IEC (box)']] },
+    { key: 'pw', label: 'Power rating', type: 'select', def: '0', options: [['0', 'Ideal (no limit)'], ['0.125', '1/8 W'], ['0.25', '1/4 W'], ['0.5', '1/2 W'], ['1', '1 W'], ['2', '2 W'], ['3', '3 W'], ['5', '5 W'], ['10', '10 W'], ['25', '25 W'], ['50', '50 W'], ['100', '100 W']] },
   ];
-  static description = "Linear resistor obeying Ohm's law V = I·R.";
-  get R() { return Math.max(this.p.r, 1e-6); }
+  static description = "Linear resistor obeying Ohm's law V = I·R. Give it a power rating and it overheats above it and burns open at about 2.5 × its rating (real resistors fail open).";
+  get R() { return this.damaged ? 1e9 : Math.max(this.p.r, 1e-6); }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1 / this.R); }
-  accept(s) { this.setCurrent(this.voltageDiff(s) / this.R); }
+  accept(s) {
+    const v = this.voltageDiff(s), i = v / this.R;
+    this.setCurrent(i);
+    const pw = +this.p.pw;
+    if (!(pw > 0) || s.mode === 'dc' || this.damaged) return;
+    // a small resistor heats up in about a second, a big power resistor in tens of seconds
+    const load = this.heatAvg(s, (v * i) / pw, 1 + 4 * Math.sqrt(pw));
+    this.stress = Math.max(0, Math.min(1, (load - 1) / 1.5));
+    if (load > 2.5) this.setDamage(s, `Burnt open — dissipating ${fmtShort(load * pw, 'W')} in a ${fmtShort(pw, 'W')} resistor`);
+  }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / this.R); }
   spice(n) { return `${this.name} ${n[0]} ${n[1]} ${this.R}`; }
   draw(g) {
@@ -187,7 +198,23 @@ export class ElectrolyticCap extends Capacitor {
     { key: 'ic', label: 'Initial voltage', unit: 'V', def: 0, min: -1e3, max: 1e3 },
     { key: 'vmax', label: 'Rated voltage', unit: 'V', def: 25, min: 1, max: 1000 },
   ];
-  static description = 'Polarised capacitor. Flashes red when reverse-biased or over its rated voltage.';
+  static description = 'Polarised capacitor. Flashes red when reverse-biased or over its rated voltage; kept there (over 1.2 × its rated voltage or more than 1.5 V reversed) it overheats and bursts open. Select it and tap Replace after that.';
+  static failShort = false;
+  stamp(s) {
+    if (this.damaged) { s.addG(this.nodes[0], this.nodes[1], this.constructor.failShort ? 20 : 1e-9); return; }
+    super.stamp(s);
+  }
+  stampStep(s) { if (!this.damaged) super.stampStep(s); }
+  accept(s) {
+    if (this.damaged) { const v = this.voltageDiff(s); this.vPrev = v; this.iPrev = 0; this.setCurrent(this.constructor.failShort ? v * 20 : 0); return; }
+    super.accept(s);
+    if (s.mode === 'dc') return;
+    const v = this.vPrev, over = Math.max(v / this.p.vmax - 1.1, -v / 1.5 - 0.5, 0);
+    // gas builds up inside while it is over-stressed; it vents after about a second
+    const a = this.heatAvg(s, over > 0 ? 1 + over : 0, 0.6);
+    this.stress = Math.min(1, a / 0.9);
+    if (a > 0.9) this.setDamage(s, v < 0 ? `Burst — connected the wrong way round (${fmtShort(v, 'V')})` : `Burst — ${fmtShort(v, 'V')} on a ${fmtShort(this.p.vmax, 'V')} capacitor`);
+  }
   draw(g) {
     super.draw(g, true);
     const v = g.pv(0) - g.pv(1);
@@ -364,8 +391,9 @@ export class Fuse extends TwoTerm {
     { key: 'r', label: 'Resistance', unit: 'Ω', def: 0.05, min: 1e-4, max: 100, log: true },
     { key: 'i2t', label: 'Melting I²t', unit: 'A²s', def: 0.05, min: 1e-6, max: 1e4, log: true },
   ];
-  static description = 'Blows (opens) when the let-through energy ∫(i² − I²rated)dt exceeds I²t. Reset the simulation to replace it.';
-  reset() { this.blown = false; this.heat = 0; this.setCurrent(0); }
+  static description = 'Blows (opens) when the let-through energy ∫(i² − I²rated)dt exceeds I²t. A blown fuse stays blown — select it and tap Replace to put in a new one.';
+  reset() { this.heat = 0; this.i2 = 0; this.setCurrent(0); }
+  get blown() { return !!this.damaged; }
   get R() { return this.blown ? 1e9 : this.p.r; }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1 / this.R); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / this.R); }
@@ -374,7 +402,9 @@ export class Fuse extends TwoTerm {
     this.setCurrent(i);
     if (s.mode === 'dc' || this.blown) return;
     this.heat = Math.max(0, this.heat + (i * i - this.p.rating ** 2) * s.dt);
-    if (this.heat > this.p.i2t) { this.blown = true; s.markEvent(); }
+    this.i2 = (this.i2 || 0) + (i * i - (this.i2 || 0)) * Math.min(1, s.dt / Math.max(0.005, s.acPeriod || 0.005));
+    this.stress = Math.min(1, this.heat / this.p.i2t);
+    if (this.heat > this.p.i2t) this.setDamage(s, `Blown — about ${fmtShort(Math.sqrt(this.i2), 'A')} through a ${fmtShort(this.p.rating, 'A')} fuse melted its element`, true);
   }
   spice(n) { return `${this.name} ${n[0]} ${n[1]} ${this.R} ; fuse`; }
   draw(g) {
@@ -401,11 +431,20 @@ export class Lamp extends TwoTerm {
     { key: 'w', label: 'Rated power', unit: 'W', def: 5, min: 1e-3, max: 1e4, log: true, knob: true },
   ];
   static description = 'Incandescent lamp modelled at its hot resistance R = V²/P; brightness follows dissipated power.';
-  get R() { return (this.p.v * this.p.v) / this.p.w; }
+  get R() { return this.damaged ? 1e9 : (this.p.v * this.p.v) / this.p.w; }
   valueLabel() { return `${+this.p.v.toPrecision(3)}V ${+this.p.w.toPrecision(3)}W`; }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1 / this.R); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / this.R); }
-  accept(s) { this.setCurrent(this.voltageDiff(s) / this.R); }
+  reset() { this.pf = 0; this.setCurrent(0); }
+  accept(s) {
+    const v = this.voltageDiff(s), i = v / this.R;
+    this.setCurrent(i);
+    if (s.mode === 'dc' || this.damaged) return;
+    // filament: ≈ 50 ms thermal time; far above its rated power the tungsten melts
+    this.pf = (this.pf || 0) + ((v * i) / this.p.w - (this.pf || 0)) * Math.min(1, s.dt / 0.05);
+    this.stress = Math.max(0, Math.min(1, (this.pf - 1.2) / 1.4));
+    if (this.pf > 2.6) this.setDamage(s, `Filament burnt out — over-voltage (${fmtShort(Math.sqrt(this.pf) * this.p.v, 'V')} on a ${fmtShort(this.p.v, 'V')} lamp)`);
+  }
   spice(n) { return `${this.name} ${n[0]} ${n[1]} ${this.R} ; lamp`; }
   leads() { return [[0, -2 * G, 0, -G * 0.8, 0], [1, 2 * G, 0, G * 0.8, 0]]; }
   localBox() { return [-2 * G, -0.9 * G, 2 * G, 0.9 * G]; }

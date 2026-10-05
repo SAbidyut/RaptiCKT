@@ -53,6 +53,27 @@ export class Simulator {
     this.error = null;
     this.warnings = [];
     this.ready = false;
+    // Slow thermal effects (breaker bimetals, overload relays, cable heating, parts burning
+    // out) run on a clock heatScale times faster than simulated time. The editor sets it so
+    // that they happen in real wall-clock time while the waveforms are shown slowed down.
+    this.heatScale = 1;
+    this.damageOn = true;   // parts burn out / cables catch fire when over-stressed
+    this.damageLog = [];    // elements damaged since the UI last looked
+  }
+
+  /** Time step on the thermal clock (see heatScale). */
+  heatDt() { return this.dt * (this.heatScale || 1); }
+
+  /**
+   * Heat clock for a part carrying `ratio` × its rated current: overloads (≤ 3×) heat on the
+   * thermal clock; fault currents (≥ 8×) heat in simulated time, so a breaker or fuse that
+   * clears a short circuit in a few milliseconds still protects the cable behind it.
+   */
+  heatDtAt(ratio) {
+    const k = this.heatScale || 1;
+    if (k <= 1 || ratio <= 3) return this.dt * k;
+    if (ratio >= 8) return this.dt;
+    return this.dt * Math.pow(k, (8 - ratio) / 5);
   }
 
   // ------------------------------------------------------------------ build
@@ -67,7 +88,9 @@ export class Simulator {
     this.warnings = [];
     const uf = new UnionFind();
     const points = [];
-    for (const w of wires) {
+    // a burnt-through wire no longer connects anything
+    const live = wires.filter((w) => !w.burnt);
+    for (const w of live) {
       for (let i = 0; i < w.pts.length; i++) {
         const k = key(w.pts[i][0], w.pts[i][1]);
         uf.find(k);
@@ -80,7 +103,7 @@ export class Simulator {
       for (const p of e._posts) { uf.find(key(p[0], p[1])); points.push(p); }
     }
     // T-junctions: any point lying inside a wire segment joins that wire.
-    for (const w of wires) {
+    for (const w of live) {
       for (let i = 1; i < w.pts.length; i++) {
         const [ax, ay] = w.pts[i - 1], [bx, by] = w.pts[i];
         for (const p of points) {
@@ -122,7 +145,7 @@ export class Simulator {
       if (!uf.p.has(k)) return -1;
       return nodeFor(k);
     };
-    this.wireNodes = wires.map((w) => nodeFor(key(w.pts[0][0], w.pts[0][1])));
+    this.wireNodes = wires.map((w) => (w.burnt ? 0 : nodeFor(key(w.pts[0][0], w.pts[0][1]))));
     this.hasGround = groundRoot !== null;
     n = this.applyFaults(n);
     return this.finishBuild(n);
@@ -423,7 +446,8 @@ export class Simulator {
     this.x.fill(0);
     this.xPrev.fill(0);
     this.beSteps = 0;
-    for (const e of this.elements) if (e.reset) e.reset(this);
+    for (const e of this.elements) { e._hav = 0; e.stress = 0; if (e.reset) e.reset(this); }
+    this.damageLog = [];
     this.dirty = true;
   }
 

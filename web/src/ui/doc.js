@@ -1,13 +1,21 @@
 // Circuit document: elements + wires, serialisation, designators, routing helpers.
 
 import { Element, GRID, getType } from '../elements/index.js';
+import { normSpec } from '../elements/cables.js';
 
 let wid = 1;
 
 export class Wire {
-  constructor(pts) { this.id = wid++; this.pts = pts.map((p) => [p[0], p[1]]); this.dotPhase = []; }
+  constructor(pts) {
+    this.id = wid++; this.pts = pts.map((p) => [p[0], p[1]]); this.dotPhase = [];
+    this.cable = null;  // cable spec ({type, size, shape, inst}); null = ideal wire with no limit
+    this.burnt = false; // burnt through by overcurrent: drawn charred, no longer connects
+    this.heat = null;   // live conductor-temperature model while simulating
+  }
   get a() { return this.pts[0]; }
   get b() { return this.pts[this.pts.length - 1]; }
+  /** saved form: plain point list for an ideal wire, else {p, c, b} */
+  toJSON() { return this.cable || this.burnt ? { p: this.pts, c: this.cable || undefined, b: this.burnt ? 1 : undefined } : this.pts; }
 }
 
 export const snap = (v) => Math.round(v / GRID) * GRID;
@@ -49,10 +57,12 @@ export class CircuitDoc {
   }
 
   add(e) { this.elements.push(e); return e; }
-  addWire(pts) {
+  /** Add a wire; `from` ({cable, burnt} — e.g. the wire it was split from) sets its cable. */
+  addWire(pts, from = null) {
     const s = simplify(pts);
     if (s.length < 2) return null;
     const w = new Wire(s);
+    if (from) { w.cable = normSpec(from.cable); w.burnt = !!from.burnt; }
     this.wires.push(w);
     return w;
   }
@@ -91,7 +101,7 @@ export class CircuitDoc {
     return {
       app: 'RaptiCKT', v: 1, name: this.name, description: this.description || undefined,
       elements: this.elements.map((e) => e.toJSON()),
-      wires: this.wires.map((w) => w.pts),
+      wires: this.wires.map((w) => w.toJSON()),
       probes: this.probes.map((p) => ({ ...p, el: p.el != null ? idx.get(p.el) : undefined })),
       sim: this.simSettings,
     };
@@ -105,7 +115,10 @@ export class CircuitDoc {
       const e = Element.fromJSON(eo);
       if (e) d.elements.push(e);
     }
-    for (const pts of o.wires || []) d.addWire(pts);
+    for (const w of o.wires || []) {
+      if (Array.isArray(w)) d.addWire(w);
+      else if (w && w.p) d.addWire(w.p, { cable: w.c, burnt: w.b });
+    }
     d.probes = (o.probes || []).map((p) => ({ ...p, el: p.el != null && d.elements[p.el] ? d.elements[p.el].id : undefined })).filter((p) => p.kind === 'node' || p.el != null);
     d.simSettings = o.sim || {};
     d.assignNames();
@@ -117,7 +130,7 @@ export class CircuitDoc {
 
 /** Serialise a selection (elements + wires) for copy/paste. */
 export function serializeSelection(elements, wires) {
-  return { elements: elements.map((e) => e.toJSON()), wires: wires.map((w) => w.pts.map((p) => [...p])) };
+  return { elements: elements.map((e) => e.toJSON()), wires: wires.map((w) => (w.cable ? { p: w.pts.map((p) => [...p]), c: { ...w.cable } } : w.pts.map((p) => [...p]))) };
 }
 
 export function makeElement(type, x, y) {

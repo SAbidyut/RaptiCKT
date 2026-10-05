@@ -36,6 +36,7 @@ export class Element {
     this.dotPhase = [];
     this.i = 0;
     this.name = this.constructor.prefix + '?';
+    this.damaged = null; // { why } once burnt out / blown / destroyed — kept until replaced
   }
 
   get cls() { return this.constructor; }
@@ -111,6 +112,7 @@ export class Element {
     if (Object.keys(p).length) out.p = p;
     if (this.label) out.l = this.label;
     if (this.fault && this.fault.m && this.fault.m !== 'none') out.fl = { ...this.fault };
+    if (this.damaged) out.d = this.damaged.why;
     return out;
   }
 
@@ -123,9 +125,37 @@ export class Element {
     if (o.p) Object.assign(e.p, o.p);
     if (o.l) e.label = o.l;
     if (o.fl) e.fault = { ...o.fl };
+    if (o.d) e.damaged = { why: String(o.d) };
     e.onParamChange();
     return e;
   }
+
+  // ----------------------------------------------------------- damage
+  /**
+   * The part is destroyed by over-stress (burnt filament, blown fuse, exploded capacitor…).
+   * It stays damaged — also after a restart — until the user replaces it. `always` is for
+   * parts whose whole job is to fail (fuses), so they blow even with damage switched off.
+   */
+  setDamage(s, why, always = false) {
+    if (this.damaged) return false;
+    if (s && s.damageOn === false && !always) return false;
+    this.damaged = { why, t: s ? s.t : 0 };
+    if (s) { s.markEvent(); s.damageLog.push(this); }
+    return true;
+  }
+  /** Put in a new part: clear the damage and start from a cold, unstressed state. */
+  replace(s) {
+    this.damaged = null;
+    this.stress = 0; this._hav = 0;
+    try { if (this.reset) this.reset(s); } catch { /* reset again at the next run */ }
+  }
+  /**
+   * Running average of a load ratio on the thermal clock (time constant tau, seconds of real
+   * time). Parts use it to decide when a sustained overload has cooked them.
+   */
+  heatAvg(s, x, tau) { this._hav = (this._hav || 0) + (x - (this._hav || 0)) * Math.min(1, s.heatDt() / tau); return this._hav; }
+  /** 0 … 1: how close the part is to failing (drawn as a warning glow). */
+  stressLevel() { return this.stress || 0; }
 
   // -------------------------------------------------- engine interface
   // nonlinear = true enables stampNL

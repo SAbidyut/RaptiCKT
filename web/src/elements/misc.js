@@ -17,6 +17,7 @@ import { MCCB } from './protection.js';
 import { Chip, P, bits, val } from './digital2.js';
 import { DIGI_PROPS } from './digital.js';
 import { fmtQty, fmtShort } from '../engine/units.js';
+import { CableHeat, STATE_TEXT } from './cables.js';
 
 const G = GRID;
 const TAU = 2 * Math.PI;
@@ -118,8 +119,13 @@ class Cable extends Element {
     { key: 'mat', label: 'Conductor', type: 'select', def: 'cu', options: [['cu', 'Copper'], ['al', 'Aluminium']] },
     { key: 'temp', label: 'Conductor temperature', unit: '°C', def: 70, min: -20, max: 160 },
   ];
-  constructor(x, y) { super(x, y); this.postCurrents = new Array(2 * this.n()).fill(0); }
+  constructor(x, y) { super(x, y); this.postCurrents = new Array(2 * this.n()).fill(0); this.onParamChange(); }
   n() { return this.constructor.cores; }
+  /** conductor temperature: overloaded it smokes, catches fire and burns open (cables.js) */
+  onParamChange() {
+    const A = this.A(), spec = { type: this.p.mat === 'al' ? 'nayy' : 'nyy', size: A, shape: A >= 25 ? 'SM' : 'RE', inst: 'C' };
+    if (this.heat) this.heat.setSpec(spec, this.ampacity()); else this.heat = new CableHeat(spec, this.ampacity());
+  }
   labels() { return ['L', 'N']; }
   localPosts() { const n = this.n(), ys = n === 2 ? [-G, G] : [-3 * G, -G, G, 3 * G]; return [...ys.map((y) => [-2 * G, y]), ...ys.map((y) => [2 * G, y])]; }
   localBox() { const h = this.n() === 2 ? 1.5 * G : 3.5 * G; return [-2 * G, -h, 2 * G, h]; }
@@ -127,10 +133,10 @@ class Cable extends Element {
   connectivity() { const n = this.n(); return Array.from({ length: n }, (_, k) => [k, k + n]); }
   branchCount() { return this.n(); }
   A() { return parseFloat(this.p.size) || 2.5; }
-  R() { const m = MAT[this.p.mat] || MAT.cu; return (m.rho * (1 + m.a * (this.p.temp - 20)) * this.p.len) / this.A(); }
+  R() { if (this.damaged) return 1e9; const m = MAT[this.p.mat] || MAT.cu; return (m.rho * (1 + m.a * (this.p.temp - 20)) * this.p.len) / this.A(); }
   L() { return (0.08e-3 * this.p.len) / (TAU * 50); }
   ampacity() { const m = MAT[this.p.mat] || MAT.cu, t = this.n() === 2 ? AMP2 : AMP3; return (t[this.A()] ?? 27) * m.k; }
-  reset() { this.il = new Array(this.n()).fill(0); this.irms = new Ema(0.1); this.irms.v = 0; this.vs = new Ema(0.1); this.vr = new Ema(0.1); this.postCurrents.fill(0); }
+  reset() { this.il = new Array(this.n()).fill(0); this.irms = new Ema(0.1); this.irms.v = 0; this.vs = new Ema(0.1); this.vr = new Ema(0.1); this.postCurrents.fill(0); this.heat?.reset(); this.fire = false; this.smoke = false; }
   stamp(s) {
     const n = this.n(), R = this.R(), f = s.mode === 'dc' ? 0 : this.L() / s.dt;
     for (let k = 0; k < n; k++) { const a = this.nodes[k], b = this.nodes[k + n], br = this.branches[k]; s.addBranchKCL(a, b, br); s.addA(br, a - 1, 1); s.addA(br, b - 1, -1); s.addA(br, br, -(R + f)); }
@@ -150,6 +156,13 @@ class Cable extends Element {
     this.irms.push(Math.max(...i.map((x) => x * x)), s.dt);
     const vs = n === 2 ? v(0) - v(1) : v(0) - v(1), vr = n === 2 ? v(2) - v(3) : v(4) - v(5);
     this.vs.push(vs * vs, s.dt); this.vr.push(vr * vr, s.dt);
+    if (this.damaged) return;
+    let imax = 0;
+    for (const x of i) if (Math.abs(x) > Math.abs(imax)) imax = x;
+    if (this.heat.step(imax, s) && this.heat.state === 'burnt') this.setDamage(s, this.heat.why);
+    this.stress = this.heat.stress();
+    this.fire = this.heat.state === 'fire';
+    this.smoke = this.heat.state === 'hot' || this.fire;
   }
   valueLabel() { return `${this.p.size} mm² ${fmtQty(this.p.len, 'm')}`; }
   readings(s) {
@@ -157,13 +170,15 @@ class Cable extends Element {
     const drop = Vs > 1e-6 ? ((Vs - Vr) / Vs) * 100 : 0, amp = this.ampacity();
     return [['Resistance per conductor', this.R(), 'Ω'], ['Current (RMS)', I, 'A'], ['Current-carrying capacity', amp, 'A'],
       ['Loading', I > amp ? `OVERLOADED ${Math.round((I / amp) * 100)} %` : `${Math.round((I / amp) * 100)} %`, ''],
-      ['Voltage drop', drop, '%'], ['Status', drop > 5 ? 'drop above 5 % — use a larger cable' : 'OK', ''], ['Power loss', I * I * this.R() * this.n(), 'W']];
+      ['Voltage drop', drop, '%'], ['Status', drop > 5 ? 'drop above 5 % — use a larger cable' : 'OK', ''], ['Power loss', I * I * this.R() * this.n(), 'W'],
+      ['Insulation', this.damaged ? 'BURNT — ' + this.damaged.why : STATE_TEXT[this.heat.state], ''], ['Conductor temperature (heating)', this.heat.T, '°C']];
   }
   draw(g) {
     const n = this.n(), ys = this.localPosts().slice(0, n).map(([, y]) => y), [, y1, , y2] = this.localBox();
     g.box(-1.3 * G, y1 + 0.3 * G, 1.3 * G, y2 - 0.3 * G, { stroke: g.muted, width: g.lw * 0.6, fill: g.fill, r: 0.5 * G });
     const I = Math.sqrt(Math.max(0, this.irms?.v || 0)), hot = g.running && I > this.ampacity();
-    ys.forEach((y, k) => g.line(-1.3 * G, y, 1.3 * G, y, hot ? '#ef4444' : g.vc(g.pv(k)), g.lw));
+    if (this.damaged) ys.forEach((y) => { g.line(-1.3 * G, y, -0.2 * G, y, '#8b5a3c', g.lw); g.line(0.2 * G, y, 1.3 * G, y, '#8b5a3c', g.lw); });
+    else ys.forEach((y, k) => g.line(-1.3 * G, y, 1.3 * G, y, hot ? '#ef4444' : g.vc(g.pv(k)), g.lw));
     this.labels().forEach((t, k) => g.text(t, -1.0 * G, ys[k] - 0.35 * G, { size: 6, color: g.muted }));
   }
 }
@@ -266,7 +281,7 @@ export class HalogenLamp extends Bulb {
     { key: 'tau', label: 'Filament time constant', unit: 's', def: 0.05, min: 1e-3, max: 5, log: true },
   ];
   static description = 'Tungsten-halogen lamp (e.g. 12 V 50 W MR16): a hotter filament than an ordinary bulb (≈18 lm/W, whiter light) in a quartz envelope; like any filament it draws ≈10–15× inrush current when cold.';
-  readings(s) { const r = super.readings(s); r[5] = ['Light output', 18 * this.p.w * this.bright(), 'lm']; return r; }
+  readings(s) { const r = super.readings(s); if (r.length > 5) r[5] = ['Light output', 18 * this.p.w * this.bright(), 'lm']; return r; }
 }
 register(HalogenLamp);
 

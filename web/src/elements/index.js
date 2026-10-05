@@ -35,6 +35,7 @@ import './analog3.js';
 import './semis3.js';
 import './passive3.js';
 import './ladder.js';
+import './cables.js';
 
 import { getType } from './base.js';
 export { getType, allTypes, Element, GRID } from './base.js';
@@ -48,7 +49,7 @@ export const CATEGORIES = [
   { id: 'Protection', icon: 'shield', items: ['fuse', 'hrcfuse', 'tco', 'polyfuse', 'mcb', 'mcb2p', 'mcb3p', 'mccb', 'acb', 'rccb', 'rcbo', 'olr', 'olr3', 'phaserelay', 'voltrelay', 'idmt', 'mov', 'arrester', 'gdt', 'tvs', 'tvsbi', 'lolr', 'lphase', 'lmpcb'] },
   { id: 'Switches & Relays', icon: 'switch', items: ['switch', 'togglesw', 'slidesw', 'rockersw', 'keysw', 'oneway', 'twoway', 'threeway', 'intermediate', 'spdt', 'dpst', 'dpdt', 'pushno', 'pushnc', 'footsw', 'latchbtn', 'estop', 'limitsw', 'rotary4', 'dipsw', 'selector3', 'isolator', 'changeover', 'reed', 'floatsw', 'pressw', 'thermostat', 'vcsw', 'ccsw', 'relay', 'relayspst', 'relaydpst', 'relaydpdt', 'reedrelay', 'latchrelay', 'auxrelay', 'contactor', 'contactor2', 'tdr', 'ssr', 'lcoil', 'ltimer', 'lno', 'lnc', 'lmain3', 'lcounter', 'lcreset', 'llevel', 'llsno', 'llsnc', 'lcart', 'ltank'] },
   { id: 'Electrical', icon: 'home', items: ['bulb', 'lamp', 'halogen', 'tube', 'ballast', 'starter', 'ledbulb', 'cfl', 'ledstrip', 'leddriver', 'ledpanel', 'neon', 'fan', 'heater', 'socket', 'dimmer', 'fanregres', 'fanregcap', 'bell', 'earthrod', 'photocell', 'pirsw', 'emerg'] },
-  { id: 'Power Systems', icon: 'tower', items: ['rload', 'rlload', 'rcload', 'load3y', 'load3d', 'pfcap', 'sline', 'piline', 'cable', 'cable4', 'busbar', 'jbox', 'faultsw'] },
+  { id: 'Power Systems', icon: 'tower', items: ['rload', 'rlload', 'rcload', 'load3y', 'load3d', 'pfcap', 'sline', 'piline', 'cable1', 'cable', 'cable4', 'busbar', 'jbox', 'faultsw'] },
   { id: 'Machines', icon: 'motor', items: ['motor', 'dcsep', 'dcshunt', 'dcseries', 'dcgen', 'im3', 'im1', 'alternator', 'im3d', 'dccompound', 'universal', 'syncmotor', 'pmsm', 'bldc', 'stepper', 'acgen1'] },
   { id: 'Diodes', icon: 'diode', items: ['diode', 'diodeq', 'fastdiode', 'ufdiode', 'powerdiode', 'sicdiode', 'avalanche', 'zener', 'schottky', 'varactor', 'tunnel', 'crd', 'pindiode', 'gunn', 'impatt', 'bridge', 'rect3'] },
   { id: 'Transistors', icon: 'transistor', items: ['npn', 'pnp', 'darlnpn', 'darlpnp', 'nmos', 'pmos', 'depnmos', 'njfet', 'pjfet', 'igbt', 'hemt', 'ujt', 'opto'] },
