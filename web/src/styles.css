@@ -889,6 +889,31 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
   .mseg { padding: 0 9px; }
   .mseg span { display: none; } /* icons only on narrow phones: the time chip keeps its room */
 }
-/* the selection bar sits under the time chip / mode row instead of covering it */
-.editor .selbar { top: 52px; }
-.editor.fs .selbar { top: calc(50px + var(--stage-t)); }
+/* The selection bar (wires / several parts) sits low on the board, just above the + button, using the
+   full width, so the top of the board stays for the time chip, the ☰ handle and the Operate / Wire
+   switch. Hidden, it is fully gone (no strip of it peeking out under the toolbar). */
+.editor .selbar { top: auto; left: 10px; right: 10px; bottom: calc(90px + var(--safe-b)); width: fit-content; max-width: calc(100% - 20px); margin: 0 auto;
+  transform: translate3d(0, 40px, 0); opacity: 0; visibility: hidden; pointer-events: none;
+  transition: transform 0.26s cubic-bezier(.32, .72, 0, 1), opacity 0.2s, visibility 0s 0.26s; }
+.editor .selbar.show { transform: none; opacity: 1; visibility: visible; pointer-events: auto; transition: transform 0.26s cubic-bezier(.32, .72, 0, 1), opacity 0.2s; }
+.editor.fs .selbar { left: calc(10px + var(--cut-l)); right: calc(10px + var(--cut-r)); bottom: calc(80px + var(--cut-b)); max-width: calc(100% - 20px - var(--cut-l) - var(--cut-r)); }
+.editor.wide .selbar { bottom: 74px; }
+.editor.sheet-open .selbar { opacity: 0; pointer-events: none; }
+@media (max-width: 440px) { .selbar > span { white-space: normal; max-width: 112px; font-size: 11px; line-height: 1.25; } }
+
+/* Full screen in / out: the title bar and toolbar slide up out of the way (or back down) while the
+   circuit glides into place, the tool rail slides in from the left and the Operate / Wire switch
+   moves to its new spot, all on the same 320 ms curve, so nothing pops. */
+@keyframes fsHeadOut { from { transform: none; opacity: 1; } to { transform: translate3d(0, -100%, 0); opacity: 0; } }
+@keyframes fsHeadIn { from { transform: translate3d(0, -100%, 0); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fsRailIn { from { transform: translate3d(calc(-100% - 20px), 0, 0); opacity: 0; } }
+@keyframes fsFadeIn { from { opacity: 0; } }
+.editor.fs.fs-enter .ed-head { display: block !important; position: absolute; left: 0; right: 0; top: 0; z-index: 30; pointer-events: none;
+  animation: fsHeadOut 0.32s cubic-bezier(.32, .72, 0, 1) both; will-change: transform, opacity; }
+.editor.wide.fs.fs-enter .ed-head { display: flex !important; }
+.editor.fs-exit .ed-head { animation: fsHeadIn 0.32s cubic-bezier(.32, .72, 0, 1) both; will-change: transform, opacity; }
+.editor.fs.fs-enter .fs-rail { animation: fsRailIn 0.34s cubic-bezier(.32, .72, 0, 1) both; }
+.editor.fs.fs-enter .fs-handle, .editor.fs.fs-enter .fab { animation: fsFadeIn 0.3s ease both; }
+.mode-seg { transition: top 0.32s cubic-bezier(.32, .72, 0, 1), right 0.32s cubic-bezier(.32, .72, 0, 1); }
+:root.lite .editor .ed-head, :root.lite .editor .fs-rail, :root.lite .editor .fs-handle, :root.lite .editor .fab { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .editor .ed-head, .editor .fs-rail { animation: none !important; } }
