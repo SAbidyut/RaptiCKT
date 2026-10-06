@@ -40,7 +40,9 @@ class Axis {
   run() { if (!this.raf) { this.prev = 0; this.raf = requestAnimationFrame(this.frame); } }
 
   // finger
-  grab() { const fast = this.mode === 'coast' && Math.abs(this.v) > 0.08; this.stop(); this.measure(); this.raw0 = this.bound(this.pos) + this.unband(this.over()); return fast; }
+  // a finger only "catches" a fling that is still clearly moving (> 0.3 px/ms ≈ 5 px a frame); on a
+  // slow drift that already looks stopped it is a plain tap and presses what is under it
+  grab() { const fast = (this.mode === 'coast' || this.mode === 'coastTo') && Math.abs(this.v) > 0.3; this.stop(); this.measure(); this.raw0 = this.bound(this.pos) + this.unband(this.over()); return fast; }
   drag(delta) { const raw = this.raw0 - delta, b = this.bound(raw); this.pos = b + this.band(raw - b); this.apply(this.pos); }
   release(v) {
     const o = this.over();
@@ -86,7 +88,7 @@ class Axis {
       if (this.pos < 0 || this.pos > this.max) { // ran into an end: carry on into the band and spring back
         const b = this.pos < 0 ? 0 : this.max, v = Math.sign(this.v) * Math.min(Math.abs(this.v), MAX_EDGE_V);
         this.spring(b, this.pos - b, v, now);
-      } else if (this.mode === 'coast' && Math.abs(this.v) < 0.01) { this.stop(); this.apply(this.pos); return; }
+      } else if (this.mode === 'coast' && Math.abs(this.v) < 0.02) { this.stop(); this.apply(this.pos); return; } // < 0.3 px a frame: done
     } else if (this.mode === 'spring') {
       const e = Math.exp(-OMEGA * t), B = this.v0 + OMEGA * this.a0;
       const x = (this.a0 + B * t) * e;
@@ -231,7 +233,8 @@ function smoothScroll(viewport, content, opts) {
   const swallowClick = () => {
     const kill = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
     viewport.addEventListener('click', kill, { capture: true, once: true });
-    setTimeout(() => viewport.removeEventListener('click', kill, { capture: true }), 350);
+    // only the click of this same touch (it follows touchend at once): never a later, separate tap
+    setTimeout(() => viewport.removeEventListener('click', kill, { capture: true }), 120);
   };
 
   // ------------------------------------------------------- wheel / native
