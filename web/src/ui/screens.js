@@ -215,19 +215,48 @@ export class HomeScreen {
 
   renderExamples(body) {
     const cats = ['All', ...exampleCategories()];
-    const list = EXAMPLES.filter((e) => this.cat === 'All' || e.cat === this.cat);
     body.innerHTML = `
       <h2 class="page-title">Examples</h2>
       <p class="page-sub">Ready-made circuits with explanations. Open one, press Run and experiment.</p>
       <div class="chips">${cats.map((c) => `<button class="chip2 ${c === this.cat ? 'on' : ''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('')}</div>
-      <div class="ex-list">${list.map((e) => `
+      <div class="ex-list">${this.exampleItems()}</div>`;
+    // a category only swaps the list below: the chip row stays where it was scrolled to
+    body.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => {
+      if (b.dataset.cat === this.cat) { this.showChip(b); return; }
+      this.cat = b.dataset.cat;
+      body.querySelectorAll('[data-cat]').forEach((c) => c.classList.toggle('on', c === b));
+      this.showChip(b);
+      const list = body.querySelector('.ex-list');
+      list.innerHTML = this.exampleItems();
+      this.bindCards(list);
+      this.drawThumbs(list);
+      this.scrollApi?.refresh();
+      this.reveal(body);
+    }));
+    this.bindCards(body);
+    this.drawThumbs(body);
+  }
+
+  exampleItems() {
+    return EXAMPLES.filter((e) => this.cat === 'All' || e.cat === this.cat).map((e) => `
         <button class="ex-item" data-ex="${e.id}">
           <canvas class="thumb" data-thumb-ex="${e.id}"></canvas>
           <div><span class="tag">${esc(e.cat)}</span><b>${esc(e.title)}</b><p>${esc(e.desc)}</p></div>
-        </button>`).join('')}</div>`;
-    body.querySelectorAll('[data-cat]').forEach((b) => b.addEventListener('click', () => { this.cat = b.dataset.cat; this.renderExamples(body); }));
-    this.bindCards(body);
-    this.drawThumbs(body);
+        </button>`).join('');
+  }
+
+  /** Slide the chip row just enough that a chip cut off at either edge is fully in view. */
+  showChip(chip) {
+    const row = chip.closest('.chips');
+    if (!row) return;
+    const pad = 16, w = row.clientWidth, ax = row._axis;
+    const x = ax ? chip.offsetLeft - (row.firstElementChild?.offsetLeft || 0) : chip.offsetLeft - row.offsetLeft;
+    const cur = ax ? (ax.mode === 'glide' ? ax.target : ax.pos) : row.scrollLeft;
+    let to = cur;
+    if (x - pad < cur) to = x - pad;
+    else if (x + chip.offsetWidth + pad > cur + w) to = x + chip.offsetWidth + pad - w;
+    if (Math.abs(to - cur) < 1) return;
+    if (ax) { ax.measure(); ax.glideTo(to); } else row.scrollTo({ left: Math.max(0, to), behavior: 'smooth' });
   }
 
   // ------------------------------------------------- My Circuits: folders and projects
