@@ -196,34 +196,51 @@ class Cable4 extends Cable {
 }
 register(Cable4);
 
+// Copper flat bar sizes (width × thickness, mm): cross-section and a typical AC rating for a painted
+// bar indoors (DIN 43671 order of magnitude). Picking one fills in the area and the rating.
+const BARS = { '12×2': [24, 123], '15×3': [45, 162], '20×3': [60, 204], '20×5': [100, 274], '25×5': [125, 337], '30×5': [150, 399], '40×5': [200, 524],
+  '50×5': [250, 647], '40×10': [400, 852], '50×10': [500, 1020], '60×10': [600, 1180], '80×10': [800, 1500], '100×10': [1000, 1810] };
+const BAR_PRESET = Object.fromEntries(Object.entries(BARS).map(([k, [w, rating]]) => [k, { w, rating }]));
+const TAP_OPTS = Array.from({ length: 23 }, (_, i) => String(i + 2));
+
 export class Busbar extends Element {
-  static type = 'busbar'; static title = 'Busbar (6 taps)'; static category = 'Power Systems';
-  static prefix = 'BB'; static keywords = 'busbar bus bar copper bar distribution board switchboard tap neutral link';
+  static type = 'busbar'; static title = 'Busbar'; static category = 'Power Systems';
+  static prefix = 'BB'; static keywords = 'busbar bus bar copper bar distribution board switchboard tap neutral link earth bar taps area size';
   static props = [
-    { key: 'rating', label: 'Current rating', unit: 'A', def: 250, min: 1, max: 1e4, log: true, knob: true },
-    { key: 'w', label: 'Bar cross-section', unit: 'mm²', def: 150, min: 1, max: 1e4, log: true },
-    { key: 'pitch', label: 'Tap spacing', unit: 'm', def: 0.05, min: 0.001, max: 10 },
+    { key: 'taps', label: 'Number of taps', type: 'select', def: '6', options: TAP_OPTS.map((n) => [n, `${n} taps`]), structural: true },
+    { key: 'model', label: 'Bar size (copper, W × T)', type: 'select', def: '30×5', options: [...Object.entries(BARS).map(([k, [w]]) => [k, `${k} mm (${w} mm²)`]), ['custom', 'Custom']], preset: BAR_PRESET },
+    { key: 'w', label: 'Bar cross-section (area)', unit: 'mm²', def: 150, min: 1, max: 1e4, log: true, knob: true },
+    { key: 'rating', label: 'Current rating', unit: 'A', def: 399, min: 1, max: 1e4, log: true, knob: true },
+    { key: 'pmm', label: 'Tap spacing', unit: 'mm', def: 50, min: 1, max: 10000 },
   ];
-  static description = 'Copper busbar with six tap points: each section between taps has R = ρ·pitch/A (a few µΩ), so the bar distributes current with negligible drop. Readings show the largest section current against the rating.';
-  constructor(x, y) { super(x, y); this.postCurrents = new Array(6).fill(0); }
-  localPosts() { return [-5, -3, -1, 1, 3, 5].map((k) => [k * G, 0]); }
-  localBox() { return [-5.4 * G, -0.5 * G, 5.4 * G, 0.5 * G]; }
+  static description = 'Copper busbar with 2 to 24 tap points (choose the number of taps). Pick a standard bar size (width × thickness) or type your own cross-section area: each section between taps has R = ρ·pitch/A (a few µΩ), so the bar distributes current with negligible drop. Readings show the largest section current against the rating; a bar run above its rating turns red.';
+  constructor(x, y) { super(x, y); this.postCurrents = new Array(this.n()).fill(0); }
+  n() { return Math.max(2, Math.min(24, Math.round(+this.p.taps) || 6)); }
+  localPosts() { const n = this.n(); return Array.from({ length: n }, (_, k) => [(2 * k - (n - 1)) * G, 0]); }
+  localBox() { const h = this.n() - 1 + 0.4; return [-h * G, -0.5 * G, h * G, 0.5 * G]; }
   leads() { return []; }
   connectivity() { return null; }
-  rseg() { return Math.max(1e-7, (0.017241 * this.p.pitch) / this.p.w); }
-  stamp(s) { for (let k = 0; k < 5; k++) s.addG(this.nodes[k], this.nodes[k + 1], 1 / this.rseg()); }
-  stampAC(ac) { for (let k = 0; k < 5; k++) ac.addY(this.nodes[k], this.nodes[k + 1], 1 / this.rseg()); }
-  reset() { this.imax = 0; this.postCurrents.fill(0); }
+  onParamChange() { if (this.postCurrents.length !== this.n()) this.postCurrents = new Array(this.n()).fill(0); }
+  rseg() { return Math.max(1e-7, (0.017241 * (this.p.pmm / 1000)) / this.p.w); }
+  stamp(s) { for (let k = 0; k < this.n() - 1; k++) s.addG(this.nodes[k], this.nodes[k + 1], 1 / this.rseg()); }
+  stampAC(ac) { for (let k = 0; k < this.n() - 1; k++) ac.addY(this.nodes[k], this.nodes[k + 1], 1 / this.rseg()); }
+  reset() { this.imax = 0; this.postCurrents = new Array(this.n()).fill(0); }
   accept(s) {
-    const g = 1 / this.rseg(), seg = [0, 1, 2, 3, 4].map((k) => (s.v(this.nodes[k]) - s.v(this.nodes[k + 1])) * g);
-    this.postCurrents = [seg[0], seg[1] - seg[0], seg[2] - seg[1], seg[3] - seg[2], seg[4] - seg[3], -seg[4]];
+    const g = 1 / this.rseg(), n = this.n(), seg = [];
+    for (let k = 0; k < n - 1; k++) seg.push((s.v(this.nodes[k]) - s.v(this.nodes[k + 1])) * g);
+    const pc = new Array(n);
+    pc[0] = seg[0];
+    for (let k = 1; k < n - 1; k++) pc[k] = seg[k] - seg[k - 1];
+    pc[n - 1] = -seg[n - 2];
+    this.postCurrents = pc;
     this.imax = Math.max(...seg.map(Math.abs)); this.i = this.imax;
   }
-  valueLabel() { return fmtShort(this.p.rating, 'A'); }
-  readings() { return [['Highest section current', this.imax || 0, 'A'], ['Rating', this.p.rating, 'A'], ['Section resistance', this.rseg(), 'Ω']]; }
+  valueLabel() { const b = BARS[this.p.model]; return `${b && b[0] === this.p.w ? this.p.model : fmtShort(this.p.w, 'mm²')} ${fmtShort(this.p.rating, 'A')}`; }
+  readings() { return [['Highest section current', this.imax || 0, 'A'], ['Rating', this.p.rating, 'A'], ['Cross-section', this.p.w, 'mm²'], ['Taps', this.n(), ''], ['Section resistance', this.rseg(), 'Ω']]; }
   draw(g) {
-    const hot = g.running && (this.imax || 0) > this.p.rating;
-    g.box(-5.2 * G, -0.22 * G, 5.2 * G, 0.22 * G, { stroke: g.body, width: g.lw * 0.6, fill: hot ? '#ef4444' : '#d08a4a', r: 2 });
+    const hot = g.running && (this.imax || 0) > this.p.rating, h = this.n() - 1 + 0.2;
+    const t = Math.max(0.12, Math.min(0.32, 0.12 + Math.log10(Math.max(10, this.p.w)) * 0.06)); // a bigger bar looks thicker
+    g.box(-h * G, -t * G, h * G, t * G, { stroke: g.body, width: g.lw * 0.6, fill: hot ? '#ef4444' : '#d08a4a', r: 2 });
     for (const [x] of this.localPosts()) g.circle(x, 0, 2.2, { fill: '#7c4a1e' });
   }
 }
