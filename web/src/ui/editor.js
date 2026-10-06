@@ -232,7 +232,7 @@ export class Editor {
   stepGlide(now) {
     const g = this.glide, R = this.renderer;
     if (!g) return;
-    const k = Math.min(1, Math.max(0, now - g.t0) / 300), e = 1 - Math.pow(1 - k, 3);
+    const k = Math.min(1, Math.max(0, now - g.t0) / 320), e = 1 - Math.pow(1 - k, 3);
     R.ox = g.fx + (g.tx - g.fx) * e; R.oy = g.fy + (g.ty - g.fy) * e;
     this.dirtyDraw = true;
     if (k >= 1) this.glide = null;
@@ -263,6 +263,12 @@ export class Editor {
   setFullscreen(on) {
     if (!!on === !!this.fullscreen) return;
     this.fullscreen = !!on;
+    // the bars slide away (or back) while the circuit glides into place, all on one 320 ms curve
+    clearTimeout(this.fsAnimT);
+    this.root.classList.remove('fs-enter', 'fs-exit');
+    void this.root.offsetWidth; // restart the animation when toggled quickly
+    this.root.classList.add(this.fullscreen ? 'fs-enter' : 'fs-exit');
+    this.fsAnimT = setTimeout(() => this.root.classList.remove('fs-enter', 'fs-exit'), 400);
     this.root.classList.toggle('fs', this.fullscreen);
     this.showFsTools(this.fullscreen, 2600); // shown at first, then out of the way
     // re-lay the board out in this same frame (the bars just appeared / went), so the circuit
