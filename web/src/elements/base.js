@@ -113,6 +113,7 @@ export class Element {
     if (this.label) out.l = this.label;
     if (this.fault && this.fault.m && this.fault.m !== 'none') out.fl = { ...this.fault };
     if (this.damaged) out.d = this.damaged.why;
+    if (this.damaged?.partial) out.dp = 1; // part of it failed (a fan's burst capacitor), the rest still conducts
     return out;
   }
 
@@ -125,7 +126,7 @@ export class Element {
     if (o.p) Object.assign(e.p, o.p);
     if (o.l) e.label = o.l;
     if (o.fl) e.fault = { ...o.fl };
-    if (o.d) e.damaged = { why: String(o.d) };
+    if (o.d) e.damaged = o.dp ? { why: String(o.d), partial: true } : { why: String(o.d) };
     e.onParamChange();
     return e;
   }

@@ -295,16 +295,35 @@ export class InductionMotor1 extends InductionBase {
     { key: 'llr', label: 'Rotor leakage', unit: 'H', def: 0.04, min: 1e-6, max: 10, log: true },
     { key: 'j', label: 'Inertia J', unit: 'kg·m²', def: 0.004, min: 1e-6, max: 100, log: true },
     { key: 'b', label: 'Friction b', unit: 'N·m·s', def: 1e-4, min: 0, max: 10 },
+    { key: 'vr', label: 'Rated voltage (RMS)', unit: 'V', def: 230, min: 1, max: 1e4 },
+    { key: 'irated', label: 'Rated current (RMS)', unit: 'A', def: 1.6, min: 0.001, max: 1e4, log: true },
   ];
-  static description = 'Permanent-split-capacitor motor: main winding M–C and auxiliary winding A–C in quadrature. Connect the run capacitor (e.g. 2.5 µF) between M and A and the supply across M–C. Without the capacitor it cannot start.';
+  static description = 'Permanent-split-capacitor motor: main winding M–C and auxiliary winding A–C in quadrature. Connect the run capacitor (e.g. 2.5 µF) between M and A and the supply across M–C. Without the capacitor it cannot start. Above ≈1.15 × its rated voltage the iron saturates and the current climbs steeply; the winding (class B) burns at ≈180 °C — on twice its rated voltage within seconds, stalled or overloaded within minutes — and stays open until replaced.';
   localPosts() { return [[-2 * G, -G], [-2 * G, G], [0, 2 * G]]; }
   localBox() { return [-2 * G, -1.4 * G, 1.4 * G, 2 * G]; }
   leads() { return [[0, -2 * G, -G, -0.8 * G, -0.6 * G], [1, -2 * G, G, -0.8 * G, 0.6 * G], [2, 0, 2 * G, 0, G]]; }
   labelSide() { return [1, 0]; }
   nStator() { return 2; }
   statorEnds() { const [m, a, c] = this.nodes; return [[m, c], [a, c]]; }
+  /** magnetising inductance, lowered by core saturation on over-voltage */
+  lmE() { return this.p.lm / (this.sat || 1); }
+  reset() { super.reset(); this.sat = 1; this.tw = 40; this.vm = 0; }
+  accept(s) {
+    super.accept(s);
+    if (s.mode === 'dc' || this.damaged) return;
+    const [m, , c] = this.nodes, v = s.v(m) - s.v(c);
+    this.vm = Math.sqrt(Math.max(0, (this.vm || 0) ** 2 + (v * v - (this.vm || 0) ** 2) * Math.min(1, s.dt / 0.02)));
+    const sat = Math.min(6, 1 + 2 * Math.max(0, this.vm / this.p.vr - 1.15) ** 2);
+    if (Math.abs(sat - (this.sat || 1)) > 0.02 * (this.sat || 1)) { this.sat = sat; s.dirty = true; }
+    // winding temperature (class B insulation): ≈100 °C at rated current, burns at ≈180 °C
+    const r = (this.irms || 0) / this.p.irated;
+    this.tw = (this.tw ?? 40) + (40 + 60 * r * r - (this.tw ?? 40)) * Math.min(1, s.heatDt() / 120);
+    this.stress = Math.min(1, Math.max(0, (this.tw - 110) / 70));
+    if (this.tw > 180 && this.setDamage(s, `Winding burnt — insulation charred at ${Math.round(this.tw)} °C (${fmtShort(this.irms, 'A')}, rated ${fmtShort(this.p.irated, 'A')})${this.sat > 1.3 ? `: ${fmtShort(this.vm, 'V')} on a ${fmtShort(this.p.vr, 'V')} motor saturated the core` : ': stalled or overloaded for too long'}`)) s.dirty = true;
+  }
+  readings() { return [...super.readings(), ['Winding temperature', this.tw ?? 40, '°C']]; }
   Lm_() {
-    const { lls, llr, lm } = this.p, a = -this.p.a, Lr = llr + lm;
+    const { lls, llr } = this.p, lm = this.lmE(), a = -this.p.a, Lr = llr + lm;
     return [
       [lls + lm, 0, lm, 0],
       [0, a * a * (lls + lm), 0, a * lm],
@@ -313,14 +332,15 @@ export class InductionMotor1 extends InductionBase {
     ];
   }
   Rm_(wr) {
-    const { rm, ra, rr, llr, lm } = this.p, a = -this.p.a, Lr = llr + lm;
+    const { rr, llr } = this.p, lm = this.lmE(), a = -this.p.a, Lr = llr + lm;
+    const rm = this.damaged ? 1e7 : this.p.rm, ra = this.damaged ? 1e7 : this.p.ra; // burnt open
     const R = [[rm, 0, 0, 0], [0, ra, 0, 0], [0, 0, rr, 0], [0, 0, 0, rr]];
     // α: +ωr·ψrβ = ωr(Lr·irβ + a·Lm·iaux); β: −ωr·ψrα = −ωr(Lr·irα + Lm·imain)
     R[2][3] += wr * Lr; R[2][1] += wr * a * lm;
     R[3][2] -= wr * Lr; R[3][0] -= wr * lm;
     return R;
   }
-  torque(i) { return (this.p.poles / 2) * this.p.lm * (-this.p.a * i[1] * i[2] - i[0] * i[3]); }
+  torque(i) { return (this.p.poles / 2) * this.lmE() * (-this.p.a * i[1] * i[2] - i[0] * i[3]); }
   statorCurrents(i) { this.postCurrents = [i[0], i[1], -(i[0] + i[1])]; this.i = i[0]; }
   draw(g) {
     drawMotor(g, 'M 1~', this.ang || 0, g.running, 1.05 * G);
