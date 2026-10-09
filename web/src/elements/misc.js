@@ -889,12 +889,12 @@ export class DCFan extends TwoTerm {
     { key: 'rpm', label: 'Rated speed', unit: 'rpm', def: 2500, min: 100, max: 20000 },
     { key: 'cfm', label: 'Rated airflow', unit: 'CFM', def: 40, min: 0.1, max: 1000 },
   ];
-  static description = 'Brushless DC cooling fan (with built-in commutation and reverse-polarity protection): speed and airflow rise roughly in proportion to the voltage, the air load torque ∝ speed², and it stalls below about a third of the rated voltage. Current flows only with the correct polarity.';
+  static description = 'Brushless DC cooling fan (with built-in commutation and reverse-polarity protection): speed and airflow rise roughly in proportion to the voltage, the air load torque ∝ speed², and it stalls below about a third of the rated voltage. Current flows only with the correct polarity. Its driver chip is built for the rated voltage: from ≈1.6 × (a 12 V fan on 20 V) it burns out, at 24 V almost at once, and the fan stays dead until replaced.';
   nonlinear = true;
   R() { return (0.35 * this.p.vr) / this.p.ir; }
   ke() { return (this.p.vr - 0.3 - this.p.ir * this.R()) / ((this.p.rpm * TAU) / 60); }
-  reset() { this.w = 0; this.ang = 0; this.vd = 0; this.setCurrent(0); }
-  iv(v) { return soft(v - this.ke() * this.w - 0.3, this.R(), 0.05); }
+  reset() { this.w = 0; this.ang = 0; this.vd = 0; this.wear = 0; this.setCurrent(0); }
+  iv(v) { return this.damaged ? { i: 1e-9 * v, g: 1e-9 } : soft(v - this.ke() * this.w - 0.3, this.R(), 0.05); }
   stampNL(s) { const [a, b] = this.nodes, v = s.v(a) - s.v(b), c = this.iv(v); s.addNLCurrent(a, b, c.i, [[a, b, c.g, v]]); }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1e-9); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / this.R()); }
@@ -902,13 +902,21 @@ export class DCFan extends TwoTerm {
     const v = this.voltageDiff(s), i = this.iv(v).i;
     this.setCurrent(i);
     if (s.mode === 'dc') return;
+    // driver chip over-voltage: a little over 1.6 × rated it lasts seconds, at 2 × a fraction of one
+    const x = v / this.p.vr;
+    if (!this.damaged && x > 1.6) {
+      this.wear = (this.wear || 0) + s.heatDt() / (0.5 * Math.pow(1.6 / x, 8));
+      this.stress = Math.min(1, this.wear);
+      if (this.wear >= 1) this.setDamage(s, `Driver chip burnt — ${fmtShort(v, 'V')} on a ${fmtShort(this.p.vr, 'V')} fan`);
+    }
     const wr = (this.p.rpm * TAU) / 60, ke = this.ke(), kf = (ke * this.p.ir) / (wr * wr), J = (2 * ke * this.p.ir * 0.3) / wr;
-    const te = ke * i, stiction = 0.9 * ke * this.p.ir; // a stopped fan needs ≈1/3 of rated voltage to start
+    const te = this.damaged ? 0 : ke * i, stiction = 0.9 * ke * this.p.ir; // a stopped fan needs ≈1/3 of rated voltage to start
     if (this.w > 1e-3 * wr || te > stiction) this.w = Math.max(0, this.w + ((te - kf * this.w * this.w) / J) * s.dt);
+    if (this.damaged) this.w *= 1 - Math.min(1, s.dt / 0.8); // dead: the bearings run it down
     this.ang += this.w * s.dt * 0.05;
   }
   valueLabel() { return fmtShort(this.p.vr, 'V'); }
-  readings() { const wr = (this.p.rpm * TAU) / 60; return [['Speed', (this.w * 60) / TAU, 'rpm'], ['Airflow', (this.p.cfm * this.w) / wr, 'CFM'], ['Current', this.i, 'A']]; }
+  readings() { const wr = (this.p.rpm * TAU) / 60; return [['Speed', (this.w * 60) / TAU, 'rpm'], ['Airflow', (this.p.cfm * this.w) / wr, 'CFM'], ['Current', this.i, 'A'], ['State', this.damaged ? 'BURNT — replace it' : this.w > 1e-3 * wr ? 'Running' : 'Stopped', '']]; }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
   localBox() { return [-2 * G, -G, 2 * G, G]; }
   draw(g) {
