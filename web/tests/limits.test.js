@@ -405,4 +405,23 @@ test('a destroyed part keeps its failure in the saved file', () => {
   assert.deepEqual(back.damaged.fail, m.damaged.fail);
   back.replace();
   assert.equal(back.damaged, null);
+
+test('a CFL burns out on over-voltage instead of taking kilowatts, and runs normally at its rating', () => {
+  for (const [vrms, why] of [[860, /capacitor burst/], [400, /over-voltage/]]) {
+    const { el, run } = net();
+    el('mains', [1, 0], { vrms });
+    const lamp = el('cfl', [1, 0], { w: 20 });
+    const sim = run(3, 1e-4);
+    assert.ok(lamp.damaged && why.test(lamp.damaged.why), `${vrms} V: ${lamp.damaged?.why}`);
+    assert.ok(Math.abs(lamp.i) < 1e-3 && lamp.readings(sim)[0][1] < 0.5, `${vrms} V: open circuit once burnt`);
+    lamp.replace(sim);
+    assert.equal(lamp.damaged, null);
+  }
+  const { el, run } = net();
+  el('mains', [1, 0]);
+  const lamp = el('cfl', [1, 0], { w: 20 });
+  const sim = run(3, 1e-4);
+  const P = lamp.readings(sim)[0][1];
+  assert.equal(lamp.damaged, null);
+  assert.ok(P > 18 && P < 25, 'rated power at 230 V: ' + P);
 });

@@ -314,8 +314,11 @@ class CPLoad extends TwoTerm {
 export class CFL extends Composite {
   static type = 'cfl'; static title = 'CFL (energy-saving lamp)'; static category = 'Electrical';
   static prefix = 'LP'; static keywords = 'cfl compact fluorescent lamp energy saving bulb electronic ballast power factor harmonics';
-  static props = [{ key: 'w', label: 'Rated power', unit: 'W', def: 15, min: 3, max: 100, knob: true }];
-  static description = 'Compact fluorescent lamp with an electronic ballast: a bridge rectifier charges a small reservoir capacitor, so mains current flows only in short peaks near the voltage maxima (power factor ≈0.6, rich in harmonics) while the ballast takes constant power. ≈60 lm/W.';
+  static props = [
+    { key: 'w', label: 'Rated power', unit: 'W', def: 15, min: 3, max: 100, knob: true },
+    { key: 'v', label: 'Rated voltage (RMS)', unit: 'V', def: 230, min: 100, max: 277 },
+  ];
+  static description = 'Compact fluorescent lamp with an electronic ballast: a bridge rectifier charges a small reservoir capacitor, so mains current flows only in short peaks near the voltage maxima (power factor ≈0.6, rich in harmonics) while the ballast takes constant power. ≈60 lm/W. The ballast is built for its rated voltage: well above it the reservoir capacitor and switching transistors overheat and the lamp burns out (far above it, the capacitor bursts at once) and stays dead until replaced.';
   ownInternal() { return 3; }
   parts() {
     const BR = getType('bridge'), cp = new CPLoad();
@@ -325,6 +328,7 @@ export class CFL extends Composite {
     if (!this.subs) return;
     const [r, , c, cp] = this.subs.map((s) => s.el);
     r.p.r = 20; c.p.c = (this.p.w / 15) * 4.7e-6; cp.pw = this.p.w / 0.9; cp.vmin = 60;
+    r.damaged = this.damaged ? { why: this.damaged.why } : null; // a burnt-out lamp is an open circuit
   }
   connectivity() { return null; }
   localPosts() { return [[-2 * G, 0], [2 * G, 0]]; }
@@ -336,12 +340,27 @@ export class CFL extends Composite {
     if (s.mode === 'dc') return;
     const v = s.v(this.nodes[0]) - s.v(this.nodes[1]), i = this.postCurrents[0];
     this.pin.push(v * i, s.dt); this.i2.push(i * i, s.dt); this.v2.push(v * v, s.dt);
+    if (this.damaged) return;
+    // the reservoir capacitor is rated for about 1.4 × the rated peak (400 V on 230 V mains):
+    // twice the rated peak bursts it at once
+    const vc = Math.abs(s.v(this.inodes[1]) - s.v(this.inodes[2])), vpk = this.p.v * Math.SQRT2;
+    const vrms = Math.sqrt(Math.max(0, this.v2.v)), irms = Math.sqrt(Math.max(0, this.i2.v));
+    if (vc > 2 * vpk) { this.fail(s, `Ballast capacitor burst — over-voltage: ${fmtShort(vc, 'V')} on a capacitor built for about ${fmtShort(1.4 * vpk, 'V')} (${fmtShort(this.p.v, 'V')} lamp)`); return; }
+    // ballast temperature follows the power it takes and the voltage stress on its parts
+    const over = this.heatAvg(s, Math.max(this.pin.v / this.p.w, (vrms / this.p.v) ** 2), 1.5);
+    this.stress = clamp((over - 1.3) / 0.9, 0, 1);
+    if (over > 2.2) this.fail(s, `Burnt out — over-voltage: ${fmtShort(vrms, 'V')} and ${fmtShort(irms, 'A')}, drawing ${fmtShort(this.pin.v, 'W')} instead of ${fmtShort(this.p.w, 'W')}`);
   }
+  fail(s, why) { if (this.setDamage(s, why)) this.sync(); }
   pf() { const S = Math.sqrt(this.v2?.v * this.i2?.v || 0); return S > 1e-9 ? (this.pin?.v || 0) / S : 0; }
   valueLabel() { return fmtQty(this.p.w, 'W').replace(' ', ''); }
-  readings() { return [['Power (avg)', this.pin?.v || 0, 'W'], ['Power factor', this.pf(), ''], ['Current (RMS)', Math.sqrt(Math.max(0, this.i2?.v || 0)), 'A'], ['Light output', 60 * (this.pin?.v || 0), 'lm']]; }
+  readings() {
+    const P = this.pin?.v || 0;
+    return [['Power (avg)', P, 'W'], ['Power factor', this.pf(), ''], ['Current (RMS)', Math.sqrt(Math.max(0, this.i2?.v || 0)), 'A'], ['Voltage (RMS)', Math.sqrt(Math.max(0, this.v2?.v || 0)), 'V'],
+      ['Light output', this.damaged ? 0 : 60 * clamp(P, 0, 1.2 * this.p.w), 'lm'], ['Rated', `${fmtShort(this.p.w, 'W')} at ${fmtShort(this.p.v, 'V')}`, '']];
+  }
   draw(g) {
-    const b = g.running ? clamp((this.pin?.v || 0) / this.p.w, 0, 1.2) : 0;
+    const b = g.running && !this.damaged ? clamp((this.pin?.v || 0) / this.p.w, 0, 1.2) : 0;
     if (b > 0.02) g.glow(0, -0.3 * G, G * 1.5, '235,245,255', Math.min(0.9, b));
     g.box(-0.45 * G, 0.1 * G, 0.45 * G, 0.6 * G, { stroke: g.body, width: g.lw * 0.8, fill: g.fill, r: 2 });
     const ctx = g.ctx; ctx.beginPath();
