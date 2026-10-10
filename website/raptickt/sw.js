@@ -1,7 +1,7 @@
 // RaptiCKT offline cache. A new build changes VERSION, so visitors get the update
 // on their next visit and old caches are removed.
-const VERSION = 'raptickt-5b3fa7da3d';
-const FILES = ["./","index.html","css/styles.css?v=5b3fa7da3d","js/app.js?v=5b3fa7da3d","js/boot.js","manifest.webmanifest","assets/apple-touch-icon.png","assets/icon-192.png","assets/icon-512.png","assets/icon.svg"];
+const VERSION = 'raptickt-53d2074131';
+const FILES = ["./","index.html","css/styles.css?v=53d2074131","js/app.js?v=53d2074131","js/boot.js","manifest.webmanifest","assets/apple-touch-icon.png","assets/icon-192.png","assets/icon-512.png","assets/icon.svg"];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });

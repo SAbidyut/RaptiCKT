@@ -4,7 +4,7 @@ import { CATEGORIES, getType, allTypes } from '../elements/index.js';
 import { Renderer } from './render.js';
 import { icon } from './icons.js';
 import { store } from './store.js';
-import { iosScroll } from './scroller.js';
+import { iosScroll, dragScrollX } from './scroller.js';
 
 export class Palette {
   constructor(editor, host) {
@@ -40,6 +40,7 @@ export class Palette {
       this.host.querySelectorAll('.pal-tabs button').forEach((x) => x.classList.toggle('on', x === b));
       this.fill();
     }));
+    dragScrollX(this.host.querySelector('.pal-tabs'));
     const inp = this.host.querySelector('input');
     inp.addEventListener('input', () => { this.query = inp.value.trim().toLowerCase(); this.fill(); });
     // slide in first, then build the grid on the next frame so the animation never stutters

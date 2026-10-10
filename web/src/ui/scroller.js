@@ -203,18 +203,15 @@ function smoothScroll(viewport, content, opts) {
     return Math.max(-8, Math.min(8, -(b - a) / (tb - ta)));
   };
 
-  const onStart = (e) => {
-    if (e.touches.length !== 1) return;
-    const p = e.touches[0];
+  const begin = (p, target) => {
     sx = p.clientX; sy = p.clientY; axis = null; dragging = false;
-    row = findRow(e.target);
+    row = findRow(target);
     rowAx = row ? rowAxis(row) : null;
     swallow = page.grab();
     if (rowAx && rowAx.grab()) swallow = true; // a tap that stops a fling does not press what is under it
   };
-  const onMove = (e) => {
-    if (e.touches.length !== 1) return;
-    const p = e.touches[0], dx = p.clientX - sx, dy = p.clientY - sy;
+  const move = (p) => {
+    const dx = p.clientX - sx, dy = p.clientY - sy;
     if (!axis) {
       if (Math.hypot(dx, dy) < 6) return;
       axis = Math.abs(dx) > Math.abs(dy) && rowAx ? 'x' : 'y';
@@ -225,10 +222,39 @@ function smoothScroll(viewport, content, opts) {
     }
     if (axis === 'x') { rowAx.drag(p.clientX - sx); track(p.clientX); } else { page.drag(p.clientY - sy); track(p.clientY); }
   };
-  const onEnd = () => {
+  const end = () => {
     if (axis || swallow) swallowClick();
     if (axis === 'x') { rowAx.release(velocity()); page.settle(); } else if (axis === 'y') { dragging = false; page.release(velocity()); } else { page.settle(); rowAx?.settle(); }
     axis = null;
+  };
+  const onStart = (e) => { if (e.touches.length === 1) begin(e.touches[0], e.target); };
+  const onMove = (e) => { if (e.touches.length === 1) move(e.touches[0]); };
+  const onEnd = end;
+
+  // mouse: press and drag the page or a row, like a finger (a wheel and the trackpad work too)
+  let mouseDown = false;
+  const onMouseDown = (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || e.target.closest('input, textarea, select, [data-nodrag]')) return;
+    mouseDown = true;
+    begin(e, e.target);
+    window.addEventListener('pointermove', onMouseMove);
+    window.addEventListener('pointerup', onMouseUp);
+    window.addEventListener('pointercancel', onMouseUp);
+  };
+  const onMouseMove = (e) => {
+    if (e.pointerType !== 'mouse' || !mouseDown) return;
+    if (axis) e.preventDefault();
+    move(e);
+    viewport.classList.toggle('mouse-drag', !!axis);
+  };
+  const onMouseUp = () => {
+    if (!mouseDown) return;
+    mouseDown = false;
+    window.removeEventListener('pointermove', onMouseMove);
+    window.removeEventListener('pointerup', onMouseUp);
+    window.removeEventListener('pointercancel', onMouseUp);
+    viewport.classList.remove('mouse-drag');
+    end();
   };
   const swallowClick = () => {
     const kill = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
@@ -246,6 +272,11 @@ function smoothScroll(viewport, content, opts) {
       const ax = rowAxis(r); ax.measure();
       ax.glideTo((ax.mode === 'glide' ? ax.target : ax.pos) + e.deltaX);
       return;
+    }
+    if (r && r.classList.contains('chips') && !e.shiftKey) { // a mouse wheel over the category chips moves them, then hands over to the page
+      const ax = rowAxis(r); ax.measure();
+      const at = ax.mode === 'glide' ? ax.target : ax.pos, dd = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY;
+      if (ax.max > 0 && ((dd > 0 && at < ax.max - 1) || (dd < 0 && at > 1))) { e.preventDefault(); ax.glideTo(at + dd); return; }
     }
     e.preventDefault();
     page.measure();
@@ -265,6 +296,8 @@ function smoothScroll(viewport, content, opts) {
   viewport.addEventListener('touchmove', onMove, { passive: true });
   viewport.addEventListener('touchend', onEnd, { passive: true });
   viewport.addEventListener('touchcancel', onEnd, { passive: true });
+  viewport.addEventListener('pointerdown', onMouseDown);
+  viewport.addEventListener('dragstart', (e) => e.preventDefault()); // no ghost image when dragging over a picture
   viewport.addEventListener('wheel', onWheel, { passive: false });
   viewport.addEventListener('scroll', onNative, { passive: true });
   // rows are given their track up front so the layout never changes under a finger
@@ -287,6 +320,7 @@ function smoothScroll(viewport, content, opts) {
       page.stop(); ro?.disconnect(); mo?.disconnect(); bar.remove();
       viewport.removeEventListener('touchstart', onStart); viewport.removeEventListener('touchmove', onMove);
       viewport.removeEventListener('touchend', onEnd); viewport.removeEventListener('touchcancel', onEnd);
+      viewport.removeEventListener('pointerdown', onMouseDown); onMouseUp();
       viewport.removeEventListener('wheel', onWheel); viewport.removeEventListener('scroll', onNative);
       viewport.classList.remove('ios-scroll'); content.classList.remove('ios-content');
       content.style.transform = '';
@@ -295,4 +329,39 @@ function smoothScroll(viewport, content, opts) {
   };
   viewport._ios = api;
   return api;
+}
+
+/**
+ * A plain sideways-scrolling strip (overflow-x: auto), e.g. the palette's category tabs, for a
+ * mouse: the wheel moves it, and it can be dragged. Touch keeps the platform's own scrolling.
+ */
+export function dragScrollX(el) {
+  if (!el || el._dragX) return;
+  el._dragX = true;
+  el.addEventListener('wheel', (e) => {
+    const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (!d || el.scrollWidth <= el.clientWidth) return;
+    e.preventDefault();
+    el.scrollLeft += e.deltaMode === 1 ? d * 32 : d;
+  }, { passive: false });
+  let x0 = 0, l0 = 0, down = false, moved = false;
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    down = true; moved = false; x0 = e.clientX; l0 = el.scrollLeft;
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (!down) return;
+    if (!moved && Math.abs(e.clientX - x0) < 5) return;
+    moved = true; el.classList.add('mouse-drag');
+    el.scrollLeft = l0 - (e.clientX - x0);
+  });
+  window.addEventListener('pointerup', () => {
+    if (!down) return;
+    down = false; el.classList.remove('mouse-drag');
+    if (moved) { // the click that ends this drag must not press a tab
+      const kill = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      el.addEventListener('click', kill, { capture: true, once: true });
+      setTimeout(() => el.removeEventListener('click', kill, { capture: true }), 120);
+    }
+  });
 }

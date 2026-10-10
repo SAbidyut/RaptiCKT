@@ -84,6 +84,48 @@ async function open(viewport, opts = {}) {
   await ctx.close();
 }
 
+// ---- desktop mouse: palette tabs, palette list and example chips can be reached with wheel and drag
+{
+  const { ctx, page, errs } = await open({ width: 1440, height: 900 });
+  await page.goto(base);
+  await page.evaluate(() => localStorage.setItem('raptickt.flags.v1', JSON.stringify({ editorTips: true })));
+  await page.reload(); await page.waitForTimeout(2300);
+  await page.evaluate(() => document.querySelector('[data-h=new]').click()); await page.waitForTimeout(500);
+  await page.evaluate(() => document.querySelector('.fab').click()); await page.waitForTimeout(700);
+  const tabs = () => page.evaluate(() => { const t = document.querySelector('.pal-tabs'); return Math.round(t.scrollLeft); });
+  const tb = await page.locator('.pal-tabs').boundingBox();
+  await page.mouse.move(tb.x + 200, tb.y + 15); await page.mouse.wheel(0, 400); await page.waitForTimeout(400);
+  const t1 = await tabs();
+  check(t1 > 100, `mouse: wheel over the palette tabs scrolls them (${t1})`);
+  await page.mouse.move(tb.x + 380, tb.y + 15); await page.mouse.down(); await page.mouse.move(tb.x + 100, tb.y + 15, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(400);
+  const t2 = await tabs();
+  check(t2 > t1 + 100, `mouse: dragging the palette tabs scrolls them (${t1} -> ${t2})`);
+  await page.click('.pal-tabs [data-t=Sources]'); await page.waitForTimeout(700);
+  const gb = await page.locator('.pal-grid').boundingBox();
+  const gy = () => page.evaluate(() => Math.round(app.editor.palette.scroll.y));
+  await page.mouse.move(gb.x + 200, gb.y + 200); await page.mouse.wheel(0, 300); await page.waitForTimeout(800);
+  const y1 = await gy();
+  check(y1 > 100, `mouse: wheel scrolls the component list (${y1})`);
+  await page.mouse.move(gb.x + 40, gb.y + 300); await page.mouse.down(); await page.mouse.move(gb.x + 40, gb.y + 100, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(800);
+  const y2 = await gy();
+  check(y2 > y1, `mouse: dragging scrolls the component list (${y1} -> ${y2})`);
+  check(await page.evaluate(() => app.editor.doc.elements.length === 0), 'mouse: a drag does not add a part');
+  await page.evaluate(() => { document.querySelector('.pal-head [data-close]').click(); app.goHome(); }); await page.waitForTimeout(800);
+  await page.evaluate(() => document.querySelector('.bottom-nav [data-tab=examples]').click()); await page.waitForTimeout(800);
+  const chips = () => page.evaluate(() => { const a = document.querySelector('.home-body .chips')._axis; return Math.round(a.pos); });
+  const cb = await page.locator('.home-body .chips').boundingBox();
+  await page.mouse.move(cb.x + 300, cb.y + 15); await page.mouse.wheel(0, 300); await page.waitForTimeout(600);
+  const c1 = await chips();
+  check(c1 > 100, `mouse: wheel over the example categories scrolls them (${c1})`);
+  await page.mouse.move(cb.x + 600, cb.y + 15); await page.mouse.down(); await page.mouse.move(cb.x + 200, cb.y + 15, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(700);
+  const c2 = await chips();
+  check(c2 > c1, `mouse: dragging the example categories scrolls them (${c1} -> ${c2})`);
+  await page.mouse.move(700, 500); await page.mouse.down(); await page.mouse.move(700, 150, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(900);
+  check(await page.evaluate(() => app.current === 'home' && app.home.scrollApi.y > 200), 'mouse: dragging scrolls the example list and opens nothing');
+  check(!errs.length, 'mouse: no console errors ' + errs.join(' | '));
+  await ctx.close();
+}
+
 // ---- phone (touch) and tablet
 for (const [name, vp] of [['phone', { width: 390, height: 844 }], ['phone-landscape', { width: 844, height: 390 }], ['tablet', { width: 820, height: 1180 }]]) {
   const { ctx, page, errs } = await open(vp, { hasTouch: true, isMobile: true });

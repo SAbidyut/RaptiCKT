@@ -538,6 +538,15 @@ input.toggle:checked::after { transform: translateX(18px); }
 :root.lite .splash svg, :root.lite .splash h1, :root.lite .splash p, :root.lite .splash .logo-dot { animation: none !important; }
 :root.lite *, :root.lite *::before, :root.lite *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
 :root.lite .card-row { scroll-snap-type: x proximity; }
+/* mouse: the page and its rows can be grabbed and dragged */
+@media (hover: hover) and (pointer: fine) {
+  .ios-scroll, .pal-tabs { cursor: grab; }
+  .ios-scroll button, .pal-tabs button { cursor: pointer; }
+  .mouse-drag, .mouse-drag * { cursor: grabbing !important; user-select: none; }
+  .pal-tabs { scrollbar-width: thin; scrollbar-color: rgba(140, 150, 170, 0.5) transparent; padding-bottom: 6px; }
+  .pal-tabs::-webkit-scrollbar { display: block; height: 5px; }
+  .pal-tabs::-webkit-scrollbar-thumb { background: rgba(140, 150, 170, 0.5); border-radius: 3px; }
+}
 .ios-content { will-change: transform; backface-visibility: hidden; }
 .ios-bar { position: absolute; top: 0; right: 3px; width: 3px; border-radius: 3px; background: rgba(140, 150, 170, 0.55);
   opacity: 0; pointer-events: none; z-index: 6; transition: opacity 0.35s ease; will-change: transform, opacity; }
