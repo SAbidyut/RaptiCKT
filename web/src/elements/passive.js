@@ -32,9 +32,9 @@ export class Resistor extends TwoTerm {
   static props = [
     { key: 'r', label: 'Resistance', unit: 'Ω', def: 1000, min: 1e-3, max: 1e9, log: true, knob: true },
     { key: 'style', label: 'Symbol', type: 'select', def: 'zigzag', options: [['zigzag', 'IEEE (zigzag)'], ['box', 'IEC (box)']] },
-    { key: 'pw', label: 'Power rating', type: 'select', def: '0', options: [['0', 'Ideal (no limit)'], ['0.125', '1/8 W'], ['0.25', '1/4 W'], ['0.5', '1/2 W'], ['1', '1 W'], ['2', '2 W'], ['3', '3 W'], ['5', '5 W'], ['10', '10 W'], ['25', '25 W'], ['50', '50 W'], ['100', '100 W']] },
+    { key: 'pw', label: 'Power rating', type: 'select', def: '0.25', options: [['0', 'Ideal (no limit)'], ['0.125', '1/8 W'], ['0.25', '1/4 W'], ['0.5', '1/2 W'], ['1', '1 W'], ['2', '2 W'], ['3', '3 W'], ['5', '5 W'], ['10', '10 W'], ['25', '25 W'], ['50', '50 W'], ['100', '100 W']] },
   ];
-  static description = "Linear resistor obeying Ohm's law V = I·R. Give it a power rating and it overheats above it and burns open at about 2.5 × its rating (real resistors fail open).";
+  static description = "Linear resistor obeying Ohm's law V = I·R. Like a real one it has a power rating (¼ W unless you choose another): above it, it overheats, and at about 2.5 × its rating it burns open (real resistors fail open). Choose a bigger rating for power circuits, or Ideal for no limit.";
   get R() { return this.damaged ? 1e9 : Math.max(this.p.r, 1e-6); }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1 / this.R); }
   accept(s) {
@@ -44,8 +44,9 @@ export class Resistor extends TwoTerm {
     if (!(pw > 0) || s.mode === 'dc' || this.damaged) return;
     // a small resistor heats up in about a second, a big power resistor in tens of seconds
     const load = this.heatAvg(s, (v * i) / pw, 1 + 4 * Math.sqrt(pw));
+    this.pavg = (this.pavg || 0) + (v * i - (this.pavg || 0)) * Math.min(1, s.dt / (s.acPeriod || s.dt)); // average over a cycle (AC)
     this.stress = Math.max(0, Math.min(1, (load - 1) / 1.5));
-    if (load > 2.5) this.setDamage(s, `Burnt open — dissipating ${fmtShort(load * pw, 'W')} in a ${fmtShort(pw, 'W')} resistor`);
+    if (load > 2.5) this.setDamage(s, `Burnt open — dissipating ${fmtShort(Math.max(this.pavg, load * pw), 'W')} in a ${fmtShort(pw, 'W')} resistor`);
   }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / this.R); }
   spice(n) { return `${this.name} ${n[0]} ${n[1]} ${this.R}`; }
@@ -138,7 +139,7 @@ export class Capacitor extends TwoTerm {
     { key: 'c', label: 'Capacitance', unit: 'F', def: 10e-6, min: 1e-15, max: 10, log: true, knob: true },
     { key: 'ic', label: 'Initial voltage', unit: 'V', def: 0, min: -1e3, max: 1e3 },
   ];
-  static description = 'Ideal capacitor: i = C·dv/dt. Plates show accumulated charge while simulating.';
+  static description = 'Capacitor: i = C·dv/dt. Plates show accumulated charge while simulating. Like a real one it has a voltage rating (50 V unless you choose another): at 1.5 × its rating the dielectric breaks down and it shorts. Choose Ideal for no limit.';
   reset() { this.vPrev = this.p.ic; this.iPrev = 0; this.setCurrent(0); this.J = 0; }
   geq(s) { return (s.method === 'be' ? 1 : 2) * this.p.c / s.dt; }
   stamp(s) {
@@ -231,7 +232,7 @@ export class Inductor extends TwoTerm {
     { key: 'rs', label: 'Series resistance', unit: 'Ω', def: 0, min: 0, max: 1e6 },
     { key: 'ic', label: 'Initial current', unit: 'A', def: 0, min: -1e3, max: 1e3 },
   ];
-  static description = 'Ideal inductor v = L·di/dt with optional winding resistance.';
+  static description = 'Inductor v = L·di/dt with optional winding resistance. Like a real one it has a current rating (2 A unless you choose another): a sustained overload burns its winding open. Choose Ideal for no limit.';
   branchCount() { return 1; }
   get Rs() { return Math.max(this.p.rs, 1e-9); }
   reset() { this.iPrev = this.p.ic; this.vlPrev = 0; this.setCurrent(this.p.ic); }
@@ -392,7 +393,7 @@ export class Fuse extends TwoTerm {
     { key: 'i2t', label: 'Melting I²t', unit: 'A²s', def: 0.05, min: 1e-6, max: 1e4, log: true },
   ];
   static description = 'Blows (opens) when the let-through energy ∫(i² − I²rated)dt exceeds I²t. A blown fuse stays blown — select it and tap Replace to put in a new one.';
-  reset() { this.heat = 0; this.i2 = 0; this.setCurrent(0); }
+  reset() { this.heat = 0; this.i2 = 0; this.ft = 0; this.setCurrent(0); }
   get blown() { return !!this.damaged; }
   get R() { return this.blown ? 1e9 : this.p.r; }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1 / this.R); }
@@ -401,7 +402,8 @@ export class Fuse extends TwoTerm {
     const i = this.voltageDiff(s) / this.R;
     this.setCurrent(i);
     if (s.mode === 'dc' || this.blown) return;
-    this.heat = Math.max(0, this.heat + (i * i - this.p.rating ** 2) * s.dt);
+    // the element melts on the thermal clock (see heatDtAt): an overload blows it in real seconds
+    this.heat = Math.max(0, this.heat + (i * i - this.p.rating ** 2) * s.heatDtAt(Math.abs(i) / this.p.rating, this));
     this.i2 = (this.i2 || 0) + (i * i - (this.i2 || 0)) * Math.min(1, s.dt / Math.max(0.005, s.acPeriod || 0.005));
     this.stress = Math.min(1, this.heat / this.p.i2t);
     if (this.heat > this.p.i2t) this.setDamage(s, `Blown — about ${fmtShort(Math.sqrt(this.i2), 'A')} through a ${fmtShort(this.p.rating, 'A')} fuse melted its element`, true);

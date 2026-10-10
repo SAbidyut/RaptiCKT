@@ -2,6 +2,7 @@
 
 import { CircuitDoc, makeElement } from './doc.js';
 import { GRID } from '../elements/index.js';
+import { WIRE_PRESETS } from '../elements/cables.js';
 import { EXAMPLES2, ALLOW_OPEN2 } from './examples2.js';
 import { EXAMPLES3, ALLOW_OPEN3 } from './examples3.js';
 
@@ -25,9 +26,13 @@ function builder(name) {
     h(type, x, y, p) { return b.el(type, x, y, p, 0); },
     v(type, x, y, p) { return b.el(type, x, y, p, 1); },
     vr(type, x, y, p) { return b.el(type, x, y, p, 3); },
-    /** wires drawn after setting b.cable get that cable (null = ideal wire) */
+    /**
+     * wires drawn after setting b.cable get that cable; by default (null) the same 1.5 mm² house
+     * wire as a newly drawn wire, so example wires overheat and burn like real ones too
+     * ('ideal' = a wire with no limit)
+     */
     cable: null,
-    w(...pts) { doc.addWire(pts.map(([x, y]) => [x * G, y * G]), b.cable ? { cable: b.cable } : null); },
+    w(...pts) { const c = b.cable === 'ideal' ? null : b.cable || WIRE_PRESETS['hw1.5']; doc.addWire(pts.map(([x, y]) => [x * G, y * G]), c ? { cable: { ...c } } : null); },
     node(x, y, color) { doc.probes.push({ id: 'e' + pid++, kind: 'node', pos: [x * G, y * G], color, label: '', unit: 'V' }); },
     volt(e, color) { doc.probes.push({ id: 'e' + pid++, kind: 'volt', el: e.id, color, label: '', unit: 'V' }); },
     cur(e, color) { doc.probes.push({ id: 'e' + pid++, kind: 'cur', el: e.id, color, label: '', unit: 'A' }); },
@@ -185,7 +190,7 @@ const BASE = [
       const dm = { model: '1N4007', is: 7e-9, n: 1.9, bv: 1000 };
       b.h('diode', 6, -2, dm); b.h('diode', 10, -2, dm); b.h('diode', 6, 2, dm); b.h('diode', 10, 2, dm);
       b.v('ecap', 16, 0, { c: 1000e-6, vmax: 35 });
-      const rl = b.v('resistor', 20, 0, { r: 220 });
+      const rl = b.v('resistor', 20, 0, { r: 220, pw: '1' });
       b.w([-10, -2], [-6, -2]); b.w([-10, 2], [-6, 2]); b.w([-10, 2], [-10, 4]);
       b.w([4, -2], [4, 2]); b.w([12, -2], [12, 2]);
       b.w([-2, -2], [-2, -6], [8, -6], [8, -2]); b.w([-2, 2], [-2, 6], [8, 6], [8, 2]);
@@ -337,7 +342,7 @@ const BASE = [
     build(b) {
       b.v('solar', 0, 0, { cells: 36, isc: 3, voc: 0.6, irr: 1000 });
       b.h('ammeter', 4, -4);
-      const r = b.v('resistor', 8, 0, { r: 7 });
+      const r = b.v('resistor', 8, 0, { r: 7, pw: '100' });
       b.v('voltmeter', 12, 0);
       b.el('ground', 0, 6);
       b.w([0, -2], [0, -4], [2, -4]); b.w([6, -4], [8, -4], [8, -2]); b.w([8, -4], [12, -4], [12, -2]);

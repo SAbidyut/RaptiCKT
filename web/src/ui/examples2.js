@@ -289,8 +289,8 @@ export const EXAMPLES2 = [
       b.el('logicin', 8, 6, { on: true }); b.w([9, 6], [9, 4], b.pin(inv, 3));
       b.w(b.pin(bat, 0), [0, -2], [14, -2], b.pin(inv, 4));
       b.w(b.pin(bat, 1), [0, 7], [14, 7], b.pin(inv, 8)); b.el('ground', 0, 7);
-      const l = b.h('inductor', 18, 1, { l: 5e-3, rs: 0.1 });
-      const c = b.v('capacitor', 22, 3, { c: 10e-6 }), r = b.v('resistor', 26, 3, { r: 50 }), vm = b.v('voltmeter', 30, 3, { mode: 'rms' });
+      const l = b.h('inductor', 18, 1, { l: 5e-3, rs: 0.1, irate: '10' });
+      const c = b.v('capacitor', 22, 3, { c: 10e-6, vr: '630' }), r = b.v('resistor', 26, 3, { r: 50, pw: '0' }), vm = b.v('voltmeter', 30, 3, { mode: 'rms' });
       b.w(b.pin(inv, 5), b.pin(l, 0)); b.w(b.pin(l, 1), b.pin(c, 0)); b.w(b.pin(c, 0), b.pin(r, 0)); b.w(b.pin(r, 0), b.pin(vm, 0));
       b.w(b.pin(inv, 6), [15, 2], [15, 5], b.pin(c, 1)); b.w(b.pin(c, 1), b.pin(r, 1)); b.w(b.pin(r, 1), b.pin(vm, 1));
       b.label(-2.6, 2, '350 V'); b.label(6, -1.4, 'SPWM'); b.label(12, -3.4, 'H-bridge'); b.label(20, -0.4, 'LC filter'); b.label(26, 6, '50 Ω');
@@ -312,7 +312,7 @@ export const EXAMPLES2 = [
       b.el('pwm', -3, 6, { duty: 33, freq: 20000, vhigh: 10 }, 2); b.w([-1, 6], b.pin(q, 0)); b.el('ground', -5, 6);
       const d = b.h('diode', 11, 4, { model: '1N5819' });
       b.w(b.pin(t, 3), b.pin(d, 0)); b.w(b.pin(t, 2), [11, 0]); b.el('ground', 11, 0);
-      const co = b.v('ecap', 15, 6, { c: 470e-6, vmax: 16 }), rl = b.v('resistor', 19, 6, { r: 10 }), vm = b.v('voltmeter', 23, 6, { mode: 'avg', tau: 0.005 });
+      const co = b.v('ecap', 15, 6, { c: 470e-6, vmax: 16 }), rl = b.v('resistor', 19, 6, { r: 10, pw: '25' }), vm = b.v('voltmeter', 23, 6, { mode: 'avg', tau: 0.005 });
       b.w(b.pin(d, 1), b.pin(co, 0)); b.w(b.pin(co, 0), b.pin(rl, 0)); b.w(b.pin(rl, 0), b.pin(vm, 0));
       b.w(b.pin(co, 1), b.pin(rl, 1)); b.w(b.pin(rl, 1), b.pin(vm, 1)); b.el('ground', 15, 8);
       b.label(-2.6, 2, '12 V'); b.label(6, -2.6, '200 µH 1:1'); b.label(-3, 7.6, '20 kHz'); b.label(8.4, 6, '36 V'); b.label(19, 9.4, '10 Ω');
@@ -333,7 +333,7 @@ export const EXAMPLES2 = [
       tagR(b, ...b.pin(t1, 2), 'G1'); tagR(b, ...b.pin(t2, 2), 'G2'); tagR(b, ...b.pin(t3, 2), 'G3'); tagR(b, ...b.pin(t4, 2), 'G4');
       tagL(b, ...b.pin(t1, 0), 'L'); b.w(b.pin(t2, 0), [19, 4]); tagR(b, 19, 4, 'N');
       b.w(b.pin(t1, 1), [10, -2], [16, -2]); b.w(b.pin(t2, 1), [16, -2]); tagL(b, 10, -2, 'P');
-      const r = b.v('resistor', 24, 1, { r: 20 }), l = b.v('inductor', 24, 5, { l: 0.2, rs: 0.5 }), vm = b.v('voltmeter', 28, 3, { mode: 'avg', tau: 0.04 });
+      const r = b.v('resistor', 24, 1, { r: 20, pw: '0' }), l = b.v('inductor', 24, 5, { l: 0.2, rs: 0.5, irate: '20' }), vm = b.v('voltmeter', 28, 3, { mode: 'avg', tau: 0.04 });
       b.w([16, -2], [24, -2], b.pin(r, 0)); b.w(b.pin(r, 1), b.pin(l, 0));
       b.w(b.pin(t3, 0), b.pin(t4, 0)); b.w(b.pin(t4, 0), [24, 8], b.pin(l, 1));
       b.w([24, -2], [28, -2], b.pin(vm, 0)); b.w([24, 8], [28, 8], b.pin(vm, 1));

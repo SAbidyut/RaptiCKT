@@ -11,7 +11,7 @@ test('busbar with 8 taps feeds 7 loads; size presets set area and rating', () =>
   assert.equal(bus.getPosts().length, 8);
   bus.nodes = [1, 2, 3, 4, 5, 6, 7, 8];
   const src = new V(0, 0); src.p.amp = 230; src.nodes = [1, 0];
-  const loads = [2, 3, 4, 5, 6, 7, 8].map((n) => { const r = new R(0, 0); r.p.r = 23; r.nodes = [n, 0]; return r; });
+  const loads = [2, 3, 4, 5, 6, 7, 8].map((n) => { const r = new R(0, 0); r.p.r = 23; r.p.pw = '0'; r.nodes = [n, 0]; return r; });
   const s = new Simulator().buildNet([src, bus, ...loads]);
   assert.ok(s.start(), s.error);
   for (let i = 0; i < 20; i++) assert.ok(s.step(1e-4));

@@ -99,7 +99,7 @@ export class CircuitDoc {
   toJSON() {
     const idx = new Map(this.elements.map((e, i) => [e.id, i]));
     return {
-      app: 'RaptiCKT', v: 1, name: this.name, description: this.description || undefined,
+      app: 'RaptiCKT', v: 2, name: this.name, description: this.description || undefined,
       elements: this.elements.map((e) => e.toJSON()),
       wires: this.wires.map((w) => w.toJSON()),
       probes: this.probes.map((p) => ({ ...p, el: p.el != null ? idx.get(p.el) : undefined })),
@@ -111,7 +111,9 @@ export class CircuitDoc {
     if (typeof o === 'string') o = JSON.parse(o);
     const d = new CircuitDoc(o.name || 'Imported circuit');
     d.description = o.description || '';
-    for (const eo of o.elements || []) {
+    const old = !(o.v >= 2);
+    for (let eo of o.elements || []) {
+      if (old) eo = migrateV1(eo);
       const e = Element.fromJSON(eo);
       if (e) d.elements.push(e);
     }
@@ -126,6 +128,16 @@ export class CircuitDoc {
   }
 
   clone() { const c = CircuitDoc.fromJSON(JSON.parse(JSON.stringify(this.toJSON()))); c.id = this.id; c.folder = this.folder; return c; }
+}
+
+// Version 1 files were saved when the plain resistor, capacitor and inductor were ideal by
+// default; they now have real ratings (¼ W, 50 V, 2 A). A circuit saved before keeps working as
+// it did: its parts get "Ideal" written in.
+const V1_IDEAL = { resistor: { pw: '0' }, capacitor: { vr: '0' }, inductor: { irate: '0' }, varind: { irate: '0' } };
+function migrateV1(eo) {
+  const add = eo && V1_IDEAL[eo.t];
+  if (!add) return eo;
+  return { ...eo, p: { ...add, ...(eo.p || {}) } };
 }
 
 /** Serialise a selection (elements + wires) for copy/paste. */

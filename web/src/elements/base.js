@@ -12,6 +12,7 @@ const LIMITS = new Map();
  */
 export function setLimits(type, fn) { LIMITS.set(type, fn); }
 export function hasLimits(type) { return LIMITS.has(type); }
+export function getLimits(type) { return LIMITS.get(type); }
 export function register(cls) {
   if (REGISTRY.has(cls.type)) throw new Error(`duplicate component type '${cls.type}'`); // a second part must never silently replace the first
   REGISTRY.set(cls.type, cls);
@@ -187,6 +188,7 @@ export class Element {
    *  irms — RMS current at the given pins (A);  vrms — RMS voltage across a pin pair (V)
    *  vpk  — instantaneous voltage across a pin pair ('span' = between any two pins)
    *  cfg  — a setting that destroys it at power-up (logic VDD 12 V, op-amp on ±25 V…)
+   *  vpin — any pin against ground outside lo … hi (a chip's pins beyond its supply rails)
    * Models: 'life' — wear accumulates at 1 / (T2·(2/r)^m) per second of the thermal clock above
    * the rating (r = value / rating, T2 = life at twice the rating), as semiconductors and LEDs age;
    * 'therm' — first-order heating (time constant tau) failing at lim × the rating, as windings
@@ -197,7 +199,7 @@ export class Element {
     if (!spec || s.mode === 'dc') return;
     const R = spec.rules, n = R.length, N = this.nodes, I = this.postCurrents;
     let st = this._lim;
-    if (!st || st.w.length !== n) st = this._lim = { q: new Float64Array(n), f: new Float64Array(n), w: new Float64Array(n), t: new Float64Array(n) };
+    if (!st || st.w.length !== n) st = this._lim = { q: new Float64Array(n), f: new Float64Array(n), w: new Float64Array(n), t: new Float64Array(n), h: R.map(() => ({ ft: 0 })) };
     const dt = s.dt, hdt = s.heatDt(), aq = Math.min(1, dt / Math.max(0.02, s.acPeriod || 0)), af = Math.min(1, dt / 1e-3);
     const v = (k) => (k === 'g' ? 0 : s.v(N[k]));
     let stress = 0;
@@ -207,6 +209,15 @@ export class Element {
       if (r.q === 'cfg') {
         const msg = r.fn(this);
         if (msg) return this.fail(s, msg, r.fail ?? spec.fail, spec);
+        continue;
+      }
+      if (r.q === 'vpin') {
+        // every pin against ground: beyond lo … hi the input-protection diodes and the
+        // junctions behind them burn
+        let worst = 0, u0 = 0;
+        for (let k = 0; k < N.length; k++) { const u = v(k), d = Math.max(u - r.hi, r.lo - u); if (d > worst) { worst = d; u0 = u; } }
+        st.t[j] = worst > 0 ? st.t[j] + dt : 0;
+        if (st.t[j] >= (r.tf ?? 1e-3)) return this.fail(s, r.why ? r.why(u0, this) : `Destroyed — ${fmtShort(u0, 'V')} on a pin (it allows ${fmtShort(r.lo, 'V')} … ${fmtShort(r.hi, 'V')})`, r.fail ?? spec.fail, spec);
         continue;
       }
       if (r.q === 'pd') {
@@ -238,7 +249,7 @@ export class Element {
         // fault currents (≥ 8 × rating) heat in circuit time, so a breaker clearing a short in
         // milliseconds still protects the switches and meters in its path (see heatDtAt). A battery
         // heats itself: nothing upstream can clear its fault, so it always uses the thermal clock.
-        st.w[j] += (ratio * ratio - st.w[j]) * Math.min(1, (r.selfHeat ? hdt : s.heatDtAt(ratio)) / (r.tau || 30));
+        st.w[j] += (ratio * ratio - st.w[j]) * Math.min(1, (r.selfHeat ? hdt : s.heatDtAt(ratio, st.h[j])) / (r.tau || 30));
         const lim = (r.lim || 1.5) ** 2;
         stress = Math.max(stress, Math.min(1, Math.max(0, (st.w[j] - 1) / (lim - 1))));
         if (st.w[j] >= lim) return this.fail(s, this.limitWhy(r, slow), r.fail ?? spec.fail, spec);
@@ -258,6 +269,7 @@ export class Element {
     const out = [];
     for (const r of spec.rules) {
       if (r.q === 'cfg') { if (r.label) out.push(r.label); continue; }
+      if (r.q === 'vpin') { out.push(`Pins ${fmtShort(r.lo, 'V')} … ${fmtShort(r.hi, 'V')}`); continue; }
       if (r.q === 'pd') out.push(`Power ${fmtShort(r.rated, 'W')}`);
       else if (r.q === 'irms') out.push(`Current ${fmtShort(r.rated, 'A')}`);
       else if (r.q === 'vrms') out.push(`Voltage ${fmtShort(r.rated, 'V')} RMS`);

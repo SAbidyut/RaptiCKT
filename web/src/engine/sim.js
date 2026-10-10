@@ -70,14 +70,23 @@ export class Simulator {
   /**
    * Heat clock for a part carrying `ratio` × its rated current: overloads (≤ 3×) heat on the
    * thermal clock; fault currents (≥ 8×) heat in simulated time, so a breaker or fuse that
-   * clears a short circuit in a few milliseconds still protects the cable behind it.
+   * clears a short circuit in a few milliseconds (or an ACB after its short-time delay) still
+   * protects the cable behind it. A fault that nothing clears must not take minutes on screen,
+   * though: once it has lasted faultWindow() of circuit time, `h` (the part's own state, which
+   * remembers how long its fault has lasted) moves it onto the thermal clock, so an unprotected
+   * short burns the wire or part in about real time.
    */
-  heatDtAt(ratio) {
+  heatDtAt(ratio, h) {
     const k = this.heatScale || 1;
+    if (h) h.ft = ratio > 3 ? (h.ft || 0) + this.dt : Math.max(0, (h.ft || 0) - this.dt);
     if (k <= 1 || ratio <= 3) return this.dt * k;
+    if (h && h.ft > this.faultWindow()) return this.dt * k;
     if (ratio >= 8) return this.dt;
     return this.dt * Math.pow(k, (8 - ratio) / 5);
   }
+
+  /** Circuit time a fault heats in simulated time before the thermal clock takes over (s). */
+  faultWindow() { return Math.max(0.02, Math.min(0.25, 6 / (this.heatScale || 1))); }
 
   // ------------------------------------------------------------------ build
   /**

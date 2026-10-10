@@ -191,7 +191,7 @@ export class PolyFuse extends TwoTerm {
     { key: 'tau', label: 'Thermal time constant', unit: 's', def: 0.5, min: 1e-3, max: 100, log: true },
   ];
   static description = 'Polymer PTC fuse: self-heating raises its resistance by orders of magnitude above the trip current (≈2·Ihold); it resets once the fault is removed and it cools.';
-  reset() { this.T = 25; this.R = this.p.r0; this.setCurrent(0); }
+  reset() { this.T = 25; this.R = this.p.r0; this.ft = 0; this.setCurrent(0); }
   resist(T) { return this.p.r0 * (1 + 2e4 / (1 + Math.exp(-(T - 125) / 4))); }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1 / (this.R ?? this.p.r0)); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / (this.R ?? this.p.r0)); }
@@ -201,7 +201,7 @@ export class PolyFuse extends TwoTerm {
     if (s.mode === 'dc') return;
     // thermal resistance chosen so 1.5·Ihold heats it to the 125 °C switching point
     const rth = 100 / (2.25 * this.p.ih * this.p.ih * this.p.r0), cth = this.p.tau / rth;
-    const dt = s.heatDtAt(Math.abs(i) / (2 * this.p.ih));
+    const dt = s.heatDtAt(Math.abs(i) / (2 * this.p.ih), this);
     this.T += ((v * i - (this.T - 25) / rth) / cth) * dt;
     this.T = Math.min(400, Math.max(25, this.T));
     const R = this.resist(this.T);

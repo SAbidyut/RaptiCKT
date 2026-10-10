@@ -14,6 +14,7 @@ function net() {
   const el = (type, nodes, p = {}) => {
     const e = new (getType(type))(0, 0);
     Object.assign(e.p, p);
+    if (type === 'resistor' && p.pw === undefined) e.p.pw = '0'; // test loads stay ideal (a new resistor is ¼ W)
     e.nodes = nodes; e.name = type + els.length;
     e.onParamChange?.();
     els.push(e);

@@ -140,7 +140,7 @@ test('cable: R = ρL/A at temperature, voltage drop reading', () => {
 });
 
 test('net labels connect posts with the same name', () => {
-  const mk = (t, x, y, p = {}) => { const C = getType(t), e = new C(x, y); Object.assign(e.p, p); e.name = t; return e; };
+  const mk = (t, x, y, p = {}) => { const C = getType(t), e = new C(x, y); Object.assign(e.p, p); if (t === 'resistor' && p.pw === undefined) e.p.pw = '0'; e.name = t; return e; };
   // battery at (100,100): + post (60,100), − post (140,100); resistor at (300,100): (260,100)-(340,100)
   const els = [mk('dcv', 100, 100, { amp: 9 }), mk('resistor', 300, 100, { r: 1000 }), mk('netlabel', 80, 100, { name: 'VCC' }), mk('netlabel', 280, 100, { name: 'VCC' }),
     mk('ground', 140, 100), mk('ground', 340, 100)];

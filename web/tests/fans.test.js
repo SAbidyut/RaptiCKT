@@ -10,6 +10,7 @@ function net() {
   const el = (type, nodes, p = {}) => {
     const e = new (getType(type))(0, 0);
     Object.assign(e.p, p);
+    if (type === 'resistor' && p.pw === undefined) e.p.pw = '0'; // test loads stay ideal (a new resistor is ¼ W)
     e.nodes = nodes; e.name = type + els.length;
     e.onParamChange?.();
     els.push(e);
@@ -95,7 +96,7 @@ test('a 230 V capacitor-run motor burns on 500 V but runs for good at 230 V', ()
     const { el, run } = net();
     el('mains', [1, 0], { vrms: v });
     const m = el('im1', [1, 2, 0]);
-    el('capacitor', [1, 2], { c: 10e-6 });
+    el('capacitor', [1, 2], { c: 10e-6, vr: '450' }); // a motor-run capacitor
     run(1.5, 5e-5, { scale: 25 });
     assert.equal(!!m.damaged, burns, `${v} V: ${m.damaged?.why}`);
   }

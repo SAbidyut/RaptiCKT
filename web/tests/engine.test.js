@@ -9,6 +9,7 @@ function mk(type, nodes, props = {}) {
   assert.ok(C, 'unknown type ' + type);
   const e = new C(0, 0);
   Object.assign(e.p, props);
+  if (type === 'resistor' && props.pw === undefined) e.p.pw = '0'; // test loads stay ideal (a new resistor is ¼ W)
   e.onParamChange();
   e.nodes = nodes;
   e.name = type;
