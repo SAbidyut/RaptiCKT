@@ -110,6 +110,13 @@ function drawWaveGlyph(g, wave, r, color) {
   ctx.strokeStyle = color; ctx.lineWidth = g.lw * 0.8; ctx.lineJoin = 'round'; ctx.stroke();
 }
 
+// A source whose terminals a wire joins (shorted) has nothing but its internal resistance to
+// limit the current. An ideal one would make the circuit unsolvable; a real one drives a huge
+// current that burns the wire — so a shorted source gets at least this much (Ω).
+export const SHORT_RINT = 1e-3;
+/** internal resistance of a source between nodes a and b */
+export const rintOf = (rint, a, b) => (a === b ? Math.max(rint || 0, SHORT_RINT) : rint || 0);
+
 // ------------------------------------------------------------- voltage source
 export class VoltageSource extends TwoTerm {
   static type = 'dcv'; static title = 'DC Voltage'; static category = 'Sources';
@@ -128,7 +135,8 @@ export class VoltageSource extends TwoTerm {
     const k = this.branches[0], [a, b] = this.nodes;
     s.addBranchKCL(a, b, k);
     s.addA(k, a - 1, 1); s.addA(k, b - 1, -1);
-    if (this.p.rint > 0) s.addA(k, k, -this.p.rint);
+    const r = rintOf(this.p.rint, a, b);
+    if (r > 0) s.addA(k, k, -r);
   }
   stampStep(s) {
     if (this.p.wave === 'noise' && s.mode !== 'dc') this.noiseVal = gaussian();
@@ -146,7 +154,8 @@ export class VoltageSource extends TwoTerm {
     const k = this.branches[0], [a, b] = this.nodes;
     ac.addBranchKCL(a, b, k);
     ac.addA(k, a - 1, 1); ac.addA(k, b - 1, -1);
-    if (this.p.rint > 0) ac.addA(k, k, -this.p.rint);
+    const r = rintOf(this.p.rint, a, b);
+    if (r > 0) ac.addA(k, k, -r);
     if (ac.input === this) ac.addB(k, 1);
   }
   readings(s) {
@@ -265,7 +274,7 @@ export class Rail extends Element {
   connectivity() { return [[0, 'gnd']]; }
   branchCount() { return 1; }
   reset() { this.i = 0; this.postCurrents[0] = 0; this.lastLevel = null; }
-  stamp(s) { const k = this.branches[0]; s.addBranchKCL(this.nodes[0], 0, k); s.addA(k, this.nodes[0] - 1, 1); }
+  stamp(s) { const k = this.branches[0]; s.addBranchKCL(this.nodes[0], 0, k); s.addA(k, this.nodes[0] - 1, 1); if (this.nodes[0] === 0) s.addA(k, k, -SHORT_RINT); }
   stampStep(s) {
     if (this.p.wave === 'noise' && s.mode !== 'dc') this.noiseVal = gaussian();
     s.b[this.branches[0]] += waveValue(this.p, s.mode === 'dc' ? 0 : s.tNext, this) * (s.srcScale ?? 1);

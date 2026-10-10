@@ -9,21 +9,28 @@ import { fmtShort } from '../engine/units.js';
 
 const G = GRID;
 const EXPMAX = 80;
+/**
+ * Above ≈100 A a junction's bulk resistance dominates: the exponential continues as a straight
+ * line of the same slope. A diode, zener or transistor put straight across a supply then draws
+ * a huge but finite current — and burns out — instead of breaking the solver.
+ */
+const IKNEE = 100;
+const xKnee = (is) => Math.min(EXPMAX, Math.log(IKNEE / Math.max(is, 1e-300)));
 
-function safeExp(x) {
-  if (x > EXPMAX) { const e = Math.exp(EXPMAX); return { e: e * (1 + x - EXPMAX), d: e }; }
+function safeExp(x, xmax = EXPMAX) {
+  if (x > xmax) { const e = Math.exp(xmax); return { e: e * (1 + x - xmax), d: e }; }
   const e = Math.exp(x); return { e, d: e };
 }
 
 /** Diode current & conductance. v: junction voltage. */
 export function diodeIV(v, is, n, bv, ibv = 1e-3) {
   const nvt = n * VT;
-  const f = safeExp(v / nvt);
+  const f = safeExp(v / nvt, xKnee(is));
   let i = is * (f.e - 1), g = (is * f.d) / nvt;
   if (bv > 0) {
     // reverse breakdown: exponential knee scaled so I(-bv) = ibv
     const nvb = VT;
-    const r = safeExp((-v - bv) / nvb);
+    const r = safeExp((-v - bv) / nvb, xKnee(ibv));
     i -= ibv * r.e;
     g += (ibv * r.d) / nvb;
   }
@@ -174,7 +181,12 @@ export class LED extends Diode {
     if (this.j) this.j.set(this.p.is, this.p.n, 0); else this.j = new Junction(this.p.is, this.p.n, 0);
   }
   constructor(x, y) { super(x, y); this.onParamChange(); }
-  reset() { super.reset(); this.ifast = 0; }
+  reset() { super.reset(); this.ifast = 0; this.wear = 0; }
+  /**
+   * LED life against current (life consumption, Miner's rule): an hour at twice the rated
+   * current, ≈1.5 min at 3×, ≈1 s at 5×, gone at once above 10×. Lasers are far more fragile.
+   */
+  static lifeT2 = 3600; static lifeM = 8.8; static lifeInst = 10;
   /**
    * Above 5 × its rated current the die's bulk resistance takes over: the exponential
    * continues as a straight line of the same slope (Rs = nVt / 5·Imax). An LED put straight
@@ -203,13 +215,13 @@ export class LED extends Diode {
     this.gd = g; this.j.vd = v;
     this.setCurrent(i);
     if (s.mode === 'dc') return;
-    // the die heats in milliseconds: far over its rating it dies at once, a moderate overload
-    // within seconds (most LEDs are rated 20 mA continuous, about 30 mA absolute maximum)
-    const r = Math.max(0, this.i) / this.p.imax;
-    this.ifast = (this.ifast || 0) + (r - (this.ifast || 0)) * Math.min(1, s.dt / 0.005);
-    const slow = this.heatAvg(s, r, 2);
-    this.stress = Math.max(0, Math.min(1, (slow - 1.3) / 1.2));
-    if (this.ifast > 10 || slow > 2.5) this.setDamage(s, `Burnt out — ${fmtShort(Math.max(this.i, slow * this.p.imax), 'A')} through an LED rated ${fmtShort(this.p.imax, 'A')} (use a series resistor)`);
+    // the die heats within milliseconds (1 ms average of the current)
+    const C = this.constructor, r = Math.max(0, this.i) / this.p.imax;
+    this.ifast = (this.ifast || 0) + (r - (this.ifast || 0)) * Math.min(1, s.dt / 1e-3);
+    const rf = this.ifast;
+    if (rf > 1) this.wear = (this.wear || 0) + s.heatDt() / (C.lifeT2 * Math.pow(2 / rf, C.lifeM));
+    this.stress = Math.min(1, this.wear || 0);
+    if (rf > C.lifeInst || this.wear >= 1) this.setDamage(s, `Burnt out — ${fmtShort(rf * this.p.imax, 'A')} through ${C.type === 'laser' ? 'a laser diode' : 'an LED'} rated ${fmtShort(this.p.imax, 'A')} (use a series resistor)`);
   }
   valueLabel() { return ''; }
   spice(n) { return `${this.name} ${n[0]} ${n[1]} D${this.name}\n.model D${this.name} D(Is=${this.p.is.toExponential(3)} N=${this.p.n})`; }
@@ -290,7 +302,7 @@ export class NPN extends Element {
   evalAt(vbe, vbc) {
     const { is, bf, br, va } = this.p;
     const gmin = 1e-12;
-    const fe = safeExp(vbe / VT), fc = safeExp(vbc / VT);
+    const xk = xKnee(this.p.is), fe = safeExp(vbe / VT, xk), fc = safeExp(vbc / VT, xk);
     const kq = va > 0 ? Math.max(0.05, 1 - vbc / va) : 1;
     const ict = is * (fe.e - fc.e) * kq;
     const dict_dbe = (is / VT) * fe.d * kq;

@@ -74,10 +74,14 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           ls -la out
 
+      # The release below is where the APK is downloaded from; a full Actions storage
+      # quota must not stop it from being published.
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: RaptiCKT-apk-build${{ github.run_number }}
           path: out/*.apk
+          retention-days: 3
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

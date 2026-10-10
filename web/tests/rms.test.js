@@ -9,7 +9,7 @@ import { RmsTracker, acFrequency } from '../src/ui/rms.js';
 function build(parts) {
   const els = parts.map(([type, nodes, p = {}], i) => {
     const e = new (getType(type))(0, 0);
-    Object.assign(e.p, p); e.nodes = nodes; e.name = type + i; e.onParamChange?.();
+    Object.assign(e.p, p); if (type === 'resistor' && p.pw === undefined) e.p.pw = '0'; e.nodes = nodes; e.name = type + i; e.onParamChange?.();
     return e;
   });
   const sim = new Simulator().buildNet(els);

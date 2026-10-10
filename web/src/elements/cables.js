@@ -125,7 +125,7 @@ export class CableHeat {
     this.C = mat.cv * area; // J/(K·m)
     this.h = (iz * iz * r20 * (1 + mat.alpha * (ins.tmax - 20))) / (ins.tmax - AMBIENT); // W/(K·m)
   }
-  reset() { this.T = AMBIENT; this.i2 = 0; this.fireT = 0; this.state = 'ok'; this.why = ''; }
+  reset() { this.T = AMBIENT; this.i2 = 0; this.fireT = 0; this.state = 'ok'; this.why = ''; this.ft = 0; }
   /** resistance per metre at the present temperature */
   r() { const { mat, r20 } = this.info; return r20 * (1 + mat.alpha * (Math.min(this.T, mat.melt) - 20)); }
   get irms() { return Math.sqrt(this.i2); }
@@ -137,7 +137,7 @@ export class CableHeat {
     if (s.mode === 'dc') return false;
     this.i2 += (i * i - this.i2) * Math.min(1, s.dt / Math.max(0.02, s.acPeriod || 0.02));
     const { mat, ins, iz } = this.info;
-    const dt = s.heatDtAt(Math.abs(i) / iz);
+    const dt = s.heatDtAt(Math.abs(i) / iz, this);
     // implicit in the cooling term, so long thermal-clock steps stay stable
     this.T = (this.T + (dt / this.C) * (i * i * this.r() + this.h * AMBIENT)) / (1 + (dt * this.h) / this.C);
     let st = this.T > ins.tfire ? 'fire' : this.T > ins.tsc ? 'hot' : this.T > ins.tmax + 0.5 ? 'warm' : 'ok';

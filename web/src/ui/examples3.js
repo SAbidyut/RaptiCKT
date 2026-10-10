@@ -25,7 +25,7 @@ const PBNC = (label, where) => part('pushnc', {}, label, where);
 const ES = () => part('estop', {}, 'E-STOP', 'high');
 const SW = (label, closed = false, where) => part('switch', { closed }, label, where);
 const COIL = (tag) => part('lcoil', { tag });
-const LAMP = (label) => part('neon', {}, label, 'left');
+const LAMP = (label) => part('neon', { rb: 150e3 }, label, 'left'); // panel pilot lamp: resistor built in
 const TMR = (tag, p) => part('ltimer', { tag, ...p });
 const DC = { vcoil: 24, ac: false, rcoil: 300, lcoil: 0.2 };
 const DCOIL = (tag) => part('lcoil', { tag, ...DC });

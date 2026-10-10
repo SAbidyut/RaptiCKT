@@ -4,7 +4,7 @@
 // earth / chassis grounds.
 
 import { Element, TwoTerm, register, GRID } from './base.js';
-import { VoltageSource } from './sources.js';
+import { VoltageSource, rintOf } from './sources.js';
 import { Ground } from './passive.js';
 import { SolarCell } from './sensors.js';
 import { exprFn } from './kit.js';
@@ -345,7 +345,8 @@ export class DualPSU extends Element {
     const [p, c, m] = this.nodes, [k1, k2] = this.branches;
     for (const [a, b, k] of [[p, c, k1], [c, m, k2]]) {
       s.addBranchKCL(a, b, k); s.addA(k, a - 1, 1); s.addA(k, b - 1, -1);
-      if (this.p.rint > 0) s.addA(k, k, -this.p.rint);
+      const r = rintOf(this.p.rint, a, b);
+      if (r > 0) s.addA(k, k, -r);
     }
   }
   stampStep(s) { for (const k of this.branches) s.b[k] += this.p.v * (s.srcScale ?? 1); }
@@ -357,7 +358,8 @@ export class DualPSU extends Element {
     const [p, c, m] = this.nodes, [k1, k2] = this.branches;
     for (const [a, b, k] of [[p, c, k1], [c, m, k2]]) {
       ac.addBranchKCL(a, b, k); ac.addA(k, a - 1, 1); ac.addA(k, b - 1, -1);
-      if (this.p.rint > 0) ac.addA(k, k, -this.p.rint);
+      const r = rintOf(this.p.rint, a, b);
+      if (r > 0) ac.addA(k, k, -r);
     }
   }
   readings(s) {

@@ -286,6 +286,7 @@ test('BMS: over-current trip/release, over-discharge latch released by a charger
   near(load.i, 3.78 / 10.05, 0.02, 'normal discharge');
   // over-discharge: weak, nearly empty cell
   const b = net([['liion', [1, 0], { soc: 1, rint: 0.5, ah: 1e-5 }], ['bms', [1, 0, 2, 3]], ['resistor', [2, 3], { r: 1 }], ['dcv', [4, 3], { amp: 0 }], ['resistor', [2, 4], { r: 1 }]]);
+  b.sim.damageOn = false; // a 10 µAh cell (to empty it quickly) at 1 A is far beyond any real C-rate
   assert.ok(b.sim.start(), b.sim.error);
   run(b.sim, 0.05, 1e-5);
   assert.equal(b.els[1].why, 'over-discharge');
@@ -304,6 +305,7 @@ test('BMS: over-current trip/release, over-discharge latch released by a charger
 test('CC-CV charger: constant current, constant voltage, termination', () => {
   const { sim, els } = net([['dcv', [1, 0], { amp: 5 }], ['cccv', [1, 0, 2], { icc: 1 }], ['liion', [2, 0], { soc: 20, ah: 0.001, rint: 0.05 }]]);
   const [, ch, cell] = els;
+  sim.damageOn = false; // a 1 mAh cell (to charge it quickly) at 1 A is far beyond any real C-rate
   assert.ok(sim.start(), sim.error);
   run(sim, 0.1, 1e-3);
   assert.equal(ch.st, 'cc');

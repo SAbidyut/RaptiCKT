@@ -157,6 +157,7 @@ export class Composite extends Element {
       e.inodes = this.inodes.slice(ni, ni + ci); ni += ci;
       e.branches = this.branches.slice(bi, bi + cb); bi += cb;
       e.name = this.name;
+      e.owner = this;
     }
   }
   reset(s) { this.wire(); this.sync(); for (const x of this.subs) x.el.reset?.(s); this.postCurrents.fill(0); this.i = 0; }

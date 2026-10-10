@@ -5,6 +5,9 @@
 
 import { RealLU, complexSolve } from './matrix.js';
 
+/** A part destroyed by a broken rating (elements/base.js checkLimits): only its remains are stamped. */
+const dead = (e) => !!(e.damaged && e.damaged.fail);
+
 export const DEFAULT_OPTIONS = {
   method: 'trap',        // 'trap' | 'be'
   reltol: 1e-3,        // SPICE default
@@ -67,14 +70,23 @@ export class Simulator {
   /**
    * Heat clock for a part carrying `ratio` × its rated current: overloads (≤ 3×) heat on the
    * thermal clock; fault currents (≥ 8×) heat in simulated time, so a breaker or fuse that
-   * clears a short circuit in a few milliseconds still protects the cable behind it.
+   * clears a short circuit in a few milliseconds (or an ACB after its short-time delay) still
+   * protects the cable behind it. A fault that nothing clears must not take minutes on screen,
+   * though: once it has lasted faultWindow() of circuit time, `h` (the part's own state, which
+   * remembers how long its fault has lasted) moves it onto the thermal clock, so an unprotected
+   * short burns the wire or part in about real time.
    */
-  heatDtAt(ratio) {
+  heatDtAt(ratio, h) {
     const k = this.heatScale || 1;
+    if (h) h.ft = ratio > 3 ? (h.ft || 0) + this.dt : Math.max(0, (h.ft || 0) - this.dt);
     if (k <= 1 || ratio <= 3) return this.dt * k;
+    if (h && h.ft > this.faultWindow()) return this.dt * k;
     if (ratio >= 8) return this.dt;
     return this.dt * Math.pow(k, (8 - ratio) / 5);
   }
+
+  /** Circuit time a fault heats in simulated time before the thermal clock takes over (s). */
+  faultWindow() { return Math.max(0.02, Math.min(0.25, 6 / (this.heatScale || 1))); }
 
   // ------------------------------------------------------------------ build
   /**
@@ -219,6 +231,8 @@ export class Simulator {
     this.externalNodes = externalNodes;
     this.findIslands();
     this.nonlinear = elements.filter((e) => e.nonlinear);
+    // parts with ratings: checked after every step (see Element.checkLimits)
+    this.monitored = elements.filter((e) => e.ratings && e.ratings());
     this.A = new Float64Array(m * m);
     this.Alin = new Float64Array(m * m);
     this.b = new Float64Array(m);
@@ -328,7 +342,7 @@ export class Simulator {
     const gmin = this.opt.gmin + (this.extraGmin || 0);
     for (let i = 1; i < n; i++) this.A[(i - 1) * this.size + (i - 1)] += gmin;
     for (const nd of this.groundTies) this.addG(nd, 0, 1);
-    for (const e of this.elements) if (e.stamp) e.stamp(this);
+    for (const e of this.elements) { if (dead(e)) this.stampDead(e); else if (e.stamp) e.stamp(this); }
     this.Alin.set(this.A);
     this.linFactored = false;
     this.dirty = false;
@@ -336,7 +350,7 @@ export class Simulator {
 
   buildStepRHS() {
     this.b.fill(0);
-    for (const e of this.elements) if (e.stampStep) e.stampStep(this);
+    for (const e of this.elements) if (e.stampStep && !dead(e)) e.stampStep(this);
     this.bStep.set(this.b);
   }
 
@@ -361,7 +375,7 @@ export class Simulator {
       this.A.set(this.Alin);
       this.b.set(this.bStep);
       this.limited = false;
-      for (const e of this.nonlinear) e.stampNL(this);
+      for (const e of this.nonlinear) if (!dead(e)) e.stampNL(this);
       if (!this.lu.factor(this.A)) return this.singular();
       this.lu.solveRefined(this.A, this.b, xn, 2);
       let conv = !this.limited && it > 0;
@@ -387,7 +401,7 @@ export class Simulator {
     this.A.set(this.Alin);
     this.b.set(this.bStep);
     this.limited = false;
-    for (const e of this.nonlinear) e.stampNL(this);
+    for (const e of this.nonlinear) if (!dead(e)) e.stampNL(this);
     if (this.limited) return false;
     for (let i = 0; i < m; i++) {
       let r = -b[i], scale = Math.abs(b[i]);
@@ -446,7 +460,7 @@ export class Simulator {
     this.x.fill(0);
     this.xPrev.fill(0);
     this.beSteps = 0;
-    for (const e of this.elements) { e._hav = 0; e.stress = 0; if (e.reset) e.reset(this); }
+    for (const e of this.elements) { e._hav = 0; e._lim = null; e.stress = 0; if (e.reset) e.reset(this); }
     this.damageLog = [];
     this.dirty = true;
   }
@@ -458,7 +472,7 @@ export class Simulator {
     this.srcScale = 1;
     let ok = false;
     for (let pass = 0; pass < 8; pass++) {
-      for (const e of this.elements) if (e.preStep) e.preStep(this);
+      for (const e of this.elements) if (e.preStep && !dead(e)) e.preStep(this);
       if (this.dirty) this.buildLinear();
       ok = this.solvePoint(this.opt.dcMaxIter);
       if (!ok && !this.fatal) ok = this.gminStepping();
@@ -467,13 +481,13 @@ export class Simulator {
       // settle digital states that depend on the solution
       let changed = false;
       if (pass < 3) {
-        for (const e of this.elements) if (e.digitalSettle && e.digitalSettle(this)) changed = true;
+        for (const e of this.elements) if (e.digitalSettle && !dead(e) && e.digitalSettle(this)) changed = true;
       } else {
         // Updating every gate at once never settles a symmetric feedback loop (a NOR latch
         // flips 11 → 00 → 11 … forever). Settle one element at a time, re-solving after each
         // change, so the loop falls into one of its stable states like a real circuit does.
         for (const e of this.elements) {
-          if (!e.digitalSettle || !e.digitalSettle(this)) continue;
+          if (!e.digitalSettle || dead(e) || !e.digitalSettle(this)) continue;
           changed = true;
           this.dirty = true;
           ok = this.solvePoint(this.opt.dcMaxIter);
@@ -484,7 +498,7 @@ export class Simulator {
       if (!changed) break;
     }
     if (ok) {
-      for (const e of this.elements) if (e.accept) e.accept(this);
+      this.acceptAll();
       this.xPrev.set(this.x);
     }
     this.mode = 'tran';
@@ -552,7 +566,7 @@ export class Simulator {
     if (method !== this.curMethod) { this.curMethod = method; this.dirty = true; }
     this.method = method;
     this.tNext = this.t + dt;
-    for (const e of this.elements) if (e.preStep) e.preStep(this);
+    for (const e of this.elements) if (e.preStep && !dead(e)) e.preStep(this);
     this.x.set(this.xPrev);
     const ok = this.solvePoint(this.opt.maxIter);
     if (!ok) {
@@ -570,7 +584,9 @@ export class Simulator {
     }
     this.t += dt;
     this.event = false;
-    for (const e of this.elements) if (e.accept) e.accept(this);
+    this.acceptAll();
+    if (this.limitsStale) { this.limitsStale = false; this.monitored = this.elements.filter((e) => e.ratings && e.ratings()); }
+    if (this.damageOn !== false) for (const e of this.monitored) if (!e.damaged) e.checkLimits(this);
     if (method === 'trap') this.watchRinging(); else if (this.zig) this.zig.fill(0);
     this.xPrev.set(this.x);
     if (this.beSteps > 0) this.beSteps--;
@@ -607,7 +623,24 @@ export class Simulator {
    * markEvent, the next steps use backward Euler: the trapezoidal rule never damps an
    * inductor whose current was just cut, so it would ring at ±kV from step to step forever.
    */
-  discontinuity() { this.dirty = true; this.beSteps = Math.max(this.beSteps || 0, 2); }
+  discontinuity() { this.dirty = true; this.limitsStale = true; this.beSteps = Math.max(this.beSteps || 0, 2); }
+
+  acceptAll() { for (const e of this.elements) { if (dead(e)) this.acceptDead(e); else if (e.accept) e.accept(this); } }
+
+  /** What is left of a destroyed part: open (its branches carry nothing) or shorted pin pairs. */
+  stampDead(e) {
+    for (const k of e.branches) this.addA(k, k, 1);
+    for (const [a, b, r] of e.damaged.fail) this.addG(e.nodes[a] ?? 0, e.nodes[b] ?? 0, 1 / r);
+  }
+  acceptDead(e) {
+    if (e.postCurrents && e.postCurrents.fill) e.postCurrents.fill(0);
+    e.i = 0;
+    for (const [a, b, r] of e.damaged.fail) {
+      const i = (this.v(e.nodes[a] ?? 0) - this.v(e.nodes[b] ?? 0)) / r;
+      if (e.postCurrents) { e.postCurrents[a] = (e.postCurrents[a] || 0) + i; e.postCurrents[b] = (e.postCurrents[b] || 0) - i; }
+      if (!e.i) e.i = i;
+    }
+  }
 
   nodeVoltage(node) { return node > 0 && node < this.nodeCount ? this.x[node - 1] : 0; }
 
@@ -672,7 +705,7 @@ export class Simulator {
     for (let k = 1; k < this.nodeCount; k++) re[(k - 1) * m + (k - 1)] += this.opt.gmin;
     for (const nd of this.groundTies) ac.addY(nd, 0, 1);
     for (const e of this.elements) {
-      if (e.stampAC) e.stampAC(ac);
+      if (dead(e)) { for (const k of e.branches || []) ac.addA(k, k, 1); for (const [a, b, r] of e.damaged.fail) ac.addY(e.nodes[a] ?? 0, e.nodes[b] ?? 0, 1 / r); } else if (e.stampAC) e.stampAC(ac);
       else for (const k of e.branches || []) ac.addA(k, k, 1); // no small-signal model: branch treated as open
     }
     if (extra) extra(ac);
@@ -691,11 +724,11 @@ export class Simulator {
       this.mode = 'dc';
       this.dirty = true;
       this.srcScale = 1;
-      for (const e of this.elements) if (e.preStep) e.preStep(this);
+      for (const e of this.elements) if (e.preStep && !dead(e)) e.preStep(this);
       let ok = this.solvePoint(this.opt.dcMaxIter);
       if (!ok && !this.fatal) ok = this.gminStepping();
       if (!ok) { out.push({ x: val, y: NaN }); this.error = null; continue; }
-      for (const e of this.elements) if (e.accept) e.accept(this);
+      this.acceptAll();
       out.push({ x: val, y: probe(this) });
     }
     el.p[param] = orig;

@@ -314,8 +314,11 @@ class CPLoad extends TwoTerm {
 export class CFL extends Composite {
   static type = 'cfl'; static title = 'CFL (energy-saving lamp)'; static category = 'Electrical';
   static prefix = 'LP'; static keywords = 'cfl compact fluorescent lamp energy saving bulb electronic ballast power factor harmonics';
-  static props = [{ key: 'w', label: 'Rated power', unit: 'W', def: 15, min: 3, max: 100, knob: true }];
-  static description = 'Compact fluorescent lamp with an electronic ballast: a bridge rectifier charges a small reservoir capacitor, so mains current flows only in short peaks near the voltage maxima (power factor ≈0.6, rich in harmonics) while the ballast takes constant power. ≈60 lm/W.';
+  static props = [
+    { key: 'w', label: 'Rated power', unit: 'W', def: 15, min: 3, max: 100, knob: true },
+    { key: 'v', label: 'Rated voltage (RMS)', unit: 'V', def: 230, min: 100, max: 277 },
+  ];
+  static description = 'Compact fluorescent lamp with an electronic ballast: a bridge rectifier charges a small reservoir capacitor, so mains current flows only in short peaks near the voltage maxima (power factor ≈0.6, rich in harmonics) while the ballast takes constant power. ≈60 lm/W. The ballast is built for its rated voltage: well above it the reservoir capacitor and switching transistors overheat and the lamp burns out (far above it, the capacitor bursts at once) and stays dead until replaced.';
   ownInternal() { return 3; }
   parts() {
     const BR = getType('bridge'), cp = new CPLoad();
@@ -325,6 +328,7 @@ export class CFL extends Composite {
     if (!this.subs) return;
     const [r, , c, cp] = this.subs.map((s) => s.el);
     r.p.r = 20; c.p.c = (this.p.w / 15) * 4.7e-6; cp.pw = this.p.w / 0.9; cp.vmin = 60;
+    r.damaged = this.damaged ? { why: this.damaged.why } : null; // a burnt-out lamp is an open circuit
   }
   connectivity() { return null; }
   localPosts() { return [[-2 * G, 0], [2 * G, 0]]; }
@@ -336,12 +340,27 @@ export class CFL extends Composite {
     if (s.mode === 'dc') return;
     const v = s.v(this.nodes[0]) - s.v(this.nodes[1]), i = this.postCurrents[0];
     this.pin.push(v * i, s.dt); this.i2.push(i * i, s.dt); this.v2.push(v * v, s.dt);
+    if (this.damaged) return;
+    // the reservoir capacitor is rated for about 1.4 × the rated peak (400 V on 230 V mains):
+    // twice the rated peak bursts it at once
+    const vc = Math.abs(s.v(this.inodes[1]) - s.v(this.inodes[2])), vpk = this.p.v * Math.SQRT2;
+    const vrms = Math.sqrt(Math.max(0, this.v2.v)), irms = Math.sqrt(Math.max(0, this.i2.v));
+    if (vc > 2 * vpk) { this.fail(s, `Ballast capacitor burst — over-voltage: ${fmtShort(vc, 'V')} on a capacitor built for about ${fmtShort(1.4 * vpk, 'V')} (${fmtShort(this.p.v, 'V')} lamp)`); return; }
+    // ballast temperature follows the power it takes and the voltage stress on its parts
+    const over = this.heatAvg(s, Math.max(this.pin.v / this.p.w, (vrms / this.p.v) ** 2), 1.5);
+    this.stress = clamp((over - 1.3) / 0.9, 0, 1);
+    if (over > 2.2) this.fail(s, `Burnt out — over-voltage: ${fmtShort(vrms, 'V')} and ${fmtShort(irms, 'A')}, drawing ${fmtShort(this.pin.v, 'W')} instead of ${fmtShort(this.p.w, 'W')}`);
   }
+  fail(s, why) { if (this.setDamage(s, why)) this.sync(); }
   pf() { const S = Math.sqrt(this.v2?.v * this.i2?.v || 0); return S > 1e-9 ? (this.pin?.v || 0) / S : 0; }
   valueLabel() { return fmtQty(this.p.w, 'W').replace(' ', ''); }
-  readings() { return [['Power (avg)', this.pin?.v || 0, 'W'], ['Power factor', this.pf(), ''], ['Current (RMS)', Math.sqrt(Math.max(0, this.i2?.v || 0)), 'A'], ['Light output', 60 * (this.pin?.v || 0), 'lm']]; }
+  readings() {
+    const P = this.pin?.v || 0;
+    return [['Power (avg)', P, 'W'], ['Power factor', this.pf(), ''], ['Current (RMS)', Math.sqrt(Math.max(0, this.i2?.v || 0)), 'A'], ['Voltage (RMS)', Math.sqrt(Math.max(0, this.v2?.v || 0)), 'V'],
+      ['Light output', this.damaged ? 0 : 60 * clamp(P, 0, 1.2 * this.p.w), 'lm'], ['Rated', `${fmtShort(this.p.w, 'W')} at ${fmtShort(this.p.v, 'V')}`, '']];
+  }
   draw(g) {
-    const b = g.running ? clamp((this.pin?.v || 0) / this.p.w, 0, 1.2) : 0;
+    const b = g.running && !this.damaged ? clamp((this.pin?.v || 0) / this.p.w, 0, 1.2) : 0;
     if (b > 0.02) g.glow(0, -0.3 * G, G * 1.5, '235,245,255', Math.min(0.9, b));
     g.box(-0.45 * G, 0.1 * G, 0.45 * G, 0.6 * G, { stroke: g.body, width: g.lw * 0.8, fill: g.fill, r: 2 });
     const ctx = g.ctx; ctx.beginPath();
@@ -889,12 +908,12 @@ export class DCFan extends TwoTerm {
     { key: 'rpm', label: 'Rated speed', unit: 'rpm', def: 2500, min: 100, max: 20000 },
     { key: 'cfm', label: 'Rated airflow', unit: 'CFM', def: 40, min: 0.1, max: 1000 },
   ];
-  static description = 'Brushless DC cooling fan (with built-in commutation and reverse-polarity protection): speed and airflow rise roughly in proportion to the voltage, the air load torque ∝ speed², and it stalls below about a third of the rated voltage. Current flows only with the correct polarity.';
+  static description = 'Brushless DC cooling fan (with built-in commutation and reverse-polarity protection): speed and airflow rise roughly in proportion to the voltage, the air load torque ∝ speed², and it stalls below about a third of the rated voltage. Current flows only with the correct polarity. Its driver chip is built for the rated voltage: from ≈1.6 × (a 12 V fan on 20 V) it burns out, at 24 V almost at once, and the fan stays dead until replaced.';
   nonlinear = true;
   R() { return (0.35 * this.p.vr) / this.p.ir; }
   ke() { return (this.p.vr - 0.3 - this.p.ir * this.R()) / ((this.p.rpm * TAU) / 60); }
-  reset() { this.w = 0; this.ang = 0; this.vd = 0; this.setCurrent(0); }
-  iv(v) { return soft(v - this.ke() * this.w - 0.3, this.R(), 0.05); }
+  reset() { this.w = 0; this.ang = 0; this.vd = 0; this.wear = 0; this.setCurrent(0); }
+  iv(v) { return this.damaged ? { i: 1e-9 * v, g: 1e-9 } : soft(v - this.ke() * this.w - 0.3, this.R(), 0.05); }
   stampNL(s) { const [a, b] = this.nodes, v = s.v(a) - s.v(b), c = this.iv(v); s.addNLCurrent(a, b, c.i, [[a, b, c.g, v]]); }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1e-9); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / this.R()); }
@@ -902,13 +921,21 @@ export class DCFan extends TwoTerm {
     const v = this.voltageDiff(s), i = this.iv(v).i;
     this.setCurrent(i);
     if (s.mode === 'dc') return;
+    // driver chip over-voltage: a little over 1.6 × rated it lasts seconds, at 2 × a fraction of one
+    const x = v / this.p.vr;
+    if (!this.damaged && x > 1.6) {
+      this.wear = (this.wear || 0) + s.heatDt() / (0.5 * Math.pow(1.6 / x, 8));
+      this.stress = Math.min(1, this.wear);
+      if (this.wear >= 1) this.setDamage(s, `Driver chip burnt — ${fmtShort(v, 'V')} on a ${fmtShort(this.p.vr, 'V')} fan`);
+    }
     const wr = (this.p.rpm * TAU) / 60, ke = this.ke(), kf = (ke * this.p.ir) / (wr * wr), J = (2 * ke * this.p.ir * 0.3) / wr;
-    const te = ke * i, stiction = 0.9 * ke * this.p.ir; // a stopped fan needs ≈1/3 of rated voltage to start
+    const te = this.damaged ? 0 : ke * i, stiction = 0.9 * ke * this.p.ir; // a stopped fan needs ≈1/3 of rated voltage to start
     if (this.w > 1e-3 * wr || te > stiction) this.w = Math.max(0, this.w + ((te - kf * this.w * this.w) / J) * s.dt);
+    if (this.damaged) this.w *= 1 - Math.min(1, s.dt / 0.8); // dead: the bearings run it down
     this.ang += this.w * s.dt * 0.05;
   }
   valueLabel() { return fmtShort(this.p.vr, 'V'); }
-  readings() { const wr = (this.p.rpm * TAU) / 60; return [['Speed', (this.w * 60) / TAU, 'rpm'], ['Airflow', (this.p.cfm * this.w) / wr, 'CFM'], ['Current', this.i, 'A']]; }
+  readings() { const wr = (this.p.rpm * TAU) / 60; return [['Speed', (this.w * 60) / TAU, 'rpm'], ['Airflow', (this.p.cfm * this.w) / wr, 'CFM'], ['Current', this.i, 'A'], ['State', this.damaged ? 'BURNT — replace it' : this.w > 1e-3 * wr ? 'Running' : 'Stopped', '']]; }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
   localBox() { return [-2 * G, -G, 2 * G, G]; }
   draw(g) {

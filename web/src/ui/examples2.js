@@ -58,7 +58,7 @@ function olrMotor(b, cx, oy, olrP, motorType, motorP) {
 function tripLamp(b, olr) {
   const [x, y] = b.pin(olr, 9);
   tagR(b, ...b.pin(olr, 8), 'L1 ctrl');
-  const l = b.h('neon', x + 3, y + 1);
+  const l = b.h('neon', x + 3, y + 1, { rb: 150e3 });
   b.w([x, y], [x, y + 1], b.pin(l, 0)); tagR(b, ...b.pin(l, 1), 'N');
   b.label(x + 3, y + 2.6, 'TRIP');
   return l;
@@ -93,7 +93,7 @@ export const EXAMPLES2 = [
       b.w([38, 0], [50, 0]); b.h('ltimer', 52, 0, { tag: 'KT', t: 1.5 }); b.w([54, 0], [58, 0]);
       lnc(b, 40, 3, 'KT', '15-16'); lnc(b, 44, 3, 'KΔ'); b.w([46, 3], [50, 3]); lcoil(b, 52, 3, 'KY'); b.w([54, 3], [58, 3]);
       lno(b, 40, 6, 'KT', '15-18'); lnc(b, 44, 6, 'KY'); b.w([46, 6], [50, 6]); lcoil(b, 52, 6, 'KΔ'); b.w([54, 6], [58, 6]);
-      const lamp = (y, tag, terms, text) => { lno(b, 26, y, tag, terms); b.w([28, y], [50, y]); b.h('neon', 52, y); b.w([54, y], [58, y]); b.label(46, y - 0.9, text); };
+      const lamp = (y, tag, terms, text) => { lno(b, 26, y, tag, terms); b.w([28, y], [50, y]); b.h('neon', 52, y, { rb: 150e3 }); b.w([54, y], [58, y]); b.label(46, y - 0.9, text); };
       lamp(9, 'KY', '13-14', 'STAR'); lamp(12, 'KΔ', '13-14', 'DELTA'); lamp(yb, 'F1', '97-98', 'TRIP');
       b.label(30, -7.7, 'STOP'); b.label(34, -7.7, 'START');
       b.cur(mot, C[0]);
@@ -121,7 +121,7 @@ export const EXAMPLES2 = [
       b.w([32, -3], [32, 1]); b.h('pushno', 34, 1); lnc(b, 38, 1, 'KF');
       b.w([40, 1], [44, 1]); lcoil(b, 46, 1, 'KR'); b.w([48, 1], [52, 1]);
       lno(b, 34, 4, 'KR'); b.w([32, 1], [32, 4]); b.w([36, 1], [36, 4]);
-      lno(b, 26, yb, 'F1', '97-98'); b.w([28, yb], [44, yb]); b.h('neon', 46, yb); b.w([48, yb], [52, yb]);
+      lno(b, 26, yb, 'F1', '97-98'); b.w([28, yb], [44, yb]); b.h('neon', 46, yb, { rb: 150e3 }); b.w([48, yb], [52, yb]);
       b.label(30, -7.7, 'STOP'); b.label(34, -7.7, 'FWD'); b.label(34, -0.7, 'REV'); b.label(46, yb - 1.6, 'TRIP');
       b.cur(mot, C[0]);
       b.doc.simSettings.speed = 0.2;
@@ -140,8 +140,8 @@ export const EXAMPLES2 = [
       for (let k = 0; k < 3; k++) b.w(b.pin(olr, 3 + k), b.pin(mot, k));
       lnc(b, 24, -6, 'F1', '95-96'); b.h('floatsw', 30, -6, { mode: 'NC', set: 80, hyst: 60, level: 85 });
       b.w([26, -6], [28, -6]); b.w([32, -6], [38, -6]); lcoil(b, 40, -6, 'K'); b.w([42, -6], [46, -6]);
-      lno(b, 24, 1, 'K'); b.w([26, 1], [38, 1]); b.h('neon', 40, 1); b.w([42, 1], [46, 1]);
-      lno(b, 24, yb, 'F1', '97-98'); b.w([26, yb], [38, yb]); b.h('neon', 40, yb); b.w([42, yb], [46, yb]);
+      lno(b, 24, 1, 'K'); b.w([26, 1], [38, 1]); b.h('neon', 40, 1, { rb: 150e3 }); b.w([42, 1], [46, 1]);
+      lno(b, 24, yb, 'F1', '97-98'); b.w([26, yb], [38, yb]); b.h('neon', 40, yb, { rb: 150e3 }); b.w([42, yb], [46, yb]);
       b.label(30, -7.8, 'FLOAT (NC)'); b.label(40, -0.6, 'RUN'); b.label(40, yb - 1.6, 'TRIP');
       b.cur(mot, C[0]);
       b.doc.simSettings.speed = 0.2;
@@ -187,8 +187,8 @@ export const EXAMPLES2 = [
       lnc(b, 28, -6, 'F1', '95-96'); b.h('pushnc', 32, -6); b.h('pushno', 36, -6); lno(b, 40, -6, 'KP', '11-14');
       b.w([42, -6], [46, -6]); lcoil(b, 48, -6, 'K'); b.w([50, -6], [54, -6]);
       lno(b, 36, -3, 'K'); b.w([34, -6], [34, -3]); b.w([38, -6], [38, -3]); // hold-in
-      lnc(b, 28, 1, 'KP', '11-12'); b.w([30, 1], [46, 1]); b.h('neon', 48, 1); b.w([50, 1], [54, 1]);
-      lno(b, 28, yb, 'F1', '97-98'); b.w([30, yb], [46, yb]); b.h('neon', 48, yb); b.w([50, yb], [54, yb]);
+      lnc(b, 28, 1, 'KP', '11-12'); b.w([30, 1], [46, 1]); b.h('neon', 48, 1, { rb: 150e3 }); b.w([50, 1], [54, 1]);
+      lno(b, 28, yb, 'F1', '97-98'); b.w([30, yb], [46, yb]); b.h('neon', 48, yb, { rb: 150e3 }); b.w([50, yb], [54, yb]);
       b.label(32, -7.7, 'STOP'); b.label(36, -7.7, 'START'); b.label(14, -1, 'blown fuse');
       b.label(48, -0.6, 'PHASE FAULT'); b.label(48, yb - 1.6, 'TRIP');
       b.cur(mot, C[0]);
@@ -289,8 +289,8 @@ export const EXAMPLES2 = [
       b.el('logicin', 8, 6, { on: true }); b.w([9, 6], [9, 4], b.pin(inv, 3));
       b.w(b.pin(bat, 0), [0, -2], [14, -2], b.pin(inv, 4));
       b.w(b.pin(bat, 1), [0, 7], [14, 7], b.pin(inv, 8)); b.el('ground', 0, 7);
-      const l = b.h('inductor', 18, 1, { l: 5e-3, rs: 0.1 });
-      const c = b.v('capacitor', 22, 3, { c: 10e-6 }), r = b.v('resistor', 26, 3, { r: 50 }), vm = b.v('voltmeter', 30, 3, { mode: 'rms' });
+      const l = b.h('inductor', 18, 1, { l: 5e-3, rs: 0.1, irate: '10' });
+      const c = b.v('capacitor', 22, 3, { c: 10e-6, vr: '630' }), r = b.v('resistor', 26, 3, { r: 50, pw: '0' }), vm = b.v('voltmeter', 30, 3, { mode: 'rms' });
       b.w(b.pin(inv, 5), b.pin(l, 0)); b.w(b.pin(l, 1), b.pin(c, 0)); b.w(b.pin(c, 0), b.pin(r, 0)); b.w(b.pin(r, 0), b.pin(vm, 0));
       b.w(b.pin(inv, 6), [15, 2], [15, 5], b.pin(c, 1)); b.w(b.pin(c, 1), b.pin(r, 1)); b.w(b.pin(r, 1), b.pin(vm, 1));
       b.label(-2.6, 2, '350 V'); b.label(6, -1.4, 'SPWM'); b.label(12, -3.4, 'H-bridge'); b.label(20, -0.4, 'LC filter'); b.label(26, 6, '50 Ω');
@@ -312,7 +312,7 @@ export const EXAMPLES2 = [
       b.el('pwm', -3, 6, { duty: 33, freq: 20000, vhigh: 10 }, 2); b.w([-1, 6], b.pin(q, 0)); b.el('ground', -5, 6);
       const d = b.h('diode', 11, 4, { model: '1N5819' });
       b.w(b.pin(t, 3), b.pin(d, 0)); b.w(b.pin(t, 2), [11, 0]); b.el('ground', 11, 0);
-      const co = b.v('ecap', 15, 6, { c: 470e-6, vmax: 16 }), rl = b.v('resistor', 19, 6, { r: 10 }), vm = b.v('voltmeter', 23, 6, { mode: 'avg', tau: 0.005 });
+      const co = b.v('ecap', 15, 6, { c: 470e-6, vmax: 16 }), rl = b.v('resistor', 19, 6, { r: 10, pw: '25' }), vm = b.v('voltmeter', 23, 6, { mode: 'avg', tau: 0.005 });
       b.w(b.pin(d, 1), b.pin(co, 0)); b.w(b.pin(co, 0), b.pin(rl, 0)); b.w(b.pin(rl, 0), b.pin(vm, 0));
       b.w(b.pin(co, 1), b.pin(rl, 1)); b.w(b.pin(rl, 1), b.pin(vm, 1)); b.el('ground', 15, 8);
       b.label(-2.6, 2, '12 V'); b.label(6, -2.6, '200 µH 1:1'); b.label(-3, 7.6, '20 kHz'); b.label(8.4, 6, '36 V'); b.label(19, 9.4, '10 Ω');
@@ -333,7 +333,7 @@ export const EXAMPLES2 = [
       tagR(b, ...b.pin(t1, 2), 'G1'); tagR(b, ...b.pin(t2, 2), 'G2'); tagR(b, ...b.pin(t3, 2), 'G3'); tagR(b, ...b.pin(t4, 2), 'G4');
       tagL(b, ...b.pin(t1, 0), 'L'); b.w(b.pin(t2, 0), [19, 4]); tagR(b, 19, 4, 'N');
       b.w(b.pin(t1, 1), [10, -2], [16, -2]); b.w(b.pin(t2, 1), [16, -2]); tagL(b, 10, -2, 'P');
-      const r = b.v('resistor', 24, 1, { r: 20 }), l = b.v('inductor', 24, 5, { l: 0.2, rs: 0.5 }), vm = b.v('voltmeter', 28, 3, { mode: 'avg', tau: 0.04 });
+      const r = b.v('resistor', 24, 1, { r: 20, pw: '0' }), l = b.v('inductor', 24, 5, { l: 0.2, rs: 0.5, irate: '20' }), vm = b.v('voltmeter', 28, 3, { mode: 'avg', tau: 0.04 });
       b.w([16, -2], [24, -2], b.pin(r, 0)); b.w(b.pin(r, 1), b.pin(l, 0));
       b.w(b.pin(t3, 0), b.pin(t4, 0)); b.w(b.pin(t4, 0), [24, 8], b.pin(l, 1));
       b.w([24, -2], [28, -2], b.pin(vm, 0)); b.w([24, 8], [28, 8], b.pin(vm, 1));
@@ -405,6 +405,9 @@ export const EXAMPLES2 = [
       const bms = b.el('bms', 14, 2, {}, 2, true);
       b.w(b.pin(ch, 2), b.pin(bms, 2)); b.w(b.pin(bms, 3), [12, 4]); b.el('ground', 12, 4);
       const cell = b.v('liion', 20, 2, { soc: 20, ah: 0.003 });
+      // a 3 mAh cell (so the whole charge takes seconds) at 300 mA is ≈100 C: time is compressed
+      // here, so the real-life limits are off for this demonstration
+      b.doc.simSettings.noDamage = true;
       b.w(b.pin(bms, 0), [18, 1], [18, 0], b.pin(cell, 0)); b.w(b.pin(bms, 1), [18, 3], [18, 4], b.pin(cell, 1));
       const sw = b.v('switch', 10, 4, { closed: false }), rl = b.v('resistor', 10, 8, { r: 2 });
       b.w([10, 1], b.pin(sw, 0)); b.w(b.pin(sw, 1), b.pin(rl, 0)); b.w(b.pin(rl, 1), [10, 10]); b.el('ground', 10, 10);

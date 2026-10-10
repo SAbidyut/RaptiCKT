@@ -84,7 +84,8 @@ export class FusibleResistor extends TwoTerm {
   ];
   static description = 'Resistor that also acts as a fuse: it works as a normal resistor up to its rating, but if the dissipation stays far above it (default 10×) it burns open safely instead of catching fire. Tap a blown one to replace it.';
   interactive = true;
-  reset() { this.blown = false; this.heat = 0; this.setCurrent(0); }
+  reset() { this.heat = 0; this.setCurrent(0); }
+  get blown() { return !!this.damaged; }
   R() { return this.blown ? 1e9 : Math.max(this.p.r, 1e-6); }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1 / this.R()); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / this.R()); }
@@ -94,9 +95,9 @@ export class FusibleResistor extends TwoTerm {
     if (s.mode === 'dc' || this.blown) return;
     const p = v * i;
     this.heat += (p - this.heat) * Math.min(1, s.dt / this.p.tau);
-    if (this.heat > this.p.kfuse * this.p.pmax) { this.blown = true; s.markEvent(); }
+    if (this.heat > this.p.kfuse * this.p.pmax) this.setDamage(s, `Fused open — ${fmtShort(this.heat, 'W')} in a ${fmtShort(this.p.pmax, 'W')} fusible resistor (it opens at ${this.p.kfuse} × its rating)`, true);
   }
-  onTap() { if (!this.blown) return false; this.blown = false; this.heat = 0; return true; }
+  onTap(s) { if (!this.blown) return false; this.replace(s); return true; }
   valueLabel() { return fmtShort(this.p.r, 'Ω'); }
   readings(s) {
     const v = this.voltageDiff(s);

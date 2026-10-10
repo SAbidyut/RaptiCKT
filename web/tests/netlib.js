@@ -10,6 +10,7 @@ export function net(parts, opts = {}) {
     if (!C) throw new Error('unknown type ' + t);
     const e = new C(0, 0);
     Object.assign(e.p, p);
+    if (t === 'resistor' && p.pw === undefined) e.p.pw = '0'; // test loads stay ideal (a new resistor is ¼ W)
     e.nodes = nodes; e.name = C.prefix + (i + 1);
     e.onParamChange?.();
     return e;

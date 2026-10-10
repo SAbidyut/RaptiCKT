@@ -1,10 +1,18 @@
 // Base class shared by all circuit elements: geometry, properties, serialisation.
 
-import { fmtQty } from '../engine/units.js';
+import { fmtQty, fmtShort } from '../engine/units.js';
 
 export const GRID = 20;
 
 const REGISTRY = new Map();
+const LIMITS = new Map();
+/**
+ * Ratings of a part type (elements/limits.js): fn(element) → { rules: [...], fail } or null.
+ * The simulator checks every rated part after each step and destroys it when a rule is broken.
+ */
+export function setLimits(type, fn) { LIMITS.set(type, fn); }
+export function hasLimits(type) { return LIMITS.has(type); }
+export function getLimits(type) { return LIMITS.get(type); }
 export function register(cls) {
   if (REGISTRY.has(cls.type)) throw new Error(`duplicate component type '${cls.type}'`); // a second part must never silently replace the first
   REGISTRY.set(cls.type, cls);
@@ -113,6 +121,8 @@ export class Element {
     if (this.label) out.l = this.label;
     if (this.fault && this.fault.m && this.fault.m !== 'none') out.fl = { ...this.fault };
     if (this.damaged) out.d = this.damaged.why;
+    if (this.damaged && this.damaged.fail) out.dq = this.damaged.fail;
+    if (this.damaged?.partial) out.dp = 1; // part of it failed (a fan's burst capacitor), the rest still conducts
     return out;
   }
 
@@ -125,7 +135,8 @@ export class Element {
     if (o.p) Object.assign(e.p, o.p);
     if (o.l) e.label = o.l;
     if (o.fl) e.fault = { ...o.fl };
-    if (o.d) e.damaged = { why: String(o.d) };
+    if (o.d) e.damaged = o.dp ? { why: String(o.d), partial: true } : { why: String(o.d) };
+    if (o.dq && e.damaged) e.damaged.fail = Array.isArray(o.dq) ? o.dq : [];
     e.onParamChange();
     return e;
   }
@@ -140,13 +151,17 @@ export class Element {
     if (this.damaged) return false;
     if (s && s.damageOn === false && !always) return false;
     this.damaged = { why, t: s ? s.t : 0 };
-    if (s) { s.markEvent(); s.damageLog.push(this); }
+    // a part inside a composite (an LED of an RGB LED…): the whole package is the burnt part
+    const o = this.owner;
+    if (o && !o.damaged) o.damaged = { why, t: this.damaged.t, inner: true };
+    if (s) { s.markEvent(); s.damageLog.push(o || this); }
     return true;
   }
   /** Put in a new part: clear the damage and start from a cold, unstressed state. */
   replace(s) {
     this.damaged = null;
-    this.stress = 0; this._hav = 0;
+    this.stress = 0; this._hav = 0; this._lim = null;
+    for (const x of this.subs || []) { x.el.damaged = null; x.el.stress = 0; x.el._hav = 0; }
     try { if (this.reset) this.reset(s); } catch { /* reset again at the next run */ }
   }
   /**
@@ -156,6 +171,129 @@ export class Element {
   heatAvg(s, x, tau) { this._hav = (this._hav || 0) + (x - (this._hav || 0)) * Math.min(1, s.heatDt() / tau); return this._hav; }
   /** 0 … 1: how close the part is to failing (drawn as a warning glow). */
   stressLevel() { return this.stress || 0; }
+
+  // ---------------------------------------------------------- ratings
+  /** This part's ratings (see setLimits), re-read when its values change. */
+  ratings() {
+    const f = LIMITS.get(this.constructor.type);
+    if (!f) return null;
+    const sig = JSON.stringify(this.p);
+    if (sig !== this._limSig) { this._limSig = sig; this._limSpec = f(this) || null; this._lim = null; }
+    return this._limSpec;
+  }
+
+  /**
+   * Check the ratings after an accepted step. Rules:
+   *  pd   — power dissipated in the part, Σ v·i over its pins (W)
+   *  irms — RMS current at the given pins (A);  vrms — RMS voltage across a pin pair (V)
+   *  vpk  — instantaneous voltage across a pin pair ('span' = between any two pins)
+   *  cfg  — a setting that destroys it at power-up (logic VDD 12 V, op-amp on ±25 V…)
+   *  vpin — any pin against ground outside lo … hi (a chip's pins beyond its supply rails)
+   * Models: 'life' — wear accumulates at 1 / (T2·(2/r)^m) per second of the thermal clock above
+   * the rating (r = value / rating, T2 = life at twice the rating), as semiconductors and LEDs age;
+   * 'therm' — first-order heating (time constant tau) failing at lim × the rating, as windings
+   * and insulation do; plus an instant failure at inst × the rating.
+   */
+  checkLimits(s) {
+    const spec = this._limSpec;
+    if (!spec || s.mode === 'dc') return;
+    const R = spec.rules, n = R.length, N = this.nodes, I = this.postCurrents;
+    let st = this._lim;
+    if (!st || st.w.length !== n) st = this._lim = { q: new Float64Array(n), f: new Float64Array(n), w: new Float64Array(n), t: new Float64Array(n), h: R.map(() => ({ ft: 0 })) };
+    const dt = s.dt, hdt = s.heatDt(), aq = Math.min(1, dt / Math.max(0.02, s.acPeriod || 0)), af = Math.min(1, dt / 1e-3);
+    const v = (k) => (k === 'g' ? 0 : s.v(N[k]));
+    let stress = 0;
+    for (let j = 0; j < n; j++) {
+      const r = R[j];
+      let x, slow, fast;
+      if (r.q === 'cfg') {
+        const msg = r.fn(this);
+        if (msg) return this.fail(s, msg, r.fail ?? spec.fail, spec);
+        continue;
+      }
+      if (r.q === 'vpin') {
+        // every pin against ground: beyond lo … hi the input-protection diodes and the
+        // junctions behind them burn
+        let worst = 0, u0 = 0;
+        for (let k = 0; k < N.length; k++) { const u = v(k), d = Math.max(u - r.hi, r.lo - u); if (d > worst) { worst = d; u0 = u; } }
+        st.t[j] = worst > 0 ? st.t[j] + dt : 0;
+        if (st.t[j] >= (r.tf ?? 1e-3)) return this.fail(s, r.why ? r.why(u0, this) : `Destroyed — ${fmtShort(u0, 'V')} on a pin (it allows ${fmtShort(r.lo, 'V')} … ${fmtShort(r.hi, 'V')})`, r.fail ?? spec.fail, spec);
+        continue;
+      }
+      if (r.q === 'pd') {
+        x = 0;
+        const posts = r.posts || N.map((_, k) => k);
+        for (const k of posts) x += v(k) * (I[k] || 0);
+        st.q[j] += (x - st.q[j]) * aq; slow = Math.max(0, st.q[j]);
+        st.f[j] += (x - st.f[j]) * af; fast = st.f[j];
+      } else if (r.q === 'irms') {
+        x = 0;
+        for (const k of r.posts || N.map((_, kk) => kk)) x = Math.max(x, r.sign ? r.sign * (I[k] || 0) : Math.abs(I[k] || 0));
+        st.q[j] += (x * x - st.q[j]) * aq; slow = Math.sqrt(st.q[j]);
+        st.f[j] += (x - st.f[j]) * af; fast = st.f[j];
+      } else if (r.q === 'vrms') {
+        x = v(r.pair[0]) - v(r.pair[1]);
+        st.q[j] += (x * x - st.q[j]) * aq; slow = Math.sqrt(st.q[j]);
+        st.f[j] += (Math.abs(x) - st.f[j]) * af; fast = st.f[j] / Math.SQRT2;
+      } else { // vpk
+        if (r.pair === 'span') { let lo = Infinity, hi = -Infinity; for (let k = 0; k < N.length; k++) { const u = v(k); if (u < lo) lo = u; if (u > hi) hi = u; } x = hi - lo; } else x = v(r.pair[0]) - v(r.pair[1]);
+        if (r.dir) x *= r.dir; else x = Math.abs(x);
+        st.t[j] = x > r.max ? st.t[j] + dt : 0;
+        if (st.t[j] >= (r.tf ?? 2e-4)) return this.fail(s, r.why ? r.why(x, this) : `Over-voltage — ${fmtShort(x, 'V')} across ${r.what || 'it'} (maximum ${fmtShort(r.max, 'V')})`, r.fail ?? spec.fail, spec);
+        if (x > 0.8 * r.max) stress = Math.max(stress, Math.min(0.9, (x / r.max - 0.8) * 4));
+        continue;
+      }
+      const rated = r.rated, ratio = slow / rated;
+      if (r.inst && fast > r.inst * rated) return this.fail(s, this.limitWhy(r, Math.max(fast, slow)), r.fail ?? spec.fail, spec);
+      if (r.model === 'therm') {
+        // fault currents (≥ 8 × rating) heat in circuit time, so a breaker clearing a short in
+        // milliseconds still protects the switches and meters in its path (see heatDtAt). A battery
+        // heats itself: nothing upstream can clear its fault, so it always uses the thermal clock.
+        st.w[j] += (ratio * ratio - st.w[j]) * Math.min(1, (r.selfHeat ? hdt : s.heatDtAt(ratio, st.h[j])) / (r.tau || 30));
+        const lim = (r.lim || 1.5) ** 2;
+        stress = Math.max(stress, Math.min(1, Math.max(0, (st.w[j] - 1) / (lim - 1))));
+        if (st.w[j] >= lim) return this.fail(s, this.limitWhy(r, slow), r.fail ?? spec.fail, spec);
+      } else {
+        if (ratio > 1) st.w[j] += hdt / ((r.T2 || 5) * Math.pow(2 / ratio, r.m || 6));
+        stress = Math.max(stress, Math.min(1, st.w[j]));
+        if (st.w[j] >= 1) return this.fail(s, this.limitWhy(r, slow), r.fail ?? spec.fail, spec);
+      }
+    }
+    this.stress = stress;
+  }
+
+  /** The ratings in words, for the property sheet (e.g. "Power 625 mW · collector–emitter ≤ 46 V"). */
+  ratingText() {
+    const spec = this.ratings();
+    if (!spec) return '';
+    const out = [];
+    for (const r of spec.rules) {
+      if (r.q === 'cfg') { if (r.label) out.push(r.label); continue; }
+      if (r.q === 'vpin') { out.push(`Pins ${fmtShort(r.lo, 'V')} … ${fmtShort(r.hi, 'V')}`); continue; }
+      if (r.q === 'pd') out.push(`Power ${fmtShort(r.rated, 'W')}`);
+      else if (r.q === 'irms') out.push(`Current ${fmtShort(r.rated, 'A')}`);
+      else if (r.q === 'vrms') out.push(`Voltage ${fmtShort(r.rated, 'V')} RMS`);
+      else out.push(`${r.what ? r.what[0].toUpperCase() + r.what.slice(1) : 'Voltage'} ≤ ${fmtShort(r.show ?? r.max, 'V')}`);
+    }
+    return [...new Set(out)].join(' · ');
+  }
+
+  limitWhy(r, x) {
+    if (r.why) return r.why(x, this);
+    const u = { pd: 'W', irms: 'A', vrms: 'V' }[r.q];
+    const what = r.what ? ` ${r.what}` : '';
+    if (r.q === 'pd') return `Overheated — dissipating ${fmtShort(x, 'W')}${what} (rated ${fmtShort(r.rated, 'W')})`;
+    if (r.q === 'irms') return `Over-current — ${fmtShort(x, 'A')}${what} (rated ${fmtShort(r.rated, 'A')})`;
+    return `Over-voltage — ${fmtShort(x, u)} RMS${what} (rated ${fmtShort(r.rated, u)})`;
+  }
+
+  /** Destroyed by a broken rating: what is left behind (open, or shorted pins [a, b, R]). */
+  fail(s, why, fail, spec) {
+    if (!this.setDamage(s, why)) return;
+    this.damaged.fail = Array.isArray(fail) ? fail : [];
+    if (spec && spec.flame) this.damaged.flame = true; // lithium cells burn
+    this.stress = 0;
+  }
 
   // -------------------------------------------------- engine interface
   // nonlinear = true enables stampNL
