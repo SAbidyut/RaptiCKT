@@ -538,6 +538,15 @@ input.toggle:checked::after { transform: translateX(18px); }
 :root.lite .splash svg, :root.lite .splash h1, :root.lite .splash p, :root.lite .splash .logo-dot { animation: none !important; }
 :root.lite *, :root.lite *::before, :root.lite *::after { transition-duration: 0s !important; transition-delay: 0s !important; }
 :root.lite .card-row { scroll-snap-type: x proximity; }
+/* mouse: the page and its rows can be grabbed and dragged */
+@media (hover: hover) and (pointer: fine) {
+  .ios-scroll, .pal-tabs { cursor: grab; }
+  .ios-scroll button, .pal-tabs button { cursor: pointer; }
+  .mouse-drag, .mouse-drag * { cursor: grabbing !important; user-select: none; }
+  .pal-tabs { scrollbar-width: thin; scrollbar-color: rgba(140, 150, 170, 0.5) transparent; padding-bottom: 6px; }
+  .pal-tabs::-webkit-scrollbar { display: block; height: 5px; }
+  .pal-tabs::-webkit-scrollbar-thumb { background: rgba(140, 150, 170, 0.5); border-radius: 3px; }
+}
 .ios-content { will-change: transform; backface-visibility: hidden; }
 .ios-bar { position: absolute; top: 0; right: 3px; width: 3px; border-radius: 3px; background: rgba(140, 150, 170, 0.55);
   opacity: 0; pointer-events: none; z-index: 6; transition: opacity 0.35s ease; will-change: transform, opacity; }
@@ -720,6 +729,41 @@ input.toggle:checked::after { transform: translateX(18px); }
 .editor.wide .knob { bottom: 72px; right: 8px; }
 .editor.wide .quickbar { bottom: 12px; right: 76px; }
 .editor.wide .hud-status { top: 8px; }
+/* desktop / laptop browser (the website): scope on the left, side panels beside the board,
+   in full screen the tools on the right */
+.scope-grip { display: none; }
+.editor.desk .ed-head { min-height: 56px; padding: 0 8px; }
+.editor.desk .topbar .title { flex-basis: 260px; }
+.editor.desk .tb { min-width: 54px; font-size: 10.5px; }
+.editor.desk.side-scope .ed-main { flex-direction: row; }
+.editor.desk.side-scope .scope-panel { border-left: 0; border-right: 1px solid var(--border); }
+.editor.desk.side-scope.with-scope .scope-panel { width: var(--scope-w, clamp(340px, 38%, 720px)); }
+.editor.desk.with-scope .scope-grip { display: block; flex: none; width: 9px; margin: 0 -5px 0 -4px; position: relative; z-index: 7; cursor: col-resize; touch-action: none; }
+.editor.desk .scope-grip::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: transparent; transition: background 0.15s; }
+.editor.desk .scope-grip:hover::after, .editor.scope-sizing .scope-grip::after { background: var(--accent); }
+.editor.scope-sizing, .editor.scope-sizing * { cursor: col-resize !important; user-select: none; }
+.editor.desk .sheet { top: 64px; bottom: 8px; width: 420px; }
+.editor.desk.fs .sheet { top: 8px; }
+.editor.desk.sheet-open .scrim { opacity: 0; pointer-events: none; }
+.editor.desk.sheet-open .ed-main, .editor.desk.pal-open .ed-main { margin-right: 436px; }
+.editor.desk.sheet-open .mode-seg { opacity: 1; pointer-events: auto; }
+.editor.desk .menu { top: 60px; }
+.editor.fs.desk .fs-rail { left: auto; right: calc(8px + var(--cut-r)); }
+.editor.fs.desk:not(.fs-ui) .fs-rail { transform: translateX(calc(100% + 20px)); }
+.editor.fs.desk .fs-hide svg { transform: scaleX(-1); }
+.editor.fs.desk .fs-handle { left: auto; right: calc(6px + var(--cut-r)); }
+.editor.fs.desk .hud-status, .editor.fs.desk .meter-card { left: 10px; }
+.editor.fs.desk .popover { left: 10px; }
+.editor.fs.desk .mode-seg { right: calc(62px + var(--cut-r)); }
+.editor.fs.desk .fab { right: calc(66px + var(--cut-r)); }
+.editor.fs.desk .quickbar { right: calc(132px + var(--cut-r)); }
+.editor.fs.desk:not(.fs-ui) .quickbar { right: 12px; }
+.editor.fs.desk.side-scope.with-scope .scope-panel { border-right: 1px solid var(--border); }
+.ctx-menu { min-width: 220px; }
+.ctx-menu button kbd, .keys-tbl kbd { margin-left: auto; font: 11.5px var(--mono); color: var(--muted); }
+.ctx-menu button.danger, .ctx-menu button.danger .ic { color: var(--danger); }
+.ctx-menu button:hover, .menu button:hover { background: var(--surface3); }
+.keys-tbl kbd { display: inline-block; padding: 2px 7px; border-radius: 6px; background: var(--surface3); color: var(--text); white-space: nowrap; }
 @media (max-height: 520px) {
   .editor.fs .fs-rail { gap: 0; padding: 3px; left: calc(6px + var(--cut-l)); top: calc(5px + var(--stage-t)); border-radius: 14px; }
   .fs-btn { width: 35px; height: 35px; border-radius: 10px; }

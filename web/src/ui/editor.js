@@ -15,6 +15,7 @@ import { Multimeter } from './meter.js';
 import { store } from './store.js';
 import { RmsTracker, acFrequency } from './rms.js';
 import { WireHeat } from './wireheat.js';
+import { installDesktop } from './desktop.js';
 import { WIRE_PRESETS, cableLabel } from '../elements/cables.js';
 import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore } from './autoroute.js';
 
@@ -55,6 +56,7 @@ export class Editor {
     // system bars going away) the moment layout changes, before the frame is painted
     if (window.ResizeObserver) new ResizeObserver(() => { if (this.app.current === 'editor') this.onResize(); }).observe(this.canvas);
     this.updateLayout();
+    installDesktop(this);
   }
 
   q(s) { return this.root.querySelector(s); }
@@ -88,6 +90,7 @@ export class Editor {
       </div>
       <div class="ed-main">
       <div class="scope-panel"></div>
+      <div class="scope-grip" title="Drag to resize · double-click to reset"></div>
       <div class="stage">
         <canvas class="board"></canvas>
         <div class="fs-rail">
@@ -254,9 +257,12 @@ export class Editor {
    */
   updateLayout() {
     const w = window.innerWidth, h = window.innerHeight;
-    const wide = w > h * 1.15 && h <= 640;
+    // a desktop or laptop browser (the website): the same merged bar, the scope on the left
+    const desk = !this.app.bridge.isAndroid() && w >= 1000 && w > h;
+    const wide = desk || (w > h * 1.15 && h <= 640);
+    this.root.classList.toggle('desk', desk);
     this.root.classList.toggle('wide', wide);
-    this.root.classList.toggle('side-scope', wide && this.settings.scopeSide !== false);
+    this.root.classList.toggle('side-scope', wide && (desk || this.settings.scopeSide !== false));
   }
 
   /** Full screen, as in RaptiAuto: no bars, no system UI, a small tool rail on the left. */
@@ -278,7 +284,7 @@ export class Editor {
     this.app.bridge.setImmersive(this.fullscreen);
     this.haptic(8);
     this.updateToolbar();
-    if (this.fullscreen && !store.flag('fsTip2')) { store.setFlag('fsTip2'); this.toast('Full screen: tap ☰ at the top left for the tools · Back exits'); }
+    if (this.fullscreen && !store.flag('fsTip2')) { store.setFlag('fsTip2'); this.toast(this.root.classList.contains('desk') ? 'Full screen: click ☰ at the top right for the tools · Esc exits' : 'Full screen: tap ☰ at the top left for the tools · Back exits'); }
   }
 
   /**
