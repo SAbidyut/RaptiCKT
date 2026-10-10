@@ -405,6 +405,7 @@ test('a destroyed part keeps its failure in the saved file', () => {
   assert.deepEqual(back.damaged.fail, m.damaged.fail);
   back.replace();
   assert.equal(back.damaged, null);
+});
 
 test('a CFL burns out on over-voltage instead of taking kilowatts, and runs normally at its rating', () => {
   for (const [vrms, why] of [[860, /capacitor burst/], [400, /over-voltage/]]) {
