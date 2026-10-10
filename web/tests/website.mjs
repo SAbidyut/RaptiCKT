@@ -126,6 +126,28 @@ async function open(viewport, opts = {}) {
   await ctx.close();
 }
 
+// ---- desktop layout: scope on the left, tools on the right in full screen; phones keep theirs
+for (const [name, vp, touch, want] of [['desktop', { width: 1440, height: 900 }, false, 'left'], ['phone', { width: 390, height: 844 }, true, 'top'], ['phone-landscape', { width: 844, height: 390 }, true, 'right']]) {
+  const { ctx, page, errs } = await open(vp, touch ? { hasTouch: true, isMobile: true } : {});
+  await page.goto(base);
+  await page.evaluate(() => localStorage.setItem('raptickt.flags.v1', JSON.stringify({ editorTips: true })));
+  await page.reload(); await page.waitForTimeout(2300);
+  await page.evaluate(() => app.openExample(document.querySelector('[data-ex]').dataset.ex)); await page.waitForTimeout(1200);
+  await page.evaluate(() => { if (!app.editor.scopeOpen) app.editor.toggleScope(true); }); await page.waitForTimeout(700);
+  const where = await page.evaluate(() => {
+    const s = document.querySelector('.scope-panel').getBoundingClientRect(), b = app.editor.canvas.getBoundingClientRect();
+    return s.bottom <= b.top + 1 ? 'top' : s.right <= b.left + 1 ? 'left' : s.left >= b.right - 1 ? 'right' : 'overlap';
+  });
+  check(where === want, `${name}: oscilloscope ${where} of the circuit (want ${want})`);
+  if (!touch) {
+    await page.evaluate(() => { app.editor.setFullscreen(true); app.editor.showFsTools(true, 99999); }); await page.waitForTimeout(700);
+    const rail = await page.evaluate(() => { const r = document.querySelector('.fs-rail').getBoundingClientRect(); return r.right > innerWidth - 40; });
+    check(rail, 'desktop: full-screen tools on the right');
+  }
+  check(!errs.length, `${name} layout: no console errors ` + errs.join(' | '));
+  await ctx.close();
+}
+
 // ---- phone (touch) and tablet
 for (const [name, vp] of [['phone', { width: 390, height: 844 }], ['phone-landscape', { width: 844, height: 390 }], ['tablet', { width: 820, height: 1180 }]]) {
   const { ctx, page, errs } = await open(vp, { hasTouch: true, isMobile: true });
