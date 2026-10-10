@@ -16,7 +16,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## Features
 
-- **520 components** in 22 categories, each with a physical simulation model:
+- **529 components** in 22 categories, each with a physical simulation model:
   - Sources (34): DC/AC/pulse/triangle/saw/noise/chirp, AM/FM, PWM, step, ramp, exponential, damped sine, PWL, f(t) expression, single-phase mains presets, 3-phase star/delta supply, bench PSU (CV/CC), dual PSU, PV module, rails, net labels, controlled sources, earth/chassis
   - Batteries (16): AA, 9 V, coin cell, NiMH, NiCd, Li-ion, 2S Li-Po, LiFePO₄ cell and 12.8 V battery, lead-acid, AGM, gel, configurable S/P pack, supercapacitor, BMS protection board, CC-CV charger — all with state-of-charge models that collapse when exhausted
   - Renewables (7): PV array, MPPT and PWM solar charge controllers, off-grid and grid-tie (anti-islanding) inverters, wind turbine, PEM fuel cell
@@ -80,7 +80,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## User manual
 
-A complete, step-by-step manual is built into the app: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 520 components and 101 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
+A complete, step-by-step manual is built into the app: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 529 components and 105 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
 
 The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md). It is generated from `web/src/ui/manual-content.js` with `cd web && npm run manual`; re-run it after editing the manual. `web/tests/manual-content.test.js` fails if a component, example, setting or menu item is added to the app without being covered by the manual.
 

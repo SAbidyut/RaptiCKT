@@ -44,13 +44,13 @@ export const CHAPTERS = [
       H('What you can do with it'),
       L([
         'Build analog, digital and mixed circuits on an unlimited canvas.',
-        'Pick from **520 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
+        'Pick from **529 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
         'Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.',
         'Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.',
         'Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).',
         'Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.',
         'Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.',
-        'Learn from **101 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
+        'Learn from **105 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
         'Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).',
       ]),
       H('Who it is for'),
@@ -215,7 +215,7 @@ export const CHAPTERS = [
       ]),
       TIP('The **Recent** tab remembers the parts you used last, so common parts are one tap away.'),
       TIP('Always add a **Ground** to your circuit (see {{ch:wiring}}). Many examples show where it goes.'),
-      P('The complete list of all 520 components, with what each one does and which values you can change, is in the chapter **Component library**.'),
+      P('The complete list of all 529 components, with what each one does and which values you can change, is in the chapter **Component library**.'),
     ],
   },
 
@@ -673,7 +673,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 15 (library: generated)
   {
     id: 'library', icon: 'chip', generated: 'library',
-    title: 'Component library (all 520)',
+    title: 'Component library (all 529)',
     blocks: [
       P('Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.'),
     ],
@@ -682,7 +682,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 16 (examples: generated)
   {
     id: 'examples', icon: 'book', generated: 'examples',
-    title: 'Examples (all 101)',
+    title: 'Examples (all 105)',
     blocks: [
       P('Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.'),
     ],

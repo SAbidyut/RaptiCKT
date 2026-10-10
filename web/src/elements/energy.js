@@ -531,6 +531,25 @@ function cp(l) {
   const li = 1 / (1 / l - 0.035);
   return Math.max(0, 0.5176 * (116 / li - 5) * Math.exp(-21 / li) + 0.0068 * l);
 }
+// Torque coefficient Ct(λ) = Cp/λ of the rotor over its whole speed range:
+//  - below the λ of peak torque the blades are stalled: Ct falls off gently to the
+//    starting torque at standstill (never so steeply that more wind gives less torque);
+//  - between peak torque and runaway it is Cp(λ)/λ;
+//  - above runaway (Cp = 0, λ ≈ 13) the rotor windmills: Ct goes negative and the
+//    air brakes it, so a rotor spinning too fast for the wind slows down.
+const CT = (() => {
+  let lpk = 0.2, ctpk = 0;
+  for (let l = 0.2; l < 13; l += 0.005) if (cp(l) / l > ctpk) { ctpk = cp(l) / l; lpk = l; }
+  let l0 = lpk;
+  while (cp(l0 + 0.001) > 0) l0 += 0.001;
+  const h = 0.05, slope = (cp(l0) / l0 - cp(l0 - h) / (l0 - h)) / h; // negative
+  return { lpk, ctpk, l0, slope };
+})();
+export function ctWind(l) {
+  if (l <= CT.lpk) return CT.ctpk * (0.35 + 0.65 * Math.max(0, l) / CT.lpk);
+  if (l < CT.l0) return cp(l) / l;
+  return CT.slope * (l - CT.l0);
+}
 export class WindTurbine extends Element {
   static type = 'windgen'; static title = 'Wind Turbine Generator'; static category = 'Renewables';
   static prefix = 'WT'; static keywords = 'wind turbine generator small wind pmsg rectifier battery charging renewable tip speed ratio';
@@ -543,7 +562,7 @@ export class WindTurbine extends Element {
     { key: 'j', label: 'Rotor inertia', unit: 'kg·m²', def: 0.8, min: 1e-3, max: 1e7, log: true },
     { key: 'cutout', label: 'Cut-out wind speed', unit: 'm/s', def: 25, min: 5, max: 40 },
   ];
-  static description = 'Small wind turbine with a permanent-magnet generator and built-in rectifier (DC output). Aerodynamic power P = ½ρπR²v³·Cp(λ), with the power coefficient Cp peaking at ≈0.48 near tip-speed ratio λ = ωR/v ≈ 8; the generator EMF is Ke·ω and the rectifier only lets current flow out of +. Above rated power the blades stall/furl to hold the rated power; above the cut-out speed the rotor is braked. Load it with a battery to see the operating point settle.';
+  static description = 'Small wind turbine with a permanent-magnet generator and built-in rectifier (DC output). Aerodynamic power P = ½ρπR²v³·Cp(λ), with the power coefficient Cp peaking at ≈0.48 near tip-speed ratio λ = ωR/v ≈ 8; the generator EMF is Ke·ω and the rectifier only lets current flow out of +. Above rated power the blades stall/furl to hold the rated power; above the cut-out speed the rotor is braked. When the wind drops, a rotor turning faster than the wind can drive is slowed by the air (and by its load), so the speed, voltage and power follow the wind knob both up and down; with no wind it coasts to a stop. Load it with a battery to see the operating point settle.';
   nonlinear = true;
   refNode = 1;
   constructor(x, y) { super(x, y); this.postCurrents = [0, 0]; }
@@ -558,15 +577,22 @@ export class WindTurbine extends Element {
   }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1e-7); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1e-7); }
+  /** aerodynamic torque on the rotor at speed w (rad/s) in the present wind */
   aero(w) {
-    const v = this.p.wind, R = this.p.r;
-    if (v < 0.1 || v > this.p.cutout) return -5 * w * this.p.j; // parked / braked
-    const l = (w * R) / v, A = Math.PI * R * R;
-    // torque coefficient with a starting torque at low λ
-    const ct = Math.max(l > 0.2 ? cp(l) / l : 0, 0.04 * (1 - l / 3));
-    let T = 0.5 * RHO * A * R * v * v * ct;
-    if (T * w > this.p.prated) T = this.p.prated / w;
+    const v = this.p.wind, R = this.p.r, k = 0.5 * RHO * Math.PI * R * R * R;
+    if (v > this.p.cutout) return -5 * w * this.p.j; // storm: the brake stops the rotor
+    // blade profile drag: the only torque left when the wind drops to nothing
+    const drag = k * 3e-5 * (w * R) ** 2;
+    if (v < 0.05) return -drag;
+    const l = (w * R) / v;
+    let T = k * v * v * ctWind(l) - drag;
+    if (T * w > this.p.prated) T = this.p.prated / w; // furling holds the rated power
     return T;
+  }
+  /** bearing and generator iron losses: ≈3 % of the rated torque, plus a little viscous drag */
+  loss(w) {
+    const R = this.p.r, vr = Math.cbrt(this.p.prated / (0.5 * RHO * Math.PI * R * R * 0.48)), wr = (8 * vr) / R;
+    return 0.03 * (this.p.prated / wr) * Math.tanh(w / 2) + 0.002 * w;
   }
   accept(s) {
     const [a, b] = this.nodes, v = s.v(a) - s.v(b), io = this.out(v).i;
@@ -575,7 +601,7 @@ export class WindTurbine extends Element {
     if (s.mode === 'dc') return;
     this.ta = this.aero(this.w);
     const tg = this.p.ke * io;
-    this.w = Math.max(0, this.w + ((this.ta - tg - 0.002 * this.w) / this.p.j) * s.dt);
+    this.w = Math.max(0, this.w + ((this.ta - tg - this.loss(this.w)) / this.p.j) * s.dt);
     this.ang += this.w * s.dt;
   }
   valueLabel() { return fmtQty(this.p.wind, 'm/s'); }

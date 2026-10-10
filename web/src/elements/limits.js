@@ -266,7 +266,7 @@ lim(['tvs', 'tvsbi'], () => ({ rules: [PD(5, { T2: 2, m: 4, inst: 120, why: (x) 
 const SW = {
   switch: 10, togglesw: 6, slidesw: 0.5, rockersw: 10, keysw: 5, oneway: 10, twoway: 10, threeway: 15, intermediate: 10, spdt: 5, dpst: 10, dpdt: 5,
   pushno: 3, pushnc: 3, footsw: 10, latchbtn: 3, estop: 10, limitsw: 10, rotary4: 3, dipsw: 0.1, selector3: 10, isolator: 63, changeover: 63,
-  reed: 0.5, floatsw: 10, pressw: 16, thermostat: 16, relay: 10, relayspst: 10, relaydpst: 10, relaydpdt: 5, reedrelay: 0.5, latchrelay: 10,
+  reed: 0.5, floatsw: 10, pressw: 16, thermostat: 16, relay: 10, relayspst: 10, relaydpst: 10, relaydpdt: 5, relay8: 5, relay8oct: 10, relay14: 3, relayauto4: 30, relayauto5: 30, relaymod: 10, reedrelay: 0.5, latchrelay: 10,
   auxrelay: 10, contactor: 25, contactor2: 25, tdr: 5, lno: 10, lnc: 10, lmain3: 25, photocell: 6, pirsw: 6, socket: 16, jbox: 32,
 };
 addProp(Object.keys(SW), { key: 'irate', label: 'Contact rating', unit: 'A', def: SW, min: 0.01, max: 6300, log: true });
@@ -274,20 +274,45 @@ const contacts = (e, extra = []) => ({
   rules: [...extra, I(e.p.irate, { model: 'therm', tau: 60, lim: 1.5, why: (x) => `Contacts burnt — ${fmtShort(x, 'A')} through a ${fmtShort(e.p.irate, 'A')} contact` })],
   fail: [],
 });
-const COIL = ['relay', 'relayspst', 'relaydpst', 'relaydpdt', 'reedrelay', 'latchrelay', 'auxrelay', 'contactor', 'contactor2', 'tdr', 'lcoil', 'ltimer', 'lcounter', 'lcreset', 'llevel'];
+const COIL = ['relay', 'relayspst', 'relaydpst', 'relaydpdt', 'relay8', 'relay8oct', 'relay14', 'relayauto4', 'relayauto5', 'reedrelay', 'latchrelay', 'auxrelay', 'contactor', 'contactor2', 'tdr', 'lcoil', 'ltimer', 'lcounter', 'lcreset', 'llevel'];
 const coilPower = (e) => {
   const R = e.p.rcoil || 100, X = e.p.ac ? 2 * Math.PI * (e.p.freq || 50) * (e.p.lcoil || 0) : 0, Z2 = R * R + X * X;
   return (e.p.vcoil * e.p.vcoil * R) / Z2;
 };
 const coilRule = (e) => PD(coilPower(e), { model: 'therm', tau: 60, lim: 1.8, inst: 0, why: (x) => `Coil burnt — ${fmtShort(x, 'W')} in a coil rated ${fmtShort(coilPower(e), 'W')} (${fmtShort(e.p.vcoil, 'V')}${e.p.ac ? ' AC' : ''}) — check the coil voltage` });
 for (const t of Object.keys(SW)) {
-  if (['socket', 'jbox', 'photocell', 'pirsw'].includes(t)) continue;
+  if (['socket', 'jbox', 'photocell', 'pirsw', 'relaymod'].includes(t)) continue;
   lim(t, (e) => contacts(e, COIL.includes(t) ? [coilRule(e)] : []));
 }
 lim(['lcoil', 'ltimer', 'lcounter', 'lcreset', 'llevel'], (e) => ({ rules: [coilRule(e)], fail: [] }));
 // contactors: a short-circuit current far above the rating welds the main contacts shut
 lim(['contactor', 'contactor2'], (e) => ({
   rules: [coilRule(e), I(e.p.irate, { posts: [2, 3, 4], model: 'therm', tau: 60, lim: 1.5, inst: 12, fail: SHORT([2, 5, 0.01], [3, 6, 0.01], [4, 7, 0.01]), why: (x) => `Main contacts welded shut — ${fmtShort(x, 'A')} through ${fmtShort(e.p.irate, 'A')} contacts (protect it with an MCB / overload relay)` })],
+  fail: [],
+}));
+// relay module: the coil burns on a supply far above its rating; contacts as any relay
+lim('relaymod', (e) => ({
+  rules: [VR([0, 1], +e.p.vcoil || 5, { tau: 30, lim: 1.5, inst: 0, why: (x) => `Relay coil burnt — ${fmtShort(x, 'V')} on a ${e.p.vcoil} V module` }),
+    I(e.p.irate, { posts: [4], model: 'therm', tau: 60, lim: 1.5, why: (x) => `Contacts burnt — ${fmtShort(x, 'A')} through a ${fmtShort(e.p.irate, 'A')} relay module` })],
+  fail: [],
+}));
+// ULN2003A: 500 mA per output, 50 V, ≈1 W for the DIP package
+lim('uln2003', () => ({
+  rules: [PD(1, { T2: 10, m: 5, inst: 20, what: '(DIP-16, ≈1 W)' }),
+    I(0.5, { posts: [8, 9, 10, 11, 12, 13, 14], model: 'life', T2: 10, m: 4, inst: 4, what: 'in an output (500 mA each)' }),
+    VP([8, 7], 57.5, { show: 50, what: 'output 1C–GND' }), I(0.025, { posts: [0, 1, 2, 3, 4, 5, 6], model: 'life', T2: 5, m: 4, inst: 8, what: 'into an input' })],
+  fail: SHORT([8, 7, 2]),
+}));
+// stabilizer: winding rated for its VA at the set voltage; the input survives up to ≈300 V
+lim('stabilizer', (e) => ({
+  rules: [I(e.p.va / e.p.vset, { posts: [1], model: 'therm', tau: 120, lim: 1.5, why: (x) => `Winding burnt — ${fmtShort(x, 'A')} out of a ${fmtShort(e.p.va, 'VA')} stabilizer (overloaded)` }),
+    VR([0, 2], 300, { tau: 10, lim: 1.2, inst: 1.6, why: (x) => `Burnt — ${fmtShort(x, 'V')} on its input (rated up to 300 V)` })],
+  fail: [],
+}));
+// flasher: lamp current and a 12 V system
+lim('flasher', (e) => ({
+  rules: [I(Math.max(1, (2.5 * e.p.load) / 12), { posts: [2], model: 'therm', tau: 20, lim: 1.5, inst: 8, what: 'to the lamps' }),
+    VR([0, 1], 15, { tau: 10, lim: 1.3, inst: 2, why: (x) => `Burnt — ${fmtShort(x, 'V')} on a 12 V flasher` })],
   fail: [],
 }));
 lim('ssr', () => ({ rules: [I(25, { posts: [2], model: 'therm', tau: 30, lim: 1.3, inst: 10, what: 'through the output (25 A SSR)' }), I(0.05, { posts: [0], model: 'life', T2: 300, m: 6, inst: 8, what: 'into the input' })], fail: SHORT([2, 3, 0.05]) }));
