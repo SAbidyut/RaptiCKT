@@ -5,6 +5,8 @@
 //  - automotive relays, 4-pin (SPST, 30–87) and 5-pin (changeover, 30–87/87a)
 //  - 1-channel 5 V relay module (SRD-05VDC relay, optocoupler input, low/high trigger)
 //  - ULN2003 seven-channel Darlington driver with the flyback clamp diodes to COM
+//  - 8-pin and 14-pin plug-in timers (H3CR-A8 / AH3-3, H3Y-4): on-delay, off-delay,
+//    interval and flicker
 //  - automatic voltage stabilizer (relay tap-changing autotransformer, low/high cut,
 //    start delay) as used on fridges and TVs
 //  - electronic turn-signal flasher (85 flashes/min, flashes twice as fast when a
@@ -181,6 +183,93 @@ export class AutoRelay5 extends PlugRelay {
   static description = 'Standard 5-pin car (Bosch-type) changeover relay: coil 85–86 (12 V, ≈85 Ω), common 30 connected to 87a (NC) when released and to 87 (NO) when energised. Contacts 30 A.';
 }
 register(AutoRelay5);
+
+// ------------------------------------------------------- plug-in timers
+// supply of electronic multi-mode timers (Omron H3CR-A8 / H3Y-4, AH3-3): nearly resistive
+const TIMER_COILS = {
+  '230 V AC': { vcoil: 230, rcoil: 24000, lcoil: 1, ac: true, freq: 50 },
+  '110 V AC': { vcoil: 110, rcoil: 5500, lcoil: 0.3, ac: true, freq: 50 },
+  '24 V AC': { vcoil: 24, rcoil: 260, lcoil: 0.02, ac: true, freq: 50 },
+  '24 V DC': { vcoil: 24, rcoil: 600, lcoil: 0.02, ac: false },
+  '12 V DC': { vcoil: 12, rcoil: 150, lcoil: 0.01, ac: false },
+};
+const TIMER_MODES = [['on', 'On-delay (TON)'], ['off', 'Off-delay (TOF)'], ['int', 'Interval (ON for T)'], ['flk', 'Flicker (OFF T / ON T, repeats)']];
+const MODE_TAG = { on: 'TON', off: 'TOF', int: 'INT', flk: 'FLK' };
+/**
+ * Plug-in electronic timer: the supply terminals take the place of the coil, and the output
+ * relay's changeover poles follow the timing function instead of the supply directly.
+ */
+class PlugTimer extends PlugRelay {
+  static led = false;
+  contactsClosed() { return !!this.out; }
+  setOut(s, v) { if (!!this.out !== v) { this.out = v; s.markEvent(); } }
+  onChange(s) {
+    this.timer = 0;
+    const m = this.p.mode;
+    if (m === 'on' || m === 'flk') { if (!this.on) this.setOut(s, false); } else if (m === 'off') { if (this.on) this.setOut(s, true); } else this.setOut(s, this.on);
+    s.markEvent();
+  }
+  tick(s) {
+    if (s.mode === 'dc') return;
+    const m = this.p.mode, T = this.p.t;
+    const timing = m === 'on' ? this.on && !this.out : m === 'off' ? !this.on && this.out : m === 'int' ? this.on && this.out : this.on;
+    if (!timing) return;
+    this.timer += s.dt;
+    if (this.timer < T) return;
+    this.timer = 0;
+    this.setOut(s, m === 'on' ? true : m === 'flk' ? !this.out : false);
+  }
+  digitalSettle() { return false; }
+  timing() {
+    const m = this.p.mode;
+    return m === 'on' ? this.on && !this.out : m === 'off' ? !this.on && this.out : m === 'int' ? this.on && this.out : this.on;
+  }
+  valueLabel() { return `${MODE_TAG[this.p.mode] || ''} ${fmtShort(this.p.t, 's')}`; }
+  readings(s) { return [['Output', this.out ? 'ON' : 'OFF', ''], ['Powered', this.on ? 'yes' : 'no', ''], ['Elapsed', this.timer || 0, 's'], ['Set time', this.p.t, 's'], ['Supply voltage', s.v(this.nodes[0]) - s.v(this.nodes[1]), 'V']]; }
+  draw(g) {
+    super.draw(g);
+    const { bw, top, bot } = this.geom();
+    // dial: set time and progress
+    const cx = -bw + 1.05 * G, cy = bot - 0.95 * G, r = 0.42 * G, f = this.timing() && g.running ? Math.min(1, (this.timer || 0) / this.p.t) : 0;
+    g.circle(cx, cy, r, { stroke: g.muted, width: g.lw * 0.5, fill: g.fill });
+    if (f > 0) { const c = g.ctx; c.beginPath(); c.moveTo(cx, cy); c.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + f * 2 * Math.PI); c.closePath(); c.fillStyle = 'rgba(245,158,11,0.75)'; c.fill(); }
+    g.line(cx, cy, cx + Math.sin(f * 2 * Math.PI) * r, cy - Math.cos(f * 2 * Math.PI) * r, g.body, g.lw * 0.6);
+    // power (green) and output (red) LEDs
+    g.circle(bw - 0.85 * G, top + 0.4 * G, 2.6, { fill: g.running && this.on ? '#22c55e' : '#14532d' });
+    g.circle(bw - 0.4 * G, top + 0.4 * G, 2.6, { fill: g.running && this.out ? '#ef4444' : '#5b1d1d' });
+  }
+}
+const timerProps = (def) => [
+  { key: 't', label: 'Set time', unit: 's', def: 5, min: 0.05, max: 36000, log: true, knob: true },
+  { key: 'mode', label: 'Function', type: 'select', def: 'on', options: TIMER_MODES },
+  ...coilProps(TIMER_COILS, def),
+];
+
+export class Timer8 extends PlugTimer {
+  static type = 'timer8'; static title = '8-Pin Timer (DPDT, H3CR-A8 / AH3-3)';
+  static keywords = 'timer 8 pin 8pin octal h3cr h3cr-a8 ah3-3 ah3 analog timer on delay off delay star delta timer relay 220v 24v plug in pf083a';
+  static props = timerProps('230 V AC');
+  // octal base like the MK2P: supply 2–7; timed pole 1: 1 COM / 4 NC / 3 NO, pole 2: 8 COM / 5 NC / 6 NO
+  static pins = [['2', 'L'], ['7', 'L'], ['1', 'R'], ['4', 'R'], ['3', 'R'], ['8', 'R'], ['5', 'R'], ['6', 'R']];
+  static poles = [[2, 3, 4], [5, 6, 7]];
+  static contacts = poleContacts(Timer8.poles);
+  static glyph = 'TIMER'; static base = '8-pin';
+  static description = 'The common 8-pin plug-in timer (Omron H3CR-A8 / AH3-3 type) on an octal PF083A socket. Supply on 2–7; two timed changeover poles: 1 common, 4 NC, 3 NO and 8 common, 5 NC, 6 NO. Set the time with the knob and choose the function: on-delay (contacts change T seconds after power is applied — star-delta, staircase, motor start delay), off-delay (they return T seconds after power is removed), interval (ON for T) or flicker (OFF T, ON T, repeating). Contacts 5 A at 250 V AC.';
+}
+register(Timer8);
+
+export class Timer14 extends PlugTimer {
+  static type = 'timer14'; static title = '14-Pin Timer (4PDT, H3Y-4)';
+  static keywords = 'timer 14 pin 14pin h3y-4 h3y square timer 4pdt on delay off delay timer relay 220v 24v plug in pyf14a';
+  static props = timerProps('230 V AC');
+  // MY4 base: supply 13–14; timed pole k: 8+k COM, k NC, 4+k NO
+  static pins = Relay14.pins;
+  static poles = Relay14.poles;
+  static contacts = poleContacts(Timer14.poles);
+  static glyph = 'TIMER'; static base = '14-pin';
+  static description = 'The 14-pin square plug-in timer (Omron H3Y-4 type) on a PYF14A socket, same base as the MY4N relay. Supply on 13–14; four timed changeover poles: 9/1/5, 10/2/6, 11/3/7, 12/4/8 (common/NC/NO). Functions: on-delay, off-delay, interval or flicker. Contacts 3 A at 250 V AC.';
+}
+register(Timer14);
 
 // ---------------------------------------------------------- relay module
 /**

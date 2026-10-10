@@ -21,8 +21,8 @@ Everything in the app, explained step by step.
 13. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
 14. [Saving, opening and sharing](#ch-saving)
 15. [Settings reference](#ch-settings)
-16. [Component library (all 529)](#ch-library)
-17. [Examples (all 105)](#ch-examples)
+16. [Component library (all 531)](#ch-library)
+17. [Examples (all 106)](#ch-examples)
 18. [Quick reference: formulas and units](#ch-formulas)
 19. [Troubleshooting and FAQ](#ch-troubleshooting)
 20. [About RAPTI and contact](#ch-about)
@@ -36,13 +36,13 @@ Everything in the app, explained step by step.
 #### What you can do with it
 
 - Build analog, digital and mixed circuits on an unlimited canvas.
-- Pick from **529 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
+- Pick from **531 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
 - Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.
 - Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
-- Learn from **105 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
+- Learn from **106 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
 
 #### Who it is for
@@ -222,7 +222,7 @@ On a computer browser you can also use: **Delete** (remove), **R** (rotate), **S
 
 > **Tip:** Always add a **Ground** to your circuit (see chapter 7). Many examples show where it goes.
 
-The complete list of all 529 components, with what each one does and which values you can change, is in the chapter **Component library**.
+The complete list of all 531 components, with what each one does and which values you can change, is in the chapter **Component library**.
 
 <a id="ch-editing"></a>
 
@@ -734,7 +734,7 @@ These are the same defaults SPICE uses. Change them only if you know why; **Rese
 
 <a id="ch-library"></a>
 
-## 16. Component library (all 529)
+## 16. Component library (all 531)
 
 Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.
 
@@ -897,7 +897,7 @@ Fuses, breakers, residual-current devices, surge protectors and relays. They rea
 | **Phase Monitor (ladder)** | The sensing part of a phase-failure / sequence relay (L1, L2, L3, N). While all phases are present, in sequence and balanced, it is operated: its NO Contact (11-14) with the same tag closes in the control ladder. On phase loss, under-voltage, wrong sequence or unbalance it releases after the delay. <br>*Settings:* Tag (contacts with this tag follow it), Minimum phase voltage (RMS) (V), Maximum unbalance (%), Trip delay (s) |
 | **MPCB (ladder)** | Motor protection circuit breaker: a 3-pole switch with a thermal overload release (set to the motor full-load current, Ir) and a magnetic short-circuit release (about 13 × Ir, instant). Tap it to switch OFF / ON; after a trip, tap to reset. Its auxiliary NO Contact (13-14) with the same tag is closed while the breaker is ON — put it in the control circuit. <br>*Settings:* Tag (contacts with this tag follow it), Current setting Ir (A), Switched ON |
 
-### Switches & Relays — 59
+### Switches & Relays — 61
 
 Tap a switch to toggle it while the circuit runs. Push buttons act only while held. Relays, contactors (with main poles and auxiliary 13-14 / 21-22 contacts), latching and timer relays, the 3-pole overload relay and phase / voltage monitoring relays have a **coil** or sensing side and a **contact** side: when the coil is energised the contacts move. To draw a control circuit as a **ladder diagram** (like a textbook), use the ladder parts: put a **Contactor Coil** or **Timer Coil** in a rung and give it a tag such as `KF`; every **NO Contact**, **NC Contact** and **Main Contacts 3-pole** part with the same tag then follows that coil (a new contact takes the tag of the last coil already in the circuit, and the coils that exist are shown as buttons under its *Follows* field — tap one to link it; while running, a contact whose tag matches no coil shows its tag in amber with a ?), and **Overload Relay Heaters** / **Phase Monitor** work the same way for their 95-96, 97-98 and 11-14 contacts. More ladder parts: **Counter Coil** + **Counter Reset Coil** (preset counter), **Floatless Level Relay** watching a **Water Tank**, **Limit Switch NO / NC** operated by a **Carriage / Cylinder** that the coils drive, and the **MPCB**. Every example in *Industrial Control (Ladder)* is drawn this way — open them from Examples.
 
@@ -948,6 +948,8 @@ Tap a switch to toggle it while the circuit runs. Push buttons act only while he
 | **Contactor (3-pole)** | Three-pole power contactor with 230 V AC coil (A1–A2), main contacts L1–T1, L2–T2, L3–T3 and an auxiliary NO contact 13–14 for the hold-in (self-latching) circuit of a DOL starter. <br>*Settings:* Coil rated voltage (V), Coil resistance (Ω), Coil inductance (H), AC coil, AC coil frequency (Hz), Contact rating (A) |
 | **Contactor 3-pole + NO + NC** | Power contactor with a 230 V AC coil (A1–A2), three main contacts (L1–T1, L2–T2, L3–T3) and two auxiliary contacts: 13–14 NO for the hold-in circuit and 21–22 NC for electrical interlocking (forward/reverse, star/delta). <br>*Settings:* Coil rated voltage (V), Coil resistance (Ω), Coil inductance (H), AC coil, AC coil frequency (Hz), Contact rating (A) |
 | **Timer Relay (TON/TOF)** | Time-delay relay. On-delay: the changeover contact (15 COM, 16 NC, 18 NO) switches T seconds after the coil is energised. Off-delay: it switches immediately and returns T seconds after de-energising. <br>*Settings:* Delay time (s), Function, Coil rated voltage (V), Coil resistance (Ω), Coil inductance (H), AC coil, AC coil frequency (Hz), Contact rating (A) |
+| **8-Pin Timer (DPDT, H3CR-A8 / AH3-3)** | The common 8-pin plug-in timer (Omron H3CR-A8 / AH3-3 type) on an octal PF083A socket. Supply on 2–7; two timed changeover poles: 1 common, 4 NC, 3 NO and 8 common, 5 NC, 6 NO. Set the time with the knob and choose the function: on-delay (contacts change T seconds after power is applied — star-delta, staircase, motor start delay), off-delay (they return T seconds after power is removed), interval (ON for T) or flicker (OFF T, ON T, repeating). Contacts 5 A at 250 V AC. <br>*Settings:* Set time (s), Function, Coil, Coil rated voltage (V), Coil resistance (Ω), Coil inductance (H), AC coil, AC coil frequency (Hz), Contact rating (A) |
+| **14-Pin Timer (4PDT, H3Y-4)** | The 14-pin square plug-in timer (Omron H3Y-4 type) on a PYF14A socket, same base as the MY4N relay. Supply on 13–14; four timed changeover poles: 9/1/5, 10/2/6, 11/3/7, 12/4/8 (common/NC/NO). Functions: on-delay, off-delay, interval or flicker. Contacts 3 A at 250 V AC. <br>*Settings:* Set time (s), Function, Coil, Coil rated voltage (V), Coil resistance (Ω), Coil inductance (H), AC coil, AC coil frequency (Hz), Contact rating (A) |
 | **Solid-State Relay (SSR)** | Optically isolated AC solid-state relay: input LED (3+/4−, ~1.2 V + 1 kΩ internal) triggers a TRIAC output (1–2) at the next voltage zero crossing; it turns off at current zero after the input is removed. <br>*Settings:* Input trigger current (A), Zero-cross switching, Output holding current (A) |
 | **Flasher Relay (turn signal)** | Electronic flasher for car and motorcycle turn signals (12 V): B to battery +, E to ground, L to the indicator lamps through the turn switch. It switches the lamps on and off ≈85 times a minute. If a bulb blows the lamp current drops below 70 % of the rated load (2 × 21 W) and it flashes twice as fast — the dashboard warning drivers know. <br>*Settings:* Flash rate (/min), Rated lamp load (W) |
 | **Contactor Coil (ladder)** | The coil (A1–A2) of a contactor or relay, drawn on its own in a rung of a ladder diagram. Every Main Contacts, NO Contact and NC Contact part with the same tag (for example KF) switches with it: they close (NO) or open (NC) when the coil pulls in. 230 V AC coil by default. <br>*Settings:* Tag (contacts with this tag follow it), Coil rated voltage (V), Coil resistance (Ω), Coil inductance (H), AC coil, AC coil frequency (Hz) |
@@ -1423,7 +1425,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="ch-examples"></a>
 
-## 17. Examples (all 105)
+## 17. Examples (all 106)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1553,6 +1555,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 - **Fire alarm zone (smoke detectors)**: A conventional fire-alarm zone: 24 V through a 470 Ω zone resistor feeds two smoke detectors in parallel and a 4.7 kΩ end-of-line resistor (which lets the panel see a broken cable). Normal: the zone sits at ≈21.8 V. Raise the smoke density on either detector above 3 %/m: it latches into alarm and clamps the line to ≈6 V; the comparator (zone below 15 V) sounds the buzzer and lights the LED. Clearing the smoke does not reset it — hold RESET to remove the zone power.
 - **8-pin relay: start / stop with hold-in (MY2N)**: The classic self-holding circuit built with an 8-pin MY2N relay and its 230 V AC coil (13–14). Press START: the coil pulls in, pole 2 (12 common → 8 NO) closes across the START button, so the relay stays on after you let go. Press STOP to break the coil circuit. Pole 1 shows the state: 9 common → 5 NO lights the green RUN lamp, 9 → 1 NC the red OFF lamp. Pin 4 (NC of pole 2) is not used.
 - **14-pin relay switching four circuits (MY4N)**: One switch, four separate circuits: the 14-pin MY4N relay has four changeover poles (common 9, 10, 11, 12; NC 1, 2, 3, 4; NO 5, 6, 7, 8) driven by one 230 V AC coil on 13–14. Turn the switch on and all four lamps light together through the NO contacts 5, 6, 7 and 8; turn it off and they all go out. The NC contacts 1–4 are left free — in a panel they would light an OFF lamp or interlock another starter.
+- **8-pin timer: on-delay lamp (H3CR-A8 / AH3-3)**: An 8-pin plug-in timer set to on-delay, 3 s. Turn the switch on: the timer is powered on 2–7, its dial runs, and the red WAIT lamp stays lit through 1 → 4 (NC). After 3 s the contacts change over: 1 → 3 (NO) lights the green ON lamp and WAIT goes out. Turn the switch off and it resets at once. Select the timer to change the time with the knob or pick off-delay, interval or flicker. Pole 2 (8 common, 5 NC, 6 NO) is free.
 
 ### Power Electronics
 

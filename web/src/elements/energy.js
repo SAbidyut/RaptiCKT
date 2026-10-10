@@ -610,14 +610,47 @@ export class WindTurbine extends Element {
     return [['Wind', this.p.wind, 'm/s'], ['Rotor speed', (this.w * 60) / TAU, 'rpm'], ['Tip-speed ratio λ', l, ''], ['Power coefficient Cp', this.w > 0 && this.p.wind > 0.1 ? (this.ta * this.w) / (0.5 * RHO * Math.PI * this.p.r ** 2 * this.p.wind ** 3) : 0, ''],
       ['Rotor power', this.ta * this.w, 'W'], ['Electrical power', (s.v(this.nodes[0]) - s.v(this.nodes[1])) * this.io, 'W'], ['Output current', this.io, 'A']];
   }
+  /**
+   * Blade angle for the screen. The real rotor turns 5–25 times a second, far faster than the
+   * display can show (a 60 Hz screen would see the blades jump, stand still or run backwards),
+   * so the picture turns at a smooth, wall-clock rate that rises with the rotor speed and is
+   * capped below the aliasing limit; it stops when the rotor stops.
+   */
+  visualAngle(g) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const dt = this._tw ? Math.min(0.1, (now - this._tw) / 1000) : 0;
+    this._tw = now;
+    const rpm = ((this.w || 0) * 60) / TAU;
+    if (g.running) {
+      this.vang = (this.vang || 0) + dt * TAU * 1.4 * Math.tanh(rpm / 600); // ≤1.4 rev/s on screen
+      this.vwind = (this.vwind || 0) + dt * (0.4 + 0.12 * this.p.wind); // streak phase
+    }
+    return this.vang || 0;
+  }
   draw(g) {
-    g.line(0, -0.25 * G, 0, 0.45 * G, g.body, g.lw * 1.2);
+    const hub = [0, -1.05 * G], R = 0.78 * G, a = this.visualAngle(g);
+    // tower and generator
+    g.poly([[-0.07 * G, hub[1]], [0.07 * G, hub[1]], [0.12 * G, -0.45 * G], [-0.12 * G, -0.45 * G]], { stroke: g.body, width: g.lw * 0.6, fill: g.fill, close: true });
     g.box(-0.7 * G, -0.45 * G, 0.7 * G, 0.45 * G, { stroke: g.body, width: g.lw * 0.8, fill: g.fill, r: 4 });
     g.upright(() => g.text('G', 0, 0.5, { size: 8, color: g.text2, bold: true }));
-    const hub = [0, -1.05 * G], a = this.ang || 0;
-    for (let k = 0; k < 3; k++) { const t = a + (k * TAU) / 3; g.line(hub[0], hub[1], hub[0] + Math.cos(t) * 0.75 * G, hub[1] + Math.sin(t) * 0.75 * G, g.accent, g.lw * 1.4); }
-    g.line(0, -1.05 * G, 0, -0.45 * G, g.body, g.lw);
-    g.circle(hub[0], hub[1], 2.5, { fill: g.body });
+    // wind streaks, faster and more of them with more wind
+    const wind = this.p.wind, n = wind < 0.5 ? 0 : wind < 5 ? 1 : wind < 12 ? 2 : 3;
+    if (g.running && n) {
+      for (let k = 0; k < n; k++) {
+        const y = hub[1] + (k - (n - 1) / 2) * 0.35 * G, ph = ((this.vwind || 0) + k * 0.37) % 1;
+        const x0 = -1.95 * G + ph * 0.75 * G, len = (0.2 + 0.02 * Math.min(wind, 20)) * G;
+        g.line(x0, y, Math.min(x0 + len, -0.95 * G), y, g.muted, g.lw * 0.5);
+      }
+    }
+    // rotor: blurred disc when it turns fast, three tapered blades
+    const rpm = ((this.w || 0) * 60) / TAU;
+    if (g.running && rpm > 200) g.circle(hub[0], hub[1], R, { fill: `rgba(120,180,255,${Math.min(0.18, (rpm - 200) / 3000).toFixed(3)})` });
+    for (let k = 0; k < 3; k++) {
+      const t = a + (k * TAU) / 3, c = Math.cos(t), sn = Math.sin(t), px = -sn, py = c;
+      const P = (r, w) => [hub[0] + c * r + px * w, hub[1] + sn * r + py * w];
+      g.poly([P(0.12 * G, -0.06 * G), P(0.3 * G, 0.11 * G), P(R, 0.03 * G), P(R, -0.01 * G), P(0.12 * G, 0.04 * G)], { fill: g.accent, stroke: g.accent, width: g.lw * 0.3, close: true });
+    }
+    g.circle(hub[0], hub[1], 0.13 * G, { fill: g.body });
     g.text('+', -1.45 * G, -0.5 * G, { size: 10, color: g.pos, bold: true });
   }
 }

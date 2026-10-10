@@ -107,3 +107,37 @@ test('flasher: ≈85 flashes a minute, twice as fast with a bulb out', () => {
     assert.ok(n * 5 >= lo && n * 5 <= hi, `${w} W: ${n * 5}/min`);
   }
 });
+
+test('8-pin timer: on-delay, off-delay, interval and flicker on its 1/4/3 pole', () => {
+  // pins: 2, 7 supply; 1 COM, 4 NC, 3 NO; 8 COM, 5 NC, 6 NO
+  const rig = (mode) => {
+    const r = net([['dcv', [1, 0], { amp: 24 }], ['switch', [1, 2], { closed: true }], ['timer8', [2, 0, 3, 4, 5, 3, 6, 7], { mode, t: 1, model: '24 V DC', vcoil: 24, rcoil: 600, lcoil: 0.02, ac: false }],
+      ['dcv', [3, 0], { amp: 5 }], ...[4, 5, 6, 7].map((n) => ['resistor', [n, 0], { r: 1000 }])]);
+    r.sim.start();
+    return { ...r, no: () => r.sim.v(5) > 4.9, nc: () => r.sim.v(4) > 4.9 };
+  };
+  let r = rig('on');
+  run(r.sim, 0.5, 1e-3); assert.ok(!r.no() && r.nc(), 'on-delay: still waiting at 0.5 s');
+  run(r.sim, 0.7, 1e-3); assert.ok(r.no() && !r.nc(), 'on-delay: changed over after 1 s');
+  r.els[1].p.closed = false; r.sim.dirty = true; run(r.sim, 0.05, 1e-3); assert.ok(!r.no(), 'on-delay: resets when power is removed');
+  r = rig('off');
+  run(r.sim, 0.2, 1e-3); assert.ok(r.no(), 'off-delay: on at once');
+  r.els[1].p.closed = false; r.sim.dirty = true; run(r.sim, 0.5, 1e-3); assert.ok(r.no(), 'off-delay: still on 0.5 s after power off');
+  run(r.sim, 0.7, 1e-3); assert.ok(!r.no(), 'off-delay: off after 1 s');
+  r = rig('int');
+  run(r.sim, 0.5, 1e-3); assert.ok(r.no(), 'interval: on for T');
+  run(r.sim, 0.7, 1e-3); assert.ok(!r.no(), 'interval: off after T');
+  r = rig('flk');
+  let edges = 0, p = false; run(r.sim, 6.5, 1e-3, () => { const n = r.no(); if (n && !p) edges++; p = n; });
+  assert.ok(edges === 3, 'flicker: 1 s off / 1 s on → 3 cycles in 6.5 s, got ' + edges);
+});
+
+test('14-pin timer switches all four poles after its delay', () => {
+  const poles = [[3, 4], [5, 6], [7, 8], [9, 10]];
+  const { sim } = net([['dcv', [1, 0], { amp: 24 }], ['timer14', [1, 0, ...poles.flatMap(([nc, no]) => [2, nc, no])], { t: 0.5, model: '24 V DC', vcoil: 24, rcoil: 600, lcoil: 0.02, ac: false }],
+    ['dcv', [2, 0], { amp: 5 }], ...poles.flat().map((n) => ['resistor', [n, 0], { r: 1000 }])]);
+  sim.start(); run(sim, 0.3, 1e-3);
+  for (const [nc, no] of poles) assert.ok(sim.v(nc) > 4.9 && sim.v(no) < 0.1, 'waiting');
+  run(sim, 0.4, 1e-3);
+  for (const [nc, no] of poles) assert.ok(sim.v(no) > 4.9 && sim.v(nc) < 0.1, `pole ${no} changed over`);
+});

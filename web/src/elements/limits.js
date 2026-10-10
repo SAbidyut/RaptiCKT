@@ -266,7 +266,7 @@ lim(['tvs', 'tvsbi'], () => ({ rules: [PD(5, { T2: 2, m: 4, inst: 120, why: (x) 
 const SW = {
   switch: 10, togglesw: 6, slidesw: 0.5, rockersw: 10, keysw: 5, oneway: 10, twoway: 10, threeway: 15, intermediate: 10, spdt: 5, dpst: 10, dpdt: 5,
   pushno: 3, pushnc: 3, footsw: 10, latchbtn: 3, estop: 10, limitsw: 10, rotary4: 3, dipsw: 0.1, selector3: 10, isolator: 63, changeover: 63,
-  reed: 0.5, floatsw: 10, pressw: 16, thermostat: 16, relay: 10, relayspst: 10, relaydpst: 10, relaydpdt: 5, relay8: 5, relay8oct: 10, relay14: 3, relayauto4: 30, relayauto5: 30, relaymod: 10, reedrelay: 0.5, latchrelay: 10,
+  reed: 0.5, floatsw: 10, pressw: 16, thermostat: 16, relay: 10, relayspst: 10, relaydpst: 10, relaydpdt: 5, relay8: 5, relay8oct: 10, relay14: 3, relayauto4: 30, relayauto5: 30, relaymod: 10, timer8: 5, timer14: 3, reedrelay: 0.5, latchrelay: 10,
   auxrelay: 10, contactor: 25, contactor2: 25, tdr: 5, lno: 10, lnc: 10, lmain3: 25, photocell: 6, pirsw: 6, socket: 16, jbox: 32,
 };
 addProp(Object.keys(SW), { key: 'irate', label: 'Contact rating', unit: 'A', def: SW, min: 0.01, max: 6300, log: true });
@@ -274,7 +274,7 @@ const contacts = (e, extra = []) => ({
   rules: [...extra, I(e.p.irate, { model: 'therm', tau: 60, lim: 1.5, why: (x) => `Contacts burnt — ${fmtShort(x, 'A')} through a ${fmtShort(e.p.irate, 'A')} contact` })],
   fail: [],
 });
-const COIL = ['relay', 'relayspst', 'relaydpst', 'relaydpdt', 'relay8', 'relay8oct', 'relay14', 'relayauto4', 'relayauto5', 'reedrelay', 'latchrelay', 'auxrelay', 'contactor', 'contactor2', 'tdr', 'lcoil', 'ltimer', 'lcounter', 'lcreset', 'llevel'];
+const COIL = ['relay', 'relayspst', 'relaydpst', 'relaydpdt', 'relay8', 'relay8oct', 'relay14', 'relayauto4', 'relayauto5', 'timer8', 'timer14', 'reedrelay', 'latchrelay', 'auxrelay', 'contactor', 'contactor2', 'tdr', 'lcoil', 'ltimer', 'lcounter', 'lcreset', 'llevel'];
 const coilPower = (e) => {
   const R = e.p.rcoil || 100, X = e.p.ac ? 2 * Math.PI * (e.p.freq || 50) * (e.p.lcoil || 0) : 0, Z2 = R * R + X * X;
   return (e.p.vcoil * e.p.vcoil * R) / Z2;
