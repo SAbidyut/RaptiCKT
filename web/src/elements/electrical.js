@@ -365,7 +365,7 @@ register(NeonLamp);
 // ------------------------------------------------------------ appliances
 export class CeilingFan extends TwoTerm {
   static type = 'fan'; static title = 'Ceiling Fan'; static category = 'Electrical';
-  static prefix = 'M'; static keywords = 'ceiling fan table fan single phase induction motor capacitor 75w';
+  static prefix = 'M'; static keywords = 'ceiling fan table fan exhaust fan pedestal fan single phase induction motor capacitor 75w';
   static props = [
     { key: 'v', label: 'Rated voltage (RMS)', unit: 'V', def: 230, min: 12, max: 480 },
     { key: 'w', label: 'Rated power', unit: 'W', def: 75, min: 1, max: 2000, knob: true },
@@ -374,18 +374,20 @@ export class CeilingFan extends TwoTerm {
     { key: 'freq', label: 'Rated frequency', unit: 'Hz', def: 50, min: 1, max: 400 },
     { key: 'cv', label: 'Capacitor rating (AC)', unit: 'V', def: 440, min: 50, max: 1000 },
   ];
-  static description = 'Ceiling fan (permanent-split capacitor motor) as an equivalent series R–L load from rated power and power factor. Speed follows the winding current with the fan load curve and the blade inertia; stalls below ≈35 % — try it with a regulator. Over-voltage saturates the iron core, so the current rises much faster than the voltage; the run capacitor (≈1.2 × the supply voltage across it) bursts above its rating and the fan then only hums, drawing locked-rotor current; the winding (class B, ≈100 °C at rated load) burns at ≈180 °C.';
-  constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.ang = 0; this.sat = 1; }
+  static description = 'Ceiling / table / exhaust fan (permanent-split capacitor motor) as an equivalent series R–L load from rated power and power factor. Speed follows the winding current with the fan load curve and the blade inertia; stalls below ≈35 % — try it with a regulator. Switched off, it carries no current and runs down. Over-voltage saturates the iron core, so the current climbs much faster than the voltage; the run capacitor (≈1.2 × the supply across it) bursts above its rating and the fan slows to a hum at locked-rotor current; the winding (class B, ≈100 °C at rated load) burns at ≈180 °C. A 230 V fan on 500 V: capacitor bursts in about a second, winding burns a few seconds later, and it stays dead until replaced.';
+  constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.vcyc = new Rms(0.02); this.speed = 0; this.ang = 0; this.sat = 1; this.tw = 40; this.capWear = 0; }
   branchCount() { return 1; }
+  /** run capacitor burst but the winding still conducts: it hums instead of turning */
   capGone() { return !!(this.damaged && this.damaged.partial); }
+  burnt() { return !!(this.damaged && !this.damaged.partial); }
   rl0() {
-    if (this.damaged && !this.damaged.partial) return [1e9, 0];
+    if (this.burnt()) return [1e9, 0];
     const S = this.p.w / this.p.pf, Z = (this.p.v * this.p.v) / S, R = Z * this.p.pf, X = Z * Math.sqrt(1 - this.p.pf ** 2);
     // a saturated core and a stalled rotor both lower the impedance
     const k = (this.sat || 1) * (this.capGone() ? 1.8 : 1);
     return [R / k, X / (TAU * this.p.freq) / k];
   }
-  reset() { this.rl.reset(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.speed = 0; this.sat = 1; this.tw = 40; this.capWear = 0; this.setCurrent(0); }
+  reset() { this.rl.reset(); this.rms = new Rms(0.1); this.irms = new Rms(0.1); this.icyc = new Rms(0.02); this.vcyc = new Rms(0.02); this.speed = 0; this.sat = 1; this.tw = 40; this.capWear = 0; this.setCurrent(0); }
   irated() { return this.p.w / (this.p.pf * this.p.v); }
   /** spinning on its own inertia with (almost) no current: switched off or stalled by the regulator */
   coasting() { return (this.speed || 0) >= 1 && this.icyc.v < 0.05 * this.irated(); }
@@ -396,54 +398,59 @@ export class CeilingFan extends TwoTerm {
     this.rl.accept(s, this.nodes[0], this.nodes[1], this.branches[0], R);
     this.setCurrent(this.rl.i);
     if (s.mode === 'dc') return;
-    this.rms.push(this.voltageDiff(s), s.dt);
+    this.rms.push(this.voltageDiff(s), s.dt); this.vcyc.push(this.voltageDiff(s), s.dt);
     // driven by the current, not the terminal voltage: an open-circuited winding has no torque
     // (and an inductive kick across the open switch must not spin it up)
     const vr = this.irms.push(this.rl.i, s.dt) / this.irated();
     this.icyc.push(this.rl.i, s.dt);
-    if (!this.damaged || this.damaged.partial) {
-      // iron saturation above ≈1.15 × rated voltage: the magnetising current climbs steeply
-      const x = this.rms.v / this.p.v, sat = 1 + 2 * Math.max(0, x - 1.15) ** 2;
-      if (Math.abs(sat - this.sat) > 0.02 * this.sat) { this.sat = sat; s.dirty = true; }
-      // run capacitor: ≈1.2 × the supply across it; above ≈1.2 × its rating it breaks down in seconds
-      const rc = (1.2 * this.rms.v) / this.p.cv;
-      if (!this.capGone() && rc > 1.2) {
-        this.capWear = (this.capWear || 0) + s.heatDt() / (5 * Math.pow(1.4 / rc, 10));
-        if (this.capWear >= 1 && this.setDamage(s, `Run capacitor burst — ${fmtShort(1.2 * this.rms.v, 'V')} across a ${fmtShort(this.p.cv, 'V')} capacitor. The fan only hums and draws locked-rotor current: switch it off!`)) { this.damaged.partial = true; s.dirty = true; }
-      }
-      // winding temperature (class B insulation): ≈100 °C at rated current, time constant ≈6 min
-      const r2 = vr * vr;
-      this.tw = (this.tw ?? 40) + (40 + 60 * r2 - (this.tw ?? 40)) * Math.min(1, s.heatDt() / 345);
-      this.stress = Math.max(this.capGone() ? 0 : Math.min(1, this.capWear || 0), Math.min(1, Math.max(0, (this.tw - 110) / 70)));
-      if (this.tw > 180) {
-        if (this.damaged) this.damaged = null;
-        this.setDamage(s, `Winding burnt — insulation charred at ${Math.round(this.tw)} °C (${fmtShort(this.irms.v, 'A')}, rated ${fmtShort(this.irated(), 'A')})${this.sat > 1.3 ? ': over-voltage saturated the core' : this.capGone() ? ': it was left humming with a dead capacitor' : ''}`);
-      }
-    }
-    const target = vr < 0.35 || this.capGone() ? 0 : this.p.rpm * Math.min(1.05, Math.pow((vr - 0.35) / 0.65, 0.6));
+    if (!this.burnt()) this.overStress(s, vr);
+    const target = vr < 0.35 || this.damaged ? 0 : this.p.rpm * Math.min(1.05, Math.pow((vr - 0.35) / 0.65, 0.6));
     this.speed += (target - this.speed) * Math.min(1, s.dt / 0.3); // quick spin-up, so it settles at mains simulation speeds
     if (target === 0 && this.speed < 1) this.speed = 0; // bearing friction: it does stop
     this.ang += (this.speed / 60) * TAU * s.dt;
   }
+  /** core saturation, run capacitor and winding temperature on the thermal (real-time) clock */
+  overStress(s, vr) {
+    // iron saturation above ≈1.15 × rated voltage: the magnetising current climbs steeply
+    // (both follow the voltage of the last cycle or so, not a slow average)
+    const x = this.vcyc.v / this.p.v, sat = Math.min(6, 1 + 2 * Math.max(0, x - 1.15) ** 2);
+    if (Math.abs(sat - this.sat) > 0.02 * this.sat) { this.sat = sat; s.dirty = true; }
+    // run capacitor: ≈1.2 × the supply across it. A little over its rating it lasts a few
+    // seconds; at ≈1.3 × (about 570 V on a 440 V capacitor) it bursts within a second or so
+    const vc = 1.2 * this.vcyc.v, rc = vc / this.p.cv;
+    if (!this.capGone() && rc > 1.1) {
+      this.capWear += s.heatDt() / (2 * Math.pow(1.3 / rc, 12));
+      if (this.capWear >= 1 && this.setDamage(s, `Run capacitor burst — ${fmtShort(vc, 'V')} across a ${fmtShort(this.p.cv, 'V')} capacitor. The fan only hums at locked-rotor current and the winding is overheating — switch it off`)) { this.damaged.partial = true; s.dirty = true; }
+    }
+    // winding temperature (class B insulation): ≈100 °C at rated current, burns at ≈180 °C
+    this.tw += (40 + 60 * vr * vr - this.tw) * Math.min(1, s.heatDt() / 120);
+    this.stress = Math.max(this.capGone() ? 0.6 : Math.min(1, this.capWear), Math.min(1, Math.max(0, (this.tw - 110) / 70)));
+    if (this.tw > 180) {
+      const why = `Winding burnt — insulation charred at ${Math.round(this.tw)} °C (${fmtShort(this.irms.v, 'A')}, rated ${fmtShort(this.irated(), 'A')})${this.sat > 1.3 ? `: ${fmtShort(this.rms.v, 'V')} on a ${fmtShort(this.p.v, 'V')} fan saturated the core` : this.capGone() ? ': it was left humming with a burst capacitor' : ': overloaded for too long'}`;
+      this.damaged = null;
+      this.setDamage(s, why);
+    }
+  }
   stampAC(ac) { const [R, L] = this.rl0(); this.rl.ac(ac, this.nodes[0], this.nodes[1], this.branches[0], R, L); }
-  valueLabel() { return fmtQty(Math.round(this.speed || 0), 'rpm') + (this.coasting() ? ' coasting' : ''); }
+  valueLabel() { return this.burnt() ? 'BURNT' : this.capGone() ? 'humming' : fmtQty(Math.round(this.speed || 0), 'rpm') + (this.coasting() ? ' coasting' : ''); }
   readings(s) {
-    const st = this.damaged && !this.damaged.partial ? 'BURNT — ' + this.damaged.why : this.capGone() ? 'Capacitor burst — humming, not turning' : this.coasting() ? 'Coasting (no current)' : this.speed >= 1 ? 'Running' : 'Stopped';
+    const st = this.burnt() ? 'BURNT — replace it' : this.capGone() ? 'Capacitor burst — humming, not turning' : this.coasting() ? 'Coasting (no current)' : this.speed >= 1 ? 'Running' : 'Stopped';
     return [['Speed', this.speed || 0, 'rpm'], ['State', st, ''], ['Voltage (RMS)', this.rms.v, 'V'], ['Current (RMS)', this.irms.v, 'A'], ['Winding temperature', this.tw ?? 40, '°C'], ['Voltage', this.voltageDiff(s), 'V']];
   }
   leads() { return [[0, -2 * G, 0, -G, 0], [1, 2 * G, 0, G, 0]]; }
   localBox() { return [-2 * G, -1.1 * G, 2 * G, 1.1 * G]; }
   draw(g) {
-    g.circle(0, 0, G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill });
+    const burnt = this.burnt();
+    g.circle(0, 0, G, { stroke: burnt ? '#5b4636' : g.body, width: g.lw * 0.9, fill: g.fill });
     const a = this.ang || 0, ctx = g.ctx;
     for (let k = 0; k < 3; k++) {
       const t = a + (k * TAU) / 3;
       ctx.save(); ctx.rotate(t);
       ctx.beginPath(); ctx.ellipse(0.48 * G, 0, 0.42 * G, 0.14 * G, 0, 0, TAU);
-      ctx.fillStyle = g.running && this.speed > 5 ? 'rgba(34,211,238,0.55)' : 'rgba(148,178,230,0.35)'; ctx.fill();
+      ctx.fillStyle = burnt ? 'rgba(60,40,28,0.8)' : g.running && this.speed > 5 ? 'rgba(34,211,238,0.55)' : 'rgba(148,178,230,0.35)'; ctx.fill();
       ctx.restore();
     }
-    g.circle(0, 0, 0.16 * G, { fill: g.accent });
+    g.circle(0, 0, 0.16 * G, { fill: burnt ? '#3b2a20' : this.capGone() ? '#ef4444' : g.accent });
   }
 }
 register(CeilingFan);
