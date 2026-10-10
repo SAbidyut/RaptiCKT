@@ -531,6 +531,25 @@ function cp(l) {
   const li = 1 / (1 / l - 0.035);
   return Math.max(0, 0.5176 * (116 / li - 5) * Math.exp(-21 / li) + 0.0068 * l);
 }
+// Torque coefficient Ct(λ) = Cp/λ of the rotor over its whole speed range:
+//  - below the λ of peak torque the blades are stalled: Ct falls off gently to the
+//    starting torque at standstill (never so steeply that more wind gives less torque);
+//  - between peak torque and runaway it is Cp(λ)/λ;
+//  - above runaway (Cp = 0, λ ≈ 13) the rotor windmills: Ct goes negative and the
+//    air brakes it, so a rotor spinning too fast for the wind slows down.
+const CT = (() => {
+  let lpk = 0.2, ctpk = 0;
+  for (let l = 0.2; l < 13; l += 0.005) if (cp(l) / l > ctpk) { ctpk = cp(l) / l; lpk = l; }
+  let l0 = lpk;
+  while (cp(l0 + 0.001) > 0) l0 += 0.001;
+  const h = 0.05, slope = (cp(l0) / l0 - cp(l0 - h) / (l0 - h)) / h; // negative
+  return { lpk, ctpk, l0, slope };
+})();
+export function ctWind(l) {
+  if (l <= CT.lpk) return CT.ctpk * (0.35 + 0.65 * Math.max(0, l) / CT.lpk);
+  if (l < CT.l0) return cp(l) / l;
+  return CT.slope * (l - CT.l0);
+}
 export class WindTurbine extends Element {
   static type = 'windgen'; static title = 'Wind Turbine Generator'; static category = 'Renewables';
   static prefix = 'WT'; static keywords = 'wind turbine generator small wind pmsg rectifier battery charging renewable tip speed ratio';
@@ -543,7 +562,7 @@ export class WindTurbine extends Element {
     { key: 'j', label: 'Rotor inertia', unit: 'kg·m²', def: 0.8, min: 1e-3, max: 1e7, log: true },
     { key: 'cutout', label: 'Cut-out wind speed', unit: 'm/s', def: 25, min: 5, max: 40 },
   ];
-  static description = 'Small wind turbine with a permanent-magnet generator and built-in rectifier (DC output). Aerodynamic power P = ½ρπR²v³·Cp(λ), with the power coefficient Cp peaking at ≈0.48 near tip-speed ratio λ = ωR/v ≈ 8; the generator EMF is Ke·ω and the rectifier only lets current flow out of +. Above rated power the blades stall/furl to hold the rated power; above the cut-out speed the rotor is braked. Load it with a battery to see the operating point settle.';
+  static description = 'Small wind turbine with a permanent-magnet generator and built-in rectifier (DC output). Aerodynamic power P = ½ρπR²v³·Cp(λ), with the power coefficient Cp peaking at ≈0.48 near tip-speed ratio λ = ωR/v ≈ 8; the generator EMF is Ke·ω and the rectifier only lets current flow out of +. Above rated power the blades stall/furl to hold the rated power; above the cut-out speed the rotor is braked. When the wind drops, a rotor turning faster than the wind can drive is slowed by the air (and by its load), so the speed, voltage and power follow the wind knob both up and down; with no wind it coasts to a stop. Load it with a battery to see the operating point settle.';
   nonlinear = true;
   refNode = 1;
   constructor(x, y) { super(x, y); this.postCurrents = [0, 0]; }
@@ -558,15 +577,22 @@ export class WindTurbine extends Element {
   }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1e-7); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1e-7); }
+  /** aerodynamic torque on the rotor at speed w (rad/s) in the present wind */
   aero(w) {
-    const v = this.p.wind, R = this.p.r;
-    if (v < 0.1 || v > this.p.cutout) return -5 * w * this.p.j; // parked / braked
-    const l = (w * R) / v, A = Math.PI * R * R;
-    // torque coefficient with a starting torque at low λ
-    const ct = Math.max(l > 0.2 ? cp(l) / l : 0, 0.04 * (1 - l / 3));
-    let T = 0.5 * RHO * A * R * v * v * ct;
-    if (T * w > this.p.prated) T = this.p.prated / w;
+    const v = this.p.wind, R = this.p.r, k = 0.5 * RHO * Math.PI * R * R * R;
+    if (v > this.p.cutout) return -5 * w * this.p.j; // storm: the brake stops the rotor
+    // blade profile drag: the only torque left when the wind drops to nothing
+    const drag = k * 3e-5 * (w * R) ** 2;
+    if (v < 0.05) return -drag;
+    const l = (w * R) / v;
+    let T = k * v * v * ctWind(l) - drag;
+    if (T * w > this.p.prated) T = this.p.prated / w; // furling holds the rated power
     return T;
+  }
+  /** bearing and generator iron losses: ≈3 % of the rated torque, plus a little viscous drag */
+  loss(w) {
+    const R = this.p.r, vr = Math.cbrt(this.p.prated / (0.5 * RHO * Math.PI * R * R * 0.48)), wr = (8 * vr) / R;
+    return 0.03 * (this.p.prated / wr) * Math.tanh(w / 2) + 0.002 * w;
   }
   accept(s) {
     const [a, b] = this.nodes, v = s.v(a) - s.v(b), io = this.out(v).i;
@@ -575,7 +601,7 @@ export class WindTurbine extends Element {
     if (s.mode === 'dc') return;
     this.ta = this.aero(this.w);
     const tg = this.p.ke * io;
-    this.w = Math.max(0, this.w + ((this.ta - tg - 0.002 * this.w) / this.p.j) * s.dt);
+    this.w = Math.max(0, this.w + ((this.ta - tg - this.loss(this.w)) / this.p.j) * s.dt);
     this.ang += this.w * s.dt;
   }
   valueLabel() { return fmtQty(this.p.wind, 'm/s'); }
@@ -584,14 +610,47 @@ export class WindTurbine extends Element {
     return [['Wind', this.p.wind, 'm/s'], ['Rotor speed', (this.w * 60) / TAU, 'rpm'], ['Tip-speed ratio λ', l, ''], ['Power coefficient Cp', this.w > 0 && this.p.wind > 0.1 ? (this.ta * this.w) / (0.5 * RHO * Math.PI * this.p.r ** 2 * this.p.wind ** 3) : 0, ''],
       ['Rotor power', this.ta * this.w, 'W'], ['Electrical power', (s.v(this.nodes[0]) - s.v(this.nodes[1])) * this.io, 'W'], ['Output current', this.io, 'A']];
   }
+  /**
+   * Blade angle for the screen. The real rotor turns 5–25 times a second, far faster than the
+   * display can show (a 60 Hz screen would see the blades jump, stand still or run backwards),
+   * so the picture turns at a smooth, wall-clock rate that rises with the rotor speed and is
+   * capped below the aliasing limit; it stops when the rotor stops.
+   */
+  visualAngle(g) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const dt = this._tw ? Math.min(0.1, (now - this._tw) / 1000) : 0;
+    this._tw = now;
+    const rpm = ((this.w || 0) * 60) / TAU;
+    if (g.running) {
+      this.vang = (this.vang || 0) + dt * TAU * 1.4 * Math.tanh(rpm / 600); // ≤1.4 rev/s on screen
+      this.vwind = (this.vwind || 0) + dt * (0.4 + 0.12 * this.p.wind); // streak phase
+    }
+    return this.vang || 0;
+  }
   draw(g) {
-    g.line(0, -0.25 * G, 0, 0.45 * G, g.body, g.lw * 1.2);
+    const hub = [0, -1.05 * G], R = 0.78 * G, a = this.visualAngle(g);
+    // tower and generator
+    g.poly([[-0.07 * G, hub[1]], [0.07 * G, hub[1]], [0.12 * G, -0.45 * G], [-0.12 * G, -0.45 * G]], { stroke: g.body, width: g.lw * 0.6, fill: g.fill, close: true });
     g.box(-0.7 * G, -0.45 * G, 0.7 * G, 0.45 * G, { stroke: g.body, width: g.lw * 0.8, fill: g.fill, r: 4 });
     g.upright(() => g.text('G', 0, 0.5, { size: 8, color: g.text2, bold: true }));
-    const hub = [0, -1.05 * G], a = this.ang || 0;
-    for (let k = 0; k < 3; k++) { const t = a + (k * TAU) / 3; g.line(hub[0], hub[1], hub[0] + Math.cos(t) * 0.75 * G, hub[1] + Math.sin(t) * 0.75 * G, g.accent, g.lw * 1.4); }
-    g.line(0, -1.05 * G, 0, -0.45 * G, g.body, g.lw);
-    g.circle(hub[0], hub[1], 2.5, { fill: g.body });
+    // wind streaks, faster and more of them with more wind
+    const wind = this.p.wind, n = wind < 0.5 ? 0 : wind < 5 ? 1 : wind < 12 ? 2 : 3;
+    if (g.running && n) {
+      for (let k = 0; k < n; k++) {
+        const y = hub[1] + (k - (n - 1) / 2) * 0.35 * G, ph = ((this.vwind || 0) + k * 0.37) % 1;
+        const x0 = -1.95 * G + ph * 0.75 * G, len = (0.2 + 0.02 * Math.min(wind, 20)) * G;
+        g.line(x0, y, Math.min(x0 + len, -0.95 * G), y, g.muted, g.lw * 0.5);
+      }
+    }
+    // rotor: blurred disc when it turns fast, three tapered blades
+    const rpm = ((this.w || 0) * 60) / TAU;
+    if (g.running && rpm > 200) g.circle(hub[0], hub[1], R, { fill: `rgba(120,180,255,${Math.min(0.18, (rpm - 200) / 3000).toFixed(3)})` });
+    for (let k = 0; k < 3; k++) {
+      const t = a + (k * TAU) / 3, c = Math.cos(t), sn = Math.sin(t), px = -sn, py = c;
+      const P = (r, w) => [hub[0] + c * r + px * w, hub[1] + sn * r + py * w];
+      g.poly([P(0.12 * G, -0.06 * G), P(0.3 * G, 0.11 * G), P(R, 0.03 * G), P(R, -0.01 * G), P(0.12 * G, 0.04 * G)], { fill: g.accent, stroke: g.accent, width: g.lw * 0.3, close: true });
+    }
+    g.circle(hub[0], hub[1], 0.13 * G, { fill: g.body });
     g.text('+', -1.45 * G, -0.5 * G, { size: 10, color: g.pos, bold: true });
   }
 }

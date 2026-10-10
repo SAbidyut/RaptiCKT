@@ -5,6 +5,7 @@ import { GRID } from '../elements/index.js';
 import { WIRE_PRESETS } from '../elements/cables.js';
 import { EXAMPLES2, ALLOW_OPEN2 } from './examples2.js';
 import { EXAMPLES3, ALLOW_OPEN3 } from './examples3.js';
+import { EXAMPLES4, ALLOW_OPEN4 } from './examples4.js';
 
 const G = GRID;
 
@@ -895,10 +896,10 @@ const BASE = [
   },
 ];
 
-export const EXAMPLES = [...BASE, ...EXAMPLES2, ...EXAMPLES3];
+export const EXAMPLES = [...BASE, ...EXAMPLES2, ...EXAMPLES3, ...EXAMPLES4];
 
 // unused outputs that are legitimately left open (relay NC contacts, the RAM cells' Q̄, the tens carry)
-export const EXAMPLE_ALLOW_OPEN = { relay: 1, ram16: 16, clock60: 1, streetlight: 1, ...ALLOW_OPEN2, ...ALLOW_OPEN3 };
+export const EXAMPLE_ALLOW_OPEN = { relay: 1, ram16: 16, clock60: 1, streetlight: 1, ...ALLOW_OPEN2, ...ALLOW_OPEN3, ...ALLOW_OPEN4 };
 
 export function buildExample(ex) {
   const b = builder(ex.title);
