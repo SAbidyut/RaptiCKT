@@ -12,6 +12,7 @@ import { Renderer, WireGraph } from './ui/render.js';
 import { THEMES } from './ui/theme.js';
 import { LOGO_SVG, icon } from './ui/icons.js';
 import { APP } from './ui/brand.js';
+import { installWebShell } from './ui/webshell.js';
 
 class App {
   constructor() {
@@ -49,6 +50,7 @@ class App {
         if (d.id && !d.isExample) this.saveToLibrary(d, true);
       }
     };
+    installWebShell(this);
     this.show('home');
     this.home.render();
     setTimeout(() => { this.el.querySelector('.splash').classList.add('hide'); document.documentElement.classList.add('app-ready'); }, 1300);

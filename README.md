@@ -14,6 +14,10 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 2. Download `RaptiCKT-v1.0.0-buildN.apk` (or `RaptiCKT-latest.apk`) on your phone.
 3. Open it, and allow "Install unknown apps" for your browser or file manager if Android asks. Requires Android 8.0 or newer.
 
+## Website version (rapti.net)
+
+The full app also runs in a browser. `website/raptickt/` is a ready-to-upload folder (and `website/raptickt-website.zip` the same, zipped) for a section of [rapti.net](https://rapti.net); see [website/README.md](website/README.md) for uploading and embedding. Rebuild it with `cd web && npm run website`.
+
 ## Features
 
 - **520 components** in 22 categories, each with a physical simulation model:

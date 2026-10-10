@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" aria-label="RaptiCKT logo" class="rlogo">
+  <defs>
+    <linearGradient id="fava" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>
+    <radialGradient id="favb" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect x="4" y="4" width="120" height="120" rx="32" fill="url(#fava)"/>
+  <rect x="4" y="4" width="120" height="120" rx="32" fill="url(#favb)"/>
+  <!-- "R" whose leg is a resistor, with circuit terminals -->
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M45 66V28h22a19 19 0 0 1 0 38H45" stroke-width="9.5"/>
+    <path d="M45 66V92" stroke-width="9.5"/>
+    <path d="M61.0 66.0 L65.0 70.4 L61.9 78.8 L79.2 74.1 L72.8 90.9 L90.1 86.2 L87.0 94.6 L91.0 99.0" stroke-width="7.5"/>
+    <circle cx="45" cy="99.5" r="6.5" stroke-width="5"/>
+    <circle cx="95.5" cy="103.5" r="6.5" stroke-width="5"/>
+  </g>
+  <circle class="logo-dot" cx="98" cy="30" r="8.5" fill="#fbbf24"/>
+</svg>
