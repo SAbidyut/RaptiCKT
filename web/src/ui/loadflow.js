@@ -52,11 +52,12 @@ export class LoadFlowScreen {
     this.res = null;
     this.n1 = null;
     this.flowLabel = 'P';
+    this.diagStyle = s?.diagStyle === 'modern' ? 'modern' : 'classic';
     this.ybusPolar = false;
     this.iterBus = 'all';
   }
 
-  persist() { store.saveLfState({ sys: this.sys, opts: this.opts, caseId: this.caseId }); }
+  persist() { store.saveLfState({ sys: this.sys, opts: this.opts, caseId: this.caseId, diagStyle: this.diagStyle }); }
 
   open() {
     if (!this.res) this.solve(true);
@@ -570,6 +571,7 @@ export class LoadFlowScreen {
   renderDiagram(body) {
     body.innerHTML = `
       <div class="lf-diagbar">
+        <div class="lf-seg sm lf-style">${[['classic', 'Textbook'], ['modern', 'Modern']].map(([k, t]) => `<button data-ds="${k}" class="${this.diagStyle === k ? 'on' : ''}">${t}</button>`).join('')}</div>
         <div class="lf-seg sm">${[['P', 'MW'], ['PQ', 'MW + Mvar'], ['load', 'Loading %'], ['none', 'Off']].map(([k, t]) => `<button data-fl="${k}" class="${this.flowLabel === k ? 'on' : ''}">${t}</button>`).join('')}</div>
       </div>
       <div class="lf-diag">
@@ -584,11 +586,19 @@ export class LoadFlowScreen {
         </div>
         <button class="lf-diagx" data-z="max" title="Close full screen">${icon('x', 20)}</button>
       </div>
-      <div class="lf-legend">
+      <div class="lf-legend">${this.diagStyle === 'modern' ? `
         <span><i style="background:#4ade80"></i>V within limits</span><span><i style="background:#f87171"></i>Under-voltage</span><span><i style="background:#fbbf24"></i>Over-voltage</span>
-        <span><i class="ln" style="background:#f97316"></i>Line ≥ 70 %</span><span><i class="ln" style="background:#ef4444"></i>Overloaded</span><span><b>~</b> generator</span><span><b>↓</b> load</span>
+        <span><i class="ln" style="background:#f97316"></i>Line ≥ 70 %</span><span><i class="ln" style="background:#ef4444"></i>Overloaded</span><span><b>~</b> generator</span><span><b>↓</b> load</span>` : `
+        <span><b>G1</b> generator</span><span><b>▼</b> load</span><span><i style="background:#1d4ed8"></i>|V|∠δ (pu, deg), flows</span><span><i style="background:#dc2626"></i>Outside V limits</span>
+        <span><i class="ln" style="background:#ea580c"></i>Line ≥ 70 %</span><span><i class="ln" style="background:#dc2626"></i>Overloaded</span><span><b>T1</b> transformer</span>`}
       </div>
       <p class="lf-note">${this.res ? 'The moving dots and arrows show the direction of real power. ' : 'Run the load flow to see voltages and flows. '}Pinch, scroll or double-tap to zoom (zooming in also shows labels there is no room for); drag the background to pan; drag a bus to move it; tap a bus for its details.</p>`;
+    body.querySelectorAll('[data-ds]').forEach((b) => b.addEventListener('click', () => {
+      if (this.diagStyle === b.dataset.ds) return;
+      this.diagStyle = b.dataset.ds;
+      this.persist();
+      this.renderDiagram(body);
+    }));
     body.querySelectorAll('[data-fl]').forEach((b) => b.addEventListener('click', () => {
       this.flowLabel = b.dataset.fl;
       body.querySelectorAll('[data-fl]').forEach((x) => x.classList.toggle('on', x === b));
@@ -649,7 +659,8 @@ export class LoadFlowScreen {
 
   /** Bus positions in drawing space (the fitted, unzoomed canvas), from x / y in 0–100. */
   layout(w, h) {
-    const n = this.sys.buses.length, pad = { l: 44, r: 44, t: 58, b: 74 };
+    // the textbook style writes its labels beside the bars, so it keeps a wider margin
+    const n = this.sys.buses.length, pad = this.diagStyle === 'modern' ? { l: 44, r: 44, t: 58, b: 74 } : { l: 66, r: 66, t: 70, b: 82 };
     const pos = new Map();
     this.sys.buses.forEach((b, i) => {
       if (!Number.isFinite(b.x) || !Number.isFinite(b.y)) { const a = (i / n) * Math.PI * 2 - Math.PI / 2; b.x = 50 + 42 * Math.cos(a); b.y = 50 + 42 * Math.sin(a); }
@@ -684,6 +695,7 @@ export class LoadFlowScreen {
     this.diagPos = pos;
     const pct = this.root.querySelector('.lf-zpct');
     if (pct) pct.textContent = `${Math.round(v.s * 100)}%`;
+    if (this.diagStyle !== 'modern') { this.drawClassic(cv, ctx, w, h, pos, k); return; }
     const r = this.res, opts = this.opts;
     const rb = new Map(r ? r.buses.map((b) => [String(b.id), b]) : []);
     const text = css('--text', '#e8eef8'), muted = css('--muted', '#7f8ca6'), text2 = css('--text2', '#b9c5da'), accent = css('--accent', '#22d3ee'), accent2 = css('--accent2', '#8b5cf6');
@@ -956,6 +968,232 @@ export class LoadFlowScreen {
     if (!this.sys.buses.length) { ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.font = `13px ${FONT}`; ctx.fillText('No buses', w / 2, h / 2); }
   }
 
+  /**
+   * Textbook one-line diagram: black ink on paper, thin bus bars, lines leaving each bus on a short
+   * vertical stub, generators as circles marked G1, G2 …, loads as filled arrowheads, and the
+   * results written beside them in small blue type.
+   */
+  drawClassic(cv, ctx, w, h, pos, k) {
+    const r = this.res, opts = this.opts, v = this.view;
+    const paper = '#fcfcfa', ink = '#16181d', sub = '#5f6672', blue = '#1d4ed8';
+    const SERIF = '"Times New Roman", Times, "Liberation Serif", "Noto Serif", Georgia, serif';
+    const SANS = 'Inter, Roboto, sans-serif';
+    const rb = new Map(r ? r.buses.map((b) => [String(b.id), b]) : []);
+    const vcol = (val) => (val < opts.vMin - 1e-9 ? '#dc2626' : val > opts.vMax + 1e-9 ? '#c2410c' : blue);
+    const t = performance.now() / 1000;
+    ctx.fillStyle = paper; ctx.fillRect(0, 0, w, h);
+
+    // ---- ports: what leaves each bus upwards (lines to buses above, the generator) and downwards
+    const S = 22 * k; // stub length
+    const port = new Map([...pos.keys()].map((id) => [id, { top: [], bot: [] }]));
+    const lines = [];
+    this.sys.branches.forEach((l, i) => {
+      const pa = pos.get(String(l.from)), pb = pos.get(String(l.to));
+      if (!pa || !pb) return;
+      const dy = pb.y - pa.y, dist = Math.hypot(pb.x - pa.x, dy) || 1;
+      const level = Math.abs(dy) < Math.max(14 * k, 0.12 * dist); // side by side: both stubs hang down
+      const ea = { key: pb.x, side: level || dy > 0 ? 'bot' : 'top' }, eb = { key: pa.x, side: level || dy < 0 ? 'bot' : 'top' };
+      port.get(String(l.from))[ea.side].push(ea);
+      port.get(String(l.to))[eb.side].push(eb);
+      lines.push({ l, i, pa, pb, ea, eb });
+    });
+    let gN = 0;
+    const genNo = new Map();
+    for (const [id, p] of pos) {
+      const b = p.b;
+      if (b.type !== 'pq' || +b.Pg > 0) { genNo.set(id, ++gN); port.get(id).top.push({ gen: true, key: p.x - 0.01 }); }
+      if (+b.Pd > 0 || +b.Qd > 0) port.get(id).bot.push({ load: true, key: p.x + 0.01 });
+    }
+    // bar length from the busiest side; ports spread evenly, ordered by where they lead
+    for (const [id, p] of pos) {
+      const pt = port.get(id), n = Math.max(pt.top.length, pt.bot.length, 1);
+      p.L = Math.max(66 * k, (n + 1) * 23 * k);
+      p.half = p.L / 2;
+      for (const side of ['top', 'bot']) {
+        const list = pt[side].sort((a, b) => a.key - b.key);
+        list.forEach((e, j) => { e.x = p.x - p.L / 2 + (p.L * (j + 1)) / (list.length + 1); });
+      }
+    }
+    const segs = [];
+    for (const ln of lines) {
+      const { pa, pb, ea, eb } = ln;
+      ln.a0 = { x: ea.x, y: pa.y }; ln.a1 = { x: ea.x, y: pa.y + (ea.side === 'bot' ? S : -S) };
+      ln.b0 = { x: eb.x, y: pb.y }; ln.b1 = { x: eb.x, y: pb.y + (eb.side === 'bot' ? S : -S) };
+      segs.push([ln.a0.x, ln.a0.y, ln.a1.x, ln.a1.y], [ln.b0.x, ln.b0.y, ln.b1.x, ln.b1.y], [ln.a1.x, ln.a1.y, ln.b1.x, ln.b1.y]);
+    }
+
+    // ---- free-space bookkeeping for the labels
+    const taken = [];
+    for (const p of pos.values()) taken.push([p.x - p.L / 2, p.y - 3 * k, p.L, 6 * k]);
+    const gR = 15 * k, gStem = 24 * k, aStem = 16 * k, aHead = 18 * k;
+    for (const [id, p] of pos) {
+      for (const e of port.get(id).top) if (e.gen) { taken.push([e.x - gR, p.y - gStem - 2 * gR, 2 * gR, gStem + 2 * gR]); e.cy = p.y - gStem - gR; }
+      for (const e of port.get(id).bot) if (e.load) taken.push([e.x - 8 * k, p.y, 16 * k, aStem + aHead]);
+    }
+    const zb = this.root.querySelector('.lf-zoom'), cb = cv.getBoundingClientRect();
+    if (zb && zb.offsetParent) { const z = zb.getBoundingClientRect(); taken.push([z.left - cb.left - 4, z.top - cb.top - 4, z.width + 8, z.height + 8]); }
+    const hitsBox = (x, y, wd, ht) => taken.some(([a, b, c, d]) => x < a + c - 0.5 && x + wd > a + 0.5 && y < b + d - 0.5 && y + ht > b + 0.5);
+    const hitsLine = (x, y, wd, ht, m) => segs.some(([ax, ay, bx, by]) => segRect(ax, ay, bx, by, x - m, y - m, x + wd + m, y + ht + m));
+    const onCanvas = (x, y, wd, ht) => x >= 2 && y >= 2 && x + wd <= w - 2 && y + ht <= h - 2;
+    const free = (x, y, wd, ht) => onCanvas(x, y, wd, ht) && !hitsBox(x, y, wd, ht) && !hitsLine(x, y, wd, ht, 3 * k);
+    const crossings = (x, y, wd, ht) => segs.reduce((n, [ax, ay, bx, by]) => n + (segRect(ax, ay, bx, by, x, y, x + wd, y + ht) ? 1 : 0), 0);
+    /** The first clear spot; failing that, the on-screen spot that crosses the fewest lines. */
+    const place = (cands) => {
+      let c = cands.find((x) => free(...x));
+      if (!c) {
+        let best = Infinity;
+        for (const x of cands) if (onCanvas(...x) && !hitsBox(...x)) { const n = crossings(...x); if (n < best) { best = n; c = x; } }
+      }
+      if (c) taken.push(c);
+      return c;
+    };
+
+    // bus name with its voltage underneath, beside an end of the bar like a textbook
+    const busLab = new Map();
+    for (const [id, p] of pos) {
+      const b = p.b, res = rb.get(id);
+      const own = b.name && !/^(bus\s*\d+|slack|swing)$/i.test(String(b.name).trim());
+      const name = own ? `Bus ${b.id} · ${b.name}` : `Bus ${b.id}`;
+      ctx.font = `${15 * k}px ${SERIF}`;
+      let tw = ctx.measureText(name).width;
+      const vs = res ? `${res.V.toFixed(3)}∠${res.ang.toFixed(2)}°` : '';
+      ctx.font = `600 ${10.5 * k}px ${SANS}`;
+      if (vs) tw = Math.max(tw, ctx.measureText(vs).width);
+      const th = (vs ? 31 : 17) * k, g = 8 * k, L = p.L;
+      const box = place([
+        [p.x - L / 2 - g - tw, p.y - th - 2 * k, tw, th], [p.x + L / 2 + g, p.y - th - 2 * k, tw, th],
+        [p.x - L / 2 - g - tw, p.y - th / 2, tw, th], [p.x + L / 2 + g, p.y - th / 2, tw, th],
+        [p.x - L / 2 - g - tw, p.y + 3 * k, tw, th], [p.x + L / 2 + g, p.y + 3 * k, tw, th],
+        [p.x + L / 2 - tw, p.y + S + 4 * k, tw, th], [p.x - L / 2, p.y + S + 4 * k, tw, th],
+        [p.x - L / 2, p.y - S - th - 4 * k, tw, th], [p.x + L / 2 - tw, p.y - S - th - 4 * k, tw, th],
+      ]);
+      if (box) busLab.set(id, { box, name, vs, col: res ? vcol(res.V) : sub, right: box[0] < p.x });
+    }
+    // load captions beside the arrowheads
+    const loadLab = [];
+    for (const [id, p] of pos) for (const e of port.get(id).bot) {
+      if (!e.load) continue;
+      const b = p.b, top = p.y + aStem + aHead * 0.35;
+      const s1 = `Load ${b.id}`, s2 = `${(+b.Pd).toFixed(1)} ${+b.Qd < 0 ? '−' : '+'} j${Math.abs(+b.Qd).toFixed(1)}`;
+      ctx.font = `${14 * k}px ${SERIF}`; let tw = ctx.measureText(s1).width;
+      ctx.font = `${10 * k}px ${SANS}`; tw = Math.max(tw, ctx.measureText(s2).width);
+      const th = 28 * k;
+      const box = place([[e.x + 10 * k, top, tw, th], [e.x - 10 * k - tw, top, tw, th], [e.x - tw / 2, p.y + aStem + aHead + 3 * k, tw, th]]);
+      if (box) loadLab.push({ box, s1, s2, right: box[0] < e.x });
+    }
+
+    // ---- lines
+    let pmax = 1e-9;
+    if (r) for (const l of r.branches) if (l.on) pmax = Math.max(pmax, Math.abs(l.Pf));
+    let nLine = 0, nXf = 0;
+    const lineLabs = [];
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    for (const ln of lines) {
+      const { l, i } = ln, res = r?.branches[i], live = !!(res && res.on);
+      const xf = (+l.tap && +l.tap !== 1) || +l.shift || l.kind === 'xf';
+      ln.label = xf ? `T${++nXf}` : `Line ${++nLine}`;
+      let col = ink;
+      if (l.on === false) col = '#9aa1ad';
+      else if (live && res.rate) col = res.loading > 100 ? '#dc2626' : res.loading >= 70 ? '#ea580c' : ink;
+      ctx.strokeStyle = col; ctx.lineWidth = 1.7 * k;
+      ctx.setLineDash(l.on === false ? [6 * k, 5 * k] : []);
+      ctx.beginPath(); ctx.moveTo(ln.a0.x, ln.a0.y); ctx.lineTo(ln.a1.x, ln.a1.y); ctx.lineTo(ln.b1.x, ln.b1.y); ctx.lineTo(ln.b0.x, ln.b0.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ln.col = col; ln.live = live; ln.res = res; ln.xf = xf;
+      const a = ln.a1, b = ln.b1, dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+      if (xf) { // transformer: two interlinked circles on the line
+        const ux = dx / len, uy = dy / len, mx = a.x + dx / 2, my = a.y + dy / 2, rr = 7.5 * k;
+        ctx.lineWidth = 1.6 * k;
+        for (const s of [-0.62, 0.62]) { ctx.beginPath(); ctx.arc(mx + ux * rr * s, my + uy * rr * s, rr, 0, Math.PI * 2); ctx.fillStyle = paper; ctx.fill(); ctx.stroke(); }
+        taken.push([mx - 2 * rr, my - 2 * rr, 4 * rr, 4 * rr]);
+      }
+      // moving dots: direction and size of the real power
+      if (live && Math.abs(res.Pf) >= 0.05 && len > 40) {
+        const fwd = res.Pf >= 0, fx = fwd ? a.x : b.x, fy = fwd ? a.y : b.y, sx = fwd ? dx : -dx, sy = fwd ? dy : -dy;
+        const gap = 24 * k, off = (t * (16 + 60 * Math.min(1, Math.abs(res.Pf) / pmax)) * k) % gap;
+        ctx.fillStyle = blue; ctx.globalAlpha = 0.55;
+        for (let d = off + 10 * k; d < len - 10 * k; d += gap) { ctx.beginPath(); ctx.arc(fx + (sx * d) / len, fy + (sy * d) / len, 1.7 * k, 0, Math.PI * 2); ctx.fill(); }
+        ctx.globalAlpha = 1;
+      }
+    }
+    // line names (and the flow) beside the middle of each line, sliding along it to a free spot
+    for (const ln of lines) {
+      const { res, live } = ln, a = ln.a1, b = ln.b1, dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+      let s2 = '';
+      if (live && this.flowLabel !== 'none') {
+        const fwd = res.Pf >= 0, P = fwd ? res.Pf : res.Pt, Q = fwd ? res.Qf : res.Qt;
+        s2 = this.flowLabel === 'load' ? (res.rate ? `${res.loading.toFixed(0)} %` : `${res.S.toFixed(1)} MVA`)
+          : this.flowLabel === 'PQ' && r.method !== 'dc' ? `${Math.abs(P).toFixed(1)} MW ${Q * (fwd ? 1 : -1) >= 0 ? '+' : '−'} j${Math.abs(Q).toFixed(1)}` : `${Math.abs(P).toFixed(1)} MW`;
+      }
+      ctx.font = `${14.5 * k}px ${SERIF}`; let tw = ctx.measureText(ln.label).width;
+      ctx.font = `600 ${10 * k}px ${SANS}`; if (s2) tw = Math.max(tw, ctx.measureText(s2).width);
+      const th = (s2 ? 29 : 16) * k;
+      const nx = -uy, ny = ux, off = Math.abs(nx) * (tw / 2) + Math.abs(ny) * (th / 2) + 6 * k;
+      let box = null, tt = 0.5;
+      for (const c of ln.xf ? [0.28, 0.72, 0.2, 0.8] : [0.5, 0.4, 0.6, 0.3, 0.7, 0.22, 0.78]) {
+        for (const sd of [-1, 1]) {
+          const cx = a.x + dx * c + nx * off * sd, cy = a.y + dy * c + ny * off * sd, cand = [cx - tw / 2, cy - th / 2, tw, th];
+          if (free(...cand)) { box = cand; tt = c; break; }
+        }
+        if (box) break;
+      }
+      if (box) taken.push(box);
+      // direction arrowhead on the line
+      if (live && Math.abs(res.Pf) >= 0.05 && len > 30) {
+        const fwd = res.Pf >= 0, mx = a.x + dx * tt, my = a.y + dy * tt, sx = fwd ? ux : -ux, sy = fwd ? uy : -uy, ah = 7 * k;
+        ctx.fillStyle = ln.col;
+        ctx.beginPath(); ctx.moveTo(mx + sx * ah, my + sy * ah); ctx.lineTo(mx - sx * ah * 0.6 - sy * ah * 0.6, my - sy * ah * 0.6 + sx * ah * 0.6); ctx.lineTo(mx - sx * ah * 0.6 + sy * ah * 0.6, my - sy * ah * 0.6 - sx * ah * 0.6); ctx.closePath(); ctx.fill();
+      }
+      if (box) lineLabs.push({ box, s1: ln.label, s2, col: ln.col === ink ? blue : ln.col });
+    }
+
+    // ---- buses, generators and loads
+    for (const [id, p] of pos) {
+      const res = rb.get(id), bad = res && (res.V < opts.vMin - 1e-9 || res.V > opts.vMax + 1e-9);
+      ctx.strokeStyle = bad ? vcol(res.V) : ink; ctx.lineWidth = 3.4 * k; ctx.lineCap = 'butt';
+      ctx.beginPath(); ctx.moveTo(p.x - p.L / 2, p.y); ctx.lineTo(p.x + p.L / 2, p.y); ctx.stroke();
+      ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 1.7 * k;
+      for (const e of port.get(id).top) {
+        if (!e.gen) continue;
+        ctx.beginPath(); ctx.moveTo(e.x, p.y); ctx.lineTo(e.x, e.cy + gR); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(e.x, e.cy, gR * 1.15, gR, 0, 0, Math.PI * 2); ctx.fillStyle = paper; ctx.fill(); ctx.stroke();
+        ctx.fillStyle = ink; ctx.font = `${13 * k}px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(`G${genNo.get(id)}`, e.x, e.cy + 0.5);
+        if (!res && p.b.type === 'slack') { ctx.font = `italic ${11 * k}px ${SERIF}`; ctx.fillStyle = sub; ctx.textAlign = 'left'; ctx.fillText('slack', e.x + gR * 1.15 + 5 * k, e.cy); }
+        if (res && this.flowLabel !== 'none') { // generator output beside the circle
+          const s = (r.method === 'dc' ? `${res.Pg.toFixed(1)} MW` : `${res.Pg.toFixed(1)} ${res.Qg < 0 ? '−' : '+'} j${Math.abs(res.Qg).toFixed(1)}`) + (p.b.type === 'slack' ? ' · slack' : '');
+          ctx.font = `600 ${10 * k}px ${SANS}`;
+          const tw = ctx.measureText(s).width, th = 13 * k;
+          const box = place([[e.x + gR * 1.15 + 6 * k, e.cy - th / 2, tw, th], [e.x - gR * 1.15 - 6 * k - tw, e.cy - th / 2, tw, th], [e.x - tw / 2, e.cy - gR - 4 * k - th, tw, th]]);
+          if (box) { ctx.fillStyle = blue; ctx.textAlign = 'left'; ctx.strokeStyle = paper; ctx.lineWidth = 4 * k; ctx.lineJoin = 'round'; ctx.strokeText(s, box[0], box[1] + th / 2); ctx.fillText(s, box[0], box[1] + th / 2); }
+        }
+      }
+      for (const e of port.get(id).bot) {
+        if (!e.load) continue;
+        ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = 1.7 * k;
+        ctx.beginPath(); ctx.moveTo(e.x, p.y); ctx.lineTo(e.x, p.y + aStem); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(e.x - 7.5 * k, p.y + aStem); ctx.lineTo(e.x + 7.5 * k, p.y + aStem); ctx.lineTo(e.x, p.y + aStem + aHead); ctx.closePath(); ctx.fill();
+      }
+    }
+    // ---- text last, on top of everything, each with a paper-coloured outline so a line behind never blurs it
+    const ink2 = (s, x, y) => { ctx.strokeStyle = paper; ctx.lineWidth = 4 * k; ctx.lineJoin = 'round'; ctx.strokeText(s, x, y); ctx.fillText(s, x, y); };
+    const label = (box, s1, f1, c1, s2, f2, c2, alignRight) => {
+      const [x, y, wd] = box, ax = alignRight ? x + wd : x;
+      ctx.textAlign = alignRight ? 'right' : 'left'; ctx.textBaseline = 'top';
+      ctx.font = f1; ctx.fillStyle = c1; ink2(s1, ax, y);
+      if (s2) { ctx.font = f2; ctx.fillStyle = c2; ink2(s2, ax, y + 16.5 * k); }
+    };
+    for (const [, L] of busLab) label(L.box, L.name, `${15 * k}px ${SERIF}`, ink, L.vs, `600 ${10.5 * k}px ${SANS}`, L.col, L.right);
+    for (const L of loadLab) label(L.box, L.s1, `${14 * k}px ${SERIF}`, ink, L.s2, `${10 * k}px ${SANS}`, sub, L.right);
+    for (const L of lineLabs) {
+      const [x, y, wd] = L.box;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.font = `${14.5 * k}px ${SERIF}`; ctx.fillStyle = ink; ink2(L.s1, x + wd / 2, y);
+      if (L.s2) { ctx.font = `600 ${10 * k}px ${SANS}`; ctx.fillStyle = L.col; ink2(L.s2, x + wd / 2, y + 16 * k); }
+    }
+    if (!this.sys.buses.length) { ctx.fillStyle = sub; ctx.textAlign = 'center'; ctx.font = `14px ${SERIF}`; ctx.fillText('No buses', w / 2, h / 2); }
+  }
+
   bindDiagram(cv) {
     const ptrs = new Map();
     let mode = null, drag = null, pinch = null, lastTap = 0, lastTapAt = null;
@@ -963,7 +1201,7 @@ export class LoadFlowScreen {
     const hit = (p) => {
       let best = null, bd = 28;
       for (const [id, q] of this.diagPos || []) {
-        const d = Math.hypot(Math.max(0, Math.abs(q.x - p.x) - 22), q.y - p.y);
+        const d = Math.hypot(Math.max(0, Math.abs(q.x - p.x) - (q.half || 27) + 4), q.y - p.y);
         if (d < bd) { bd = d; best = id; }
       }
       return best;

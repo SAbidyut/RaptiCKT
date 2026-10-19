@@ -1035,7 +1035,8 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .lf-mat tr.sep td, .lf-mat tr.sep th { border-top: 2px solid var(--border2); }
 .lf-errs { margin: 0 0 14px; padding-left: 20px; color: var(--text2); font-size: 14px; line-height: 1.5; }
 .lf-errs li { margin-bottom: 6px; }
-.lf-diagbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.lf-diagbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.lf-diagbar .lf-seg.lf-style { flex: 0 0 100%; }
 .lf-diagbar .lf-seg { flex: 1; }
 .lf-diag { position: relative; border-radius: 18px; border: 1px solid var(--border2); background: linear-gradient(180deg, var(--surface), var(--bg2)); overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
 .lf-diag canvas { display: block; width: 100%; height: min(68vh, 640px); min-height: 340px; touch-action: none; cursor: grab; }
