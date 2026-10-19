@@ -575,11 +575,12 @@ export class LoadFlowScreen {
       <div class="lf-diag">
         <canvas></canvas>
         <div class="lf-zoom">
-          <button data-z="in" title="Zoom in">${icon('plus', 20)}</button>
+          <button data-z="out" title="Zoom out">${icon('minus', 18)}</button>
           <span class="lf-zpct">100%</span>
-          <button data-z="out" title="Zoom out">${icon('minus', 20)}</button>
-          <button data-z="fit" title="Fit to screen">${icon('fit', 19)}</button>
-          <button data-z="max" title="Full screen">${icon('fullscreen', 18)}</button>
+          <button data-z="in" title="Zoom in">${icon('plus', 18)}</button>
+          <i></i>
+          <button data-z="fit" title="Fit to screen">${icon('fit', 17)}</button>
+          <button data-z="max" title="Full screen">${icon('fullscreen', 16)}</button>
         </div>
         <button class="lf-diagx" data-z="max" title="Close full screen">${icon('x', 20)}</button>
       </div>
@@ -587,7 +588,7 @@ export class LoadFlowScreen {
         <span><i style="background:#4ade80"></i>V within limits</span><span><i style="background:#f87171"></i>Under-voltage</span><span><i style="background:#fbbf24"></i>Over-voltage</span>
         <span><i class="ln" style="background:#f97316"></i>Line ≥ 70 %</span><span><i class="ln" style="background:#ef4444"></i>Overloaded</span><span><b>~</b> generator</span><span><b>↓</b> load</span>
       </div>
-      <p class="lf-note">${this.res ? 'The moving dots and arrows show the direction of real power. ' : 'Run the load flow to see voltages and flows. '}Pinch, scroll or double-tap to zoom; drag the background to pan; drag a bus to move it; tap a bus for its details.</p>`;
+      <p class="lf-note">${this.res ? 'The moving dots and arrows show the direction of real power. ' : 'Run the load flow to see voltages and flows. '}Pinch, scroll or double-tap to zoom (zooming in also shows labels there is no room for); drag the background to pan; drag a bus to move it; tap a bus for its details.</p>`;
     body.querySelectorAll('[data-fl]').forEach((b) => b.addEventListener('click', () => {
       this.flowLabel = b.dataset.fl;
       body.querySelectorAll('[data-fl]').forEach((x) => x.classList.toggle('on', x === b));
@@ -648,7 +649,7 @@ export class LoadFlowScreen {
 
   /** Bus positions in drawing space (the fitted, unzoomed canvas), from x / y in 0–100. */
   layout(w, h) {
-    const n = this.sys.buses.length, pad = { l: 44, r: 44, t: 58, b: 64 };
+    const n = this.sys.buses.length, pad = { l: 44, r: 44, t: 58, b: 74 };
     const pos = new Map();
     this.sys.buses.forEach((b, i) => {
       if (!Number.isFinite(b.x) || !Number.isFinite(b.y)) { const a = (i / n) * Math.PI * 2 - Math.PI / 2; b.x = 50 + 42 * Math.cos(a); b.y = 50 + 42 * Math.sin(a); }
@@ -678,7 +679,7 @@ export class LoadFlowScreen {
     const { ctx, w, h } = prep(cv);
     const pos = this.layout(w, h), v = this.view;
     // symbols grow a little when zoomed in, but much less than the spacing, so crowded labels come apart
-    const k = Math.max(0.8, Math.min(1.6, Math.pow(v.s, 0.3)));
+    const k = Math.max(0.85, Math.min(1.6, Math.pow(v.s, 0.3)));
     for (const p of pos.values()) { p.x = p.wx * v.s + v.tx; p.y = p.wy * v.s + v.ty; }
     this.diagPos = pos;
     const pct = this.root.querySelector('.lf-zpct');
@@ -690,6 +691,8 @@ export class LoadFlowScreen {
     const light = document.documentElement.dataset.theme === 'light';
     const vcol = (val) => (val < opts.vMin - 1e-9 ? (light ? '#dc2626' : '#f87171') : val > opts.vMax + 1e-9 ? (light ? '#d97706' : '#fbbf24') : (light ? '#16a34a' : '#4ade80'));
     const t = performance.now() / 1000;
+    const FONT = 'Inter, Roboto, sans-serif', MONO = '"JetBrains Mono", "Roboto Mono", monospace';
+    const bw = 54 * k, bh = 8 * k;
 
     // background: soft glow and a dot grid that pans and zooms with the drawing
     const g = ctx.createRadialGradient(w / 2, h * 0.42, 0, w / 2, h * 0.42, Math.max(w, h) * 0.75);
@@ -703,19 +706,110 @@ export class LoadFlowScreen {
     const ox = ((v.tx % gs) + gs) % gs, oy = ((v.ty % gs) + gs) % gs;
     for (let x = ox; x < w; x += gs) for (let y = oy; y < h; y += gs) ctx.fillRect(x - 0.75, y - 0.75, 1.5, 1.5);
 
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    const flows = [];
+    // ---- layout: where every line meets its bus bar, and a free spot for everything around a bus
+    // a line meets the bar at the end facing the other bus when it runs sideways, otherwise spread along the bar
+    const half = bw / 2 - 6 * k;
+    const attach = (p, q) => {
+      const dx = q.x - p.x, dy = q.y - p.y;
+      if (Math.abs(dy) < Math.abs(dx) * 0.4) return { x: p.x + Math.sign(dx) * half, y: p.y };
+      return { x: p.x + Math.max(-half, Math.min(half, dx * 0.35)), y: p.y };
+    };
+    const flows = [], segs = [];
     let pmax = 1e-9;
     if (r) for (const l of r.branches) if (l.on) pmax = Math.max(pmax, Math.abs(l.Pf));
-
-    // branches: soft halo, then the line itself
     this.sys.branches.forEach((l, i) => {
-      const a = pos.get(String(l.from)), b = pos.get(String(l.to));
-      if (!a || !b) return;
-      const res = r?.branches[i];
-      const live = res && res.on;
+      const pa = pos.get(String(l.from)), pb = pos.get(String(l.to));
+      if (!pa || !pb) return;
+      const a = attach(pa, pb), b = attach(pb, pa);
+      const res = r?.branches[i], live = !!(res && res.on);
       let col = muted;
       if (live) col = res.rate ? (res.loading > 100 ? '#ef4444' : res.loading >= 70 ? '#f97316' : (light ? '#16a34a' : '#4ade80')) : accent;
+      flows.push({ a, b, l, res, col, live });
+      segs.push([a.x, a.y, b.x, b.y]);
+    });
+    const taken = [];
+    for (const p of pos.values()) taken.push([p.x - bw / 2, p.y - bh / 2, bw, bh]);
+    const hitsLine = (x, y, wd, ht, m) => segs.some(([ax, ay, bx, by]) => segRect(ax, ay, bx, by, x - m, y - m, x + wd + m, y + ht + m));
+    // half a pixel of slack: boxes that merely touch (a label right under its bar) do not count as overlapping
+    const hitsBox = (x, y, wd, ht) => taken.some(([a, b, c, d]) => x < a + c - 0.5 && x + wd > a + 0.5 && y < b + d - 0.5 && y + ht > b + 0.5);
+    const onCanvas = (x, y, wd, ht) => x >= 2 && y >= 2 && x + wd <= w - 2 && y + ht <= h - 2;
+    const free = (x, y, wd, ht, m = 3 * k) => onCanvas(x, y, wd, ht) && !hitsBox(x, y, wd, ht) && !hitsLine(x, y, wd, ht, m);
+    // keep labels out from under the zoom buttons
+    const zb = this.root.querySelector('.lf-zoom'), cb = cv.getBoundingClientRect();
+    if (zb && zb.offsetParent) { const z = zb.getBoundingClientRect(); taken.push([z.left - cb.left - 4, z.top - cb.top - 4, z.width + 8, z.height + 8]); }
+    /**
+     * First candidate rectangle [x, y, w, h] clear of lines and of everything placed so far: the near
+     * spots, then the far ones; when none is clear it stays near its bus, crossing a line if it must.
+     */
+    const place = (near, far = []) => {
+      const best = near.find((c) => free(...c)) || far.find((c) => free(...c)) || near.find((c) => !hitsBox(...c)) || far.find((c) => !hitsBox(...c)) || near[0];
+      taken.push(best);
+      return best;
+    };
+
+    const deco = new Map();
+    for (const [id, p] of pos) {
+      const b = p.b, res = rb.get(id), d = {};
+      const gen = b.type !== 'pq' || +b.Pg > 0, load = +b.Pd > 0 || +b.Qd > 0;
+      d.col = res ? vcol(res.V) : text2;
+      if (gen) { // generator circle above or below the bar, on a short stem
+        const gr = 12 * k, dy = 34 * k;
+        const c = [[0, -1], [-0.6, -1], [0.6, -1], [0, 1], [-0.6, 1], [0.6, 1]].map(([fx, fy]) => {
+          const gx = p.x + fx * half, gy = p.y + fy * dy;
+          return [gx - gr, Math.min(gy - gr, p.y + bh / 2), 2 * gr, Math.abs(gy - p.y) + gr - bh / 2];
+        });
+        const box = place(c);
+        d.gen = { x: box[0] + gr, y: box[1] < p.y ? box[1] + gr : box[1] + box[3] - gr, r: gr };
+        if (b.type === 'slack') {
+          ctx.font = `700 ${8.5 * k}px ${FONT}`;
+          const tw = ctx.measureText('SLACK').width + 14 * k, th = 15 * k, gx = d.gen.x, gy = d.gen.y;
+          d.slack = place([[gx + gr + 5 * k, gy - th / 2, tw, th], [gx - gr - 5 * k - tw, gy - th / 2, tw, th], [gx - tw / 2, gy - gr - 5 * k - th, tw, th], [gx - tw / 2, gy + gr + 5 * k, tw, th]]);
+        }
+      }
+      if (load) { // load arrow hanging from the bar, away from the generator
+        const aw = 12 * k, ah = 21 * k, down = !d.gen || d.gen.y < p.y;
+        const xs = [half - 4 * k, -half + 4 * k, 0, half * 0.5, -half * 0.5];
+        const c = [];
+        for (const dir of down ? [1, -1] : [-1, 1]) for (const fx of xs) c.push([p.x + fx - aw / 2, dir > 0 ? p.y + bh / 2 : p.y - bh / 2 - ah, aw, ah]);
+        const box = place(c);
+        d.load = { x: box[0] + aw / 2, y0: box[1] < p.y ? box[1] + box[3] : box[1], dir: box[1] < p.y ? -1 : 1, len: ah };
+      }
+      // bus number badge: beside the bar, or above / below one of its ends
+      const br = 10.5 * k, s2 = 2 * br, gapx = 4 * k;
+      const bc = [
+        [p.x - bw / 2 - gapx - s2, p.y - br], [p.x + bw / 2 + gapx, p.y - br],
+        [p.x - bw / 2 - s2 * 0.4, p.y - bh / 2 - 4 * k - s2], [p.x - bw / 2 - s2 * 0.4, p.y + bh / 2 + 4 * k],
+        [p.x + bw / 2 - s2 * 0.6, p.y - bh / 2 - 4 * k - s2], [p.x + bw / 2 - s2 * 0.6, p.y + bh / 2 + 4 * k],
+      ].map(([x, y]) => [x, y, s2, s2]);
+      const bb = place(bc);
+      d.badge = { x: bb[0] + br, y: bb[1] + br, r: br };
+      if (res) { // |V|∠δ label
+        const s = `${res.V.toFixed(3)}∠${res.ang.toFixed(1)}°`;
+        ctx.font = `600 ${10 * k}px ${MONO}`;
+        const tw = ctx.measureText(s).width + 12 * k, th = 17 * k, gp = 5 * k;
+        const below = p.y + bh / 2 + gp, above = p.y - bh / 2 - gp - th;
+        // under or over the bar: centred, or lined up with its left or right end
+        const xs = [p.x - tw / 2, p.x - bw / 2, p.x + bw / 2 - tw];
+        const near = [], far = [];
+        for (const y of [below, above]) for (const x of xs) near.push([x, y, tw, th]);
+        for (const y of [below + 20 * k, above - 20 * k]) for (const x of xs) far.push([x, y, tw, th]);
+        const gl = d.badge.x < p.x - bw / 2 ? 2 * br + 8 * k : 5 * k, gr2 = d.badge.x > p.x + bw / 2 ? 2 * br + 8 * k : 5 * k; // step past the badge on its side
+        far.push([p.x + bw / 2 + gr2, p.y - th / 2, tw, th], [p.x - bw / 2 - gl - tw, p.y - th / 2, tw, th]);
+        d.volt = { box: place(near, far), s };
+      }
+      if (b.name && b.name !== `Bus ${b.id}` && (v.s >= 1.2 || !gen)) {
+        ctx.font = `600 ${10 * k}px ${FONT}`;
+        const tw = ctx.measureText(b.name).width + 4 * k, th = 13 * k;
+        const c = [[p.x - tw / 2, p.y - bh / 2 - 6 * k - th, tw, th], [p.x - tw / 2, p.y + bh / 2 + 6 * k, tw, th], [p.x + bw / 2 + 28 * k, p.y - th / 2, tw, th], [p.x - bw / 2 - 28 * k - tw, p.y - th / 2, tw, th]];
+        const box = c.find((x) => free(...x, 1));
+        if (box) { taken.push(box); d.name = { box, s: b.name }; }
+      }
+      deco.set(id, d);
+    }
+
+    // ---- branches: soft halo, then the line itself
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const { a, b, l, col, live } of flows) {
       if (live) {
         ctx.strokeStyle = col; ctx.globalAlpha = 0.16; ctx.lineWidth = 8 * k;
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -725,8 +819,7 @@ export class LoadFlowScreen {
       ctx.setLineDash(l.on === false ? [6 * k, 6 * k] : []);
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       ctx.setLineDash([]);
-      flows.push({ a, b, l, res, col, live });
-    });
+    }
 
     // power-flow dots, moving from the sending to the receiving end
     if (r) {
@@ -739,24 +832,14 @@ export class LoadFlowScreen {
         const off = (t * speed) % gap;
         ctx.fillStyle = light ? f.col : '#ffffff';
         ctx.globalAlpha = 0.85;
-        for (let d = off + 26 * k; d < len - 26 * k; d += gap) {
-          ctx.beginPath(); ctx.arc(from.x + (dx * d) / len, from.y + (dy * d) / len, 1.9 * k, 0, Math.PI * 2); ctx.fill();
+        for (let dd = off + 14 * k; dd < len - 14 * k; dd += gap) {
+          ctx.beginPath(); ctx.arc(from.x + (dx * dd) / len, from.y + (dy * dd) / len, 1.9 * k, 0, Math.PI * 2); ctx.fill();
         }
         ctx.globalAlpha = 1;
       }
     }
 
-    // space taken by the buses and their voltage labels, so the flow labels can keep clear of it
-    const taken = [];
-    for (const p of pos.values()) {
-      const ld = +p.b.Pd > 0 || +p.b.Qd > 0;
-      taken.push([p.x - 50 * k, p.y - 12 * k, 82 * k, 24 * k]);
-      if (rb.size) taken.push([p.x - 48 * k, p.y + (ld ? 25 : 9) * k, 96 * k, 16 * k]);
-    }
-    const free = (x, y, wd, ht) => !taken.some(([a, b, c, d]) => x < a + c && x + wd > a && y < b + d && y + ht > b);
-    ctx.font = `600 ${10.5 * k}px Inter, Roboto, sans-serif`;
-
-    // transformers, direction arrows and flow labels
+    // transformers, direction arrows and flow labels (each label slides along its line to a free spot)
     const pills = [];
     for (const f of flows) {
       const { a, b, l, res, col, live } = f;
@@ -769,8 +852,9 @@ export class LoadFlowScreen {
           ctx.fillStyle = surface; ctx.strokeStyle = c;
           ctx.beginPath(); ctx.arc(mx + ux * rr * s, my + uy * rr * s, rr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         });
+        taken.push([mx - 2 * rr, my - 2 * rr, 4 * rr, 4 * rr]);
         if (+l.tap && +l.tap !== 1 && v.s >= 1.4) {
-          ctx.font = `600 ${9 * k}px Inter, Roboto, sans-serif`; ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.font = `600 ${9 * k}px ${FONT}`; ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           ctx.fillText(`1:${(+l.tap).toFixed(3)}`, mx - uy * 24 * k, my + ux * 24 * k);
         }
       }
@@ -780,65 +864,69 @@ export class LoadFlowScreen {
       const lab = this.flowLabel === 'load' ? (res.rate ? `${res.loading.toFixed(0)} %` : `${res.S.toFixed(0)} MVA`)
         : this.flowLabel === 'PQ' && r.method !== 'dc' ? `${Math.abs(P).toFixed(1)} ${Q * (fwd ? 1 : -1) >= 0 ? '+' : '−'} j${Math.abs(Q).toFixed(1)}` : `${Math.abs(P).toFixed(1)} MW`;
       const side = Math.abs(uy) < 0.35 ? 1 : (ux * uy > 0 ? -1 : 1); // below horizontal lines, beside steep ones
-      const nx = -uy * side, ny = ux * side, off = 15 * k;
-      ctx.font = `600 ${10.5 * k}px Inter, Roboto, sans-serif`;
-      const pw = ctx.measureText(lab).width + 12 * k, ph = 17 * k;
-      // slide the label along its line (and to either side) until it is clear of everything placed so far
+      const nx = -uy * side, ny = ux * side;
+      ctx.font = `600 ${10.5 * k}px ${FONT}`;
+      const pw = ctx.measureText(lab).width + 14 * k, ph = 18 * k;
+      // clearance from the line so the pill sits beside it, not on it
+      const off = Math.abs(nx) * (pw / 2) + Math.abs(ny) * (ph / 2) + 5 * k;
       let tt = xf ? 0.28 : 0.5, lx = 0, ly = 0, found = false;
-      for (const c of xf ? [0.28, 0.72, 0.2, 0.8, 0.36, 0.64] : [0.5, 0.38, 0.62, 0.28, 0.72, 0.2, 0.8]) {
+      for (const c of xf ? [0.28, 0.72, 0.2, 0.8, 0.36, 0.64] : [0.5, 0.4, 0.6, 0.3, 0.7, 0.22, 0.78]) {
         for (const sd of [1, -1]) {
           const cx = a.x + dx * c + nx * off * sd, cy = a.y + dy * c + ny * off * sd;
-          if (free(cx - pw / 2, cy - ph / 2, pw, ph)) { tt = c; lx = cx; ly = cy; found = true; break; }
+          if (!hitsBox(cx - pw / 2, cy - ph / 2, pw, ph) && !hitsLine(cx - pw / 2, cy - ph / 2, pw, ph, 0)) { tt = c; lx = cx; ly = cy; found = true; break; }
         }
         if (found) break;
       }
-      if (!found) { lx = a.x + dx * tt + nx * off; ly = a.y + dy * tt + ny * off; }
-      taken.push([lx - pw / 2, ly - ph / 2, pw, ph]);
+      // no spot clear of everything: settle for one that at least hides no other label
+      for (const c of found ? [] : [0.5, 0.4, 0.6, 0.3, 0.7, 0.22, 0.78, 0.15, 0.85]) {
+        for (const sd of [1, -1]) {
+          const cx = a.x + dx * c + nx * off * sd, cy = a.y + dy * c + ny * off * sd;
+          if (!hitsBox(cx - pw / 2, cy - ph / 2, pw, ph)) { tt = c; lx = cx; ly = cy; found = true; break; }
+        }
+        if (found) break;
+      }
+      // still nowhere: leave this label out (it appears once zooming in makes room), keep the arrow
+      if (found) taken.push([lx - pw / 2, ly - ph / 2, pw, ph]);
       const mx = a.x + dx * tt, my = a.y + dy * tt, sx = fwd ? ux : -ux, sy = fwd ? uy : -uy, ah = 7 * k;
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.moveTo(mx + sx * ah, my + sy * ah); ctx.lineTo(mx - sx * ah * 0.7 - sy * ah * 0.75, my - sy * ah * 0.7 + sx * ah * 0.75); ctx.lineTo(mx - sx * ah * 0.7 + sy * ah * 0.75, my - sy * ah * 0.7 - sx * ah * 0.75); ctx.closePath(); ctx.fill();
-      pills.push({ x: lx, y: ly, lab, col });
+      if (found) pills.push({ x: lx, y: ly, w: pw, h: ph, lab, col });
     }
-    ctx.font = `600 ${10.5 * k}px Inter, Roboto, sans-serif`;
     for (const p of pills) {
-      const tw = ctx.measureText(p.lab).width, ph = 17 * k, pw = tw + 12 * k;
-      rrect(ctx, p.x - pw / 2, p.y - ph / 2, pw, ph, ph / 2);
-      ctx.fillStyle = surface2; ctx.globalAlpha = 0.94; ctx.fill(); ctx.globalAlpha = 1;
+      rrect(ctx, p.x - p.w / 2, p.y - p.h / 2, p.w, p.h, p.h / 2);
+      ctx.fillStyle = surface2; ctx.globalAlpha = 0.95; ctx.fill(); ctx.globalAlpha = 1;
       ctx.strokeStyle = p.col; ctx.globalAlpha = 0.55; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
-      ctx.fillStyle = text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `600 ${10.5 * k}px ${FONT}`; ctx.fillStyle = text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(p.lab, p.x, p.y + 0.5);
     }
 
-    // buses with their generators and loads
+    // ---- buses with their generators, loads, numbers and voltages
     for (const [id, p] of pos) {
-      const b = p.b, res = rb.get(id);
-      const gen = b.type !== 'pq' || +b.Pg > 0, load = +b.Pd > 0 || +b.Qd > 0;
-      const col = res ? vcol(res.V) : text2;
-      const bw = 50 * k, bh = 8 * k;
-      if (gen) {
-        const gy = p.y - 30 * k, gr = 12 * k;
+      const d = deco.get(id), col = d.col, res = rb.get(id);
+      if (d.gen) {
+        const { x: gx, y: gy, r: gr } = d.gen, up = gy < p.y;
         ctx.strokeStyle = text2; ctx.lineWidth = 2 * k;
-        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, gy + gr); ctx.stroke();
-        const gg = ctx.createLinearGradient(p.x - gr, gy - gr, p.x + gr, gy + gr);
+        ctx.beginPath(); ctx.moveTo(gx, p.y + (up ? -bh / 2 : bh / 2)); ctx.lineTo(gx, gy + (up ? gr : -gr)); ctx.stroke();
+        const gg = ctx.createLinearGradient(gx - gr, gy - gr, gx + gr, gy + gr);
         gg.addColorStop(0, accent); gg.addColorStop(1, accent2);
         ctx.fillStyle = gg;
         ctx.shadowColor = accent; ctx.shadowBlur = light ? 0 : 10 * k;
-        ctx.beginPath(); ctx.arc(p.x, gy, gr, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(gx, gy, gr, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8 * k;
-        ctx.beginPath(); ctx.moveTo(p.x - 6.5 * k, gy); ctx.bezierCurveTo(p.x - 3.5 * k, gy - 7 * k, p.x - 0.5 * k, gy - 7 * k, p.x, gy); ctx.bezierCurveTo(p.x + 0.5 * k, gy + 7 * k, p.x + 3.5 * k, gy + 7 * k, p.x + 6.5 * k, gy); ctx.stroke();
-        if (b.type === 'slack') {
-          ctx.font = `800 ${8.5 * k}px Inter, sans-serif`;
-          const tw = ctx.measureText('SLACK').width + 8 * k, tx = p.x + gr + 5 * k, ty = gy - 7 * k;
-          rrect(ctx, tx, ty, tw, 14 * k, 7 * k); ctx.fillStyle = accent; ctx.fill();
-          ctx.fillStyle = light ? '#fff' : '#06202a'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('SLACK', tx + 4 * k, ty + 7.5 * k);
-        }
+        ctx.beginPath(); ctx.moveTo(gx - 6.5 * k, gy); ctx.bezierCurveTo(gx - 3.5 * k, gy - 7 * k, gx - 0.5 * k, gy - 7 * k, gx, gy); ctx.bezierCurveTo(gx + 0.5 * k, gy + 7 * k, gx + 3.5 * k, gy + 7 * k, gx + 6.5 * k, gy); ctx.stroke();
       }
-      if (load) {
-        const lx = p.x + bw / 2 - 9 * k;
+      if (d.slack) {
+        const [sx, sy, sw, sh] = d.slack;
+        rrect(ctx, sx, sy, sw, sh, sh / 2); ctx.fillStyle = accent; ctx.fill();
+        ctx.font = `700 ${8.5 * k}px ${FONT}`; ctx.fillStyle = light ? '#fff' : '#06202a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('SLACK', sx + sw / 2, sy + sh / 2 + 0.5);
+      }
+      if (d.load) {
+        const { x: lx, y0, dir, len } = d.load;
         ctx.strokeStyle = text2; ctx.fillStyle = text2; ctx.lineWidth = 2 * k;
-        ctx.beginPath(); ctx.moveTo(lx, p.y); ctx.lineTo(lx, p.y + 16 * k); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(lx - 5 * k, p.y + 14 * k); ctx.lineTo(lx + 5 * k, p.y + 14 * k); ctx.lineTo(lx, p.y + 21 * k); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(lx, y0); ctx.lineTo(lx, y0 + dir * (len - 6 * k)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(lx - 5 * k, y0 + dir * (len - 7 * k)); ctx.lineTo(lx + 5 * k, y0 + dir * (len - 7 * k)); ctx.lineTo(lx, y0 + dir * len); ctx.closePath(); ctx.fill();
       }
       // the bus bar, glowing in its voltage colour
       ctx.shadowColor = col; ctx.shadowBlur = res && !light ? 12 * k : 0;
@@ -846,30 +934,26 @@ export class LoadFlowScreen {
       ctx.fillStyle = col; ctx.fill();
       ctx.shadowBlur = 0;
       // number badge
-      const br = 10.5 * k, bx = p.x - bw / 2 - br - 3 * k;
-      ctx.beginPath(); ctx.arc(bx, p.y, br, 0, Math.PI * 2);
+      const { x: bx, y: by, r: br } = d.badge;
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2);
       ctx.fillStyle = surface2; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.6 * k; ctx.stroke();
-      ctx.fillStyle = text; ctx.font = `800 ${String(b.id).length > 2 ? 8 * k : 10 * k}px Inter, Roboto, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(String(b.id), bx, p.y + 0.5);
-      // a real name (not just "Bus n") above the bar when there is room
-      if (b.name && b.name !== `Bus ${b.id}` && (!gen || v.s >= 1.2)) {
-        ctx.font = `600 ${10 * k}px Inter, Roboto, sans-serif`; ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-        ctx.fillText(b.name, gen ? p.x + bw / 2 + 4 * k : p.x, p.y - bh / 2 - 4 * k);
+      ctx.fillStyle = text; ctx.font = `800 ${String(p.b.id).length > 2 ? 8 * k : 10 * k}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(p.b.id), bx, by + 0.5);
+      if (d.name) {
+        const [nx, ny, nw, nh] = d.name.box;
+        ctx.font = `600 ${10 * k}px ${FONT}`; ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(d.name.s, nx + nw / 2, ny + nh / 2);
       }
-      if (res) {
-        const s = `${res.V.toFixed(3)}∠${res.ang.toFixed(1)}°`;
-        ctx.font = `600 ${10 * k}px "JetBrains Mono", "Roboto Mono", monospace`;
-        const tw = ctx.measureText(s).width + 10 * k, th = 16 * k;
-        const ty = p.y + (load ? 25 : 9) * k;
-        const tx = p.x > 0 && p.x < w ? Math.max(4, Math.min(w - tw - 4, p.x - tw / 2)) : p.x - tw / 2; // nudged onto the canvas only while the bus is on it
-        rrect(ctx, tx, ty, tw, th, 5 * k);
-        ctx.fillStyle = surface2; ctx.globalAlpha = 0.94; ctx.fill(); ctx.globalAlpha = 1;
-        ctx.strokeStyle = col; ctx.globalAlpha = 0.45; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
-        ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillText(s, tx + 5 * k, ty + th / 2 + 0.5);
+      if (d.volt) {
+        const [vx, vy, vw, vh] = d.volt.box;
+        rrect(ctx, vx, vy, vw, vh, 6 * k);
+        ctx.fillStyle = surface2; ctx.globalAlpha = 0.95; ctx.fill(); ctx.globalAlpha = 1;
+        ctx.strokeStyle = col; ctx.globalAlpha = 0.5; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.font = `600 ${10 * k}px ${MONO}`; ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(d.volt.s, vx + vw / 2, vy + vh / 2 + 0.5);
       }
     }
-    if (!this.sys.buses.length) { ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.font = '13px Inter, sans-serif'; ctx.fillText('No buses', w / 2, h / 2); }
+    if (!this.sys.buses.length) { ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.font = `13px ${FONT}`; ctx.fillText('No buses', w / 2, h / 2); }
   }
 
   bindDiagram(cv) {
@@ -1249,6 +1333,18 @@ function lineLog(cv, pts, tol) {
   ctx.stroke();
   if (L.length <= 60) { ctx.fillStyle = accent; for (const [x, y] of L) { ctx.beginPath(); ctx.arc(X(x), Y(y), 2.6, 0, Math.PI * 2); ctx.fill(); } }
   ctx.fillStyle = '#4ade80'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText('tolerance', w - pad.r, yt - 2);
+}
+
+/** Does the segment (ax, ay)–(bx, by) cross the box x0..x1 × y0..y1? (Liang–Barsky clipping) */
+function segRect(ax, ay, bx, by, x0, y0, x1, y1) {
+  let t0 = 0, t1 = 1;
+  const dx = bx - ax, dy = by - ay, P = [-dx, dx, -dy, dy], Q = [ax - x0, x1 - ax, ay - y0, y1 - ay];
+  for (let i = 0; i < 4; i++) {
+    if (P[i] === 0) { if (Q[i] < 0) return false; continue; }
+    const r = Q[i] / P[i];
+    if (P[i] < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; }
+  }
+  return true;
 }
 
 /** Rounded-rectangle path (ctx.roundRect is missing on older Android WebViews). */
