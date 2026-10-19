@@ -568,7 +568,7 @@ export const CHAPTERS = [
       T(['Tab', 'What it does'], [
         ['System', 'Choose a test system, edit buses and branches, set the solver and tap **Run load flow**'],
         ['Results', 'Convergence summary, totals (generation, load, losses, line charging), violations, bus table and line-flow table; **CSV** and **Report**'],
-        ['Diagram', 'One-line diagram coloured by voltage and line loading, with power-flow arrows and MW / Mvar / % labels; drag a bus to move it, tap it for details'],
+        ['Diagram', 'One-line diagram coloured by voltage and line loading, with moving power-flow dots, arrows and MW / Mvar / % labels; pinch, scroll or double-tap to zoom, drag to pan, **+ / − / fit / full screen** buttons; drag a bus to move it, tap it for details'],
         ['Charts', 'Voltage profile with the limits, angle profile, convergence (log scale), branch loading and losses'],
         ['Iterations', 'Every iteration: largest mismatch and the bus voltages; the Newton–Raphson Jacobian'],
         ['Y-bus', 'The bus admittance matrix in rectangular or polar form, and each branch admittance'],

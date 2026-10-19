@@ -1037,8 +1037,22 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .lf-errs li { margin-bottom: 6px; }
 .lf-diagbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .lf-diagbar .lf-seg { flex: 1; }
-.lf-diag { border-radius: 16px; border: 1px solid var(--border); background: var(--surface); overflow: hidden; }
-.lf-diag canvas { display: block; width: 100%; height: min(68vh, 620px); min-height: 320px; touch-action: none; }
+.lf-diag { position: relative; border-radius: 18px; border: 1px solid var(--border2); background: linear-gradient(180deg, var(--surface), var(--bg2)); overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); }
+.lf-diag canvas { display: block; width: 100%; height: min(68vh, 640px); min-height: 340px; touch-action: none; cursor: grab; }
+.lf-diag canvas:active { cursor: grabbing; }
+.lf-zoom { position: absolute; right: 10px; bottom: 10px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; border-radius: 16px;
+  background: var(--glass); border: 1px solid var(--border2); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.lf-zoom button { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; color: var(--text); transition: background .15s, transform .1s; }
+.lf-zoom button:active { background: var(--surface3); transform: scale(0.92); }
+.lf-zoom [data-z=fit], .lf-zoom [data-z=max] { color: var(--accent); }
+.lf-zpct { font: 600 10.5px var(--mono); color: var(--muted); padding: 1px 0; }
+.lf-diagx { display: none; position: absolute; top: calc(10px + var(--safe-t)); right: 10px; width: 42px; height: 42px; border-radius: 14px; place-items: center;
+  background: var(--glass); border: 1px solid var(--border2); color: var(--text); box-shadow: var(--shadow); }
+.lf-diag.max { position: fixed; inset: 0; z-index: 70; border-radius: 0; border: 0; }
+.lf-diag.max canvas { height: 100%; min-height: 0; }
+.lf-diag.max .lf-diagx { display: grid; }
+.lf-diag.max .lf-zoom [data-z=max] { display: none; }
+.lf-diag.max .lf-zoom { bottom: calc(14px + var(--safe-b)); right: 14px; }
 .lf-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 2px 2px; font-size: 11.5px; color: var(--text2); }
 .lf-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .lf-legend i { display: inline-block; width: 16px; height: 6px; border-radius: 2px; }

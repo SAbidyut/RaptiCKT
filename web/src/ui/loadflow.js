@@ -5,6 +5,7 @@
 
 import { icon } from './icons.js';
 import { store } from './store.js';
+import { motion } from './motion.js';
 import {
   solveLoadFlow, contingencies, buildYbus, validate, METHODS, DEFAULT_OPTIONS,
   parseMatpower, toMatpower, baseValues, changeBase,
@@ -64,6 +65,8 @@ export class LoadFlowScreen {
 
   /** Back button: from another tab go to System first. Returns false when the screen should close. */
   back() {
+    const d = this.root.querySelector('.lf-diag.max');
+    if (d) { this.toggleMax(false); return true; }
     if (this.tab !== 'system') { this.tab = 'system'; this.render(); return true; }
     return false;
   }
@@ -264,6 +267,7 @@ export class LoadFlowScreen {
       this.sys = JSON.parse(JSON.stringify(s.sys));
     } else if (v !== 'custom') this.sys = loadCase(v);
     this.caseId = v;
+    this._view = null;
     this.changed();
     this.solve(true);
     this.render();
@@ -568,149 +572,390 @@ export class LoadFlowScreen {
       <div class="lf-diagbar">
         <div class="lf-seg sm">${[['P', 'MW'], ['PQ', 'MW + Mvar'], ['load', 'Loading %'], ['none', 'Off']].map(([k, t]) => `<button data-fl="${k}" class="${this.flowLabel === k ? 'on' : ''}">${t}</button>`).join('')}</div>
       </div>
-      <div class="lf-diag"><canvas></canvas></div>
+      <div class="lf-diag">
+        <canvas></canvas>
+        <div class="lf-zoom">
+          <button data-z="in" title="Zoom in">${icon('plus', 20)}</button>
+          <span class="lf-zpct">100%</span>
+          <button data-z="out" title="Zoom out">${icon('minus', 20)}</button>
+          <button data-z="fit" title="Fit to screen">${icon('fit', 19)}</button>
+          <button data-z="max" title="Full screen">${icon('fullscreen', 18)}</button>
+        </div>
+        <button class="lf-diagx" data-z="max" title="Close full screen">${icon('x', 20)}</button>
+      </div>
       <div class="lf-legend">
         <span><i style="background:#4ade80"></i>V within limits</span><span><i style="background:#f87171"></i>Under-voltage</span><span><i style="background:#fbbf24"></i>Over-voltage</span>
         <span><i class="ln" style="background:#f97316"></i>Line ≥ 70 %</span><span><i class="ln" style="background:#ef4444"></i>Overloaded</span><span><b>~</b> generator</span><span><b>↓</b> load</span>
       </div>
-      <p class="lf-note">${this.res ? 'Arrows show the direction of real power. ' : 'Run the load flow to see voltages and flows. '}Drag a bus to move it; tap a bus for its details.</p>`;
+      <p class="lf-note">${this.res ? 'The moving dots and arrows show the direction of real power. ' : 'Run the load flow to see voltages and flows. '}Pinch, scroll or double-tap to zoom; drag the background to pan; drag a bus to move it; tap a bus for its details.</p>`;
     body.querySelectorAll('[data-fl]').forEach((b) => b.addEventListener('click', () => {
       this.flowLabel = b.dataset.fl;
       body.querySelectorAll('[data-fl]').forEach((x) => x.classList.toggle('on', x === b));
       this.drawDiagram();
     }));
     const cv = body.querySelector('canvas');
+    body.querySelectorAll('[data-z]').forEach((b) => b.addEventListener('click', () => {
+      const z = b.dataset.z, w = cv.clientWidth, h = cv.clientHeight;
+      if (z === 'in') this.zoomAt(w / 2, h / 2, 1.5, true);
+      else if (z === 'out') this.zoomAt(w / 2, h / 2, 1 / 1.5, true);
+      else if (z === 'fit') this.animateView({ s: 1, tx: 0, ty: 0 });
+      else this.toggleMax();
+    }));
     this.bindDiagram(cv);
+    requestAnimationFrame(() => { this.drawDiagram(); this.startFlow(); });
+  }
+
+  /** Diagram full screen on/off (the back button also leaves it). */
+  toggleMax(on) {
+    const d = this.root.querySelector('.lf-diag');
+    if (!d) return;
+    d.classList.toggle('max', on ?? !d.classList.contains('max'));
     requestAnimationFrame(() => this.drawDiagram());
   }
 
+  get view() { return this._view || (this._view = { s: 1, tx: 0, ty: 0 }); }
+
+  clampView(v) {
+    const cv = this.root.querySelector('.lf-diag canvas'), w = cv?.clientWidth || 300, h = cv?.clientHeight || 300;
+    v.s = Math.max(0.5, Math.min(8, v.s));
+    // keep at least a third of the drawing on screen
+    v.tx = Math.max(-w * v.s + w / 3, Math.min(w - w / 3, v.tx));
+    v.ty = Math.max(-h * v.s + h / 3, Math.min(h - h / 3, v.ty));
+    return v;
+  }
+
+  /** Zoom by factor k keeping the screen point (x, y) fixed. */
+  zoomAt(x, y, k, animate) {
+    const v = this.view, s = Math.max(0.5, Math.min(8, v.s * k)), f = s / v.s;
+    const to = this.clampView({ s, tx: x - (x - v.tx) * f, ty: y - (y - v.ty) * f });
+    if (animate) this.animateView(to); else { Object.assign(v, to); this.drawDiagram(); }
+  }
+
+  animateView(to) {
+    const from = { ...this.view }, t0 = performance.now(), dur = 260;
+    cancelAnimationFrame(this.viewRaf);
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      // the scale moves geometrically so the zoom feels even
+      this.view.s = from.s * Math.pow(to.s / from.s, e);
+      this.view.tx = from.tx + (to.tx - from.tx) * e;
+      this.view.ty = from.ty + (to.ty - from.ty) * e;
+      this.drawDiagram();
+      if (p < 1) this.viewRaf = requestAnimationFrame(step);
+    };
+    this.viewRaf = requestAnimationFrame(step);
+  }
+
+  /** Bus positions in drawing space (the fitted, unzoomed canvas), from x / y in 0–100. */
   layout(w, h) {
-    const n = this.sys.buses.length, pad = { l: 34, r: 34, t: 46, b: 54 };
+    const n = this.sys.buses.length, pad = { l: 44, r: 44, t: 58, b: 64 };
     const pos = new Map();
     this.sys.buses.forEach((b, i) => {
       if (!Number.isFinite(b.x) || !Number.isFinite(b.y)) { const a = (i / n) * Math.PI * 2 - Math.PI / 2; b.x = 50 + 42 * Math.cos(a); b.y = 50 + 42 * Math.sin(a); }
-      pos.set(String(b.id), { x: pad.l + (b.x / 100) * (w - pad.l - pad.r), y: pad.t + (b.y / 100) * (h - pad.t - pad.b), b });
+      pos.set(String(b.id), { wx: pad.l + (b.x / 100) * (w - pad.l - pad.r), wy: pad.t + (b.y / 100) * (h - pad.t - pad.b), b });
     });
     this.diagPad = pad;
     return pos;
+  }
+
+  /** Moving dots along the lines, in the direction of the real power, while the diagram is shown. */
+  startFlow() {
+    cancelAnimationFrame(this.flowRaf);
+    const smooth = motion.smooth && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    if (!smooth || !this.res) return;
+    const loop = () => {
+      const cv = this.root.querySelector('.lf-diag canvas');
+      if (!cv || this.tab !== 'diagram' || !this.root.classList.contains('active') || document.hidden) { this.flowRaf = 0; return; }
+      this.drawDiagram();
+      this.flowRaf = requestAnimationFrame(loop);
+    };
+    this.flowRaf = requestAnimationFrame(loop);
   }
 
   drawDiagram() {
     const cv = this.root.querySelector('.lf-diag canvas');
     if (!cv) return;
     const { ctx, w, h } = prep(cv);
-    const pos = this.layout(w, h);
+    const pos = this.layout(w, h), v = this.view;
+    // symbols grow a little when zoomed in, but much less than the spacing, so crowded labels come apart
+    const k = Math.max(0.8, Math.min(1.6, Math.pow(v.s, 0.3)));
+    for (const p of pos.values()) { p.x = p.wx * v.s + v.tx; p.y = p.wy * v.s + v.ty; }
     this.diagPos = pos;
+    const pct = this.root.querySelector('.lf-zpct');
+    if (pct) pct.textContent = `${Math.round(v.s * 100)}%`;
     const r = this.res, opts = this.opts;
     const rb = new Map(r ? r.buses.map((b) => [String(b.id), b]) : []);
-    const text = css('--text', '#e8eef8'), muted = css('--muted', '#7f8ca6'), text2 = css('--text2', '#b9c5da'), accent = css('--accent', '#22d3ee'), surface = css('--surface', '#0f1729');
-    const vcol = (v) => (v < opts.vMin - 1e-9 ? '#f87171' : v > opts.vMax + 1e-9 ? '#fbbf24' : '#4ade80');
-    ctx.lineCap = 'round';
-    // branches
-    this.sys.branches.forEach((l, k) => {
+    const text = css('--text', '#e8eef8'), muted = css('--muted', '#7f8ca6'), text2 = css('--text2', '#b9c5da'), accent = css('--accent', '#22d3ee'), accent2 = css('--accent2', '#8b5cf6');
+    const surface = css('--surface', '#0f1729'), surface2 = css('--surface2', '#16203a'), border = css('--border2', 'rgba(148,178,230,.22)');
+    const light = document.documentElement.dataset.theme === 'light';
+    const vcol = (val) => (val < opts.vMin - 1e-9 ? (light ? '#dc2626' : '#f87171') : val > opts.vMax + 1e-9 ? (light ? '#d97706' : '#fbbf24') : (light ? '#16a34a' : '#4ade80'));
+    const t = performance.now() / 1000;
+
+    // background: soft glow and a dot grid that pans and zooms with the drawing
+    const g = ctx.createRadialGradient(w / 2, h * 0.42, 0, w / 2, h * 0.42, Math.max(w, h) * 0.75);
+    g.addColorStop(0, light ? 'rgba(8,145,178,0.06)' : 'rgba(34,211,238,0.07)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    let gs = 24 * v.s;
+    while (gs < 14) gs *= 2;
+    while (gs > 56) gs /= 2;
+    ctx.fillStyle = border;
+    const ox = ((v.tx % gs) + gs) % gs, oy = ((v.ty % gs) + gs) % gs;
+    for (let x = ox; x < w; x += gs) for (let y = oy; y < h; y += gs) ctx.fillRect(x - 0.75, y - 0.75, 1.5, 1.5);
+
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const flows = [];
+    let pmax = 1e-9;
+    if (r) for (const l of r.branches) if (l.on) pmax = Math.max(pmax, Math.abs(l.Pf));
+
+    // branches: soft halo, then the line itself
+    this.sys.branches.forEach((l, i) => {
       const a = pos.get(String(l.from)), b = pos.get(String(l.to));
       if (!a || !b) return;
-      const res = r?.branches[k];
+      const res = r?.branches[i];
+      const live = res && res.on;
       let col = muted;
-      if (res && res.on) col = res.rate ? (res.loading > 100 ? '#ef4444' : res.loading >= 70 ? '#f97316' : '#4ade80') : accent;
-      ctx.strokeStyle = col;
-      ctx.lineWidth = res && res.on ? 2.2 : 1.6;
-      ctx.setLineDash(l.on === false ? [5, 5] : []);
+      if (live) col = res.rate ? (res.loading > 100 ? '#ef4444' : res.loading >= 70 ? '#f97316' : (light ? '#16a34a' : '#4ade80')) : accent;
+      if (live) {
+        ctx.strokeStyle = col; ctx.globalAlpha = 0.16; ctx.lineWidth = 8 * k;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.strokeStyle = col; ctx.lineWidth = (live ? 2.6 : 1.8) * k;
+      ctx.setLineDash(l.on === false ? [6 * k, 6 * k] : []);
       ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       ctx.setLineDash([]);
+      flows.push({ a, b, l, res, col, live });
+    });
+
+    // power-flow dots, moving from the sending to the receiving end
+    if (r) {
+      for (const f of flows) {
+        if (!f.live || Math.abs(f.res.Pf) < 0.05) continue;
+        const fwd = f.res.Pf >= 0, from = fwd ? f.a : f.b, to = fwd ? f.b : f.a;
+        const dx = to.x - from.x, dy = to.y - from.y, len = Math.hypot(dx, dy);
+        if (len < 40) continue;
+        const gap = 26 * k, speed = (18 + 70 * Math.min(1, Math.abs(f.res.Pf) / pmax)) * k;
+        const off = (t * speed) % gap;
+        ctx.fillStyle = light ? f.col : '#ffffff';
+        ctx.globalAlpha = 0.85;
+        for (let d = off + 26 * k; d < len - 26 * k; d += gap) {
+          ctx.beginPath(); ctx.arc(from.x + (dx * d) / len, from.y + (dy * d) / len, 1.9 * k, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // space taken by the buses and their voltage labels, so the flow labels can keep clear of it
+    const taken = [];
+    for (const p of pos.values()) {
+      const ld = +p.b.Pd > 0 || +p.b.Qd > 0;
+      taken.push([p.x - 50 * k, p.y - 12 * k, 82 * k, 24 * k]);
+      if (rb.size) taken.push([p.x - 48 * k, p.y + (ld ? 25 : 9) * k, 96 * k, 16 * k]);
+    }
+    const free = (x, y, wd, ht) => !taken.some(([a, b, c, d]) => x < a + c && x + wd > a && y < b + d && y + ht > b);
+    ctx.font = `600 ${10.5 * k}px Inter, Roboto, sans-serif`;
+
+    // transformers, direction arrows and flow labels
+    const pills = [];
+    for (const f of flows) {
+      const { a, b, l, res, col, live } = f;
       const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
       const xf = (+l.tap && +l.tap !== 1) || +l.shift || l.kind === 'xf';
-      if (xf) { // two overlapping circles
-        const mx = a.x + dx * 0.5, my = a.y + dy * 0.5;
-        ctx.fillStyle = surface; ctx.lineWidth = 1.6;
-        for (const s of [-4, 4]) { ctx.beginPath(); ctx.arc(mx + ux * s, my + uy * s, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      if (xf) {
+        const mx = a.x + dx * 0.5, my = a.y + dy * 0.5, rr = 7 * k;
+        ctx.lineWidth = 2 * k;
+        [[-0.6, accent], [0.6, accent2]].forEach(([s, c]) => {
+          ctx.fillStyle = surface; ctx.strokeStyle = c;
+          ctx.beginPath(); ctx.arc(mx + ux * rr * s, my + uy * rr * s, rr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        });
+        if (+l.tap && +l.tap !== 1 && v.s >= 1.4) {
+          ctx.font = `600 ${9 * k}px Inter, Roboto, sans-serif`; ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(`1:${(+l.tap).toFixed(3)}`, mx - uy * 24 * k, my + ux * 24 * k);
+        }
       }
-      if (res && res.on && this.flowLabel !== 'none') {
-        const fwd = res.Pf >= 0, t = xf ? 0.3 : 0.5;
-        const mx = a.x + dx * t, my = a.y + dy * t, sx = fwd ? ux : -ux, sy = fwd ? uy : -uy;
-        ctx.fillStyle = col;
-        ctx.beginPath(); ctx.moveTo(mx + sx * 7, my + sy * 7); ctx.lineTo(mx - sx * 5 - sy * 5, my - sy * 5 + sx * 5); ctx.lineTo(mx - sx * 5 + sy * 5, my - sy * 5 - sx * 5); ctx.closePath(); ctx.fill();
-        const P = fwd ? res.Pf : res.Pt, Q = fwd ? res.Qf : res.Qt;
-        const lab = this.flowLabel === 'load' ? (res.rate ? `${res.loading.toFixed(0)}%` : `${res.S.toFixed(0)} MVA`) : this.flowLabel === 'PQ' && r.method !== 'dc' ? `${P.toFixed(1)}${Q >= 0 ? '+' : '−'}j${Math.abs(Q).toFixed(1)}` : P.toFixed(1);
-        const nx = -uy, ny = ux, off = 11;
-        ctx.font = '600 10.5px Inter, Roboto, sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        const lx = mx + nx * off * (ny < 0 ? -1 : 1), ly = my + ny * off * (ny < 0 ? -1 : 1);
-        const tw = ctx.measureText(lab).width;
-        ctx.fillStyle = surface; ctx.globalAlpha = 0.85; ctx.fillRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14); ctx.globalAlpha = 1;
-        ctx.fillStyle = text2; ctx.fillText(lab, lx, ly);
+      if (!live || this.flowLabel === 'none' || len < 30) continue;
+      const fwd = res.Pf >= 0;
+      const P = fwd ? res.Pf : res.Pt, Q = fwd ? res.Qf : res.Qt;
+      const lab = this.flowLabel === 'load' ? (res.rate ? `${res.loading.toFixed(0)} %` : `${res.S.toFixed(0)} MVA`)
+        : this.flowLabel === 'PQ' && r.method !== 'dc' ? `${Math.abs(P).toFixed(1)} ${Q * (fwd ? 1 : -1) >= 0 ? '+' : '−'} j${Math.abs(Q).toFixed(1)}` : `${Math.abs(P).toFixed(1)} MW`;
+      const side = Math.abs(uy) < 0.35 ? 1 : (ux * uy > 0 ? -1 : 1); // below horizontal lines, beside steep ones
+      const nx = -uy * side, ny = ux * side, off = 15 * k;
+      ctx.font = `600 ${10.5 * k}px Inter, Roboto, sans-serif`;
+      const pw = ctx.measureText(lab).width + 12 * k, ph = 17 * k;
+      // slide the label along its line (and to either side) until it is clear of everything placed so far
+      let tt = xf ? 0.28 : 0.5, lx = 0, ly = 0, found = false;
+      for (const c of xf ? [0.28, 0.72, 0.2, 0.8, 0.36, 0.64] : [0.5, 0.38, 0.62, 0.28, 0.72, 0.2, 0.8]) {
+        for (const sd of [1, -1]) {
+          const cx = a.x + dx * c + nx * off * sd, cy = a.y + dy * c + ny * off * sd;
+          if (free(cx - pw / 2, cy - ph / 2, pw, ph)) { tt = c; lx = cx; ly = cy; found = true; break; }
+        }
+        if (found) break;
       }
-    });
-    // buses
+      if (!found) { lx = a.x + dx * tt + nx * off; ly = a.y + dy * tt + ny * off; }
+      taken.push([lx - pw / 2, ly - ph / 2, pw, ph]);
+      const mx = a.x + dx * tt, my = a.y + dy * tt, sx = fwd ? ux : -ux, sy = fwd ? uy : -uy, ah = 7 * k;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(mx + sx * ah, my + sy * ah); ctx.lineTo(mx - sx * ah * 0.7 - sy * ah * 0.75, my - sy * ah * 0.7 + sx * ah * 0.75); ctx.lineTo(mx - sx * ah * 0.7 + sy * ah * 0.75, my - sy * ah * 0.7 - sx * ah * 0.75); ctx.closePath(); ctx.fill();
+      pills.push({ x: lx, y: ly, lab, col });
+    }
+    ctx.font = `600 ${10.5 * k}px Inter, Roboto, sans-serif`;
+    for (const p of pills) {
+      const tw = ctx.measureText(p.lab).width, ph = 17 * k, pw = tw + 12 * k;
+      rrect(ctx, p.x - pw / 2, p.y - ph / 2, pw, ph, ph / 2);
+      ctx.fillStyle = surface2; ctx.globalAlpha = 0.94; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = p.col; ctx.globalAlpha = 0.55; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.fillStyle = text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(p.lab, p.x, p.y + 0.5);
+    }
+
+    // buses with their generators and loads
     for (const [id, p] of pos) {
       const b = p.b, res = rb.get(id);
       const gen = b.type !== 'pq' || +b.Pg > 0, load = +b.Pd > 0 || +b.Qd > 0;
       const col = res ? vcol(res.V) : text2;
+      const bw = 50 * k, bh = 8 * k;
       if (gen) {
-        ctx.strokeStyle = text2; ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - 15); ctx.stroke();
-        ctx.fillStyle = surface;
-        ctx.beginPath(); ctx.arc(p.x, p.y - 24, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(p.x - 5, p.y - 24); ctx.bezierCurveTo(p.x - 2.5, p.y - 30, p.x, p.y - 18, p.x + 5, p.y - 24); ctx.stroke();
-        if (b.type === 'slack') { ctx.fillStyle = accent; ctx.font = '700 9px Inter, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('SL', p.x + 12, p.y - 25); }
+        const gy = p.y - 30 * k, gr = 12 * k;
+        ctx.strokeStyle = text2; ctx.lineWidth = 2 * k;
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, gy + gr); ctx.stroke();
+        const gg = ctx.createLinearGradient(p.x - gr, gy - gr, p.x + gr, gy + gr);
+        gg.addColorStop(0, accent); gg.addColorStop(1, accent2);
+        ctx.fillStyle = gg;
+        ctx.shadowColor = accent; ctx.shadowBlur = light ? 0 : 10 * k;
+        ctx.beginPath(); ctx.arc(p.x, gy, gr, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8 * k;
+        ctx.beginPath(); ctx.moveTo(p.x - 6.5 * k, gy); ctx.bezierCurveTo(p.x - 3.5 * k, gy - 7 * k, p.x - 0.5 * k, gy - 7 * k, p.x, gy); ctx.bezierCurveTo(p.x + 0.5 * k, gy + 7 * k, p.x + 3.5 * k, gy + 7 * k, p.x + 6.5 * k, gy); ctx.stroke();
+        if (b.type === 'slack') {
+          ctx.font = `800 ${8.5 * k}px Inter, sans-serif`;
+          const tw = ctx.measureText('SLACK').width + 8 * k, tx = p.x + gr + 5 * k, ty = gy - 7 * k;
+          rrect(ctx, tx, ty, tw, 14 * k, 7 * k); ctx.fillStyle = accent; ctx.fill();
+          ctx.fillStyle = light ? '#fff' : '#06202a'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('SLACK', tx + 4 * k, ty + 7.5 * k);
+        }
       }
       if (load) {
-        ctx.strokeStyle = text2; ctx.fillStyle = text2; ctx.lineWidth = 1.6;
-        ctx.beginPath(); ctx.moveTo(p.x + 9, p.y); ctx.lineTo(p.x + 9, p.y + 16); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(p.x + 5, p.y + 13); ctx.lineTo(p.x + 13, p.y + 13); ctx.lineTo(p.x + 9, p.y + 19); ctx.closePath(); ctx.fill();
+        const lx = p.x + bw / 2 - 9 * k;
+        ctx.strokeStyle = text2; ctx.fillStyle = text2; ctx.lineWidth = 2 * k;
+        ctx.beginPath(); ctx.moveTo(lx, p.y); ctx.lineTo(lx, p.y + 16 * k); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(lx - 5 * k, p.y + 14 * k); ctx.lineTo(lx + 5 * k, p.y + 14 * k); ctx.lineTo(lx, p.y + 21 * k); ctx.closePath(); ctx.fill();
       }
-      ctx.fillStyle = col;
-      ctx.fillRect(p.x - 20, p.y - 3, 40, 6);
-      ctx.font = '700 11.5px Inter, Roboto, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = text;
-      ctx.fillText(String(b.id), p.x - 24, p.y);
+      // the bus bar, glowing in its voltage colour
+      ctx.shadowColor = col; ctx.shadowBlur = res && !light ? 12 * k : 0;
+      rrect(ctx, p.x - bw / 2, p.y - bh / 2, bw, bh, bh / 2);
+      ctx.fillStyle = col; ctx.fill();
+      ctx.shadowBlur = 0;
+      // number badge
+      const br = 10.5 * k, bx = p.x - bw / 2 - br - 3 * k;
+      ctx.beginPath(); ctx.arc(bx, p.y, br, 0, Math.PI * 2);
+      ctx.fillStyle = surface2; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.6 * k; ctx.stroke();
+      ctx.fillStyle = text; ctx.font = `800 ${String(b.id).length > 2 ? 8 * k : 10 * k}px Inter, Roboto, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(b.id), bx, p.y + 0.5);
+      // a real name (not just "Bus n") above the bar when there is room
+      if (b.name && b.name !== `Bus ${b.id}` && (!gen || v.s >= 1.2)) {
+        ctx.font = `600 ${10 * k}px Inter, Roboto, sans-serif`; ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(b.name, gen ? p.x + bw / 2 + 4 * k : p.x, p.y - bh / 2 - 4 * k);
+      }
       if (res) {
         const s = `${res.V.toFixed(3)}∠${res.ang.toFixed(1)}°`;
-        ctx.font = '10px "JetBrains Mono", "Roboto Mono", monospace';
-        const tw = ctx.measureText(s).width, ty = p.y + (load ? 22 : 7);
-        const tx = Math.max(tw / 2 + 3, Math.min(w - tw / 2 - 3, p.x)); // keep it on the canvas
-        ctx.fillStyle = surface; ctx.globalAlpha = 0.85; ctx.fillRect(tx - tw / 2 - 2, ty - 1, tw + 4, 13); ctx.globalAlpha = 1;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = col;
-        ctx.fillText(s, tx, ty);
+        ctx.font = `600 ${10 * k}px "JetBrains Mono", "Roboto Mono", monospace`;
+        const tw = ctx.measureText(s).width + 10 * k, th = 16 * k;
+        const ty = p.y + (load ? 25 : 9) * k;
+        const tx = p.x > 0 && p.x < w ? Math.max(4, Math.min(w - tw - 4, p.x - tw / 2)) : p.x - tw / 2; // nudged onto the canvas only while the bus is on it
+        rrect(ctx, tx, ty, tw, th, 5 * k);
+        ctx.fillStyle = surface2; ctx.globalAlpha = 0.94; ctx.fill(); ctx.globalAlpha = 1;
+        ctx.strokeStyle = col; ctx.globalAlpha = 0.45; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(s, tx + 5 * k, ty + th / 2 + 0.5);
       }
     }
-    if (!this.sys.buses.length) { ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.fillText('No buses', w / 2, h / 2); }
+    if (!this.sys.buses.length) { ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.font = '13px Inter, sans-serif'; ctx.fillText('No buses', w / 2, h / 2); }
   }
 
   bindDiagram(cv) {
-    let drag = null;
+    const ptrs = new Map();
+    let mode = null, drag = null, pinch = null, lastTap = 0, lastTapAt = null;
     const pt = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
     const hit = (p) => {
-      let best = null, bd = 26;
-      for (const [id, q] of this.diagPos || []) { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < bd) { bd = d; best = id; } }
+      let best = null, bd = 28;
+      for (const [id, q] of this.diagPos || []) {
+        const d = Math.hypot(Math.max(0, Math.abs(q.x - p.x) - 22), q.y - p.y);
+        if (d < bd) { bd = d; best = id; }
+      }
       return best;
     };
+    const startPinch = () => {
+      const [a, b] = [...ptrs.values()];
+      pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, v: { ...this.view } };
+      mode = 'pinch'; drag = null;
+    };
     cv.addEventListener('pointerdown', (e) => {
-      const p = pt(e), id = hit(p);
-      if (!id) return;
-      drag = { id, x0: p.x, y0: p.y, moved: false };
+      cancelAnimationFrame(this.viewRaf);
+      const p = pt(e);
+      ptrs.set(e.pointerId, p);
       cv.setPointerCapture(e.pointerId);
+      if (ptrs.size === 2) { startPinch(); return; }
+      if (ptrs.size > 2) return;
+      const id = hit(p);
+      drag = { id, x0: p.x, y0: p.y, moved: false, v: { ...this.view } };
+      mode = id ? 'bus' : 'pan';
     });
     cv.addEventListener('pointermove', (e) => {
-      if (!drag) return;
+      if (!ptrs.has(e.pointerId)) return;
       const p = pt(e);
+      ptrs.set(e.pointerId, p);
+      if (mode === 'pinch' && ptrs.size >= 2) {
+        const [a, b] = [...ptrs.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y) || 1, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const s = Math.max(0.5, Math.min(8, pinch.v.s * (d / pinch.d))), f = s / pinch.v.s;
+        Object.assign(this.view, this.clampView({ s, tx: mx - (pinch.mx - pinch.v.tx) * f, ty: my - (pinch.my - pinch.v.ty) * f }));
+        this.drawDiagram();
+        return;
+      }
+      if (!drag) return;
       if (!drag.moved && Math.hypot(p.x - drag.x0, p.y - drag.y0) < 6) return;
       drag.moved = true;
-      const pad = this.diagPad, w = cv.clientWidth, h = cv.clientHeight;
+      if (mode === 'pan') {
+        Object.assign(this.view, this.clampView({ s: drag.v.s, tx: drag.v.tx + p.x - drag.x0, ty: drag.v.ty + p.y - drag.y0 }));
+        this.drawDiagram();
+        return;
+      }
+      const pad = this.diagPad, w = cv.clientWidth, h = cv.clientHeight, v = this.view;
       const b = this.sys.buses.find((x) => String(x.id) === drag.id);
       if (!b) return;
-      b.x = Math.max(0, Math.min(100, ((p.x - pad.l) / (w - pad.l - pad.r)) * 100));
-      b.y = Math.max(0, Math.min(100, ((p.y - pad.t) / (h - pad.t - pad.b)) * 100));
+      const wx = (p.x - v.tx) / v.s, wy = (p.y - v.ty) / v.s;
+      b.x = Math.max(-5, Math.min(105, ((wx - pad.l) / (w - pad.l - pad.r)) * 100));
+      b.y = Math.max(-5, Math.min(105, ((wy - pad.t) / (h - pad.t - pad.b)) * 100));
       this.drawDiagram();
     });
-    const end = () => {
+    const end = (e) => {
+      if (!ptrs.has(e.pointerId)) return;
+      ptrs.delete(e.pointerId);
+      if (mode === 'pinch') { if (ptrs.size < 2) { mode = null; drag = null; } return; }
       if (!drag) return;
-      if (drag.moved) this.persist();
-      else if (this.res) this.busDetail(drag.id);
-      else { const i = this.sys.buses.findIndex((x) => String(x.id) === drag.id); if (i >= 0) this.editBus(i); }
-      drag = null;
+      const d = drag;
+      drag = null; mode = null;
+      if (d.moved) { if (d.id) this.persist(); return; }
+      const now = performance.now();
+      if (d.id) {
+        if (this.res) this.busDetail(d.id);
+        else { const i = this.sys.buses.findIndex((x) => String(x.id) === d.id); if (i >= 0) this.editBus(i); }
+      } else if (now - lastTap < 320 && lastTapAt && Math.hypot(lastTapAt.x - d.x0, lastTapAt.y - d.y0) < 30) {
+        // double-tap on the background: zoom in there, or back out when already well zoomed
+        if (this.view.s >= 3.9) this.animateView({ s: 1, tx: 0, ty: 0 });
+        else this.zoomAt(d.x0, d.y0, 2, true);
+        lastTap = 0;
+        return;
+      }
+      lastTap = now; lastTapAt = { x: d.x0, y: d.y0 };
     };
     cv.addEventListener('pointerup', end);
-    cv.addEventListener('pointercancel', () => { drag = null; });
+    cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); drag = null; mode = null; });
+    cv.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const p = pt(e), dy = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY;
+      this.zoomAt(p.x, p.y, Math.exp(-dy * 0.0015), false);
+    }, { passive: false });
     if (this.diagRO) this.diagRO.disconnect();
     if (typeof ResizeObserver === 'function') { this.diagRO = new ResizeObserver(() => this.drawDiagram()); this.diagRO.observe(cv); }
   }
@@ -1004,6 +1249,18 @@ function lineLog(cv, pts, tol) {
   ctx.stroke();
   if (L.length <= 60) { ctx.fillStyle = accent; for (const [x, y] of L) { ctx.beginPath(); ctx.arc(X(x), Y(y), 2.6, 0, Math.PI * 2); ctx.fill(); } }
   ctx.fillStyle = '#4ade80'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText('tolerance', w - pad.r, yt - 2);
+}
+
+/** Rounded-rectangle path (ctx.roundRect is missing on older Android WebViews). */
+function rrect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function niceStep(raw) {

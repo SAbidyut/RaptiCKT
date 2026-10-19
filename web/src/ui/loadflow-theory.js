@@ -178,7 +178,7 @@ export const LF_THEORY = [
         'Tap a bus or a branch to edit it; **+ Bus**, **+ Line** and **+ Transformer** add new ones. Use the **Per-unit tools** tab to convert ohms, Ω/km or transformer % impedance to per unit.',
         'Choose the method, tolerance and options, then tap **Run load flow**.',
         '**Results** shows the convergence summary, bus voltages, generation, line flows, losses and any violations. **CSV** exports the tables; **Report** shares a text report.',
-        '**Diagram** draws the one-line diagram coloured by voltage and loading, with flow arrows. Drag a bus to move it.',
+        '**Diagram** draws the one-line diagram coloured by voltage and loading, with moving power-flow dots and arrows. Pinch, scroll or double-tap to zoom, drag the background to pan, use + / − / fit / full screen, and drag a bus to move it.',
         '**Charts** plots the voltage and angle profiles, the convergence and the line loading.',
         '**Iterations** lists every iteration (voltages and mismatch) and the Newton–Raphson Jacobian; **Y-bus** shows the admittance matrix.',
         '**N-1** takes every line out in turn and reports the worst voltage and loading for each outage.',
