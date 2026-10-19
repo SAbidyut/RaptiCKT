@@ -54,6 +54,12 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Monte Carlo tolerance analysis
   - Power / efficiency table
   - SPICE netlist
+- **Load Flow Analysis** (its own section: the card on Home or **⋮ → Load flow analysis**): power-system power flow on bus / branch data
+  - Newton–Raphson (polar), Gauss–Seidel (with acceleration factor), Fast Decoupled (XB) and DC load flow, with generator Q limits (PV → PQ switching), flat start, tolerance and iteration settings
+  - Test systems: Saadat 3-bus (GS and NR examples), Stagg & El-Abiad 5-bus, Wood & Wollenberg 6-bus, WSCC 9-bus, IEEE 14-bus, plus a template for your own; add / edit buses, lines and tap / phase-shifting transformers, save them, and import / export MATPOWER case files
+  - Results: bus voltages and angles, generation, line flows at both ends, losses, line charging, loading %, voltage and overload violations; CSV and text report
+  - One-line diagram coloured by voltage and loading with flow arrows, charts (voltage / angle profile, convergence, loading, losses), the iteration log and Newton–Raphson Jacobian, the Y-bus matrix, N-1 contingency screening, per-unit calculators and a theory section
+  - Verified against the published IEEE 14-bus, WSCC 9-bus and textbook solutions (`web/tests/loadflow.test.js`)
 - **Fault simulation**: break a terminal, short two terminals or add leakage to any part from its properties sheet, or place a timed fault to watch protection trip.
 - **Landscape & full screen** (like RaptiAuto): sideways the bars merge into one row, the oscilloscope sits beside the circuit and sheets open as a side panel; **Full** hides every bar (and Android's status and navigation bars) so the board runs edge to edge, with the circuit gliding smoothly into place instead of jumping; the tool rail and + button hide behind a small ☰ handle until you need them. Screen rotation can be locked in Settings.
 - **Interaction**:

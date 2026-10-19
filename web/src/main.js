@@ -5,6 +5,7 @@ import { CATEGORIES } from './elements/index.js';
 import { Editor } from './ui/editor.js';
 import { HomeScreen, renderSettings } from './ui/screens.js';
 import { ManualScreen } from './ui/manual.js';
+import { LoadFlowScreen } from './ui/loadflow.js';
 import { CircuitDoc } from './ui/doc.js';
 import { EXAMPLES, buildExample } from './ui/examples.js';
 import { store, bridge } from './ui/store.js';
@@ -30,11 +31,13 @@ class App {
       <section class="screen editor"></section>
       <section class="screen settings"></section>
       <section class="screen manual"></section>
+      <section class="screen loadflow"></section>
       <div class="modal"><div class="modal-card"><div class="modal-head"><b></b><button class="icon-btn" data-close>${icon('x', 20)}</button></div><div class="modal-body"></div></div></div>
       <div class="splash">${LOGO_SVG(120, 'sp')}<h1>Rapti<span>CKT</span></h1><p>${APP.tagline}</p><div class="splash-bar"><i></i></div></div>`;
     this.home = new HomeScreen(this, this.el.querySelector('.screen.home'));
     this.editor = new Editor(this, this.el.querySelector('.screen.editor'));
     this.manual = new ManualScreen(this, this.el.querySelector('.screen.manual'));
+    this.loadflow = new LoadFlowScreen(this, this.el.querySelector('.screen.loadflow'));
     this.thumbCache = new Map();
     this.applyTheme();
     this.el.querySelector('.modal [data-close]').addEventListener('click', () => this.closeSheet());
@@ -146,6 +149,19 @@ class App {
     this.show(from);
     if (from === 'editor') { this.editor.onResize(); this.editor.dirtyDraw = true; }
   }
+  /** The Load Flow Analysis section. Back returns to wherever it was opened from. */
+  openLoadFlow() {
+    if (this.current === 'home') this.home.remember();
+    if (this.current !== 'loadflow') this.loadflowFrom = this.current;
+    this.show('loadflow');
+    this.loadflow.open();
+  }
+  closeLoadFlow() {
+    const from = this.loadflowFrom || 'home';
+    this.show(from);
+    if (from === 'home') this.home.render();
+    if (from === 'editor') { this.editor.onResize(); this.editor.dirtyDraw = true; }
+  }
   /** "Open this example" inside the manual: keep the circuit being edited, then open the example. */
   openExampleFromManual(id) {
     if (this.current === 'manual' && this.manualFrom === 'editor') {
@@ -162,6 +178,7 @@ class App {
     if (this.el.querySelector('.modal.open')) { this.closeSheet(); return true; }
     if (this.current === 'manual') { if (!this.manual.back()) this.closeManual(); return true; }
     if (this.current === 'settings') { this.closeSettings(); return true; }
+    if (this.current === 'loadflow') { if (!this.loadflow.back()) this.closeLoadFlow(); return true; }
     if (this.current === 'editor') { if (!this.editor.back()) this.goHome(); return true; }
     if (this.current === 'home' && this.home.tab === 'library' && this.home.upOne()) return true;
     if (this.current === 'home' && this.home.tab === 'manual' && this.manual.back()) return true; // up one manual page // leave select mode, then folders

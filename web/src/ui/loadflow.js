@@ -1,0 +1,1013 @@
+// Load Flow Analysis section: build or pick a power system, solve it with Newton–Raphson,
+// Gauss–Seidel, Fast Decoupled or DC load flow, and study the results as tables, a
+// one-line diagram, charts, the iteration log, the Y-bus, an N-1 screening, per-unit
+// tools and the theory behind it all.
+
+import { icon } from './icons.js';
+import { store } from './store.js';
+import {
+  solveLoadFlow, contingencies, buildYbus, validate, METHODS, DEFAULT_OPTIONS,
+  parseMatpower, toMatpower, baseValues, changeBase,
+} from '../engine/loadflow.js';
+import { LF_CASES, loadCase, newBus, newBranch } from '../engine/loadflow-cases.js';
+import { LF_THEORY } from './loadflow-theory.js';
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fx = (v, d = 3) => (Number.isFinite(v) ? (Math.abs(v) < 0.5 * 10 ** -d ? 0 : v).toFixed(d) : '—');
+const numIn = (v, def = 0) => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : def; };
+const optNum = (v) => (String(v).trim() === '' ? '' : numIn(v, ''));
+const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+
+const TABS = [
+  ['system', 'table', 'System'], ['results', 'check', 'Results'], ['diagram', 'tower', 'Diagram'], ['charts', 'chart', 'Charts'],
+  ['iter', 'sigma', 'Iterations'], ['ybus', 'grid', 'Y-bus'], ['n1', 'shield', 'N-1'], ['tools', 'gauge', 'Per-unit tools'], ['learn', 'book', 'Theory'],
+];
+const TYPE_LABEL = { slack: 'Slack', pv: 'PV', pq: 'PQ' };
+const TYPE_LONG = { slack: 'Slack (swing)', pv: 'PV (generator)', pq: 'PQ (load)' };
+
+function css(name, fb) {
+  try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fb; } catch { return fb; }
+}
+
+/** Size a canvas to its CSS box at device resolution; returns { ctx, w, h }. */
+function prep(cv) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 300, h = cv.clientHeight || 200;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h };
+}
+
+export class LoadFlowScreen {
+  constructor(app, root) {
+    this.app = app;
+    this.root = root;
+    const s = store.lfState();
+    this.sys = s?.sys && Array.isArray(s.sys.buses) ? s.sys : loadCase('ieee14');
+    this.caseId = s?.caseId || 'ieee14';
+    this.opts = { ...DEFAULT_OPTIONS, ...(s?.opts || {}) };
+    this.tab = 'system';
+    this.res = null;
+    this.n1 = null;
+    this.flowLabel = 'P';
+    this.ybusPolar = false;
+    this.iterBus = 'all';
+  }
+
+  persist() { store.saveLfState({ sys: this.sys, opts: this.opts, caseId: this.caseId }); }
+
+  open() {
+    if (!this.res) this.solve(true);
+    this.render();
+  }
+
+  /** Back button: from another tab go to System first. Returns false when the screen should close. */
+  back() {
+    if (this.tab !== 'system') { this.tab = 'system'; this.render(); return true; }
+    return false;
+  }
+
+  toast(msg) {
+    let t = this.root.querySelector('.lf-toast');
+    if (!t) { t = document.createElement('div'); t.className = 'lf-toast'; this.root.append(t); }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(this.toastT);
+    this.toastT = setTimeout(() => t.classList.remove('show'), 2400);
+  }
+
+  changed() { this.res = null; this.n1 = null; this.persist(); }
+
+  // ---------------------------------------------------------------- frame
+  render() {
+    this.root.innerHTML = `
+      <header class="an-head lf-head">
+        <button class="icon-btn" data-x="back" title="Back">${icon('back', 22)}</button>
+        <div class="lf-title"><b>Load Flow Analysis</b><span>${esc(this.sys.name || 'System')} · ${this.sys.buses.length} buses · ${this.sys.branches.length} branches</span></div>
+        <button class="btn primary lf-runbtn" data-x="run">${icon('play', 16)}<span>Run</span></button>
+      </header>
+      <nav class="an-tabs lf-tabs">${TABS.map(([id, ic, t]) => `<button data-tab="${id}" class="${this.tab === id ? 'on' : ''}">${icon(ic, 16)}${t}</button>`).join('')}</nav>
+      <div class="an-body lf-body"></div>`;
+    this.root.querySelector('[data-x=back]').addEventListener('click', () => this.app.closeLoadFlow());
+    this.root.querySelector('[data-x=run]').addEventListener('click', () => this.run());
+    this.root.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => this.setTab(b.dataset.tab)));
+    this.renderTab();
+    const on = this.root.querySelector('.lf-tabs .on');
+    if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+
+  setTab(t) {
+    this.tab = t;
+    this.root.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
+    this.root.querySelector('.lf-body').scrollTop = 0;
+    this.renderTab();
+  }
+
+  renderTab() {
+    const body = this.root.querySelector('.lf-body');
+    const t = this.tab;
+    if (t === 'system') this.renderSystem(body);
+    else if (t === 'results') this.renderResults(body);
+    else if (t === 'diagram') this.renderDiagram(body);
+    else if (t === 'charts') this.renderCharts(body);
+    else if (t === 'iter') this.renderIter(body);
+    else if (t === 'ybus') this.renderYbus(body);
+    else if (t === 'n1') this.renderN1(body);
+    else if (t === 'tools') this.renderTools(body);
+    else if (t === 'learn') this.renderLearn(body);
+  }
+
+  updateHead() {
+    const s = this.root.querySelector('.lf-title span');
+    if (s) s.textContent = `${this.sys.name || 'System'} · ${this.sys.buses.length} buses · ${this.sys.branches.length} branches`;
+  }
+
+  // ---------------------------------------------------------------- solving
+  solve(quiet) {
+    const r = solveLoadFlow(this.sys, this.opts);
+    if (!r.ok) {
+      this.res = null;
+      if (!quiet) this.app.showSheet('Cannot run the load flow', `<ul class="lf-errs">${r.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul><button class="btn" data-close2>OK</button>`, (b, close) => b.querySelector('[data-close2]').addEventListener('click', close));
+      return false;
+    }
+    this.res = r;
+    return true;
+  }
+
+  run() {
+    if (!this.solve(false)) return;
+    this.app.bridge.vibrate(10);
+    const r = this.res;
+    this.toast(r.converged ? `Converged in ${r.iterations} iteration${r.iterations === 1 ? '' : 's'} (${METHODS.find((m) => m.id === r.method).name})` : `Did not converge in ${r.iterations} iterations`);
+    if (this.tab === 'system' || this.tab === 'learn' || this.tab === 'tools') this.setTab('results');
+    else this.renderTab();
+  }
+
+  needRun(body, what = 'results') {
+    body.innerHTML = `<div class="lf-empty">${icon('tower', 40)}<b>No ${what} yet</b><p>Tap <b>Run</b> to solve the load flow of “${esc(this.sys.name)}”.</p><button class="btn primary" data-x="run2">${icon('play', 16)} Run load flow</button></div>`;
+    body.querySelector('[data-x=run2]').addEventListener('click', () => this.run());
+  }
+
+  // ---------------------------------------------------------------- System tab
+  renderSystem(body) {
+    const sys = this.sys, o = this.opts;
+    const saved = store.lfSaved();
+    const caseInfo = LF_CASES.find((c) => c.id === this.caseId);
+    body.innerHTML = `
+      <p class="an-help">Pick a standard test system or build your own, set the solver, then tap <b>Run</b>. Tap any bus or branch to edit it.</p>
+      <div class="lf-card">
+        <label class="lf-lab">Test system
+          <select data-k="case">
+            <optgroup label="Standard test systems">${LF_CASES.map((c) => `<option value="${c.id}" ${c.id === this.caseId ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</optgroup>
+            ${saved.length ? `<optgroup label="My systems">${saved.map((s) => `<option value="saved:${s.id}" ${'saved:' + s.id === this.caseId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</optgroup>` : ''}
+            ${this.caseId === 'custom' ? '<option value="custom" selected>(edited / imported system)</option>' : ''}
+          </select>
+        </label>
+        ${caseInfo ? `<p class="lf-desc">${esc(caseInfo.desc)}</p>` : ''}
+        <div class="form-grid lf-grid2">
+          <label>System name<input data-k="name" value="${esc(sys.name)}"></label>
+          <label>Base MVA<input data-k="base" type="number" inputmode="decimal" value="${sys.baseMVA}"></label>
+        </div>
+        <div class="lf-btns">
+          <button class="btn sm" data-x="save">${icon('save', 15)} Save</button>
+          <button class="btn sm" data-x="import">${icon('upload', 15)} Import</button>
+          <button class="btn sm" data-x="export">${icon('download', 15)} Export</button>
+          <button class="btn sm" data-x="reset">${icon('reset', 15)} Reload</button>
+          ${this.caseId.startsWith('saved:') ? `<button class="btn sm danger" data-x="del">${icon('trash', 15)} Delete</button>` : ''}
+        </div>
+      </div>
+
+      <h4>Solver</h4>
+      <div class="lf-card">
+        <div class="lf-seg lf-m">${METHODS.map((m) => `<button data-m="${m.id}" class="${o.method === m.id ? 'on' : ''}">${m.name}</button>`).join('')}</div>
+        <div class="form-grid lf-grid3">
+          <label>Tolerance (pu)<input data-o="tol" type="number" inputmode="decimal" step="any" value="${o.tol}"></label>
+          <label>Max iterations<input data-o="maxIter" type="number" inputmode="numeric" placeholder="auto" value="${o.maxIter || ''}"></label>
+          <label class="${o.method === 'gs' ? '' : 'lf-dim'}">Acceleration α (GS)<input data-o="accel" type="number" inputmode="decimal" step="0.1" value="${o.accel}"></label>
+          <label>V min (pu)<input data-o="vMin" type="number" inputmode="decimal" step="0.01" value="${o.vMin}"></label>
+          <label>V max (pu)<input data-o="vMax" type="number" inputmode="decimal" step="0.01" value="${o.vMax}"></label>
+        </div>
+        <label class="lf-check"><input type="checkbox" data-c="qLimits" ${o.qLimits ? 'checked' : ''}><span><b>Enforce generator Q limits</b><small>PV bus → PQ when Qg passes Qmin / Qmax</small></span></label>
+        <label class="lf-check"><input type="checkbox" data-c="flatStart" ${o.flatStart ? 'checked' : ''}><span><b>Flat start</b><small>|V| = 1, δ = 0 at load buses (off: start from the entered V and angle)</small></span></label>
+        <button class="btn primary lf-bigrun" data-x="run3">${icon('play', 18)} Run load flow</button>
+      </div>
+
+      <h4 class="lf-h4">Buses <span>${sys.buses.length}</span><button class="btn sm" data-x="addbus">${icon('plus', 15)} Bus</button></h4>
+      <div class="lf-list">${sys.buses.map((b, i) => this.busRow(b, i)).join('')}</div>
+
+      <h4 class="lf-h4">Lines & transformers <span>${sys.branches.length}</span><button class="btn sm" data-x="addline">${icon('plus', 15)} Line</button><button class="btn sm" data-x="addxf">${icon('plus', 15)} Transformer</button></h4>
+      <div class="lf-list">${sys.branches.map((l, i) => this.branchRow(l, i)).join('')}</div>
+      <p class="lf-note">Powers in MW / Mvar; R, X and B (total line charging) in per unit on the base MVA. Bus shunt Gs / Bs = MW / Mvar drawn at 1 pu (Bs > 0 = capacitor).</p>`;
+
+    const q = (s) => body.querySelector(s);
+    q('[data-k=case]').addEventListener('change', (e) => this.pickCase(e.target.value));
+    q('[data-k=name]').addEventListener('change', (e) => { sys.name = e.target.value.trim() || 'System'; this.persist(); this.updateHead(); });
+    q('[data-k=base]').addEventListener('change', (e) => { const v = numIn(e.target.value, 100); sys.baseMVA = v > 0 ? v : 100; e.target.value = sys.baseMVA; this.changed(); });
+    body.querySelectorAll('[data-m]').forEach((b) => b.addEventListener('click', () => {
+      o.method = b.dataset.m; this.res = null; this.persist();
+      body.querySelectorAll('[data-m]').forEach((x) => x.classList.toggle('on', x === b));
+      q('[data-o=accel]').closest('label').classList.toggle('lf-dim', o.method !== 'gs');
+    }));
+    body.querySelectorAll('[data-o]').forEach((inp) => inp.addEventListener('change', () => {
+      const k = inp.dataset.o;
+      if (k === 'maxIter') o.maxIter = Math.max(0, Math.round(numIn(inp.value, 0)));
+      else if (k === 'tol') o.tol = Math.min(0.1, Math.max(1e-12, numIn(inp.value, 1e-6)));
+      else if (k === 'accel') o.accel = Math.min(2, Math.max(0.5, numIn(inp.value, 1.6)));
+      else o[k] = numIn(inp.value, DEFAULT_OPTIONS[k]);
+      inp.value = k === 'maxIter' ? o.maxIter || '' : o[k];
+      this.res = null; this.persist();
+    }));
+    body.querySelectorAll('[data-c]').forEach((c) => c.addEventListener('change', () => { o[c.dataset.c] = c.checked; this.res = null; this.persist(); }));
+    q('[data-x=run3]').addEventListener('click', () => this.run());
+    q('[data-x=save]').addEventListener('click', () => this.saveSystem());
+    q('[data-x=import]').addEventListener('click', () => this.importSheet());
+    q('[data-x=export]').addEventListener('click', () => this.exportSheet());
+    q('[data-x=reset]').addEventListener('click', () => { if (confirm('Reload the selected system and lose your changes?')) this.pickCase(this.caseId === 'custom' ? 'ieee14' : this.caseId); });
+    q('[data-x=del]')?.addEventListener('click', () => {
+      if (!confirm(`Delete “${sys.name}” from My systems?`)) return;
+      store.saveLfSaved(saved.filter((s) => 'saved:' + s.id !== this.caseId));
+      this.caseId = 'custom'; this.persist(); this.renderSystem(body);
+    });
+    q('[data-x=addbus]').addEventListener('click', () => this.addBus());
+    q('[data-x=addline]').addEventListener('click', () => this.addBranch(false));
+    q('[data-x=addxf]').addEventListener('click', () => this.addBranch(true));
+    body.querySelectorAll('[data-bus]').forEach((b) => b.addEventListener('click', () => this.editBus(+b.dataset.bus)));
+    body.querySelectorAll('[data-br]').forEach((b) => b.addEventListener('click', () => this.editBranch(+b.dataset.br)));
+  }
+
+  busRow(b, i) {
+    const parts = [];
+    if (b.type !== 'pq') parts.push(`V ${fx(+b.V, 3)} pu`);
+    if (b.type === 'slack') parts.push(`δ ${fx(+b.ang, 1)}°`);
+    if (+b.Pg || b.type === 'pv') parts.push(`Pg ${fx(+b.Pg, 1)} MW`);
+    if (b.type === 'pq' && +b.Qg) parts.push(`Qg ${fx(+b.Qg, 1)}`);
+    if (+b.Pd || +b.Qd) parts.push(`Load ${fx(+b.Pd, 1)} + j${fx(+b.Qd, 1)}`);
+    if (+b.Bs || +b.Gs) parts.push(`Shunt ${+b.Gs ? fx(+b.Gs, 1) + ' MW ' : ''}${fx(+b.Bs, 1)} Mvar`);
+    if (b.type === 'pv' && (b.Qmin !== '' || b.Qmax !== '')) parts.push(`Q ${b.Qmin === '' ? '−∞' : b.Qmin}…${b.Qmax === '' ? '∞' : b.Qmax}`);
+    return `<button class="lf-row" data-bus="${i}"><span class="lf-badge ${b.type}">${TYPE_LABEL[b.type]}</span><div><b>${esc(b.id)} · ${esc(b.name)}</b><span>${parts.join(' · ') || 'No load or generation'}</span></div>${icon('edit', 16)}</button>`;
+  }
+
+  branchRow(l, i) {
+    const xf = (+l.tap && +l.tap !== 1) || +l.shift || l.kind === 'xf';
+    const parts = [`R ${l.R}`, `X ${l.X}`];
+    if (+l.B) parts.push(`B ${l.B}`);
+    if (xf) parts.push(`tap ${+l.tap || 1}${+l.shift ? ` ∠${l.shift}°` : ''}`);
+    if (+l.rate) parts.push(`${l.rate} MVA`);
+    return `<button class="lf-row ${l.on === false ? 'off' : ''}" data-br="${i}"><span class="lf-badge ${xf ? 'xf' : 'ln'}">${xf ? 'XF' : 'Line'}</span><div><b>${esc(l.from)} → ${esc(l.to)}${l.on === false ? ' · out of service' : ''}</b><span>${parts.join(' · ')}</span></div>${icon('edit', 16)}</button>`;
+  }
+
+  pickCase(v) {
+    if (v.startsWith('saved:')) {
+      const s = store.lfSaved().find((x) => 'saved:' + x.id === v);
+      if (!s) return;
+      this.sys = JSON.parse(JSON.stringify(s.sys));
+    } else if (v !== 'custom') this.sys = loadCase(v);
+    this.caseId = v;
+    this.changed();
+    this.solve(true);
+    this.render();
+  }
+
+  markCustom() { if (!this.caseId.startsWith('saved:')) this.caseId = 'custom'; }
+
+  saveSystem() {
+    const name = prompt('Save system as', this.sys.name || 'My system');
+    if (!name) return;
+    this.sys.name = name.trim();
+    const list = store.lfSaved();
+    const old = list.find((s) => s.name === this.sys.name);
+    const id = old ? old.id : 's' + Date.now().toString(36);
+    const entry = { id, name: this.sys.name, updated: Date.now(), sys: JSON.parse(JSON.stringify(this.sys)) };
+    store.saveLfSaved(old ? list.map((s) => (s.id === id ? entry : s)) : [...list, entry]);
+    this.caseId = 'saved:' + id;
+    this.persist();
+    this.render();
+    this.toast('Saved to My systems');
+  }
+
+  importSheet() {
+    this.app.showSheet('Import a system', `
+      <p class="lf-desc">Read a <b>MATPOWER case file</b> (.m, with mpc.bus, mpc.gen and mpc.branch) or a RaptiCKT load-flow .json file. You can also paste the text below.</p>
+      <button class="btn primary" data-x="file">${icon('upload', 16)} Choose file…</button>
+      <textarea class="lf-paste" placeholder="Paste MATPOWER case text here"></textarea>
+      <button class="btn" data-x="paste">${icon('check', 16)} Import pasted text</button>`, (b, close) => {
+      const take = (text, name) => {
+        try {
+          const t = String(text).trim();
+          let sys;
+          if (t.startsWith('{')) {
+            const o = JSON.parse(t);
+            sys = o.loadflow || o;
+            if (!Array.isArray(sys.buses) || !Array.isArray(sys.branches)) throw new Error('not a load-flow system');
+          } else sys = parseMatpower(t);
+          if (!sys.name && name) sys.name = name.replace(/\.\w+$/, '');
+          this.sys = sys;
+          this.caseId = 'custom';
+          this.changed();
+          close();
+          this.solve(true);
+          this.render();
+          this.toast(`Imported ${sys.buses.length} buses, ${sys.branches.length} branches`);
+        } catch (e) { alert('Could not import: ' + e.message); }
+      };
+      b.querySelector('[data-x=file]').addEventListener('click', async () => {
+        try { const { name, text } = await this.app.bridge.openFile('.m,.json,.txt,text/plain,application/json'); take(text, name); } catch (e) { if (e && e.message !== 'No file' && e.message !== 'cancelled') alert(e.message); }
+      });
+      b.querySelector('[data-x=paste]').addEventListener('click', () => take(b.querySelector('.lf-paste').value));
+    });
+  }
+
+  exportSheet() {
+    const fname = (this.sys.name || 'system').replace(/[^\w\- ]+/g, '_').trim() || 'system';
+    this.app.showSheet('Export the system', `
+      <p class="lf-desc">A MATPOWER case opens in MATLAB / Octave (MATPOWER), pandapower and PowerModels. The .json file re-opens here, including bus positions on the diagram.</p>
+      <div class="lf-btns col">
+        <button class="btn" data-x="m">${icon('code', 16)} MATPOWER case (.m)</button>
+        <button class="btn" data-x="json">${icon('download', 16)} RaptiCKT system (.json)</button>
+        <button class="btn" data-x="share">${icon('share', 16)} Share as text</button>
+      </div>`, (b, close) => {
+      b.querySelector('[data-x=m]').addEventListener('click', () => { this.app.bridge.saveFile(fname.replace(/\s+/g, '_') + '.m', 'text/plain', toMatpower(this.sys)); close(); });
+      b.querySelector('[data-x=json]').addEventListener('click', () => { this.app.bridge.saveFile(fname + '.json', 'application/json', JSON.stringify({ app: 'RaptiCKT', loadflow: this.sys }, null, 1)); close(); });
+      b.querySelector('[data-x=share]').addEventListener('click', () => { this.app.bridge.share(this.sys.name, toMatpower(this.sys)); close(); });
+    });
+  }
+
+  // ---- bus and branch editing
+  addBus() {
+    const ids = this.sys.buses.map((b) => +b.id);
+    const id = (ids.length ? Math.max(...ids) : 0) + 1;
+    this.sys.buses.push(newBus(id, 'pq', { Pd: 0, Qd: 0, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60 }));
+    this.markCustom(); this.changed();
+    this.editBus(this.sys.buses.length - 1, true);
+  }
+
+  addBranch(xf) {
+    const b = this.sys.buses;
+    if (b.length < 2) { alert('Add at least two buses first.'); return; }
+    this.sys.branches.push(newBranch(b[0].id, b[1].id, xf ? 0 : 0.01, xf ? 0.1 : 0.05, xf ? 0 : 0.02, xf ? { tap: 1, kind: 'xf' } : {}));
+    this.markCustom(); this.changed();
+    this.editBranch(this.sys.branches.length - 1, true);
+  }
+
+  editBus(i, isNew) {
+    const b = this.sys.buses[i];
+    const f = (k, label, extra = '') => `<label data-f="${k}">${label}<input data-v="${k}" type="number" inputmode="decimal" step="any" value="${esc(b[k] ?? '')}" ${extra}></label>`;
+    this.app.showSheet(isNew ? 'New bus' : `Bus ${esc(b.id)}`, `
+      <div class="form-grid lf-grid2">
+        <label>Bus number<input data-v="id" type="number" inputmode="numeric" value="${esc(b.id)}"></label>
+        <label>Name<input data-v="name" value="${esc(b.name)}"></label>
+        <label class="lf-span2">Bus type<select data-v="type">${['slack', 'pv', 'pq'].map((t) => `<option value="${t}" ${b.type === t ? 'selected' : ''}>${TYPE_LONG[t]}</option>`).join('')}</select></label>
+        ${f('V', 'Voltage |V| (pu)')}
+        ${f('ang', 'Angle δ (deg)')}
+        ${f('Pg', 'Generation Pg (MW)')}
+        ${f('Qg', 'Generation Qg (Mvar)')}
+        ${f('Pd', 'Load Pd (MW)')}
+        ${f('Qd', 'Load Qd (Mvar)')}
+        ${f('Qmin', 'Qmin (Mvar)', 'placeholder="no limit"')}
+        ${f('Qmax', 'Qmax (Mvar)', 'placeholder="no limit"')}
+        ${f('Gs', 'Shunt Gs (MW)')}
+        ${f('Bs', 'Shunt Bs (Mvar)')}
+        ${f('kV', 'Base kV (info)')}
+      </div>
+      <p class="lf-desc lf-typehelp"></p>
+      <div class="lf-btns"><button class="btn primary" data-x="ok">${icon('check', 16)} Done</button><button class="btn danger" data-x="del">${icon('trash', 16)} Delete bus</button></div>`, (el, close) => {
+      const typeSel = el.querySelector('[data-v=type]');
+      const showFor = () => {
+        const t = typeSel.value;
+        const vis = { V: t !== 'pq', ang: t === 'slack', Pg: t !== 'slack', Qg: t === 'pq', Qmin: t === 'pv', Qmax: t === 'pv' };
+        for (const [k, v] of Object.entries(vis)) el.querySelector(`[data-f=${k}]`).classList.toggle('lf-hide', !v);
+        el.querySelector('.lf-typehelp').textContent = {
+          slack: 'Slack: |V| and angle are held; P and Q follow from the solution (it supplies the losses).',
+          pv: 'PV: P and |V| are held; Q and the angle follow. With Q limits on, it turns into PQ at Qmin / Qmax.',
+          pq: 'PQ: P and Q are given (load minus any fixed generation); |V| and the angle follow.',
+        }[t];
+      };
+      typeSel.addEventListener('change', showFor);
+      showFor();
+      el.querySelector('[data-x=ok]').addEventListener('click', () => {
+        const g = (k) => el.querySelector(`[data-v=${k}]`).value;
+        const newId = Math.round(numIn(g('id'), b.id));
+        if (newId !== +b.id && this.sys.buses.some((x) => +x.id === newId)) { alert(`Bus number ${newId} is already used.`); return; }
+        const type = g('type');
+        if (type === 'slack' && b.type !== 'slack') {
+          const other = this.sys.buses.find((x) => x !== b && x.type === 'slack');
+          if (other) { other.type = 'pv'; this.toast(`Bus ${other.id} changed from slack to PV`); }
+        }
+        if (newId !== +b.id) for (const l of this.sys.branches) { if (+l.from === +b.id) l.from = newId; if (+l.to === +b.id) l.to = newId; }
+        Object.assign(b, {
+          id: newId, name: g('name').trim() || `Bus ${newId}`, type,
+          V: numIn(g('V'), 1) || 1, ang: numIn(g('ang')), Pg: numIn(g('Pg')), Qg: numIn(g('Qg')), Pd: numIn(g('Pd')), Qd: numIn(g('Qd')),
+          Qmin: optNum(g('Qmin')), Qmax: optNum(g('Qmax')), Gs: numIn(g('Gs')), Bs: numIn(g('Bs')), kV: numIn(g('kV')),
+        });
+        this.markCustom(); this.changed(); close(); this.render();
+      });
+      el.querySelector('[data-x=del]').addEventListener('click', () => {
+        const n = this.sys.branches.filter((l) => +l.from === +b.id || +l.to === +b.id).length;
+        if (!confirm(`Delete bus ${b.id}${n ? ` and its ${n} branch${n === 1 ? '' : 'es'}` : ''}?`)) return;
+        this.sys.branches = this.sys.branches.filter((l) => +l.from !== +b.id && +l.to !== +b.id);
+        this.sys.buses.splice(i, 1);
+        this.markCustom(); this.changed(); close(); this.render();
+      });
+    });
+  }
+
+  editBranch(i, isNew) {
+    const l = this.sys.branches[i];
+    const opts = (v) => this.sys.buses.map((b) => `<option value="${b.id}" ${+b.id === +v ? 'selected' : ''}>${esc(b.id)} · ${esc(b.name)}</option>`).join('');
+    const f = (k, label, extra = '') => `<label>${label}<input data-v="${k}" type="number" inputmode="decimal" step="any" value="${esc(l[k] ?? '')}" ${extra}></label>`;
+    const xf = (+l.tap && +l.tap !== 1) || +l.shift || l.kind === 'xf';
+    this.app.showSheet(isNew ? (xf ? 'New transformer' : 'New line') : `Branch ${esc(l.from)} → ${esc(l.to)}`, `
+      <div class="form-grid lf-grid2">
+        <label>From bus<select data-v="from">${opts(l.from)}</select></label>
+        <label>To bus<select data-v="to">${opts(l.to)}</select></label>
+        ${f('R', 'R (pu)')}
+        ${f('X', 'X (pu)')}
+        ${f('B', 'B total charging (pu)')}
+        ${f('rate', 'Rating (MVA)', 'placeholder="none"')}
+        ${f('tap', 'Tap ratio (from side)', 'placeholder="1 (line)"')}
+        ${f('shift', 'Phase shift (deg)')}
+      </div>
+      <label class="lf-check"><input type="checkbox" data-v="on" ${l.on === false ? '' : 'checked'}><span><b>In service</b><small>Untick to take the branch out (outage study)</small></span></label>
+      <p class="lf-desc">Tap ratio 0 or 1 = a line or a transformer at nominal ratio. A tap of 0.95 on the from side raises the voltage on the to side. Use <b>Per-unit tools</b> to convert Ω, Ω/km or % impedance.</p>
+      <div class="lf-btns"><button class="btn primary" data-x="ok">${icon('check', 16)} Done</button><button class="btn danger" data-x="del">${icon('trash', 16)} Delete</button></div>`, (el, close) => {
+      el.querySelector('[data-x=ok]').addEventListener('click', () => {
+        const g = (k) => el.querySelector(`[data-v=${k}]`).value;
+        const from = +g('from'), to = +g('to');
+        if (from === to) { alert('From and to must be different buses.'); return; }
+        const R = numIn(g('R')), X = numIn(g('X'));
+        if (!R && !X) { alert('R and X cannot both be zero.'); return; }
+        Object.assign(l, { from, to, R, X, B: numIn(g('B')), rate: numIn(g('rate')), tap: numIn(g('tap')), shift: numIn(g('shift')), on: el.querySelector('[data-v=on]').checked });
+        this.markCustom(); this.changed(); close(); this.render();
+      });
+      el.querySelector('[data-x=del]').addEventListener('click', () => {
+        if (!confirm(`Delete branch ${l.from} → ${l.to}?`)) return;
+        this.sys.branches.splice(i, 1);
+        this.markCustom(); this.changed(); close(); this.render();
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------- Results tab
+  renderResults(body) {
+    const r = this.res;
+    if (!r) { this.needRun(body); return; }
+    const t = r.totals, m = METHODS.find((x) => x.id === r.method);
+    const last = r.history[r.history.length - 1];
+    let vmin = r.buses[0], vmax = r.buses[0];
+    for (const b of r.buses) { if (b.V < vmin.V) vmin = b; if (b.V > vmax.V) vmax = b; }
+    const dc = r.method === 'dc';
+    body.innerHTML = `
+      <div class="lf-status ${r.converged ? 'ok' : 'bad'}">${icon(r.converged ? 'check' : 'x', 22)}<div><b>${r.converged ? 'Converged' : 'Did not converge'}</b>
+        <span>${m.name} · ${r.iterations} iteration${r.iterations === 1 ? '' : 's'}${dc ? '' : ` · max mismatch ${last.mis.toExponential(2)} pu`} · ${r.ms.toFixed(1)} ms</span></div></div>
+      ${r.converged ? '' : '<p class="lf-warn">The results below are the last iterate and are not valid. Try Newton–Raphson, a flat start, more iterations, or check the data (very high load, wrong impedances, X = 0).</p>'}
+      <div class="lf-tiles">
+        ${this.tile('Generation', `${fx(t.Pg, 2)} MW`, dc ? '' : `${fx(t.Qg, 2)} Mvar`)}
+        ${this.tile('Load', `${fx(t.Pd, 2)} MW`, `${fx(t.Qd, 2)} Mvar`)}
+        ${this.tile('Losses', `${fx(t.lossP, 3)} MW`, dc ? 'DC: lossless' : `${fx(t.lossQ, 3)} Mvar · ${fx(t.Pd ? (t.lossP / t.Pd) * 100 : 0, 2)} %`)}
+        ${this.tile('Lowest voltage', `${fx(vmin.V, 4)} pu`, `bus ${esc(vmin.id)}`, vmin.V < r.options.vMin ? 'bad' : '')}
+        ${this.tile('Highest voltage', `${fx(vmax.V, 4)} pu`, `bus ${esc(vmax.id)}`, vmax.V > r.options.vMax ? 'warn' : '')}
+        ${dc ? '' : this.tile('Line charging', `${fx(t.charging, 2)} Mvar`, t.Qsh ? `shunts ${fx(t.Qsh, 2)} Mvar` : 'generated by lines')}
+      </div>
+      ${r.violations.length || r.events.length ? `<div class="lf-card lf-alerts">
+        ${r.violations.map((v) => `<div class="lf-alert ${v.kind}">${icon('info', 16)}<span>${esc(v.text)}</span></div>`).join('')}
+        ${r.events.map((e) => `<div class="lf-alert ev">${icon('bolt', 16)}<span>${esc(e)}</span></div>`).join('')}
+      </div>` : `<div class="lf-alert okv">${icon('check', 16)}<span>All bus voltages within ${r.options.vMin}–${r.options.vMax} pu${r.branches.some((b) => b.rate) ? ' and no branch overloaded' : ''}.</span></div>`}
+      <div class="lf-btns">
+        <button class="btn sm" data-x="csv">${icon('download', 15)} CSV</button>
+        <button class="btn sm" data-x="report">${icon('share', 15)} Report</button>
+      </div>
+      <h4>Bus voltages and power</h4>
+      <div class="lf-tw"><table class="tbl lf-tbl">
+        <thead><tr><th>Bus</th><th>Type</th><th>|V| pu</th><th>δ deg</th><th>Pg MW</th><th>Qg Mvar</th><th>Pd MW</th><th>Qd Mvar</th></tr></thead>
+        <tbody>${r.buses.map((b) => `<tr data-rb="${esc(b.id)}" class="${b.V < r.options.vMin ? 'vlo' : b.V > r.options.vMax ? 'vhi' : ''}"><td><b>${esc(b.id)}</b> <small>${esc(b.name)}</small></td><td>${TYPE_LABEL[b.type]}${b.origType !== b.type ? '*' : ''}</td><td>${fx(b.V, 4)}</td><td>${fx(b.ang, 3)}</td><td>${b.Pg || b.type !== 'pq' ? fx(b.Pg, 2) : ''}</td><td>${dc ? '' : b.Qg || b.type !== 'pq' ? fx(b.Qg, 2) : ''}</td><td>${b.Pd ? fx(b.Pd, 2) : ''}</td><td>${b.Qd ? fx(b.Qd, 2) : ''}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td>Total</td><td></td><td></td><td></td><td>${fx(t.Pg, 2)}</td><td>${dc ? '' : fx(t.Qg, 2)}</td><td>${fx(t.Pd, 2)}</td><td>${fx(t.Qd, 2)}</td></tr></tfoot>
+      </table></div>
+      ${r.buses.some((b) => b.origType !== b.type) ? '<p class="lf-note">* PV bus held at a Q limit (now PQ).</p>' : ''}
+      <h4>Line flows and losses</h4>
+      <div class="lf-tw"><table class="tbl lf-tbl">
+        <thead><tr><th>From → To</th><th>P from MW</th><th>Q from Mvar</th><th>P to MW</th><th>Q to Mvar</th><th>Loss MW</th><th>Loss Mvar</th><th>I pu</th><th>Load %</th></tr></thead>
+        <tbody>${r.branches.map((l) => `<tr class="${!l.on ? 'off' : l.loading > 100 ? 'vlo' : ''}"><td><b>${esc(l.from)} → ${esc(l.to)}</b>${l.xfmr ? ' <small>XF</small>' : ''}${!l.on ? ' <small>out</small>' : ''}</td><td>${fx(l.Pf, 2)}</td><td>${dc ? '' : fx(l.Qf, 2)}</td><td>${fx(l.Pt, 2)}</td><td>${dc ? '' : fx(l.Qt, 2)}</td><td>${fx(l.lossP, 3)}</td><td>${dc ? '' : fx(l.lossQ, 3)}</td><td>${fx(Math.max(l.If, l.It), 3)}</td><td>${l.rate ? fx(l.loading, 1) : '—'}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td>Total loss</td><td></td><td></td><td></td><td></td><td>${fx(t.lossP, 3)}</td><td>${dc ? '' : fx(t.lossQ, 3)}</td><td></td><td></td></tr></tfoot>
+      </table></div>
+      <p class="lf-note">P from / Q from: power leaving the from bus into the branch; P to / Q to: power leaving the to bus. Their sum is the branch loss. Tap a bus row for details.</p>`;
+    body.querySelector('[data-x=csv]').addEventListener('click', () => this.app.bridge.saveFile(`${(this.sys.name || 'loadflow').replace(/\W+/g, '_')}_loadflow.csv`, 'text/csv', this.csv()));
+    body.querySelector('[data-x=report]').addEventListener('click', () => this.app.bridge.share(`Load flow – ${this.sys.name}`, this.report()));
+    body.querySelectorAll('[data-rb]').forEach((tr) => tr.addEventListener('click', () => this.busDetail(tr.dataset.rb)));
+  }
+
+  tile(label, big, small, cls = '') {
+    return `<div class="lf-tile ${cls}"><span>${label}</span><b>${big}</b>${small ? `<small>${small}</small>` : ''}</div>`;
+  }
+
+  busDetail(id) {
+    const r = this.res;
+    if (!r) return;
+    const b = r.buses.find((x) => String(x.id) === String(id));
+    if (!b) return;
+    const flows = r.branches.filter((l) => l.on && (String(l.from) === String(id) || String(l.to) === String(id))).map((l) => {
+      const out = String(l.from) === String(id);
+      return { to: out ? l.to : l.from, P: out ? l.Pf : l.Pt, Q: out ? l.Qf : l.Qt };
+    });
+    const dc = r.method === 'dc';
+    this.app.showSheet(`Bus ${esc(b.id)} · ${esc(b.name)}`, `
+      <div class="lf-tiles">
+        ${this.tile('Voltage', `${fx(b.V, 4)} pu`, `${fx(b.ang, 3)}°`)}
+        ${this.tile('Injection', `${fx(b.Pinj, 2)} MW`, dc ? '' : `${fx(b.Qinj, 2)} Mvar`)}
+        ${this.tile('Generation', `${fx(b.Pg, 2)} MW`, dc ? '' : `${fx(b.Qg, 2)} Mvar`)}
+        ${this.tile('Load', `${fx(b.Pd, 2)} MW`, `${fx(b.Qd, 2)} Mvar`)}
+      </div>
+      <h4 class="lf-sh">Power leaving the bus</h4>
+      <table class="tbl"><thead><tr><th>To bus</th><th>P MW</th><th>Q Mvar</th></tr></thead>
+      <tbody>${flows.map((f) => `<tr><td>${esc(f.to)}</td><td>${fx(f.P, 2)}</td><td>${dc ? '' : fx(f.Q, 2)}</td></tr>`).join('')}
+      ${b.Qsh || b.Psh ? `<tr><td>Shunt</td><td>${fx(b.Psh, 2)}</td><td>${dc ? '' : fx(-b.Qsh, 2)}</td></tr>` : ''}</tbody></table>
+      <p class="lf-note">Generation − load = the sum of the power leaving the bus (Kirchhoff).</p>`);
+  }
+
+  csv() {
+    const r = this.res, rows = [];
+    rows.push(`Load flow,${this.sys.name},${METHODS.find((m) => m.id === r.method).name},${r.converged ? 'converged' : 'not converged'},${r.iterations} iterations,base ${this.sys.baseMVA} MVA`);
+    rows.push('');
+    rows.push('Bus,Name,Type,V (pu),Angle (deg),Pg (MW),Qg (Mvar),Pd (MW),Qd (Mvar)');
+    for (const b of r.buses) rows.push([b.id, `"${b.name}"`, TYPE_LABEL[b.type], b.V.toFixed(6), b.ang.toFixed(4), b.Pg.toFixed(4), b.Qg.toFixed(4), b.Pd, b.Qd].join(','));
+    rows.push('');
+    rows.push('From,To,P from (MW),Q from (Mvar),P to (MW),Q to (Mvar),Loss P (MW),Loss Q (Mvar),Rating (MVA),Loading (%)');
+    for (const l of r.branches) rows.push([l.from, l.to, l.Pf.toFixed(4), l.Qf.toFixed(4), l.Pt.toFixed(4), l.Qt.toFixed(4), l.lossP.toFixed(4), l.lossQ.toFixed(4), l.rate || '', l.rate ? l.loading.toFixed(2) : ''].join(','));
+    rows.push('');
+    rows.push(`Total generation,${r.totals.Pg.toFixed(4)} MW,${r.totals.Qg.toFixed(4)} Mvar`);
+    rows.push(`Total load,${r.totals.Pd.toFixed(4)} MW,${r.totals.Qd.toFixed(4)} Mvar`);
+    rows.push(`Total losses,${r.totals.lossP.toFixed(4)} MW,${r.totals.lossQ.toFixed(4)} Mvar`);
+    return rows.join('\n');
+  }
+
+  report() {
+    const r = this.res, pad = (s, n) => String(s).padStart(n), m = METHODS.find((x) => x.id === r.method).name;
+    const L = [];
+    L.push(`LOAD FLOW REPORT — ${this.sys.name}`);
+    L.push(`Method: ${m}   ${r.converged ? 'Converged' : 'NOT converged'} in ${r.iterations} iterations   Base: ${this.sys.baseMVA} MVA`);
+    L.push('');
+    L.push(' Bus  Type     |V|pu    Angle°      Pg MW    Qg Mvar      Pd MW    Qd Mvar');
+    for (const b of r.buses) L.push(`${pad(b.id, 4)}  ${TYPE_LABEL[b.type].padEnd(5)} ${pad(b.V.toFixed(4), 8)} ${pad(b.ang.toFixed(3), 9)} ${pad(b.Pg.toFixed(2), 10)} ${pad(b.Qg.toFixed(2), 10)} ${pad(b.Pd.toFixed(2), 10)} ${pad(b.Qd.toFixed(2), 10)}`);
+    L.push('');
+    L.push(' From   To    P from    Q from      P to      Q to   Loss MW  Loss Mvar');
+    for (const l of r.branches) L.push(`${pad(l.from, 5)} ${pad(l.to, 4)} ${pad(l.Pf.toFixed(2), 9)} ${pad(l.Qf.toFixed(2), 9)} ${pad(l.Pt.toFixed(2), 9)} ${pad(l.Qt.toFixed(2), 9)} ${pad(l.lossP.toFixed(3), 9)} ${pad(l.lossQ.toFixed(3), 9)}`);
+    L.push('');
+    L.push(`Generation ${r.totals.Pg.toFixed(3)} MW + j${r.totals.Qg.toFixed(3)} Mvar`);
+    L.push(`Load       ${r.totals.Pd.toFixed(3)} MW + j${r.totals.Qd.toFixed(3)} Mvar`);
+    L.push(`Losses     ${r.totals.lossP.toFixed(3)} MW + j${r.totals.lossQ.toFixed(3)} Mvar`);
+    for (const v of r.violations) L.push('! ' + v.text);
+    for (const e of r.events) L.push('* ' + e);
+    L.push('');
+    L.push('RaptiCKT Load Flow · rapti.net');
+    return L.join('\n');
+  }
+
+  // ---------------------------------------------------------------- Diagram tab
+  renderDiagram(body) {
+    body.innerHTML = `
+      <div class="lf-diagbar">
+        <div class="lf-seg sm">${[['P', 'MW'], ['PQ', 'MW + Mvar'], ['load', 'Loading %'], ['none', 'Off']].map(([k, t]) => `<button data-fl="${k}" class="${this.flowLabel === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+      </div>
+      <div class="lf-diag"><canvas></canvas></div>
+      <div class="lf-legend">
+        <span><i style="background:#4ade80"></i>V within limits</span><span><i style="background:#f87171"></i>Under-voltage</span><span><i style="background:#fbbf24"></i>Over-voltage</span>
+        <span><i class="ln" style="background:#f97316"></i>Line ≥ 70 %</span><span><i class="ln" style="background:#ef4444"></i>Overloaded</span><span><b>~</b> generator</span><span><b>↓</b> load</span>
+      </div>
+      <p class="lf-note">${this.res ? 'Arrows show the direction of real power. ' : 'Run the load flow to see voltages and flows. '}Drag a bus to move it; tap a bus for its details.</p>`;
+    body.querySelectorAll('[data-fl]').forEach((b) => b.addEventListener('click', () => {
+      this.flowLabel = b.dataset.fl;
+      body.querySelectorAll('[data-fl]').forEach((x) => x.classList.toggle('on', x === b));
+      this.drawDiagram();
+    }));
+    const cv = body.querySelector('canvas');
+    this.bindDiagram(cv);
+    requestAnimationFrame(() => this.drawDiagram());
+  }
+
+  layout(w, h) {
+    const n = this.sys.buses.length, pad = { l: 34, r: 34, t: 46, b: 54 };
+    const pos = new Map();
+    this.sys.buses.forEach((b, i) => {
+      if (!Number.isFinite(b.x) || !Number.isFinite(b.y)) { const a = (i / n) * Math.PI * 2 - Math.PI / 2; b.x = 50 + 42 * Math.cos(a); b.y = 50 + 42 * Math.sin(a); }
+      pos.set(String(b.id), { x: pad.l + (b.x / 100) * (w - pad.l - pad.r), y: pad.t + (b.y / 100) * (h - pad.t - pad.b), b });
+    });
+    this.diagPad = pad;
+    return pos;
+  }
+
+  drawDiagram() {
+    const cv = this.root.querySelector('.lf-diag canvas');
+    if (!cv) return;
+    const { ctx, w, h } = prep(cv);
+    const pos = this.layout(w, h);
+    this.diagPos = pos;
+    const r = this.res, opts = this.opts;
+    const rb = new Map(r ? r.buses.map((b) => [String(b.id), b]) : []);
+    const text = css('--text', '#e8eef8'), muted = css('--muted', '#7f8ca6'), text2 = css('--text2', '#b9c5da'), accent = css('--accent', '#22d3ee'), surface = css('--surface', '#0f1729');
+    const vcol = (v) => (v < opts.vMin - 1e-9 ? '#f87171' : v > opts.vMax + 1e-9 ? '#fbbf24' : '#4ade80');
+    ctx.lineCap = 'round';
+    // branches
+    this.sys.branches.forEach((l, k) => {
+      const a = pos.get(String(l.from)), b = pos.get(String(l.to));
+      if (!a || !b) return;
+      const res = r?.branches[k];
+      let col = muted;
+      if (res && res.on) col = res.rate ? (res.loading > 100 ? '#ef4444' : res.loading >= 70 ? '#f97316' : '#4ade80') : accent;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = res && res.on ? 2.2 : 1.6;
+      ctx.setLineDash(l.on === false ? [5, 5] : []);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.setLineDash([]);
+      const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len;
+      const xf = (+l.tap && +l.tap !== 1) || +l.shift || l.kind === 'xf';
+      if (xf) { // two overlapping circles
+        const mx = a.x + dx * 0.5, my = a.y + dy * 0.5;
+        ctx.fillStyle = surface; ctx.lineWidth = 1.6;
+        for (const s of [-4, 4]) { ctx.beginPath(); ctx.arc(mx + ux * s, my + uy * s, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      }
+      if (res && res.on && this.flowLabel !== 'none') {
+        const fwd = res.Pf >= 0, t = xf ? 0.3 : 0.5;
+        const mx = a.x + dx * t, my = a.y + dy * t, sx = fwd ? ux : -ux, sy = fwd ? uy : -uy;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.moveTo(mx + sx * 7, my + sy * 7); ctx.lineTo(mx - sx * 5 - sy * 5, my - sy * 5 + sx * 5); ctx.lineTo(mx - sx * 5 + sy * 5, my - sy * 5 - sx * 5); ctx.closePath(); ctx.fill();
+        const P = fwd ? res.Pf : res.Pt, Q = fwd ? res.Qf : res.Qt;
+        const lab = this.flowLabel === 'load' ? (res.rate ? `${res.loading.toFixed(0)}%` : `${res.S.toFixed(0)} MVA`) : this.flowLabel === 'PQ' && r.method !== 'dc' ? `${P.toFixed(1)}${Q >= 0 ? '+' : '−'}j${Math.abs(Q).toFixed(1)}` : P.toFixed(1);
+        const nx = -uy, ny = ux, off = 11;
+        ctx.font = '600 10.5px Inter, Roboto, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        const lx = mx + nx * off * (ny < 0 ? -1 : 1), ly = my + ny * off * (ny < 0 ? -1 : 1);
+        const tw = ctx.measureText(lab).width;
+        ctx.fillStyle = surface; ctx.globalAlpha = 0.85; ctx.fillRect(lx - tw / 2 - 3, ly - 7, tw + 6, 14); ctx.globalAlpha = 1;
+        ctx.fillStyle = text2; ctx.fillText(lab, lx, ly);
+      }
+    });
+    // buses
+    for (const [id, p] of pos) {
+      const b = p.b, res = rb.get(id);
+      const gen = b.type !== 'pq' || +b.Pg > 0, load = +b.Pd > 0 || +b.Qd > 0;
+      const col = res ? vcol(res.V) : text2;
+      if (gen) {
+        ctx.strokeStyle = text2; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - 15); ctx.stroke();
+        ctx.fillStyle = surface;
+        ctx.beginPath(); ctx.arc(p.x, p.y - 24, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(p.x - 5, p.y - 24); ctx.bezierCurveTo(p.x - 2.5, p.y - 30, p.x, p.y - 18, p.x + 5, p.y - 24); ctx.stroke();
+        if (b.type === 'slack') { ctx.fillStyle = accent; ctx.font = '700 9px Inter, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('SL', p.x + 12, p.y - 25); }
+      }
+      if (load) {
+        ctx.strokeStyle = text2; ctx.fillStyle = text2; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(p.x + 9, p.y); ctx.lineTo(p.x + 9, p.y + 16); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(p.x + 5, p.y + 13); ctx.lineTo(p.x + 13, p.y + 13); ctx.lineTo(p.x + 9, p.y + 19); ctx.closePath(); ctx.fill();
+      }
+      ctx.fillStyle = col;
+      ctx.fillRect(p.x - 20, p.y - 3, 40, 6);
+      ctx.font = '700 11.5px Inter, Roboto, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = text;
+      ctx.fillText(String(b.id), p.x - 24, p.y);
+      if (res) {
+        const s = `${res.V.toFixed(3)}∠${res.ang.toFixed(1)}°`;
+        ctx.font = '10px "JetBrains Mono", "Roboto Mono", monospace';
+        const tw = ctx.measureText(s).width, ty = p.y + (load ? 22 : 7);
+        const tx = Math.max(tw / 2 + 3, Math.min(w - tw / 2 - 3, p.x)); // keep it on the canvas
+        ctx.fillStyle = surface; ctx.globalAlpha = 0.85; ctx.fillRect(tx - tw / 2 - 2, ty - 1, tw + 4, 13); ctx.globalAlpha = 1;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = col;
+        ctx.fillText(s, tx, ty);
+      }
+    }
+    if (!this.sys.buses.length) { ctx.fillStyle = muted; ctx.textAlign = 'center'; ctx.fillText('No buses', w / 2, h / 2); }
+  }
+
+  bindDiagram(cv) {
+    let drag = null;
+    const pt = (e) => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    const hit = (p) => {
+      let best = null, bd = 26;
+      for (const [id, q] of this.diagPos || []) { const d = Math.hypot(q.x - p.x, q.y - p.y); if (d < bd) { bd = d; best = id; } }
+      return best;
+    };
+    cv.addEventListener('pointerdown', (e) => {
+      const p = pt(e), id = hit(p);
+      if (!id) return;
+      drag = { id, x0: p.x, y0: p.y, moved: false };
+      cv.setPointerCapture(e.pointerId);
+    });
+    cv.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const p = pt(e);
+      if (!drag.moved && Math.hypot(p.x - drag.x0, p.y - drag.y0) < 6) return;
+      drag.moved = true;
+      const pad = this.diagPad, w = cv.clientWidth, h = cv.clientHeight;
+      const b = this.sys.buses.find((x) => String(x.id) === drag.id);
+      if (!b) return;
+      b.x = Math.max(0, Math.min(100, ((p.x - pad.l) / (w - pad.l - pad.r)) * 100));
+      b.y = Math.max(0, Math.min(100, ((p.y - pad.t) / (h - pad.t - pad.b)) * 100));
+      this.drawDiagram();
+    });
+    const end = () => {
+      if (!drag) return;
+      if (drag.moved) this.persist();
+      else if (this.res) this.busDetail(drag.id);
+      else { const i = this.sys.buses.findIndex((x) => String(x.id) === drag.id); if (i >= 0) this.editBus(i); }
+      drag = null;
+    };
+    cv.addEventListener('pointerup', end);
+    cv.addEventListener('pointercancel', () => { drag = null; });
+    if (this.diagRO) this.diagRO.disconnect();
+    if (typeof ResizeObserver === 'function') { this.diagRO = new ResizeObserver(() => this.drawDiagram()); this.diagRO.observe(cv); }
+  }
+
+  // ---------------------------------------------------------------- Charts tab
+  renderCharts(body) {
+    const r = this.res;
+    if (!r) { this.needRun(body, 'charts'); return; }
+    const rated = r.branches.some((l) => l.rate > 0);
+    body.innerHTML = `
+      <h4>Voltage profile</h4><div class="lf-chart"><canvas data-ch="v"></canvas></div>
+      <h4>Voltage angle</h4><div class="lf-chart"><canvas data-ch="a"></canvas></div>
+      ${r.method === 'dc' ? '' : '<h4>Convergence (largest mismatch, log scale)</h4><div class="lf-chart"><canvas data-ch="c"></canvas></div>'}
+      <h4>${rated ? 'Branch loading (% of rating)' : 'Branch flow |S| (MVA)'}</h4><div class="lf-chart tall"><canvas data-ch="l"></canvas></div>
+      <h4>Branch losses (MW)</h4><div class="lf-chart"><canvas data-ch="p"></canvas></div>`;
+    requestAnimationFrame(() => this.drawCharts());
+    if (this.chartRO) this.chartRO.disconnect();
+    if (typeof ResizeObserver === 'function') { this.chartRO = new ResizeObserver(() => this.drawCharts()); this.chartRO.observe(body.querySelector('canvas')); }
+  }
+
+  drawCharts() {
+    const r = this.res, body = this.root.querySelector('.lf-body');
+    if (!r || this.tab !== 'charts') return;
+    const o = r.options, on = r.branches.filter((l) => l.on);
+    const vcol = (v) => (v < o.vMin - 1e-9 ? '#f87171' : v > o.vMax + 1e-9 ? '#fbbf24' : '#4ade80');
+    const vs = r.buses.map((b) => b.V);
+    const lo = Math.min(o.vMin - 0.02, ...vs.map((v) => v - 0.01)), hi = Math.max(o.vMax + 0.02, ...vs.map((v) => v + 0.01));
+    const q = (k) => body.querySelector(`[data-ch=${k}]`);
+    barChart(q('v'), r.buses.map((b) => ({ label: String(b.id), v: b.V, color: vcol(b.V) })), { min: lo, max: hi, base: lo, fmt: (v) => v.toFixed(3), refs: [{ v: o.vMin, label: `${o.vMin}` }, { v: o.vMax, label: `${o.vMax}` }, { v: 1, label: '1.0', solid: true }] });
+    const angs = r.buses.map((b) => b.ang);
+    barChart(q('a'), r.buses.map((b) => ({ label: String(b.id), v: b.ang, color: css('--accent', '#22d3ee') })), { min: Math.min(0, ...angs) * 1.1 - 0.5, max: Math.max(0, ...angs) * 1.1 + 0.5, base: 0, fmt: (v) => v.toFixed(1) + '°' });
+    if (q('c')) lineLog(q('c'), r.history.map((h) => [h.it, h.mis]), o.tol);
+    const rated = r.branches.some((l) => l.rate > 0);
+    const lv = on.map((l) => (rated ? (l.rate ? l.loading : 0) : l.S));
+    barChart(q('l'), on.map((l, i) => ({ label: `${l.from}-${l.to}`, v: lv[i], color: rated ? (l.loading > 100 ? '#ef4444' : l.loading >= 70 ? '#f97316' : '#4ade80') : css('--accent2', '#8b5cf6') })), { min: 0, max: Math.max(rated ? 110 : 1, ...lv) * 1.08, base: 0, fmt: (v) => v.toFixed(rated ? 0 : 1), refs: rated ? [{ v: 100, label: '100 %' }] : [], rotate: on.length > 8 });
+    const lp = on.map((l) => l.lossP);
+    barChart(q('p'), on.map((l) => ({ label: `${l.from}-${l.to}`, v: l.lossP, color: '#f472b6' })), { min: Math.min(0, ...lp), max: Math.max(0.001, ...lp) * 1.1, base: 0, fmt: (v) => v.toFixed(2), rotate: on.length > 8 });
+  }
+
+  // ---------------------------------------------------------------- Iterations tab
+  renderIter(body) {
+    const r = this.res;
+    if (!r) { this.needRun(body, 'iterations'); return; }
+    const sel = this.iterBus;
+    const buses = r.buses.map((b, i) => ({ b, i })).filter(({ b }) => sel === 'all' ? r.buses.length <= 6 || b.type !== 'slack' : String(b.id) === sel).slice(0, sel === 'all' ? 8 : 1);
+    const H = r.history, gs = r.method === 'gs';
+    const rows = H.length > 60 ? [...H.slice(0, 40), null, ...H.slice(-15)] : H;
+    const J = r.jacobian;
+    body.innerHTML = `
+      <p class="an-help">Every iteration of the solution: the largest power mismatch ${gs ? 'and voltage change ' : ''}and the bus voltages |V|∠δ as they move towards the answer${r.method === 'nr' ? ' — note how the mismatch falls quadratically' : ''}.</p>
+      <label class="lf-lab inline">Show buses <select data-k="ib"><option value="all" ${sel === 'all' ? 'selected' : ''}>First 8${r.buses.length > 6 ? ' (non-slack)' : ''}</option>${r.buses.map((b) => `<option value="${esc(b.id)}" ${String(b.id) === sel ? 'selected' : ''}>Bus ${esc(b.id)}</option>`).join('')}</select></label>
+      <div class="lf-tw"><table class="tbl lf-tbl">
+        <thead><tr><th>It.</th><th>Max |ΔP|,|ΔQ| pu</th>${gs ? '<th>Max |ΔV|</th>' : ''}${buses.map(({ b }) => `<th>V${esc(b.id)}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map((h) => (h ? `<tr><td>${h.it}${h.pass ? `<small> Q${h.pass}</small>` : ''}</td><td>${h.mis.toExponential(3)}</td>${gs ? `<td>${Number.isFinite(h.dV) ? h.dV.toExponential(2) : '—'}</td>` : ''}${buses.map(({ i }) => `<td>${h.Vm[i].toFixed(5)}∠${h.Va[i].toFixed(3)}°</td>`).join('')}</tr>` : `<tr><td colspan="${3 + buses.length}" class="lf-gap">… ${H.length - 55} iterations not shown …</td></tr>`)).join('')}</tbody>
+      </table></div>
+      ${r.history.some((h) => h.pass) ? '<p class="lf-note">Q1, Q2 …: passes after generator Q limits switched a PV bus to PQ.</p>' : ''}
+      ${J ? this.jacobianHtml(J, r) : r.method === 'nr' ? '' : `<p class="lf-note">${r.method === 'gs' ? 'Gauss–Seidel needs no Jacobian: each bus voltage is updated in turn from its neighbours.' : r.method === 'fd' ? 'Fast Decoupled uses the constant matrices B′ (from 1/X) and B″ (from −Im Y-bus) instead of a Jacobian; switch to Newton–Raphson to see the Jacobian.' : 'DC load flow solves P = B′·δ once; no iteration.'}</p>`}`;
+    body.querySelector('[data-k=ib]').addEventListener('change', (e) => { this.iterBus = e.target.value; this.renderIter(body); });
+  }
+
+  jacobianHtml(jac, r) {
+    const { J, ang, mag } = jac, n = J.length;
+    const id = (i) => r.buses[i].id;
+    const heads = [...ang.map((i) => `δ${id(i)}`), ...mag.map((i) => `|V${id(i)}|`)];
+    const rowsH = [...ang.map((i) => `P${id(i)}`), ...mag.map((i) => `Q${id(i)}`)];
+    if (n > 30) return `<h4>Jacobian</h4><p class="lf-note">The final Jacobian is ${n} × ${n} (${ang.length} angle and ${mag.length} voltage unknowns) — too large to show here.</p>`;
+    return `<h4>Jacobian at the last iteration (${n} × ${n})</h4>
+      <p class="lf-note">Rows: mismatch equations; columns: unknowns. Top-left H = ∂P/∂δ, top-right N = ∂P/∂|V|, bottom-left M = ∂Q/∂δ, bottom-right L = ∂Q/∂|V|.</p>
+      <div class="lf-tw"><table class="tbl lf-mat">
+        <thead><tr><th></th>${heads.map((h, c) => `<th class="${c === ang.length ? 'sep' : ''}">${h}</th>`).join('')}</tr></thead>
+        <tbody>${J.map((row, i) => `<tr class="${i === ang.length ? 'sep' : ''}"><th>${rowsH[i]}</th>${Array.from(row).map((v, c) => `<td class="${c === ang.length ? 'sep' : ''} ${Math.abs(v) < 1e-9 ? 'z' : ''}">${Math.abs(v) < 1e-9 ? '0' : v.toFixed(3)}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table></div>`;
+  }
+
+  // ---------------------------------------------------------------- Y-bus tab
+  renderYbus(body) {
+    const errs = validate(this.sys).filter((e) => !/separate parts|slack/.test(e));
+    if (errs.length) { body.innerHTML = `<ul class="lf-errs">${errs.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>`; return; }
+    const Y = buildYbus(this.sys), n = Y.n, ids = this.sys.buses.map((b) => b.id);
+    let nz = 0;
+    for (let i = 0; i < n; i++) for (let k = 0; k < n; k++) if (Y.G[i][k] || Y.B[i][k]) nz++;
+    const cell = (g, b) => {
+      if (!g && !b) return '<td class="z">0</td>';
+      if (this.ybusPolar) { const m = Math.hypot(g, b), a = (Math.atan2(b, g) * 180) / Math.PI; return `<td>${m.toFixed(3)}∠${a.toFixed(1)}°</td>`; }
+      return `<td>${g.toFixed(3)}${b < 0 ? '−' : '+'}j${Math.abs(b).toFixed(3)}</td>`;
+    };
+    body.innerHTML = `
+      <p class="an-help">The bus admittance matrix Y = G + jB in per unit (${n} × ${n}, ${nz} non-zero entries, ${((1 - nz / (n * n)) * 100).toFixed(0)} % zeros). Diagonal Y<sub>ii</sub> = sum of everything connected to bus i; off-diagonal Y<sub>ik</sub> = −(series admittance between i and k).</p>
+      <div class="lf-seg sm lf-w">${[[false, 'Rectangular G + jB'], [true, 'Polar |Y|∠θ']].map(([p, t]) => `<button data-p="${p}" class="${this.ybusPolar === p ? 'on' : ''}">${t}</button>`).join('')}</div>
+      <div class="lf-tw"><table class="tbl lf-mat">
+        <thead><tr><th></th>${ids.map((id) => `<th>${esc(id)}</th>`).join('')}</tr></thead>
+        <tbody>${ids.map((id, i) => `<tr><th>${esc(id)}</th>${ids.map((_, k) => cell(Y.G[i][k], Y.B[i][k]).replace('<td', i === k ? '<td class="dg"' : '<td')).join('')}</tr>`).join('')}</tbody>
+      </table></div>
+      <h4>Branch admittances</h4>
+      <div class="lf-tw"><table class="tbl lf-tbl">
+        <thead><tr><th>Branch</th><th>y = 1/(R+jX)</th><th>jB/2 each end</th><th>Tap</th></tr></thead>
+        <tbody>${this.sys.branches.map((l) => { const d = l.R * l.R + l.X * l.X || 1; return `<tr class="${l.on === false ? 'off' : ''}"><td>${esc(l.from)} → ${esc(l.to)}</td><td>${(l.R / d).toFixed(3)} − j${(l.X / d).toFixed(3)}</td><td>j${((+l.B || 0) / 2).toFixed(4)}</td><td>${+l.tap && +l.tap !== 1 ? l.tap : '—'}${+l.shift ? ` ∠${l.shift}°` : ''}</td></tr>`; }).join('')}</tbody>
+      </table></div>`;
+    body.querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => { this.ybusPolar = b.dataset.p === 'true'; this.renderYbus(body); }));
+  }
+
+  // ---------------------------------------------------------------- N-1 tab
+  renderN1(body) {
+    const c = this.n1;
+    body.innerHTML = `
+      <p class="an-help"><b>N-1 contingency analysis:</b> every in-service line and transformer is taken out in turn and the load flow is solved again (Newton–Raphson${this.opts.method === 'fd' ? ' / Fast Decoupled' : ''}, same options). A secure system keeps every voltage within ${this.opts.vMin}–${this.opts.vMax} pu and every branch within its rating after any single outage. Worst cases are listed first.</p>
+      <button class="btn primary" data-x="n1">${icon('shield', 16)} Run N-1 analysis (${this.sys.branches.filter((l) => l.on !== false).length} outages)</button>
+      <div class="lf-n1"></div>`;
+    body.querySelector('[data-x=n1]').addEventListener('click', () => {
+      const errs = validate(this.sys);
+      if (errs.length) { alert(errs.join('\n')); return; }
+      const t0 = performance.now();
+      this.n1 = contingencies(this.sys, this.opts);
+      this.n1ms = performance.now() - t0;
+      this.renderN1(body);
+    });
+    if (!c) return;
+    const bad = c.filter((x) => x.status !== 'ok').length;
+    const st = { ok: 'Secure', violation: 'Violation', islanded: 'Islanding', diverged: 'Diverged' };
+    body.querySelector('.lf-n1').innerHTML = `
+      <div class="lf-status ${bad ? 'bad' : 'ok'}">${icon(bad ? 'info' : 'check', 22)}<div><b>${bad ? `${bad} of ${c.length} outages cause problems` : 'N-1 secure'}</b><span>${c.length} cases solved in ${this.n1ms.toFixed(0)} ms</span></div></div>
+      <div class="lf-tw"><table class="tbl lf-tbl">
+        <thead><tr><th>Outage</th><th>Result</th><th>Min V pu (bus)</th><th>Max loading</th><th>Losses MW</th></tr></thead>
+        <tbody>${c.map((x) => `<tr class="n1-${x.status}"><td><b>${esc(x.from)} → ${esc(x.to)}</b></td><td>${st[x.status]}${x.violations ? ` (${x.violations})` : ''}</td>${x.status === 'islanded' || x.status === 'diverged' ? `<td colspan="3">${esc(x.text)}</td>` : `<td>${x.vmin.toFixed(4)} (${esc(x.vminBus)})</td><td>${x.lmaxBranch ? `${x.lmax.toFixed(0)} % (${esc(x.lmaxBranch)})` : '—'}</td><td>${x.lossP.toFixed(2)}</td>`}</tr>`).join('')}</tbody>
+      </table></div>
+      <p class="lf-note">Islanding: the outage separates part of the network from the slack bus (radial branch). Loading needs branch ratings (MVA).</p>`;
+  }
+
+  // ---------------------------------------------------------------- Per-unit tools tab
+  renderTools(body) {
+    const opts = this.sys.buses.map((b) => `<option value="${b.id}">${esc(b.id)} · ${esc(b.name)}</option>`).join('');
+    const base = this.sys.baseMVA;
+    body.innerHTML = `
+      <p class="an-help">Convert real equipment data to per unit on the system base (${base} MVA). Results update as you type; the line and transformer tools can add the result to your system.</p>
+      <div class="lf-card" data-tool="base"><h3>${icon('gauge', 18)} Base values</h3>
+        <div class="form-grid lf-grid2"><label>Base kV (line-line)<input data-i="kv" type="number" inputmode="decimal" value="132"></label><label>Base MVA<input data-i="mva" type="number" inputmode="decimal" value="${base}"></label></div>
+        <div class="lf-out"></div></div>
+
+      <div class="lf-card" data-tool="ohm"><h3>${icon('sigma', 18)} Ohms ↔ per unit</h3>
+        <div class="form-grid lf-grid3"><label>Impedance (Ω)<input data-i="z" type="number" inputmode="decimal" value="10"></label><label>Base kV<input data-i="kv" type="number" inputmode="decimal" value="132"></label><label>Base MVA<input data-i="mva" type="number" inputmode="decimal" value="${base}"></label></div>
+        <div class="lf-out"></div></div>
+
+      <div class="lf-card" data-tool="line"><h3>${icon('tower', 18)} Overhead line / cable → per unit</h3>
+        <div class="form-grid lf-grid3">
+          <label>Voltage kV<input data-i="kv" type="number" inputmode="decimal" value="132"></label>
+          <label>Length km<input data-i="len" type="number" inputmode="decimal" value="50"></label>
+          <label>Frequency Hz<input data-i="f" type="number" inputmode="decimal" value="50"></label>
+          <label>R Ω/km<input data-i="r" type="number" inputmode="decimal" step="any" value="0.12"></label>
+          <label>X Ω/km<input data-i="x" type="number" inputmode="decimal" step="any" value="0.40"></label>
+          <label>C nF/km<input data-i="c" type="number" inputmode="decimal" step="any" value="9"></label>
+          <label>Thermal limit A<input data-i="amp" type="number" inputmode="decimal" step="any" value="600"></label>
+        </div>
+        <div class="lf-out"></div>
+        <div class="form-grid lf-grid2"><label>From bus<select data-i="from">${opts}</select></label><label>To bus<select data-i="to">${opts}</select></label></div>
+        <button class="btn sm" data-add="line">${icon('plus', 15)} Add as a line</button></div>
+
+      <div class="lf-card" data-tool="xf"><h3>${icon('coil', 18)} Transformer → per unit</h3>
+        <div class="form-grid lf-grid3">
+          <label>Rating MVA<input data-i="s" type="number" inputmode="decimal" value="50"></label>
+          <label>Impedance uk %<input data-i="uk" type="number" inputmode="decimal" step="any" value="10"></label>
+          <label>X / R ratio<input data-i="xr" type="number" inputmode="decimal" step="any" value="20"></label>
+          <label>Tap ratio<input data-i="tap" type="number" inputmode="decimal" step="any" value="1"></label>
+        </div>
+        <div class="lf-out"></div>
+        <div class="form-grid lf-grid2"><label>From (tap side)<select data-i="from">${opts}</select></label><label>To bus<select data-i="to">${opts}</select></label></div>
+        <button class="btn sm" data-add="xf">${icon('plus', 15)} Add as a transformer</button></div>
+
+      <div class="lf-card" data-tool="cb"><h3>${icon('rotate', 18)} Change of base</h3>
+        <div class="form-grid lf-grid3">
+          <label>Z old (pu)<input data-i="z" type="number" inputmode="decimal" step="any" value="0.2"></label>
+          <label>kV old<input data-i="kv1" type="number" inputmode="decimal" value="11"></label>
+          <label>MVA old<input data-i="s1" type="number" inputmode="decimal" value="25"></label>
+          <label>kV new<input data-i="kv2" type="number" inputmode="decimal" value="11"></label>
+          <label>MVA new<input data-i="s2" type="number" inputmode="decimal" value="${base}"></label>
+        </div>
+        <div class="lf-out"></div></div>`;
+    const calc = {
+      base: (v) => { const b = baseValues(v.kv, v.mva); return [['I base', `${b.I.toFixed(2)} A`], ['Z base', `${b.Z.toFixed(3)} Ω`], ['Y base', `${(1 / b.Z).toExponential(4)} S`]]; },
+      ohm: (v) => { const zb = (v.kv * v.kv) / v.mva; return [['Z base', `${zb.toFixed(3)} Ω`], [`${v.z} Ω =`, `${(v.z / zb).toFixed(6)} pu`], [`${v.z} pu =`, `${(v.z * zb).toFixed(3)} Ω`]]; },
+      line: (v) => {
+        const zb = (v.kv * v.kv) / base, R = (v.r * v.len) / zb, X = (v.x * v.len) / zb, B = 2 * Math.PI * v.f * v.c * 1e-9 * v.len * zb;
+        const mva = Math.sqrt(3) * v.kv * v.amp / 1000;
+        return { out: [['R', `${R.toFixed(5)} pu`], ['X', `${X.toFixed(5)} pu`], ['B (total)', `${B.toFixed(5)} pu`], ['Rating', `${mva.toFixed(1)} MVA`], ['Charging', `${(B * base).toFixed(2)} Mvar`], ['SIL', `${((v.kv * v.kv) / Math.sqrt((v.x / (2 * Math.PI * v.f)) / (v.c * 1e-9))).toFixed(1)} MW`]], add: { R, X, B, rate: +mva.toFixed(1) } };
+      },
+      xf: (v) => {
+        const z = (v.uk / 100) * (base / v.s), R = z / Math.sqrt(1 + v.xr * v.xr), X = R * v.xr;
+        return { out: [['Z on system base', `${z.toFixed(5)} pu`], ['R', `${R.toFixed(5)} pu`], ['X', `${X.toFixed(5)} pu`]], add: { R, X, B: 0, tap: v.tap, rate: v.s, kind: 'xf' } };
+      },
+      cb: (v) => [['Z new', `${changeBase(v.z, v.kv1, v.s1, v.kv2, v.s2).toFixed(6)} pu`]],
+    };
+    body.querySelectorAll('[data-tool]').forEach((card) => {
+      const k = card.dataset.tool;
+      let last = null;
+      const upd = () => {
+        const v = {};
+        card.querySelectorAll('input[data-i]').forEach((i) => { v[i.dataset.i] = numIn(i.value, 0); });
+        let res = calc[k](v);
+        if (!Array.isArray(res)) { last = res.add; res = res.out; }
+        card.querySelector('.lf-out').innerHTML = res.map(([a, b]) => `<div><span>${a}</span><b>${/NaN|Infinity/.test(b) ? '—' : b}</b></div>`).join('');
+      };
+      card.querySelectorAll('input').forEach((i) => i.addEventListener('input', upd));
+      const sel = card.querySelectorAll('select[data-i]');
+      if (sel.length === 2 && this.sys.buses.length > 1) sel[1].selectedIndex = 1;
+      upd();
+      card.querySelector('[data-add]')?.addEventListener('click', () => {
+        const from = +card.querySelector('[data-i=from]').value, to = +card.querySelector('[data-i=to]').value;
+        if (!last || from === to) { alert('Choose two different buses.'); return; }
+        const r5 = (x) => +x.toFixed(6);
+        this.sys.branches.push(newBranch(from, to, r5(last.R), r5(last.X), r5(last.B), { rate: last.rate || 0, tap: last.tap && last.tap !== 1 ? last.tap : 0, kind: last.kind }));
+        this.markCustom(); this.changed(); this.updateHead();
+        this.toast(`Added ${last.kind === 'xf' ? 'transformer' : 'line'} ${from} → ${to}`);
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------- Theory tab
+  renderLearn(body) {
+    const block = (b) => {
+      if (b.t === 'p') return `<p>${inline(b.text)}</p>`;
+      if (b.t === 'f') return `<pre class="lf-f">${b.lines.map(esc).join('\n')}</pre>`;
+      if (b.t === 'ul') return `<ul>${b.text.map((x) => `<li>${inline(x)}</li>`).join('')}</ul>`;
+      if (b.t === 'steps') return `<ol>${b.text.map((x) => `<li>${inline(x)}</li>`).join('')}</ol>`;
+      if (b.t === 'tip') return `<div class="lf-tip">${icon('bolt', 16)}<span>${inline(b.text)}</span></div>`;
+      if (b.t === 'table') return `<div class="lf-tw"><table class="tbl lf-tbl lf-ttext"><thead><tr>${b.head.map((h) => `<th>${inline(h)}</th>`).join('')}</tr></thead><tbody>${b.rows.map((r) => `<tr>${r.map((c) => `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+      return '';
+    };
+    body.innerHTML = `
+      <p class="an-help">The theory behind load flow analysis, from the per-unit system to Newton–Raphson. Tap a topic to open it.</p>
+      ${LF_THEORY.map((s, i) => `<details class="lf-det" ${i === 0 ? 'open' : ''}><summary>${i + 1}. ${esc(s.title)}${icon('back', 16, 'flipx lf-chev')}</summary><div class="lf-detb">${s.blocks.map(block).join('')}</div></details>`).join('')}`;
+  }
+}
+
+// ---------------------------------------------------------------- small charts
+function barChart(cv, items, o) {
+  if (!cv) return;
+  const { ctx, w, h } = prep(cv);
+  const muted = css('--muted', '#7f8ca6'), border = css('--border2', 'rgba(148,178,230,.22)'), text2 = css('--text2', '#b9c5da');
+  const pad = { l: 46, r: 10, t: 10, b: o.rotate ? 42 : 22 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+  const span = o.max - o.min || 1, Y = (v) => pad.t + ph - ((v - o.min) / span) * ph;
+  ctx.font = '10px Inter, Roboto, sans-serif';
+  // grid
+  const step = niceStep(span / 4);
+  ctx.strokeStyle = border; ctx.fillStyle = muted; ctx.lineWidth = 1; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = Math.ceil(o.min / step) * step; v <= o.max + 1e-9; v += step) {
+    const y = Y(v);
+    ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillText(o.fmt ? o.fmt(v) : String(+v.toFixed(3)), pad.l - 5, y);
+  }
+  const n = items.length || 1, bw = Math.max(2, Math.min(34, (pw / n) * 0.7)), gap = pw / n;
+  const y0 = Y(o.base ?? 0);
+  items.forEach((it, i) => {
+    const x = pad.l + gap * i + gap / 2, y = Y(it.v);
+    ctx.fillStyle = it.color;
+    ctx.fillRect(x - bw / 2, Math.min(y, y0), bw, Math.max(1, Math.abs(y0 - y)));
+    ctx.fillStyle = text2;
+    if (o.rotate) { ctx.save(); ctx.translate(x, h - pad.b + 6); ctx.rotate(-Math.PI / 3); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText(it.label, 0, 0); ctx.restore(); } else { ctx.textAlign = 'center'; ctx.textBaseline = 'top'; if (n <= 30 || i % 2 === 0) ctx.fillText(it.label, x, h - pad.b + 5); }
+  });
+  for (const r of o.refs || []) {
+    if (r.v < o.min || r.v > o.max) continue;
+    const y = Y(r.v);
+    ctx.strokeStyle = r.solid ? muted : '#f87171'; ctx.setLineDash(r.solid ? [] : [5, 4]); ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke(); ctx.setLineDash([]);
+  }
+}
+
+function lineLog(cv, pts, tol) {
+  if (!cv) return;
+  const { ctx, w, h } = prep(cv);
+  const muted = css('--muted', '#7f8ca6'), border = css('--border2', 'rgba(148,178,230,.22)'), accent = css('--accent', '#22d3ee');
+  const pad = { l: 46, r: 12, t: 10, b: 24 };
+  const L = pts.map(([x, y]) => [x, Math.log10(Math.max(y, 1e-16))]);
+  const ys = L.map((p) => p[1]).concat([Math.log10(tol)]);
+  const ymin = Math.floor(Math.min(...ys)) - 0.2, ymax = Math.ceil(Math.max(...ys)) + 0.2;
+  const xmax = Math.max(1, ...L.map((p) => p[0]));
+  const X = (x) => pad.l + (x / xmax) * (w - pad.l - pad.r), Y = (y) => pad.t + (1 - (y - ymin) / (ymax - ymin || 1)) * (h - pad.t - pad.b);
+  ctx.font = '10px Inter, Roboto, sans-serif'; ctx.lineWidth = 1;
+  const ystep = Math.max(1, Math.ceil((ymax - ymin) / 6));
+  for (let e = Math.ceil(ymin); e <= ymax; e += ystep) {
+    const y = Y(e);
+    ctx.strokeStyle = border; ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.fillStyle = muted; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillText(`1e${e}`, pad.l - 5, y);
+  }
+  const xstep = niceStep(xmax / 6) || 1;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let x = 0; x <= xmax; x += Math.max(1, Math.round(xstep))) ctx.fillText(String(x), X(x), h - pad.b + 5);
+  const yt = Y(Math.log10(tol));
+  ctx.strokeStyle = '#4ade80'; ctx.setLineDash([5, 4]); ctx.beginPath(); ctx.moveTo(pad.l, yt); ctx.lineTo(w - pad.r, yt); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.beginPath();
+  L.forEach(([x, y], i) => (i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))));
+  ctx.stroke();
+  if (L.length <= 60) { ctx.fillStyle = accent; for (const [x, y] of L) { ctx.beginPath(); ctx.arc(X(x), Y(y), 2.6, 0, Math.PI * 2); ctx.fill(); } }
+  ctx.fillStyle = '#4ade80'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText('tolerance', w - pad.r, yt - 2);
+}
+
+function niceStep(raw) {
+  if (!(raw > 0)) return 1;
+  const e = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / e;
+  return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * e;
+}

@@ -19,13 +19,14 @@ Everything in the app, explained step by step.
 11. [Oscilloscope](#ch-scope)
 12. [Multimeter](#ch-meter)
 13. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
-14. [Saving, opening and sharing](#ch-saving)
-15. [Settings reference](#ch-settings)
-16. [Component library (all 520)](#ch-library)
-17. [Examples (all 101)](#ch-examples)
-18. [Quick reference: formulas and units](#ch-formulas)
-19. [Troubleshooting and FAQ](#ch-troubleshooting)
-20. [About RAPTI and contact](#ch-about)
+14. [Load Flow Analysis (power systems)](#ch-loadflow)
+15. [Saving, opening and sharing](#ch-saving)
+16. [Settings reference](#ch-settings)
+17. [Component library (all 520)](#ch-library)
+18. [Examples (all 101)](#ch-examples)
+19. [Quick reference: formulas and units](#ch-formulas)
+20. [Troubleshooting and FAQ](#ch-troubleshooting)
+21. [About RAPTI and contact](#ch-about)
 
 <a id="ch-welcome"></a>
 
@@ -186,7 +187,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 - The round **+** button (bottom right) adds a component.
 - The **✋ Operate | Wire** switch at the top right of the board picks what a finger does (chapter 4, *Operate and Wire mode*).
 - The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). It says **CPU-limited** when the phone cannot keep up.
-- A red or yellow bar appears at the top when the circuit has a problem (chapter 19).
+- A red or yellow bar appears at the top when the circuit has a problem (chapter 20).
 - When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.
 - Messages (toasts) appear briefly at the bottom to confirm what happened.
 
@@ -606,9 +607,58 @@ Runs the circuit and averages the power flowing into every component over the la
 
 Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` commands, that you can open in **ngspice** or **LTspice** to cross-check results or continue research. Buttons: **Copy**, **Save .cir**, **Share**. Parts without a SPICE equivalent (such as digital blocks) are written as comments.
 
+<a id="ch-loadflow"></a>
+
+## 14. Load Flow Analysis (power systems)
+
+A separate section for **power-system load flow (power flow) studies**: the bus voltages |V|∠δ, the real and reactive power in every line and transformer, the slack-bus generation and the losses of a transmission network. Open it from the **Load Flow Analysis** card on Home, or from **⋮ → Load flow analysis** in the editor. Back returns to where you came from.
+
+It works on bus and branch data (like MATPOWER or the IEEE common data format), not on the schematic: powers in MW / Mvar, impedances in per unit on the system MVA base.
+
+#### Tabs
+
+| Tab | What it does |
+| --- | --- |
+| System | Choose a test system, edit buses and branches, set the solver and tap **Run load flow** |
+| Results | Convergence summary, totals (generation, load, losses, line charging), violations, bus table and line-flow table; **CSV** and **Report** |
+| Diagram | One-line diagram coloured by voltage and line loading, with power-flow arrows and MW / Mvar / % labels; drag a bus to move it, tap it for details |
+| Charts | Voltage profile with the limits, angle profile, convergence (log scale), branch loading and losses |
+| Iterations | Every iteration: largest mismatch and the bus voltages; the Newton–Raphson Jacobian |
+| Y-bus | The bus admittance matrix in rectangular or polar form, and each branch admittance |
+| N-1 | Takes each line / transformer out in turn and reports the lowest voltage and the highest loading |
+| Per-unit tools | Base values, ohms ↔ per unit, line (Ω/km, nF/km) and transformer (uk %) to per unit, change of base; adds the result as a new branch |
+| Theory | Bus types, per unit, Y-bus, power-flow equations, Gauss–Seidel, Newton–Raphson, Fast Decoupled, DC load flow, Q limits, line flows |
+
+#### Test systems
+
+- **3-bus** textbook systems (Saadat): the hand-worked Gauss–Seidel and Newton–Raphson examples.
+- **5-bus** Stagg & El-Abiad, **6-bus** Wood & Wollenberg (with line ratings), **WSCC 9-bus** (Anderson & Fouad) and the **IEEE 14-bus** system.
+- A **2-bus** template to start your own network. **Save** keeps it under My systems; **Import** / **Export** read and write MATPOWER case files (.m) and .json.
+
+#### Building a system
+
+1. Tap **+ Bus**. Choose the type: **Slack** (|V| and angle held, exactly one), **PV** (generator: P and |V| held) or **PQ** (load: P and Q given).
+2. Enter the load Pd + jQd, the generation Pg, the voltage set-point, and optional Qmin / Qmax and shunt Gs / Bs.
+3. Tap **+ Line** or **+ Transformer**: from and to bus, R, X, total line charging B (per unit), the tap ratio and phase shift of a transformer and an optional MVA rating.
+4. Untick **In service** to study an outage.
+
+#### Solver options
+
+| Option | Meaning |
+| --- | --- |
+| Method | **Newton–Raphson** (3–5 iterations), **Gauss–Seidel** (simple, many iterations), **Fast Decoupled** (constant B′ / B″ matrices) or **DC load flow** (linear, P only) |
+| Tolerance | Largest allowed power mismatch in per unit (default 10⁻⁶) |
+| Max iterations | Empty = automatic (30 NR, 100 FDLF, 1000 GS) |
+| Acceleration α | Gauss–Seidel only; 1.4–1.6 is usually fastest |
+| V min / V max | Voltage limits for the violation check and the colours (default 0.95–1.10 pu) |
+| Enforce generator Q limits | A PV bus whose Q passes Qmin / Qmax is held at the limit as a PQ bus |
+| Flat start | Start from \|V\| = 1, δ = 0 instead of the entered values |
+
+> **Tip:** Try it: open the IEEE 14-bus system, tap Run, then switch the method to Gauss–Seidel and run again. The voltages are the same; the iteration count goes from 3 to about 60.
+
 <a id="ch-saving"></a>
 
-## 14. Saving, opening and sharing
+## 15. Saving, opening and sharing
 
 #### Automatic saving
 
@@ -648,7 +698,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 
 <a id="ch-settings"></a>
 
-## 15. Settings reference
+## 16. Settings reference
 
 Open Settings from the sliders icon on Home or from **⋮ → Settings** in the editor. Every change is saved at once.
 
@@ -711,7 +761,7 @@ These are the same defaults SPICE uses. Change them only if you know why; **Rese
 
 <a id="ch-library"></a>
 
-## 16. Component library (all 520)
+## 17. Component library (all 520)
 
 Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.
 
@@ -1391,7 +1441,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="ch-examples"></a>
 
-## 17. Examples (all 101)
+## 18. Examples (all 101)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1549,7 +1599,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-formulas"></a>
 
-## 18. Quick reference: formulas and units
+## 19. Quick reference: formulas and units
 
 #### Ohm's law and power
 
@@ -1600,7 +1650,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-troubleshooting"></a>
 
-## 19. Troubleshooting and FAQ
+## 20. Troubleshooting and FAQ
 
 #### Nothing happens when I press Run
 
@@ -1678,7 +1728,7 @@ The engine follows SPICE methods and has been checked against textbook answers (
 
 <a id="ch-about"></a>
 
-## 20. About RAPTI and contact
+## 21. About RAPTI and contact
 
 **Resonance Automation Professional Training Institute** (RAPTI) was established in 2019. Established in 2019 with one goal: developing skilled manpower for the automation industry. Courses at RAPTI are designed by experienced, competent engineers so that every student can work independently in any industry after completing a course — with the knowledge and skills that real job positions demand.
 

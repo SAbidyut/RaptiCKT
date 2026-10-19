@@ -1,7 +1,7 @@
 // Persistent storage (localStorage) for settings and saved circuits, plus the
 // native Android bridge with browser fallbacks.
 
-const K = { settings: 'raptickt.settings.v1', circuits: 'raptickt.circuits.v1', recent: 'raptickt.recent.v1', autosave: 'raptickt.autosave.v1', flags: 'raptickt.flags.v1', folders: 'raptickt.folders.v1' };
+const K = { settings: 'raptickt.settings.v1', circuits: 'raptickt.circuits.v1', recent: 'raptickt.recent.v1', autosave: 'raptickt.autosave.v1', flags: 'raptickt.flags.v1', folders: 'raptickt.folders.v1', lf: 'raptickt.loadflow.v1', lfSaved: 'raptickt.loadflow.saved.v1' };
 
 export const DEFAULT_SETTINGS = {
   theme: 'dark',
@@ -83,6 +83,11 @@ export const store = {
     write(K.recent, r);
   },
   autosave(doc) { write(K.autosave, doc); },
+  // Load Flow section: the system being worked on and the user's saved systems
+  lfState() { return read(K.lf, null); },
+  saveLfState(s) { return write(K.lf, s); },
+  lfSaved() { return read(K.lfSaved, []); },
+  saveLfSaved(list) { return write(K.lfSaved, list); },
   loadAutosave() { return read(K.autosave, null); },
   flag(name) { return !!read(K.flags, {})[name]; },
   setFlag(name, v = true) { const f = read(K.flags, {}); f[name] = v; write(K.flags, f); },
