@@ -179,6 +179,7 @@ export class HomeScreen {
       </section>
       ${auto && auto.elements && auto.elements.length ? `
       <button class="resume" data-h="resume">${icon('play', 18)}<div><b>Continue where you left off</b><span>${esc(auto.name)} · ${auto.elements.length} components</span></div>${icon('back', 18, 'flipx')}</button>` : ''}
+      <button class="lf-banner" data-h="loadflow"><span class="lf-ico">${icon('tower', 26)}</span><div><b>Load Flow Analysis</b><span>Power-system bus voltages, line flows & losses · Newton–Raphson, Gauss–Seidel, Fast Decoupled, DC · IEEE test systems</span></div>${icon('back', 18, 'flipx')}</button>
       <button class="resume manual-link" data-h="manual">${icon('manual', 18)}<div><b>User manual</b><span>Step-by-step guide</span></div>${icon('back', 18, 'flipx')}</button>
       <section class="feat-grid">
         ${[
@@ -208,6 +209,7 @@ export class HomeScreen {
     body.querySelector('[data-h=open]').addEventListener('click', () => this.app.importFile());
     body.querySelector('[data-h=resume]')?.addEventListener('click', () => this.app.resume());
     body.querySelector('[data-h=manual]')?.addEventListener('click', () => { this.tab = 'manual'; this.render(); });
+    body.querySelector('[data-h=loadflow]').addEventListener('click', () => this.app.openLoadFlow());
     body.querySelector('[data-h=about]').addEventListener('click', () => this.openInstitute());
     body.querySelectorAll('[data-tab2]').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.tab2; this.render(); }));
     this.drawThumbs(body);

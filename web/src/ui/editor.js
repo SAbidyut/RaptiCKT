@@ -1423,7 +1423,7 @@ export class Editor {
       ['save', 'save', 'Save to My Circuits'], ['copy', 'saveas', 'Save as copy'], ['edit', 'info', 'Circuit name & notes'],
       ['download', 'export', 'Export file (.rckt)'], ['upload', 'import', 'Open file…'], ['share', 'share', 'Share circuit'],
       ['code', 'netlist', 'SPICE netlist'], ['camera', 'shot', 'Export image (PNG)'], ['table', 'op', 'Operating point'],
-      ['reset', 'repair', 'Replace burnt parts & wires'],
+      ['reset', 'repair', 'Replace burnt parts & wires'], ['tower', 'loadflow', 'Load flow analysis'],
       ['sliders', 'settings', 'Settings'], ['manual', 'manual', 'User manual'], ['help', 'help', 'Help & gestures'], ['trash', 'clear', 'Clear circuit'],
     ];
     m.innerHTML = items.map(([ic, a, t]) => `<button data-m="${a}">${icon(ic, 18)}<span>${t}</span></button>`).join('');
@@ -1449,6 +1449,7 @@ export class Editor {
       case 'netlist': this.analysis.open('net'); break;
       case 'op': this.analysis.open('op'); break;
       case 'repair': this.replaceAll(); break;
+      case 'loadflow': app.openLoadFlow(); break;
       case 'shot': app.bridge.saveFile(this.doc.name.replace(/\W+/g, '_') + '.png', 'image/png', this.screenshot(), true); break;
       case 'settings': app.openSettings(); break;
       case 'manual': app.openManual(); break;
