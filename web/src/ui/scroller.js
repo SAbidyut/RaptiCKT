@@ -108,6 +108,8 @@ class Axis {
 // A row (".card-row", ".chips") gets an inner track that is moved with a
 // transform; card rows snap to a card.
 const ROW_SEL = '.card-row, .chips';
+// parts that keep their own mouse behaviour (typing, sliders, the value knob, canvases)
+export const MOUSE_SKIP = 'input, textarea, select, canvas, [contenteditable], [data-nodrag], .knob-dial';
 
 function rowAxis(row) {
   if (row._axis) return row._axis;
@@ -203,33 +205,58 @@ function smoothScroll(viewport, content, opts) {
     return Math.max(-8, Math.min(8, -(b - a) / (tb - ta)));
   };
 
-  const onStart = (e) => {
-    if (e.touches.length !== 1) return;
-    const p = e.touches[0];
-    sx = p.clientX; sy = p.clientY; axis = null; dragging = false;
-    row = findRow(e.target);
+  // one code path for a finger (touch events) and for a mouse button held down (pointer events)
+  const begin = (cx, cy, target) => {
+    sx = cx; sy = cy; axis = null; dragging = false;
+    row = findRow(target);
     rowAx = row ? rowAxis(row) : null;
     swallow = page.grab();
     if (rowAx && rowAx.grab()) swallow = true; // a tap that stops a fling does not press what is under it
   };
-  const onMove = (e) => {
-    if (e.touches.length !== 1) return;
-    const p = e.touches[0], dx = p.clientX - sx, dy = p.clientY - sy;
+  const moveTo = (cx, cy) => {
+    const dx = cx - sx, dy = cy - sy;
     if (!axis) {
       if (Math.hypot(dx, dy) < 6) return;
       axis = Math.abs(dx) > Math.abs(dy) && rowAx ? 'x' : 'y';
       // start 1:1 from here, no jump
-      sx = p.clientX; sy = p.clientY;
+      sx = cx; sy = cy;
       if (axis === 'x') { rowAx.grab(); samples = [[performance.now(), sx]]; } else { dragging = true; page.grab(); samples = [[performance.now(), sy]]; }
       return;
     }
-    if (axis === 'x') { rowAx.drag(p.clientX - sx); track(p.clientX); } else { page.drag(p.clientY - sy); track(p.clientY); }
+    if (axis === 'x') { rowAx.drag(cx - sx); track(cx); } else { page.drag(cy - sy); track(cy); }
   };
+  const onStart = (e) => { if (e.touches.length === 1) begin(e.touches[0].clientX, e.touches[0].clientY, e.target); };
+  const onMove = (e) => { if (e.touches.length === 1) moveTo(e.touches[0].clientX, e.touches[0].clientY); };
   const onEnd = () => {
     if (axis || swallow) swallowClick();
     if (axis === 'x') { rowAx.release(velocity()); page.settle(); } else if (axis === 'y') { dragging = false; page.release(velocity()); } else { page.settle(); rowAx?.settle(); }
     axis = null;
   };
+
+  // ------------------------------------------------------- mouse (PC)
+  // Hold the left button and drag the page or a row of cards, like a finger. Text fields,
+  // sliders, knobs and canvases keep their own mouse behaviour.
+  let mouseId = -1;
+  const mouseTarget = (t) => !(t && t.closest && t.closest(MOUSE_SKIP));
+  const onMouseDown = (e) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0 || !mouseTarget(e.target)) return;
+    mouseId = e.pointerId;
+    begin(e.clientX, e.clientY, e.target);
+  };
+  const onMouseMove = (e) => {
+    if (e.pointerId !== mouseId) return;
+    const was = axis;
+    moveTo(e.clientX, e.clientY);
+    if (axis && !was) { viewport.classList.add('mouse-drag'); try { window.getSelection()?.removeAllRanges(); } catch { /* ignore */ } }
+  };
+  const onMouseUp = (e) => {
+    if (e.pointerId !== mouseId) return;
+    mouseId = -1;
+    viewport.classList.remove('mouse-drag');
+    onEnd();
+  };
+  const onDragStart = (e) => { if (mouseId >= 0) e.preventDefault(); }; // no ghost image of a dragged picture or link
+
   const swallowClick = () => {
     const kill = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
     viewport.addEventListener('click', kill, { capture: true, once: true });
@@ -267,6 +294,11 @@ function smoothScroll(viewport, content, opts) {
   viewport.addEventListener('touchcancel', onEnd, { passive: true });
   viewport.addEventListener('wheel', onWheel, { passive: false });
   viewport.addEventListener('scroll', onNative, { passive: true });
+  viewport.addEventListener('pointerdown', onMouseDown);
+  viewport.addEventListener('dragstart', onDragStart);
+  window.addEventListener('pointermove', onMouseMove);
+  window.addEventListener('pointerup', onMouseUp);
+  window.addEventListener('pointercancel', onMouseUp);
   // rows are given their track up front so the layout never changes under a finger
   const prepRows = () => content.querySelectorAll(ROW_SEL).forEach((r) => rowAxis(r));
   const mo = typeof MutationObserver === 'function' ? new MutationObserver(prepRows) : null;
@@ -288,7 +320,9 @@ function smoothScroll(viewport, content, opts) {
       viewport.removeEventListener('touchstart', onStart); viewport.removeEventListener('touchmove', onMove);
       viewport.removeEventListener('touchend', onEnd); viewport.removeEventListener('touchcancel', onEnd);
       viewport.removeEventListener('wheel', onWheel); viewport.removeEventListener('scroll', onNative);
-      viewport.classList.remove('ios-scroll'); content.classList.remove('ios-content');
+      viewport.removeEventListener('pointerdown', onMouseDown); viewport.removeEventListener('dragstart', onDragStart);
+      window.removeEventListener('pointermove', onMouseMove); window.removeEventListener('pointerup', onMouseUp); window.removeEventListener('pointercancel', onMouseUp);
+      viewport.classList.remove('mouse-drag', 'ios-scroll'); content.classList.remove('ios-content');
       content.style.transform = '';
       viewport._ios = null;
     },

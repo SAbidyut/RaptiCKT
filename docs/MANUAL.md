@@ -206,7 +206,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 | Tap a wire | Selects the wire (then you can scope or delete it). |
 | Tap empty space | Clears the selection. |
 
-On a computer browser you can also use: **Delete** (remove), **R** (rotate), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), and the mouse wheel to zoom.
+On a computer browser you can also use: **Delete** (remove), **R** (rotate), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), the mouse wheel to zoom, and the right or middle mouse button to drag the board. Hold the left button and drag to scroll lists, rows of cards and pages, like a finger.
 
 <a id="ch-adding"></a>
 

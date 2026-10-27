@@ -1649,6 +1649,13 @@ export class Editor {
       return;
     }
     if (this.pointers.size > 2) return;
+    // PC: middle or right mouse button drags the board around, whatever is under the pointer
+    if (ev.pointerType === 'mouse' && ev.button !== 0) {
+      this.cancelTapWire();
+      this.gesture = { type: 'pan', sx, sy, ox: this.renderer.ox, oy: this.renderer.oy };
+      this.drag = true;
+      return;
+    }
     let hit = this.hitTest(sx, sy);
     // Operate: no wiring, so a finger near a part's terminal means the part itself
     if (this.mode === 'operate' && hit.kind === 'post' && hit.el) hit = { kind: 'element', el: hit.el };
@@ -1819,6 +1826,7 @@ export class Editor {
     const [wx, wy] = R.toWorld(sx, sy);
     switch (g.type) {
       case 'pan':
+        this.canvas.classList.add('panning');
         R.ox = g.ox + (sx - g.sx); R.oy = g.oy + (sy - g.sy);
         this.dirtyDraw = true;
         break;
@@ -1863,6 +1871,7 @@ export class Editor {
   }
 
   onUp(ev, cancelled) {
+    this.canvas.classList.remove('panning');
     this.pointers.delete(ev.pointerId);
     clearTimeout(this.lpT);
     const g = this.gesture;

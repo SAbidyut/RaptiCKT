@@ -1,0 +1,608 @@
+[
+ {
+  "id": "led",
+  "cat": "Basics",
+  "title": "LED with switch",
+  "desc": "The \"hello world\" of electronics. Tap the switch to turn the LED on. The resistor limits current to I = (9 V − Vf)/470 Ω ≈ 15 mA."
+ },
+ {
+  "id": "divider",
+  "cat": "Basics",
+  "title": "Voltage divider & potentiometer",
+  "desc": "Vout = Vin·R2/(R1+R2) = 12 V · 4.7k/14.7k ≈ 3.84 V. Select the potentiometer and turn the knob to vary its wiper voltage continuously."
+ },
+ {
+  "id": "network",
+  "cat": "Basics",
+  "title": "Series–parallel resistors",
+  "desc": "Equivalent resistance: 100 Ω + (200‖200) + (300‖300‖300) = 300 Ω, so the source supplies 3 V / 300 Ω = 10 mA. Watch how the current splits at every junction (Kirchhoff's current law)."
+ },
+ {
+  "id": "rc",
+  "cat": "Basics",
+  "title": "RC charging & discharging",
+  "desc": "Close the switch to charge the 100 µF capacitor through 1 kΩ (τ = RC = 0.1 s): after one τ it reaches 63 % of the supply. Open it and hold the push button to discharge through 100 Ω."
+ },
+ {
+  "id": "lrc",
+  "cat": "Basics",
+  "title": "LRC oscillator",
+  "desc": "With the switch closed the inductor carries 50 mA. Open the switch: the stored energy rings between L and C at f = 1/(2π√LC) ≈ 71 Hz, decaying with α = R/2L = 25 s⁻¹."
+ },
+ {
+  "id": "diodeiv",
+  "cat": "Basics",
+  "title": "Diode I–V characteristic",
+  "desc": "Open Analysis → DC Sweep, sweep V1 from 0 to 3 V and measure I(D1) to trace the exponential Shockley curve. Try the Zener or LED models too."
+ },
+ {
+  "id": "lowpass",
+  "cat": "AC & Filters",
+  "title": "RC low-pass filter",
+  "desc": "First-order filter with cut-off fc = 1/(2πRC) ≈ 1 kHz. Open Analysis → AC Sweep to draw the Bode plot: −3 dB and −45° at fc, then −20 dB/decade."
+ },
+ {
+  "id": "bandpass",
+  "cat": "AC & Filters",
+  "title": "Series RLC resonance",
+  "desc": "L = 10 mH and C = 100 nF resonate at f₀ = 1/(2π√LC) ≈ 5.03 kHz where the output peaks. Q = (1/R)√(L/C) ≈ 3.2. Run an AC sweep, or turn the source frequency knob."
+ },
+ {
+  "id": "halfwave",
+  "cat": "Power",
+  "title": "Half-wave rectifier",
+  "desc": "The diode conducts only on positive half-cycles; the 470 µF reservoir capacitor holds the voltage up between peaks. Ripple ≈ I/(f·C)."
+ },
+ {
+  "id": "bridge",
+  "cat": "Power",
+  "title": "Transformer + bridge rectifier",
+  "desc": "230 V mains (325 V peak) stepped down 20:1 by the transformer, full-wave rectified by four diodes and smoothed by 1000 µF. Both half-cycles charge the capacitor, halving the ripple."
+ },
+ {
+  "id": "zener",
+  "cat": "Power",
+  "title": "Zener shunt regulator",
+  "desc": "The 5.1 V Zener holds the output nearly constant while the input varies. Turn the source knob: above ~5.5 V the output stays at the Zener voltage while the resistor drops the rest."
+ },
+ {
+  "id": "reg7805",
+  "cat": "Power",
+  "title": "5 V regulated supply (7805)",
+  "desc": "A linear regulator keeps the output at 5 V as long as the input stays ≥ 7 V (2 V dropout). Lower the battery voltage with the knob to watch it drop out of regulation."
+ },
+ {
+  "id": "ceamp",
+  "cat": "Transistors",
+  "title": "Common-emitter amplifier",
+  "desc": "Voltage-divider biasing (VB ≈ 2.1 V, IC ≈ 1.4 mA) with emitter bypass capacitor. Small-signal gain ≈ −RC‖RL / re ≈ −130: the 10 mV input becomes ~1.3 V at the output. Run an AC sweep to see the pass-band."
+ },
+ {
+  "id": "mosfet",
+  "cat": "Transistors",
+  "title": "MOSFET PWM motor control",
+  "desc": "A logic-level MOSFET switches the motor with a 1 kHz PWM signal. Motor speed follows the duty cycle – select the pulse source and change its duty. The flyback diode clamps the inductive kick."
+ },
+ {
+  "id": "inverting",
+  "cat": "Op-Amps",
+  "title": "Inverting amplifier",
+  "desc": "Gain = −Rf/Rin = −10. The op-amp drives its inverting input to a virtual ground. Switch the op-amp model to LM741 to see finite bandwidth in an AC sweep."
+ },
+ {
+  "id": "thermo",
+  "cat": "Sensors",
+  "title": "Temperature alarm (NTC)",
+  "desc": "An NTC thermistor forms a divider with 10 kΩ. When it heats above ≈ 30 °C its voltage exceeds the 2.8 V reference and the comparator sounds the buzzer. Select the NTC and turn the temperature knob."
+ },
+ {
+  "id": "nightlight",
+  "cat": "Sensors",
+  "title": "LDR night light",
+  "desc": "In bright light the LDR has low resistance, holding the transistor off. As it gets dark its resistance rises, the base voltage climbs and the LED switches on. Select the LDR and turn the light knob."
+ },
+ {
+  "id": "bridge-sg",
+  "cat": "Sensors",
+  "title": "Strain-gauge Wheatstone bridge",
+  "desc": "A 350 Ω strain gauge in a balanced bridge. Strain ε changes its resistance by GF·ε, producing a small differential voltage ≈ Vs·GF·ε/4 (≈ 2.5 mV at 1000 µε)."
+ },
+ {
+  "id": "solar",
+  "cat": "Sensors",
+  "title": "Solar panel with load",
+  "desc": "36-cell panel (Voc ≈ 21.6 V, Isc = 3 A). Change the irradiance knob, or run a DC sweep of the load resistance and measure power to find the maximum power point."
+ },
+ {
+  "id": "timer555",
+  "cat": "Timers & ICs",
+  "title": "555 astable LED flasher",
+  "desc": "Classic NE555 astable: the capacitor charges through R1 + R2 and discharges through R2. f = 1.44/((R1 + 2R2)·C) ≈ 6.9 Hz, duty ≈ 52 %."
+ },
+ {
+  "id": "gates",
+  "cat": "Digital",
+  "title": "Logic gates truth table",
+  "desc": "Toggle inputs A and B and watch every basic gate respond: NOT, AND, OR, NAND, NOR, XOR and XNOR."
+ },
+ {
+  "id": "counter",
+  "cat": "Digital",
+  "title": "Counter & 7-segment display",
+  "desc": "A 2 Hz clock drives a 4-bit binary counter; the decoder converts the count to 7-segment patterns (0–F). Toggle RESET to clear the counter."
+ },
+ {
+  "id": "relay",
+  "cat": "Switches",
+  "title": "Relay-controlled lamp",
+  "desc": "Hold the push button to energise the relay coil; its contact switches the 12 V lamp. The flyback diode absorbs the coil's inductive kick when the button is released."
+ },
+ {
+  "id": "tubelight",
+  "cat": "Electrical Wiring",
+  "title": "Tube light (choke + starter)",
+  "desc": "Classic fluorescent fitting. Switch on: the starter glows and closes, pre-heating both filaments through the choke. When the bimetal opens, the choke's L·di/dt kick strikes the arc, and the choke then limits the lamp current…"
+ },
+ {
+  "id": "staircase",
+  "cat": "Electrical Wiring",
+  "title": "Staircase wiring (2-way + intermediate)",
+  "desc": "One lamp controlled from three places: a two-way switch at each end of the stairs and an intermediate switch on the landing. Tap any switch to toggle the lamp."
+ },
+ {
+  "id": "housewiring",
+  "cat": "Electrical Wiring",
+  "title": "House wiring: meter, RCCB, MCBs",
+  "desc": "Energy meter → RCCB (main switch + earth-leakage protection) → MCB per circuit. The lighting circuit has a switch and lamp; the socket feeds a 1 kW heater. Change the socket's appliance to \"Faulty\" to trip the RCCB, or to…"
+ },
+ {
+  "id": "dimmer",
+  "cat": "Electrical Wiring",
+  "title": "TRIAC lamp dimmer & fan regulator",
+  "desc": "A TRIAC phase-control dimmer — turn its level knob and watch the RMS lamp voltage follow Vrms = V·√(1 − α/π + sin2α/2π). The top branch is a capacitor-type fan regulator — each step changes the series capacitor and so the fan…"
+ },
+ {
+  "id": "pfc",
+  "cat": "Power Systems",
+  "title": "Power-factor correction",
+  "desc": "A 1 kW inductive load at PF 0.7 draws extra reactive current. Close the switch to add a 700 VAR capacitor: the PF meter rises to ≈0.96 while the real power stays the same."
+ },
+ {
+  "id": "dol",
+  "cat": "Power Systems",
+  "title": "DOL starter: 3-phase motor",
+  "desc": "Direct-on-line starter. Press START: the contactor coil pulls in and its auxiliary contact (13–14) seals itself in, so the motor keeps running after you let go. Press STOP to break the coil circuit. Watch the ≈6× starting…"
+ },
+ {
+  "id": "house",
+  "cat": "Projects",
+  "title": "Complete house wiring: service main to earthing (2-storey house)",
+  "desc": "A whole two-storey house, from the street pole to the earth pits, as one ladder diagram. ① Service main: the pole transformer (neutral earthed at the substation) feeds a 25 m overhead service drop of 2 × 16 mm² aluminium. ②…"
+ },
+ {
+  "id": "flat",
+  "cat": "Projects",
+  "title": "Complete house wiring (2-room flat)",
+  "desc": "A whole flat as a ladder diagram. Incomer: energy meter → double-pole main switch → 30 mA RCCB. The L bus feeds one MCB per circuit and every load returns to the N bus: lights (bedroom and drawing-room lamps, a staircase lamp…"
+ },
+ {
+  "id": "norlatch",
+  "cat": "Digital",
+  "title": "1-bit memory cell (NOR latch)",
+  "desc": "The building block of every static RAM: two NOR gates, each feeding the other. Press SET and Q goes high; press RESET and it goes low. Let go and the loop keeps the bit — that is memory. Pressing both at once gives the…"
+ },
+ {
+  "id": "ram16",
+  "cat": "Projects",
+  "title": "16-bit RAM (4 words × 4 bits)",
+  "desc": "A small static RAM built like a real memory chip: 16 D-latch cells in 4 rows (words) × 4 columns (bits). To write: set DATA IN on the hex keypad, choose the address with A1 A0 and hold WRITE — the address decoder raises one…"
+ },
+ {
+  "id": "psu5v",
+  "cat": "Projects",
+  "title": "Mains to 5 V regulated power supply",
+  "desc": "Every stage of a linear DC supply: 230 V mains → fuse → 230 V : 12 V transformer → bridge rectifier → 1000 µF smoothing capacitor → 7805 regulator → steady 5 V with a power LED and a 100 Ω load. The scope compares the rippling…"
+ },
+ {
+  "id": "traffic",
+  "cat": "Projects",
+  "title": "Traffic light controller (4017)",
+  "desc": "A 1 Hz clock steps a CD4017 decade counter through ten states — exactly one output is high at a time. Diodes combine the outputs (diode-OR logic): Q0–Q4 light RED for 5 s, Q5–Q8 GREEN for 4 s and Q9 YELLOW for 1 s, then the…"
+ },
+ {
+  "id": "adder",
+  "cat": "Projects",
+  "title": "4-bit binary adder (calculator)",
+  "desc": "Adds two 4-bit numbers, like the ALU inside a CPU. Tap keypad A and keypad B to pick 0–F; the 74HC283 adder shows the sum on the hex display. A sum above 15 does not fit in 4 bits, so CARRY lights — it is worth 16 (A = 9, B =…"
+ },
+ {
+  "id": "clock60",
+  "cat": "Projects",
+  "title": "Digital seconds counter 00–59",
+  "desc": "The heart of every digital clock. A 1 Hz clock drives the units BCD counter; each time it wraps 9 → 0 its carry clocks the tens counter. An AND gate watches the tens counter: the moment it reaches 6 (Q1 = Q2 = 1) it resets it,…"
+ },
+ {
+  "id": "streetlight",
+  "cat": "Projects",
+  "title": "Automatic street light (LDR + relay)",
+  "desc": "A low-voltage sensor switching a mains lamp. In daylight the LDR has a low resistance and holds the transistor's base low. At dusk (below ≈30 lux) the divider voltage rises, the BC547 turns on and energises the 12 V relay,…"
+ },
+ {
+  "id": "stardelta",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Star-delta starter (automatic)",
+  "desc": "The standard way to start a large induction motor with reduced current, drawn as a power circuit (left) and a ladder diagram (right). Press START: coils KM and KY pull in (KM holds itself with KM 13-14), so the main contacts…"
+ },
+ {
+  "id": "fwdrev",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Forward / reverse motor control",
+  "desc": "Reversing a 3-phase motor = swapping two phases. Left, the power circuit: main contacts KF connect L1-L2-L3 to the motor in order, KR swaps L1 and L3; F1 is the overload relay. Right, the control circuit as a ladder diagram…"
+ },
+ {
+  "id": "waterpump",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Automatic water pump (float switch)",
+  "desc": "Overhead-tank pump control, drawn as a power circuit (left) and a ladder diagram (right). A tethered float switch (NC) sits in the rung of contactor coil K: it opens when the water rises above 80 % and — because of its 60 %…"
+ },
+ {
+  "id": "conveyor",
+  "cat": "Industrial Control",
+  "title": "Conveyor bottle counter (photo-eye)",
+  "desc": "A 24 V photoelectric sensor (diffuse, PNP, light-on) watches the conveyor. When a bottle passes within its 300 mm range the BK output switches +24 V; a 10 k / 2.7 k divider turns that into a 5 V logic pulse that clocks a BCD…"
+ },
+ {
+  "id": "phasefail",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Phase-failure protection relay",
+  "desc": "A 3-phase motor must never run on two phases (single-phasing): it overheats within seconds. The phase monitor KP watches L1-L2-L3 after the fuses; while all three phases are present, in the right sequence and balanced, its…"
+ },
+ {
+  "id": "loop420",
+  "cat": "Industrial Control",
+  "title": "4–20 mA pressure transmitter loop",
+  "desc": "The industry-standard analog signal. A 2-wire, loop-powered pressure transmitter (0–10 bar) regulates the loop current between 4 mA (0 bar) and 20 mA (10 bar); a 250 Ω receiver resistor turns it into 1–5 V for the panel meter…"
+ },
+ {
+  "id": "firealarm",
+  "cat": "Industrial Control",
+  "title": "Fire alarm zone (smoke detectors)",
+  "desc": "A conventional fire-alarm zone: 24 V through a 470 Ω zone resistor feeds two smoke detectors in parallel and a 4.7 kΩ end-of-line resistor (which lets the panel see a broken cable). Normal: the zone sits at ≈21.8 V. Raise the…"
+ },
+ {
+  "id": "vfd",
+  "cat": "Power Electronics",
+  "title": "Variable-frequency drive (VFD) for an induction motor",
+  "desc": "How a VFD works: the 400 V 3-phase supply is rectified by a 6-diode bridge into a ≈540 V DC bus, smoothed by the 2.2 mF capacitor bank. A 3-phase IGBT inverter then chops the DC bus into a variable-frequency, variable-voltage…"
+ },
+ {
+  "id": "hbridgemotor",
+  "cat": "Power Electronics",
+  "title": "H-bridge DC motor speed & direction (L298N)",
+  "desc": "An L298N H-bridge drives a 12 V DC motor. IN1/IN2 choose the direction (10 = forward, 01 = reverse, 00 or 11 = brake — both motor terminals tied together, the motor stops quickly), and a 1 kHz PWM signal on EN sets the speed:…"
+ },
+ {
+  "id": "sineinv",
+  "cat": "Power Electronics",
+  "title": "Single-phase sine-wave inverter (SPWM + LC filter)",
+  "desc": "A pure-sine inverter from a 350 V DC link: two half-bridge legs of an IGBT bridge are switched by unipolar sine-triangle PWM (5 kHz carrier, m = 0.9), so the bridge output is a 3-level pulse train whose average follows a 50 Hz…"
+ },
+ {
+  "id": "flyback",
+  "cat": "Power Electronics",
+  "title": "Flyback converter (switch level)",
+  "desc": "The simplest isolated SMPS, as used in phone chargers. While the MOSFET is on, the primary current ramps up and stores energy in the coupled inductor's core (the output diode is reverse-biased by the winding polarity). When it…"
+ },
+ {
+  "id": "scrbridge",
+  "cat": "Power Electronics",
+  "title": "Fully-controlled SCR bridge (phase-angle firing)",
+  "desc": "Controlled rectifier for DC motor drives and battery chargers. The firing unit synchronises to the mains zero crossings and fires T1+T4 at the angle α in the positive half-cycle and T2+T3 at α in the negative half-cycle…"
+ },
+ {
+  "id": "bldcdrive",
+  "cat": "Power Electronics",
+  "title": "BLDC motor with hall-sensor commutation",
+  "desc": "A brushless DC motor has its magnets on the rotor and three windings on the stator, so something must switch the windings in step with the rotor: three hall sensors report the rotor position in 60° sectors and the driver…"
+ },
+ {
+  "id": "stepperdrive",
+  "cat": "Power Electronics",
+  "title": "Stepper motor with a chopper driver",
+  "desc": "A bipolar stepper motor (200 steps/rev) driven by a STEP/DIR driver like the A4988/DRV8825: every rising edge on STEP advances the coil currents one step in the sequence, DIR sets the direction and ¬EN (tied low) enables the…"
+ },
+ {
+  "id": "solarmppt",
+  "cat": "Renewables",
+  "title": "Solar home system with MPPT charge controller",
+  "desc": "A 300 W panel (60 cells, Voc ≈ 40 V, Vmp ≈ 32 V) charges a 12 V 100 Ah AGM battery through an MPPT charge controller. The controller hunts for the panel's maximum-power point (perturb & observe) and converts that power down to…"
+ },
+ {
+  "id": "charger",
+  "cat": "Renewables",
+  "title": "Li-ion charger (CC-CV) with protection board",
+  "desc": "A USB-powered TP4056-style charger fills a lithium-ion cell through a DW01-style protection board (BMS). Constant current (1 A) until the cell reaches 4.2 V, then constant voltage while the current tapers; it stops at 10 % of…"
+ },
+ {
+  "id": "gridtie",
+  "cat": "Renewables",
+  "title": "Grid-tie solar inverter with house load",
+  "desc": "Ten 300 W panels in series (≈320 V DC at the maximum-power point) feed a 3 kW grid-tie inverter. It waits until the grid has been healthy for 0.2 s, then tracks the array's maximum power and injects it into the grid as a sine…"
+ },
+ {
+  "id": "offgrid",
+  "cat": "Renewables",
+  "title": "Off-grid inverter (IPS) from a 12 V battery",
+  "desc": "A pure-sine inverter makes 230 V 50 Hz from a 12 V 100 Ah battery — the classic home IPS. Switch on the lamp and the fan: the battery current follows the AC power (≈ P / (12 V × 0.9)), pulsing at 100 Hz because AC power itself…"
+ },
+ {
+  "id": "windcharge",
+  "cat": "Renewables",
+  "title": "Wind turbine charging a 48 V battery bank",
+  "desc": "A 1.5 kW wind turbine (1.2 m blades, permanent-magnet generator with built-in rectifier) charges a 48 V lead-acid bank (24 cells). The heavy rotor takes several seconds to speed up until the generator EMF exceeds the battery…"
+ },
+ {
+  "id": "rs232link",
+  "cat": "Communication",
+  "title": "UART over RS-232 (null-modem, full duplex)",
+  "desc": "Two devices talk over a serial cable. Each UART transmitter idles high and sends every character as a start bit, 8 data bits (LSB first) and a stop bit at 9600 baud. The MAX232 transceivers turn the 0/5 V logic into ±9 V…"
+ },
+ {
+  "id": "rs485bus",
+  "cat": "Communication",
+  "title": "RS-485 differential bus with termination",
+  "desc": "Industrial sensors and PLCs talk over RS-485: one twisted pair, the data carried as the difference A − B (≈ ±2 V on the loaded bus), so common-mode noise picked up along the cable cancels — runs of a kilometre are normal. The…"
+ },
+ {
+  "id": "amradio",
+  "cat": "Communication",
+  "title": "AM radio receiver chain",
+  "desc": "The signal path of an AM receiver (frequencies scaled down so it runs in real time: a 20 kHz carrier modulated 50 % by a 500 Hz tone, instead of a 531–1602 kHz broadcast station). The tuned RF amplifier selects and amplifies…"
+ },
+ {
+  "id": "wireless433",
+  "cat": "Communication",
+  "title": "433 MHz wireless remote (link budget)",
+  "desc": "A 433 MHz ASK transmitter/receiver pair as used in remote doorbells and gate openers. Press the button: the transmitter sends while it is held and the receiver output switches the buzzer. The link works only while the received…"
+ },
+ {
+  "id": "i2cexp",
+  "cat": "Communication",
+  "title": "I²C bus: running light on a PCF8574",
+  "desc": "I²C needs only two wires for many chips: SCL (clock) and SDA (data), both open-drain with 4.7 kΩ pull-ups, so any device can pull a line low but none ever drives it high. The master sends START, the 7-bit address 0x20 + write,…"
+ },
+ {
+  "id": "spi595",
+  "cat": "Communication",
+  "title": "SPI: 74HC595 shift register outputs",
+  "desc": "SPI is a fast synchronous bus: the master pulls ¬CS low, puts each bit on MOSI and pulses SCK; the slave samples MOSI on the rising edge. A 74HC595 shifts the eight bits in (SCK → SRCLK, MOSI → SER) and the rising edge of ¬CS…"
+ },
+ {
+  "id": "rfidlock",
+  "cat": "Communication",
+  "title": "RFID door lock (125 kHz reader)",
+  "desc": "An RDM6300-style 125 kHz RFID reader: bring the tag closer than 5 cm (select the reader and turn the tag-distance knob down) and its TAG output goes high while the tag ID is sent as 9600-baud UART text — shown on the terminal.…"
+ },
+ {
+  "id": "fiberlink",
+  "cat": "Communication",
+  "title": "Fibre-optic serial link",
+  "desc": "A UART message travels as light through a 20 m plastic optical fibre: an LED transmitter, the fibre and a photodiode receiver with a comparator. It is immune to electrical noise and isolates the two ends. The link budget…"
+ },
+ {
+  "id": "wien",
+  "cat": "Op-Amps",
+  "title": "Wien-bridge sine oscillator (1 kHz)",
+  "desc": "A classic low-distortion sine oscillator. The RC series-parallel network (10 kΩ, 16 nF) passes exactly one frequency, f = 1/(2πRC) ≈ 1 kHz, with zero phase shift and 1/3 attenuation, back to the non-inverting input; the…"
+ },
+ {
+  "id": "faultdemo",
+  "cat": "Power Systems",
+  "title": "Short-circuit fault & MCB tripping",
+  "desc": "Why every circuit has a breaker. A 2 kW heater is fed through a C16 MCB and 30 m of 2.5 mm² cable (≈ 0.43 Ω there and back). At t = 0.2 s the fault element applies a short circuit at the far end: the current shoots up towards…"
+ },
+ {
+  "id": "pbctrl",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Push button control (inching)",
+  "desc": "The simplest motor control: the START push button is wired straight into the rung of contactor coil KM. Hold START and KM pulls in, its main contacts (left) run the motor and KM 13-14 lights RUN; let go and the motor stops —…"
+ },
+ {
+  "id": "selfhold",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Self-holding (DOL) starter",
+  "desc": "Direct-on-line starter with a self-holding (latching, seal-in) circuit. Press START: coil KM pulls in and its own KM 13-14 contact, wired across START, keeps it energised after you let go. STOP (NC) breaks the rung and the…"
+ },
+ {
+  "id": "hoa",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Selector switch control (HAND-OFF-AUTO)",
+  "desc": "A HAND-OFF-AUTO selector decides who controls the pump. Tap the selector to step through its positions: HAND runs the pump straight away (for testing or emergencies); OFF stops it; AUTO hands control to the float switch, which…"
+ },
+ {
+  "id": "estopckt",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Emergency stop circuit",
+  "desc": "The emergency stop sits first in the control circuit, ahead of everything else, so it always wins. Start the motor with START, then tap E-STOP: the mushroom head latches open, coil KM drops and the motor stops. Tap E-STOP…"
+ },
+ {
+  "id": "torckt",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Thermal overload relay (TOR) protection",
+  "desc": "The thermal overload relay F1 carries the motor current through three bimetal heaters (left). Setting: Ir = the motor full-load current from its nameplate (here about 7 A, so F1 is set to 8 A); class 10 means it trips within…"
+ },
+ {
+  "id": "mpcbckt",
+  "cat": "Industrial Control (Ladder)",
+  "title": "MPCB motor protection",
+  "desc": "A motor protection circuit breaker (MPCB) Q1 replaces fuses plus overload relay: it has a thermal release set to the motor current (Ir) and a magnetic release that trips instantly on a short circuit (≈ 13 × Ir). Its auxiliary…"
+ },
+ {
+  "id": "protectall",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Complete motor protection circuit",
+  "desc": "All the usual protections on one motor: MPCB Q1 (short circuit and overload, aux 13-14), a phase-failure / sequence monitor KP (11-14 closed only while all three phases are healthy), the thermal overload relay F1 (95-96) and…"
+ },
+ {
+  "id": "relaylogic",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Relay logic circuits (AND, OR, NOT)",
+  "desc": "Before PLCs, logic was built with relays — and it is still used in panels. Push buttons A and B energise relays KA and KB (24 V DC). Contacts in series make AND (the lamp lights only with both buttons held), contacts in…"
+ },
+ {
+  "id": "relaymotor",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Motor control using a relay (24 V)",
+  "desc": "An interposing relay: the push buttons work at a safe 24 V DC (right) and switch the small relay KA, which holds itself in with KA 23-24. One contact of KA (13-14) sits in the 230 V coil rung of the motor contactor KM (middle)…"
+ },
+ {
+  "id": "phaseseq",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Phase sequence protection",
+  "desc": "If two supply phases are swapped (after maintenance, or a new cable), a 3-phase motor runs backwards — dangerous for pumps, conveyors, compressors and lifts. The phase monitor KP checks the sequence L1→L2→L3 (and phase loss);…"
+ },
+ {
+  "id": "floatless",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Floatless level relay pump control",
+  "desc": "A floatless (electrode) level relay KL watches the tank through probes instead of a float. Its supply is the coil rung at the top. When the water falls below the LOW probe (25 %) its contact KL 11-14 closes and the pump…"
+ },
+ {
+  "id": "tankauto",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Water tank automation (sump + overhead)",
+  "desc": "A complete building water system: the pump lifts water from the underground SUMP to the OVERHEAD tank. Level relay KL1 (fill mode, on the overhead tank) asks for water below 25 % and stops at 90 %; level relay KL2 (dry-run…"
+ },
+ {
+  "id": "ondelay",
+  "cat": "Industrial Control (Ladder)",
+  "title": "ON-delay timer motor control",
+  "desc": "An ON-delay (TON) timer switches its contacts a set time after its coil is energised. Press START: the control relay KA holds itself in and energises the timer coil KT; 3 s later KT 15-18 closes and the motor contactor KM…"
+ },
+ {
+  "id": "offdelay",
+  "cat": "Industrial Control (Ladder)",
+  "title": "OFF-delay timer (fan run-on)",
+  "desc": "An OFF-delay (TOF) timer switches its contacts at once when its coil is energised and keeps them switched for a set time after the coil is de-energised. Here it keeps an exhaust fan running 5 s after the switch is turned off…"
+ },
+ {
+  "id": "twintimer",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Twin timer (cyclic ON / OFF)",
+  "desc": "A twin (cyclic) timer switches its contacts on and off for as long as its coil is energised: ON for T, OFF for T2, over and over. Here it runs a mixer motor 3 s on, 2 s off while the switch is on — typical for mixers,…"
+ },
+ {
+  "id": "seqmotor",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Sequential motor control (timer)",
+  "desc": "Two motors that must start one after the other — e.g. a conveyor M2 that may only run once the crusher M1 feeding it is running, and never together (to limit the starting current). START pulls in KM1 (held by KM1 13-14); KM1…"
+ },
+ {
+  "id": "automachine",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Automatic machine cycle (cylinder, timer, counter)",
+  "desc": "An automatic press: press START and relay KA runs the machine. At home (LS1) the valve coil Y1 pulls in and holds itself, the cylinder extends; at the end of the stroke LS2 starts the dwell timer KT (1.5 s) and adds one to the…"
+ },
+ {
+  "id": "jogpb",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Jog (inching) with push buttons",
+  "desc": "Jogging (inching) runs a motor only while a button is held — to position a machine or a conveyor belt. RUN starts the control relay KA, which holds itself and keeps KM energised (normal running). JOG energises KM directly,…"
+ },
+ {
+  "id": "jogsel",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Jog with selector switch",
+  "desc": "One START button, two behaviours: the RUN / JOG selector sits in series with the hold-in contact KM 13-14. With the selector closed (RUN) START latches the motor on; open it (JOG) and the hold-in is cut, so START only runs the…"
+ },
+ {
+  "id": "multistart",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Multiple start, single stop",
+  "desc": "The motor can be started from two places (e.g. the machine and the control room): START buttons are wired in PARALLEL, so either one energises KM; the hold-in KM 13-14 is in parallel with them too. A single STOP (in series)…"
+ },
+ {
+  "id": "multistop",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Single start, multiple stop",
+  "desc": "Several STOP buttons placed around a machine (or a long conveyor) so it can be stopped from anywhere: they are wired in SERIES, so pressing any one of them breaks the coil rung. One START with the usual hold-in."
+ },
+ {
+  "id": "multiboth",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Multiple start, multiple stop",
+  "desc": "Control from two locations: the STOP buttons of both stations are in SERIES (any one stops the motor), the START buttons are in PARALLEL (any one starts it), and the hold-in contact KM 13-14 is in parallel with the STARTs.…"
+ },
+ {
+  "id": "interlock",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Electrical interlocking (two motors)",
+  "desc": "Duty / standby pumps that must never run together. Each contactor has its own START / STOP rung, and each rung contains an NC contact of the OTHER contactor: KM2 21-22 in the KM1 rung and KM1 21-22 in the KM2 rung. While one…"
+ },
+ {
+  "id": "ats",
+  "cat": "Industrial Control (Ladder)",
+  "title": "ATS (automatic transfer switch)",
+  "desc": "An automatic transfer switch keeps a load supplied when the mains fails. The phase monitor KP watches the mains (after its MCB). Mains healthy: KP 11-14 closes and the mains contactor KM feeds the load. Tap the mains MCB OFF…"
+ },
+ {
+  "id": "lsmotor",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Motor control using limit switches",
+  "desc": "A carriage driven forward and back by a reversing starter must stop at both ends of its track. The far-end limit switch LS2 (NC) is in the FWD rung and the home limit switch LS1 (NC) in the REV rung: when the carriage reaches…"
+ },
+ {
+  "id": "autofr",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Automatic forward-reverse (limit switches)",
+  "desc": "A shuttle that runs back and forth by itself — e.g. a machine table or a car wash. START latches the relay KA. With the carriage at home, LS1 (NO) starts KF; KF holds itself, and at the far end LS2 opens the KF rung and closes…"
+ },
+ {
+  "id": "ssrload",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Load control using an SSR",
+  "desc": "A solid-state relay (SSR) switches a 230 V load with no moving contacts: a small 24 V DC signal (from a switch, sensor or PLC) lights the LED inside it and its output TRIAC turns on at the next zero crossing — silent, fast and…"
+ },
+ {
+  "id": "sensorssr",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Load control using a sensor and SSR",
+  "desc": "A 3-wire PNP photoelectric sensor (brown +24 V, blue 0 V, black output) switches an SSR, which switches a 230 V lamp — e.g. a light that comes on when a car or a box is in front of the sensor. Select the sensor and move the…"
+ },
+ {
+  "id": "prodcounter",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Production counter with sensor",
+  "desc": "Counting products on a conveyor: a photoelectric sensor (right, 24 V DC) gives one pulse for every box that passes, and each pulse adds one to the counter C1. The conveyor motor runs (START / STOP) until the preset (5 boxes)…"
+ },
+ {
+  "id": "lscounter",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Counter with limit switch",
+  "desc": "The automatic forward-reverse shuttle with a stroke counter: every time the carriage reaches the far end, LS2 gives a pulse to the counter C1. After 5 strokes C1 21-22 (in the KA rung) stops the machine and BATCH DONE lights.…"
+ },
+ {
+  "id": "tempctrl",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Temperature control (heater and blower)",
+  "desc": "An oven or panel temperature controller: thermostat TH1 (heating mode, set to 60 °C) keeps the heater contactor KH on while the temperature is below the set point; thermostat TH2 (cooling mode, set to 80 °C) starts the blower…"
+ },
+ {
+  "id": "pressctrl",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Pressure control (air compressor)",
+  "desc": "An air compressor kept between 6 and 8 bar by a pressure switch. START latches the AUTO relay KA; the pressure switch (cut-in 6 bar, cut-out 8 bar) in the KM rung then starts and stops the compressor motor by itself. Select…"
+ },
+ {
+  "id": "pneumatic",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Electro-pneumatic cylinder control",
+  "desc": "A single-acting pneumatic cylinder moved by a 5/2 solenoid valve with spring return. Press START: the valve coil Y1 pulls in and holds itself (Y1 13-14), air extends the cylinder. At the end of the stroke the limit switch LS2…"
+ },
+ {
+  "id": "panel",
+  "cat": "Industrial Control (Ladder)",
+  "title": "Complete industrial control panel",
+  "desc": "A full pump control panel, putting the course together. Power: MPCB Q1, phase monitor KP, contactor KM, overload relay F1, motor. Control: E-STOP, Q1 13-14, F1 95-96 and KP 11-14 in series feed a HAND-OFF-AUTO selector. HAND:…"
+ }
+]

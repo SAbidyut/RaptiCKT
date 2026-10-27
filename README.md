@@ -104,9 +104,16 @@ The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md). It is 
 
 It also builds every example and checks that it is fully wired, solvable and gives the expected values; `tests/projects.test.js` runs the big projects like the real circuits (RCCB/MCB trips, RAM write/read-back, 59 → 00 roll-over, traffic-light timing, 5 V regulation, day/night switching).
 
+## Website (PHP)
+
+`website/raptickt-website/` is a ready-to-run PHP website for RaptiCKT (home, features, searchable list of all 520 components, 101 examples with thumbnails, manual, download, about, contact — English and Bangla) with the full simulator inside `simulator/`. `website/raptickt-website.zip` is the same folder as one file; its `README.txt` explains how to run it on a PC (XAMPP or `START-SERVER.bat`) or upload it to hosting. Rebuild it after changing the app with `./website/build-site.sh`.
+
+On a PC the simulator also works with the mouse: drag to pan the board or move parts, right / middle button drag to pan, wheel to zoom, and hold-and-drag to scroll lists, card rows and pages.
+
 ## Project layout
 
 ```
+website/    PHP website + built simulator (raptickt-website/, raptickt-website.zip)
 web/        Simulator app (vanilla JS + Canvas, bundled with esbuild)
   src/engine    MNA solver, AC/DC analyses
   src/elements  component models + symbols

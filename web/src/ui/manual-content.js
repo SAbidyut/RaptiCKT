@@ -197,7 +197,7 @@ export const CHAPTERS = [
         ['Tap a wire', 'Selects the wire (then you can scope or delete it).'],
         ['Tap empty space', 'Clears the selection.'],
       ]),
-      P('On a computer browser you can also use: **Delete** (remove), **R** (rotate), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), and the mouse wheel to zoom.'),
+      P('On a computer browser you can also use: **Delete** (remove), **R** (rotate), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), the mouse wheel to zoom, and the right or middle mouse button to drag the board. Hold the left button and drag to scroll lists, rows of cards and pages, like a finger.'),
     ],
   },
 

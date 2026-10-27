@@ -917,3 +917,14 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .mode-seg { transition: top 0.32s cubic-bezier(.32, .72, 0, 1), right 0.32s cubic-bezier(.32, .72, 0, 1); }
 :root.lite .editor .ed-head, :root.lite .editor .fs-rail, :root.lite .editor .fs-handle, :root.lite .editor .fab { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .editor .ed-head, .editor .fs-rail { animation: none !important; } }
+
+/* ---- mouse (PC) ---------------------------------------------------------- */
+@media (hover: hover) and (pointer: fine) {
+  .card-row, .chips, .h-row, .toolbar, .pal-tabs, .an-tabs, .insp-actions, .scope-chips, .selbar, .home-scroll, .set-scroll, .man-scroll, .an-body { cursor: grab; }
+  .card-row button, .chips button, .toolbar button, .pal-tabs button, .an-tabs button, .insp-actions button, .card, .chip, a, button, input, select, label { cursor: pointer; }
+  input[type=text], input[type=number], input[type=search], textarea { cursor: text; }
+  .board { cursor: default; }
+  .board.panning { cursor: grabbing; }
+  html.mouse-drag, html.mouse-drag * , .mouse-drag, .mouse-drag * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
+}
+.h-row img, .card-row img { -webkit-user-drag: none; user-drag: none; }

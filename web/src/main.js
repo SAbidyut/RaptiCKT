@@ -1,6 +1,7 @@
 // RaptiCKT application shell.
 
 import { motion } from './ui/motion.js';
+import { installMouseDrag } from './ui/mousedrag.js';
 import { CATEGORIES } from './elements/index.js';
 import { Editor } from './ui/editor.js';
 import { HomeScreen, renderSettings } from './ui/screens.js';
@@ -16,6 +17,7 @@ import { APP } from './ui/brand.js';
 class App {
   constructor() {
     this.bridge = bridge;
+    installMouseDrag(); // PC: drag strips and panels with the mouse
     // Android pads the WebView for system bars natively; don't add CSS safe-area insets on top.
     if (bridge.isAndroid()) document.documentElement.classList.add('android');
     this.settings = store.settings();
@@ -51,8 +53,15 @@ class App {
     };
     this.show('home');
     this.home.render();
+    this.openFromLink();
     setTimeout(() => { this.el.querySelector('.splash').classList.add('hide'); document.documentElement.classList.add('app-ready'); }, 1300);
     setTimeout(() => this.el.querySelector('.splash')?.remove(), 2000);
+  }
+
+  /** Website links: simulator/#example=<id> opens that example. */
+  openFromLink() {
+    const m = /^#example=([\w-]+)/.exec(location.hash);
+    if (m && EXAMPLES.some((e) => e.id === m[1])) this.openExample(m[1]);
   }
 
   uid() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }

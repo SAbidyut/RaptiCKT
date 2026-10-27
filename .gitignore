@@ -10,3 +10,4 @@ android/local.properties
 .DS_Store
 web/shots/
 web/shots-small/
+website/raptickt-website/storage/messages.log
