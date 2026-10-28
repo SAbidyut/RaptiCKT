@@ -19,14 +19,15 @@ Everything in the app, explained step by step.
 11. [Oscilloscope](#ch-scope)
 12. [Multimeter](#ch-meter)
 13. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
-14. [Load Flow Analysis (power systems)](#ch-loadflow)
-15. [Saving, opening and sharing](#ch-saving)
-16. [Settings reference](#ch-settings)
-17. [Component library (all 520)](#ch-library)
-18. [Examples (all 101)](#ch-examples)
-19. [Quick reference: formulas and units](#ch-formulas)
-20. [Troubleshooting and FAQ](#ch-troubleshooting)
-21. [About RAPTI and contact](#ch-about)
+14. [Network theorems, step by step](#ch-theorems)
+15. [Load Flow Analysis (power systems)](#ch-loadflow)
+16. [Saving, opening and sharing](#ch-saving)
+17. [Settings reference](#ch-settings)
+18. [Component library (all 520)](#ch-library)
+19. [Examples (all 102)](#ch-examples)
+20. [Quick reference: formulas and units](#ch-formulas)
+21. [Troubleshooting and FAQ](#ch-troubleshooting)
+22. [About RAPTI and contact](#ch-about)
 
 <a id="ch-welcome"></a>
 
@@ -42,8 +43,9 @@ Everything in the app, explained step by step.
 - Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
+- Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition or source transformation — with every intermediate circuit drawn (**⋮ → Run with theorem**).
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
-- Learn from **101 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
+- Learn from **102 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
 
 #### Who it is for
@@ -187,7 +189,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 - The round **+** button (bottom right) adds a component.
 - The **✋ Operate | Wire** switch at the top right of the board picks what a finger does (chapter 4, *Operate and Wire mode*).
 - The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). It says **CPU-limited** when the phone cannot keep up.
-- A red or yellow bar appears at the top when the circuit has a problem (chapter 20).
+- A red or yellow bar appears at the top when the circuit has a problem (chapter 21).
 - When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.
 - Messages (toasts) appear briefly at the bottom to confirm what happened.
 
@@ -607,9 +609,38 @@ Runs the circuit and averages the power flowing into every component over the la
 
 Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` commands, that you can open in **ngspice** or **LTspice** to cross-check results or continue research. Buttons: **Copy**, **Save .cir**, **Share**. Parts without a SPICE equivalent (such as digital blocks) are written as comments.
 
+<a id="ch-theorems"></a>
+
+## 14. Network theorems, step by step
+
+**⋮ → Run with theorem** solves your circuit the way it is done in class and in exams. Pick a theorem, pick the resistor whose current or voltage you want, and read the solution step by step. Every step has its own circuit drawing, the formulas with your values in them, and the result — down to the final equivalent circuit and the answer.
+
+1. Build a circuit with resistors and DC sources (or open **Basics → Network theorems practice**).
+2. Tap **⋮ → Run with theorem** and choose **Thevenin’s theorem**, **Norton’s theorem**, **Superposition theorem** or **Source transformation**.
+3. Choose the resistor (the load): tap it on the drawing or in the list. Choose **Current I** or **Voltage V**.
+4. Tap **Solve step by step**. Scroll through the steps. **Run the circuit** at the end goes back to the board, runs the simulation and selects the load, so you can compare with the live reading.
+
+#### What each theorem shows
+
+| Theorem | Steps and circuits |
+| --- | --- |
+| Thevenin | 1. R_th: the load is taken out and the sources are turned off (voltage source → wire, current source → open); the resistors are combined in series and parallel, one line per combination. 2. V_th: the open-circuit voltage between a and b, found by node voltages (KCL). 3. The Thevenin equivalent (V_th in series with R_th, the load back on) and I_L = V_th / (R_th + R_L). |
+| Norton | 1. R_N (the same as R_th). 2. I_N: a and b are shorted and I_N is the current in that short, found by node voltages and KCL at a. 3. The Norton equivalent (I_N in parallel with R_N and the load) and the current divider I_L = I_N·R_N / (R_N + R_L). |
+| Superposition | One step per independent source, with the others turned off. Each step finds the resistance the source sees and follows the current to the load with voltage and current dividers. The last step adds the parts (with their signs). |
+| Source transformation | The circuit is redrawn as a ladder with the load on the right. Then, one figure per step: V in series with R ⇄ I in parallel with R, resistors combined in series and parallel, current sources in parallel added — until one source and one resistor feed the load. |
+
+The ends of the load are named **a** and **b**: a is the end at the higher voltage, so the load current flows from a to b. Other nodes used in the equations are tagged c, d, e … on the drawings. The last step always checks the answer against a direct solution of the whole circuit.
+
+- **Works with:** resistors, DC voltage sources (with their internal resistance), DC current sources, voltage rails, ground, switches and push buttons (closed = wire, open = gap), ammeters (wire) and voltmeters (open). In DC a capacitor is open and an inductor is a wire.
+- **Not for:** transistors, diodes, op-amps, AC sources and other non-linear or time-varying parts: the theorems are for linear DC circuits. The first screen lists any such parts.
+- If the resistors form a **bridge** (not simply series or parallel), R_th is found with a 1 A test current and the circuit by node voltages. Source transformation stops when no step applies and says so.
+- If R_th is infinite (only a current source feeds the load) there is no Thevenin equivalent; if R_N is 0 (a voltage source sits right across the load) there is no Norton equivalent. The solution says which theorem to use instead.
+
+> **Tip:** Superposition adds currents and voltages, not powers: the last step shows the difference.
+
 <a id="ch-loadflow"></a>
 
-## 14. Load Flow Analysis (power systems)
+## 15. Load Flow Analysis (power systems)
 
 A separate section for **power-system load flow (power flow) studies**: the bus voltages |V|∠δ, the real and reactive power in every line and transformer, the slack-bus generation and the losses of a transmission network. Open it from the **Load Flow Analysis** card on Home, or from **⋮ → Load flow analysis** in the editor. Back returns to where you came from.
 
@@ -658,7 +689,7 @@ It works on bus and branch data (like MATPOWER or the IEEE common data format), 
 
 <a id="ch-saving"></a>
 
-## 15. Saving, opening and sharing
+## 16. Saving, opening and sharing
 
 #### Automatic saving
 
@@ -677,6 +708,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 | SPICE netlist | Opens Analysis on the netlist tab. |
 | Export image (PNG) | Saves a picture of the board with the circuit name and RAPTI credit, good for reports. |
 | Operating point | Opens Analysis on the operating-point tab. |
+| Run with theorem | Solves the circuit step by step with Thevenin, Norton, superposition or source transformation (see the chapter on network theorems). |
 | Settings | Opens Settings. |
 | User manual | Opens this manual. |
 | Help & gestures | Shows the short how-to card. |
@@ -698,7 +730,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 
 <a id="ch-settings"></a>
 
-## 16. Settings reference
+## 17. Settings reference
 
 Open Settings from the sliders icon on Home or from **⋮ → Settings** in the editor. Every change is saved at once.
 
@@ -761,7 +793,7 @@ These are the same defaults SPICE uses. Change them only if you know why; **Rese
 
 <a id="ch-library"></a>
 
-## 17. Component library (all 520)
+## 18. Component library (all 520)
 
 Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.
 
@@ -1441,7 +1473,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="ch-examples"></a>
 
-## 18. Examples (all 101)
+## 19. Examples (all 102)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1450,6 +1482,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 - **LED with switch**: The "hello world" of electronics. Tap the switch to turn the LED on. The resistor limits current to I = (9 V − Vf)/470 Ω ≈ 15 mA.
 - **Voltage divider & potentiometer**: Vout = Vin·R2/(R1+R2) = 12 V · 4.7k/14.7k ≈ 3.84 V. Select the potentiometer and turn the knob to vary its wiper voltage continuously.
 - **Series–parallel resistors**: Equivalent resistance: 100 Ω + (200‖200) + (300‖300‖300) = 300 Ω, so the source supplies 3 V / 300 Ω = 10 mA. Watch how the current splits at every junction (Kirchhoff's current law).
+- **Network theorems practice**: Find the current in R4 (5 Ω) with Thevenin, Norton, superposition or source transformation: tap ⋮ → Run with theorem and follow the steps. Answer: Vth = 18 V, Rth = 5.4 Ω, I = 18 / (5.4 + 5) ≈ 1.731 A.
 - **RC charging & discharging**: Close the switch to charge the 100 µF capacitor through 1 kΩ (τ = RC = 0.1 s): after one τ it reaches 63 % of the supply. Open it and hold the push button to discharge through 100 Ω.
 - **LRC oscillator**: With the switch closed the inductor carries 50 mA. Open the switch: the stored energy rings between L and C at f = 1/(2π√LC) ≈ 71 Hz, decaying with α = R/2L = 25 s⁻¹.
 - **Diode I–V characteristic**: Open Analysis → DC Sweep, sweep V1 from 0 to 3 V and measure I(D1) to trace the exponential Shockley curve. Try the Zener or LED models too.
@@ -1599,7 +1632,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-formulas"></a>
 
-## 19. Quick reference: formulas and units
+## 20. Quick reference: formulas and units
 
 #### Ohm's law and power
 
@@ -1650,7 +1683,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-troubleshooting"></a>
 
-## 20. Troubleshooting and FAQ
+## 21. Troubleshooting and FAQ
 
 #### Nothing happens when I press Run
 
@@ -1728,7 +1761,7 @@ The engine follows SPICE methods and has been checked against textbook answers (
 
 <a id="ch-about"></a>
 
-## 21. About RAPTI and contact
+## 22. About RAPTI and contact
 
 **Resonance Automation Professional Training Institute** (RAPTI) was established in 2019. Established in 2019 with one goal: developing skilled manpower for the automation industry. Courses at RAPTI are designed by experienced, competent engineers so that every student can work independently in any industry after completing a course — with the knowledge and skills that real job positions demand.
 

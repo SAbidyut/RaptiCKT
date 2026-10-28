@@ -88,6 +88,23 @@ const BASE = [
     },
   },
   {
+    id: 'theorems', cat: 'Basics', title: 'Network theorems practice',
+    desc: 'Find the current in R4 (5 Ω) with Thevenin, Norton, superposition or source transformation: tap ⋮ → Run with theorem and follow the steps. Answer: Vth = 18 V, Rth = 5.4 Ω, I = 18 / (5.4 + 5) ≈ 1.731 A.',
+    build(b) {
+      b.v('dcv', 0, 0, { amp: 12 });
+      b.h('resistor', 4, -4, { r: 4 });
+      b.v('resistor', 8, 0, { r: 6 });
+      b.h('resistor', 12, -4, { r: 3 });
+      b.vr('dci', 16, 0, { amp: 2 });
+      const rl = b.v('resistor', 22, 0, { r: 5 });
+      b.el('ground', 0, 4);
+      b.w([0, -2], [0, -4], [2, -4]); b.w([6, -4], [10, -4]); b.w([8, -4], [8, -2]);
+      b.w([14, -4], [22, -4], [22, -2]); b.w([16, -4], [16, -2]);
+      b.w([0, 2], [0, 4], [22, 4], [22, 2]); b.w([8, 2], [8, 4]); b.w([16, 2], [16, 4]);
+      b.cur(rl, C[0]);
+    },
+  },
+  {
     id: 'rc', cat: 'Basics', title: 'RC charging & discharging',
     desc: 'Close the switch to charge the 100 µF capacitor through 1 kΩ (τ = RC = 0.1 s): after one τ it reaches 63 % of the supply. Open it and hold the push button to discharge through 100 Ω.',
     build(b) {

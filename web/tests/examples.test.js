@@ -51,6 +51,8 @@ test('example values are physically correct', () => {
   assert.ok(led.i > 0.012 && led.i < 0.017, 'LED current ' + led.i);
   const r1 = el('network', 'R1');
   assert.ok(Math.abs(r1.i - 0.01) < 1e-6, 'network current ' + r1.i);
+  const rl = el('theorems', 'R4');
+  assert.ok(Math.abs(rl.i - 18 / 10.4) < 1e-6, 'theorems load current ' + rl.i);
   const vm = el('divider', 'VM1');
   assert.ok(Math.abs(vm.v - 12 * 4.7 / 14.7) < 1e-3, 'divider ' + vm.v);
   const reg = el('reg7805', 'VM1');
