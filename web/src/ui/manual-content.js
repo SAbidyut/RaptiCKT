@@ -49,9 +49,9 @@ export const CHAPTERS = [
         'Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.',
         'Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).',
         'Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.',
-        'Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition or source transformation — with every intermediate circuit drawn (**⋮ → Run with theorem**).',
+        'Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — with every intermediate circuit drawn (**⋮ → Run with theorem**).',
         'Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.',
-        'Learn from **102 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
+        'Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
         'Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).',
       ]),
       H('Who it is for'),
@@ -565,8 +565,8 @@ export const CHAPTERS = [
     blocks: [
       P('**⋮ → Run with theorem** solves your circuit the way it is done in class and in exams. Pick a theorem, pick the resistor whose current or voltage you want, and read the solution step by step. Every step has its own circuit drawing, the formulas with your values in them, and the result — down to the final equivalent circuit and the answer.'),
       S([
-        'Build a circuit with resistors and DC sources (or open **Basics → Network theorems practice**).',
-        'Tap **⋮ → Run with theorem** and choose **Thevenin’s theorem**, **Norton’s theorem**, **Superposition theorem** or **Source transformation**.',
+        'Build a circuit with resistors and DC sources (or open **Basics → Network theorems practice**, **Parallel batteries (Millman’s theorem)** or **Unbalanced Wheatstone bridge**).',
+        'Tap **⋮ → Run with theorem** and choose a theorem: **Thevenin**, **Norton**, **Superposition**, **Source transformation**, **Maximum power transfer**, **Millman**, **Reciprocity** or **Tellegen**.',
         'Choose the resistor (the load): tap it on the drawing or in the list. Choose **Current I** or **Voltage V**.',
         'Tap **Solve step by step**. Scroll through the steps. **Run the circuit** at the end goes back to the board, runs the simulation and selects the load, so you can compare with the live reading.',
       ]),
@@ -576,12 +576,16 @@ export const CHAPTERS = [
         ['Norton', '1. R_N (the same as R_th). 2. I_N: a and b are shorted and I_N is the current in that short, found by node voltages and KCL at a. 3. The Norton equivalent (I_N in parallel with R_N and the load) and the current divider I_L = I_N·R_N / (R_N + R_L).'],
         ['Superposition', 'One step per independent source, with the others turned off. Each step finds the resistance the source sees and follows the current to the load with voltage and current dividers. The last step adds the parts (with their signs).'],
         ['Source transformation', 'The circuit is redrawn as a ladder with the load on the right. Then, one figure per step: V in series with R ⇄ I in parallel with R, resistors combined in series and parallel, current sources in parallel added — until one source and one resistor feed the load.'],
+        ['Maximum power transfer', 'R_th and V_th as for Thevenin, then the best load R_L = R_th with P_max = V_th² / (4·R_th) drawn as an equivalent circuit, and the power of your present load with a curve of P_L against R_L that peaks at R_th.'],
+        ['Millman', 'For branches that all run in parallel between the load’s two ends (batteries with their internal resistances, resistors, current sources): each branch’s E and R, then V_M = (ΣE/R + ΣI) / Σ(1/R), R_M = 1 / Σ(1/R), and the equivalent circuit. A circuit of another shape is named as not a Millman circuit.'],
+        ['Reciprocity', 'For a circuit with one source: the current in the load with the source where it is, then the source moved into the load’s branch and an ammeter in its old place — the two currents are equal. (For a current source: the voltages.)'],
+        ['Tellegen', 'The circuit solved by node voltages, then a table of every part’s voltage, current and power: the power the sources deliver equals the power the resistors take, so the sum is zero.'],
       ]),
       P('The ends of the load are named **a** and **b**: a is the end at the higher voltage, so the load current flows from a to b. Other nodes used in the equations are tagged c, d, e … on the drawings. The last step always checks the answer against a direct solution of the whole circuit.'),
       L([
         '**Works with:** resistors, DC voltage sources (with their internal resistance), DC current sources, voltage rails, ground, switches and push buttons (closed = wire, open = gap), ammeters (wire) and voltmeters (open). In DC a capacitor is open and an inductor is a wire.',
         '**Not for:** transistors, diodes, op-amps, AC sources and other non-linear or time-varying parts: the theorems are for linear DC circuits. The first screen lists any such parts.',
-        'If the resistors form a **bridge** (not simply series or parallel), R_th is found with a 1 A test current and the circuit by node voltages. Source transformation stops when no step applies and says so.',
+        'If the resistors form a **bridge** (not simply series or parallel), R_th is found with a **delta → star (Δ–Y)** or star → delta swap, each new resistor worked out — or, when no single swap opens the bridge, with a 1 A test current. Source transformation stops when no step applies and says so.',
         'If R_th is infinite (only a current source feeds the load) there is no Thevenin equivalent; if R_N is 0 (a voltage source sits right across the load) there is no Norton equivalent. The solution says which theorem to use instead.',
       ]),
       TIP('Superposition adds currents and voltages, not powers: the last step shows the difference.'),
@@ -652,7 +656,7 @@ export const CHAPTERS = [
         ['SPICE netlist', 'Opens Analysis on the netlist tab.'],
         ['Export image (PNG)', 'Saves a picture of the board with the circuit name and RAPTI credit, good for reports.'],
         ['Operating point', 'Opens Analysis on the operating-point tab.'],
-        ['Run with theorem', 'Solves the circuit step by step with Thevenin, Norton, superposition or source transformation (see the chapter on network theorems).'],
+        ['Run with theorem', 'Solves the circuit step by step with a network theorem: Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen (see the chapter on network theorems).'],
         ['Settings', 'Opens Settings.'],
         ['User manual', 'Opens this manual.'],
         ['Help & gestures', 'Shows the short how-to card.'],
@@ -741,7 +745,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 16 (examples: generated)
   {
     id: 'examples', icon: 'book', generated: 'examples',
-    title: 'Examples (all 102)',
+    title: 'Examples (all 104)',
     blocks: [
       P('Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.'),
     ],

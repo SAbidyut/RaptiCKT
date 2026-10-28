@@ -1129,7 +1129,7 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .th-step h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-size: 15px; }
 .th-step h3 i.dot::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .th-step h3 i { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--surface3); color: var(--accent); font: 700 12px var(--mono); font-style: normal; }
-.th-step .lf-f { white-space: pre-wrap; overflow-wrap: anywhere; }
+.th-step .lf-f { white-space: pre-wrap; overflow-wrap: break-word; }
 .th-step p { margin: 8px 0; font-size: 14px; color: var(--text2); }
 .th-step p b { color: var(--text); }
 .th-step .lf-tip svg { flex: none; color: var(--accent); margin-top: 2px; }
@@ -1137,3 +1137,17 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .th-res span { padding: 5px 12px; border-radius: 20px; background: rgba(34, 211, 238, 0.1); border: 1px solid rgba(34, 211, 238, 0.3); font-size: 13px; color: var(--text); }
 .th-res b { font-family: var(--mono); color: var(--accent); }
 .th-end { margin-top: 4px; }
+.th-tw { overflow-x: auto; margin: 8px 0; }
+.th-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.th-tbl th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.th-tbl td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-family: var(--mono); white-space: nowrap; color: var(--text); }
+.th-tbl tr.mark td { background: rgba(34, 211, 238, 0.1); color: var(--accent); }
+.th-curve { display: block; width: 100%; max-width: 520px; margin: 8px 0; font: 600 10.5px var(--font); }
+.th-curve text { fill: var(--muted); }
+.th-curve .ax { stroke: var(--border); stroke-width: 1.2; }
+.th-curve .grid { stroke: var(--border); stroke-dasharray: 3 3; }
+.th-curve .line { fill: none; stroke: var(--accent); stroke-width: 2.4; }
+.th-curve .best { fill: #22c55e; }
+.th-curve .now { fill: #f59e0b; }
+.th-curve .lbest { fill: #22c55e; }
+.th-curve .lnow { fill: #f59e0b; }

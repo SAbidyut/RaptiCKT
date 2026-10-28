@@ -11,7 +11,7 @@ import { icon } from './icons.js';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 /** **bold** and X_sub → X<sub>sub</sub> */
 const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\b([A-Za-z])_([A-Za-z0-9]+)/g, '$1<sub>$2</sub>');
-const BADGE = { thevenin: 'Vth', norton: 'IN', superposition: 'Σ', source: 'V⇄I' };
+const BADGE = { thevenin: 'Vth', norton: 'IN', superposition: 'Σ', source: 'V⇄I', maxpower: 'Pmax', millman: 'VM', reciprocity: 'x⇄y', tellegen: 'Σp=0' };
 
 export class TheoremView {
   constructor(editor, host) {
@@ -142,11 +142,15 @@ export class TheoremView {
       return;
     }
     const main = this.want === 'V' ? ['V', res.answer.V, 'V'] : ['I', res.answer.I, 'A'];
+    // a theorem whose result is not the load current (maximum power, Tellegen) says what it found
+    const head = res.head
+      ? `<b>${inline(res.head.main)}</b><small>${inline(res.head.sub)}</small>`
+      : `<b>${main[0]}<sub>L</sub> = ${esc(fmtSI(main[1], main[2], 4))}</b>
+        <small>I<sub>L</sub> = ${esc(fmtSI(res.answer.I, 'A', 4))} · V<sub>L</sub> = ${esc(fmtSI(res.answer.V, 'V', 4))} · P<sub>L</sub> = ${esc(fmtSI(res.answer.P, 'W', 4))}</small>`;
     body.innerHTML = `
       <div class="th-answer">
         <span>${esc(THEOREMS.find((x) => x.id === this.theorem).short)} · ${esc(t.name)} (${esc(fmtSI(t.val, 'Ω', 4))})</span>
-        <b>${main[0]}<sub>L</sub> = ${esc(fmtSI(main[1], main[2], 4))}</b>
-        <small>I<sub>L</sub> = ${esc(fmtSI(res.answer.I, 'A', 4))} · V<sub>L</sub> = ${esc(fmtSI(res.answer.V, 'V', 4))} · P<sub>L</sub> = ${esc(fmtSI(res.answer.P, 'W', 4))}</small>
+        ${head}
       </div>
       ${res.steps.map((s) => {
         // "Step 2 — Find V_th": the number goes in the badge
@@ -181,6 +185,11 @@ export class TheoremView {
     if (b.t === 'p') return `<p>${inline(b.text)}</p>`;
     if (b.t === 'f') return `<pre class="lf-f">${b.lines.map(esc).join('\n')}</pre>`;
     if (b.t === 'tip') return `<div class="lf-tip">${icon('check', 16)}<span>${inline(b.text)}</span></div>`;
+    if (b.t === 'table') {
+      return `<div class="th-tw"><table class="th-tbl"><thead><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${b.rows.map((r, i) => `<tr class="${i === b.mark ? 'mark' : ''}">${r.map((x) => `<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    }
+    if (b.t === 'curve') return curveSVG(b);
     return '';
   }
 
@@ -193,4 +202,30 @@ export class TheoremView {
     if (!this.ed.running || this.ed.paused) this.ed.setRunning(true);
     if (el) this.ed.select(el);
   }
+}
+
+/** P_L against R_L (log scale) with the peak at R_th and the present load marked. */
+function curveSVG({ pts, now, best, xl, yl }) {
+  const W = 320, H = 170, L = 44, R = 34, T = 16, B = 30;
+  const x0 = Math.log10(pts[0][0]), x1 = Math.log10(pts[pts.length - 1][0]);
+  const ymax = best[1] * 1.12;
+  const X = (x) => L + ((Math.log10(Math.min(Math.max(x, pts[0][0]), pts[pts.length - 1][0])) - x0) / (x1 - x0)) * (W - L - R);
+  const Y = (y) => T + (1 - y / ymax) * (H - T - B);
+  const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join('');
+  const f = (v, u) => esc(fmtSI(v, u, 3));
+  const sub = (t) => esc(t).replace(/_(\w+)/g, '<tspan baseline-shift="sub" font-size="80%">$1</tspan>');
+  const ticks = [pts[0][0], best[0], pts[pts.length - 1][0]];
+  return `<svg class="th-curve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Load power against load resistance">
+    <line x1="${L}" y1="${Y(0)}" x2="${W - R}" y2="${Y(0)}" class="ax"/><line x1="${L}" y1="${T}" x2="${L}" y2="${Y(0)}" class="ax"/>
+    <line x1="${X(best[0])}" y1="${T}" x2="${X(best[0])}" y2="${Y(0)}" class="grid"/>
+    ${ticks.map((x) => `<text x="${X(x)}" y="${H - 14}" text-anchor="middle">${f(x, 'Ω')}</text>`).join('')}
+    <text x="${W - R}" y="${Y(0) - 6}" text-anchor="end">${sub(xl)}</text>
+    <text x="${L - 4}" y="${Y(best[1]) + 4}" text-anchor="end">${f(best[1], 'W')}</text>
+    <text x="${L - 4}" y="${T - 2}" text-anchor="end">${sub(yl)}</text>
+    <path d="${d}" class="line"/>
+    <circle cx="${X(best[0])}" cy="${Y(best[1])}" r="5" class="best"/>
+    <text x="${X(best[0]) + 8}" y="${Y(best[1]) - 6}" class="lbest">${sub('max at R_th')}</text>
+    <circle cx="${X(now[0])}" cy="${Y(now[1])}" r="5" class="now"/>
+    <text x="${X(now[0]) + (X(now[0]) > W / 2 ? -8 : 8)}" y="${Y(now[1]) + 17}" text-anchor="${X(now[0]) > W / 2 ? 'end' : 'start'}" class="lnow">now ${f(now[0], 'Ω')}</text>
+  </svg>`;
 }

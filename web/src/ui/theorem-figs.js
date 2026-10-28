@@ -11,14 +11,17 @@ import { Renderer, WireGraph } from './render.js';
 const C = 6 * GRID; // one ladder cell: an 80-unit part with a short lead at each end
 
 // ------------------------------------------------------------------ board figures
-/** The user's circuit as the step sees it. Returns { doc, hi, notes } (notes: annotations in world coordinates). */
+/**
+ * The user's circuit as the step sees it. Returns { doc, hi, notes, load }: notes are annotations
+ * anchored at world points (laid out in pixels when drawn), load the drawn load if it is shown.
+ */
 export function boardFigure(src, fig, net) {
   const doc = CircuitDoc.fromJSON(JSON.parse(JSON.stringify(src.toJSON())));
   const els = [...doc.elements];
   const posts = net.posts;
   const T = net.elems.find((e) => e.src === fig.target && e.kind === 'R' && !e.internal);
   const notes = [];
-  const gone = new Set([...(fig.hide || []), ...(fig.wire || []), ...(fig.ground || []), ...(fig.open || [])]);
+  const gone = new Set([...(fig.hide || []), ...(fig.wire || []), ...(fig.ground || []), ...(fig.open || []), ...(fig.meter ? [fig.meter.src] : [])]);
   // a turned-off source is labelled beside where it stood: to the right of an upright one, below a lying one
   const beside = (i, text) => {
     const [x1, y1, x2, y2] = els[i].worldBox(), [p, q] = posts[i];
@@ -31,25 +34,33 @@ export function boardFigure(src, fig, net) {
     notes.push({ t: 'tag', at: [posts[i][0][0] + 14, posts[i][0][1] - 14], text: `${els[i].name} → 0 V`, left: true });
   }
   for (const i of fig.open || []) notes.push(beside(i, `${els[i].name} → open`));
+  if (fig.meter) { // a meter where a source stood (reciprocity): it reads the answer there
+    const o = els[fig.meter.src], m = new (getType(fig.meter.type))(o.x, o.y);
+    m.rot = o.rot; m.flip = o.flip; m.name = fig.meter.type === 'ammeter' ? 'A' : 'V';
+    doc.elements.push(m);
+    const [, y1, x2, y2] = m.worldBox();
+    notes.push({ t: 'tag', at: [x2 + 4, (y1 + y2) / 2], text: fig.meter.text, left: true });
+  }
   doc.elements = doc.elements.filter((e, i) => !(i < els.length && gone.has(i)));
   const [pa, pb] = T.n[0] === fig.a ? [posts[T.src][0], posts[T.src][1]] : [posts[T.src][1], posts[T.src][0]];
   if (fig.shortAB) { doc.addWire([pa, pb]); notes.push({ t: 'short', from: pa, to: pb }); }
   const hi = new Set([...(fig.highlight || []), ...(fig.keep != null ? [fig.keep] : [])].map((i) => els[i]).filter((e) => doc.elements.includes(e)));
-  if (fig.ab) notes.push({ t: 'term', at: pa, text: 'a', away: pb }, { t: 'term', at: pb, text: 'b', away: pa });
-  // the question sits beside the a–b gap, on the side away from the rest of the circuit
+  const load = doc.elements.includes(els[T.src]) ? els[T.src] : null;
+  // `out`: across the load, pointing away from the rest of the circuit
   const mid = [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2];
   const bb = doc.bounds() || [mid[0], mid[1], mid[0], mid[1]];
   let nx = -(pb[1] - pa[1]), ny = pb[0] - pa[0];
   const nl = Math.hypot(nx, ny) || 1;
   nx /= nl; ny /= nl;
   if (nx * (mid[0] - (bb[0] + bb[2]) / 2) + ny * (mid[1] - (bb[1] + bb[3]) / 2) < 0) { nx = -nx; ny = -ny; }
-  const side = [mid[0] + nx * 62, mid[1] + ny * 62];
-  if (fig.show === 'Rth' || fig.show === 'RN') notes.push({ t: 'ask', at: side, text: `${fig.show === 'Rth' ? 'Rth' : 'RN'} = ?`, from: pa, to: pb });
-  if (fig.show === 'Vth') notes.push({ t: 'ask', at: side, text: 'Vth = ?', from: pa, to: pb, volt: [nx, ny] });
-  if (fig.show === 'IN') notes.push({ t: 'flow', from: pa, to: pb, text: 'IN' });
-  if (fig.arrow) notes.push({ t: 'flow', from: pa, to: pb, text: 'IL', side: true });
+  const out = [nx, ny], ab = { from: pa, to: pb, out, load };
+  if (fig.ab) notes.push({ t: 'term', at: pa, other: pb, out, text: 'a' }, { t: 'term', at: pb, other: pa, out, text: 'b' });
+  if (fig.show === 'Rth' || fig.show === 'RN') notes.push({ t: 'ask', ...ab, text: `${fig.show} = ?` });
+  if (fig.show === 'Vth') notes.push({ t: 'ask', ...ab, text: 'Vth = ?', volt: true });
+  if (fig.show === 'IN') notes.push({ t: 'flow', ...ab, text: 'IN' });
+  if (fig.arrow) notes.push({ t: 'flow', ...ab, text: fig.arrow === true ? 'IL' : fig.arrow });
   for (const tg of fig.tags || []) if (net.nodePos.has(tg.node)) notes.push({ t: 'node', at: net.nodePos.get(tg.node), text: tg.text });
-  return { doc, hi, notes };
+  return { doc, hi, notes, load };
 }
 
 // ------------------------------------------------------------------ ladder figures
@@ -103,9 +114,10 @@ class Builder {
 }
 
 /** Break a one-port (top terminal → bottom terminal) into ladder items, from the port leftwards. */
-function ladderItems(t, items) {
+function ladderItems(t, items, columns = false) {
   if (t.k === 'P') {
-    const cont = t.kids.filter((k) => k.k === 'S').sort((x, y) => size(y) - size(x))[0] || null;
+    // columns: every parallel branch stands on its own (Millman), none runs along the rails
+    const cont = columns ? null : t.kids.filter((k) => k.k === 'S').sort((x, y) => size(y) - size(x))[0] || null;
     const shunts = t.kids.filter((k) => k !== cont).sort((x, y) => hasSrc(x) - hasSrc(y)); // resistors next to the load, sources farther out
     for (const k of shunts) items.push({ type: 'shunt', t: k });
     if (cont) ladderItems(cont, items);
@@ -132,7 +144,7 @@ export function ladderFigure(fig) {
   if (rest.length) {
     const sp = spTree(rest, fig.a, fig.b);
     if (!sp.tree) return null;
-    ladderItems(sp.tree, items);
+    ladderItems(sp.tree, items, fig.columns);
   }
   let D = 1;
   for (const it of items) {
@@ -169,96 +181,135 @@ export function ladderFigure(fig) {
     if (it.bots.length) { botX = run(it.bots, D, botX, false); botBusy = false; }
   }
   const hi = new Set((fig.hi || []).map((id) => b.byId.get(id)).filter(Boolean));
-  const notes = [
-    { t: 'term', at: [0, 0], text: 'a', away: [-C, 0], right: true },
-    { t: 'term', at: [0, D * C], text: 'b', away: [-C, D * C], right: true },
-  ];
-  return { doc: b.doc, hi, notes };
+  const A = [0, 0], B = [0, D * C];
+  const notes = [{ t: 'term', at: A, other: B, out: [1, 0], text: 'a' }, { t: 'term', at: B, other: A, out: [1, 0], text: 'b' }];
+  return { doc: b.doc, hi, notes, load: b.byId.get(fig.load) };
 }
 
 // ------------------------------------------------------------------ drawing
+const FONT = 'Inter, system-ui, sans-serif';
+const unit = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
+
 /**
  * Draw a built figure on a canvas that is already laid out (its CSS width set). The canvas
- * height follows the figure's shape. Returns the renderer (for hit testing).
+ * height follows the figure's shape, and the view takes in every label and annotation.
+ * Returns the renderer (for hit testing).
  */
 export function drawFigure(cv, built, theme, settings, maxH = 320) {
-  const { doc, hi, notes } = built;
-  let [x1, y1, x2, y2] = doc.bounds() || [0, 0, 100, 100];
-  for (const n of notes) {
-    const p = n.at || n.from;
-    if (!p) continue;
-    x1 = Math.min(x1, p[0] - 30); y1 = Math.min(y1, p[1] - 22); x2 = Math.max(x2, p[0] + (n.left ? 80 : 30)); y2 = Math.max(y2, p[1] + 22);
-  }
-  x1 -= 16; x2 += 30; // labels carry the part's name too, so they run wider than doc.bounds() allows for
-  const W = cv.clientWidth || 320, pad = 18;
-  const k0 = Math.min(1.2, (W - 2 * pad) / Math.max(1, x2 - x1));
-  const H = Math.round(Math.max(150, Math.min(maxH, (y2 - y1) * k0 + 2 * pad)));
-  cv.style.height = H + 'px';
+  const { doc, hi, notes, load } = built;
+  const st = { ...settings, grid: 'none', showValues: true, showNames: true, currentDots: false };
   const r = new Renderer(cv);
+  r.chooseLabelSides({ doc, settings: st });
+  const base = drawingBox(doc);
+  const W = cv.clientWidth || 320, pad = 12;
+  const ctx = cv.getContext('2d');
+  // annotations are sized in pixels, so the box they need depends on the scale: settle it in two rounds
+  let box = base, k = 1;
+  for (let round = 0; round < 2; round++) {
+    k = Math.min(1.2, (W - 2 * pad) / Math.max(1, box[2] - box[0]));
+    box = [...base];
+    for (const d of layout(notes, k, load, ctx)) {
+      if (!d.w) continue;
+      const cx = d.at[0] + d.dx / k, cy = d.at[1] + d.dy / k, hw = d.w / 2 / k, hh = d.h / 2 / k;
+      box = [Math.min(box[0], cx - hw), Math.min(box[1], cy - hh), Math.max(box[2], cx + hw), Math.max(box[3], cy + hh)];
+    }
+  }
+  const H = Math.round(Math.max(140, Math.min(maxH, (box[3] - box[1]) * k + 2 * pad)));
+  cv.style.height = H + 'px';
   r.resize();
-  const k = Math.min(1.2, (W - 2 * pad) / Math.max(1, x2 - x1), (H - 2 * pad) / Math.max(1, y2 - y1));
-  r.scale = k; r.ox = W / 2 - ((x1 + x2) / 2) * k; r.oy = H / 2 - ((y1 + y2) / 2) * k;
-  r.draw({
-    doc, sim: null, running: false, theme, t: 0, probes: [],
-    settings: { ...settings, grid: 'none', showValues: true, showNames: true, currentDots: false },
-    selection: hi, selWires: new Set(), graph: new WireGraph(doc),
-  });
-  annotate(r, notes, theme);
+  k = Math.min(1.2, (W - 2 * pad) / Math.max(1, box[2] - box[0]), (H - 2 * pad) / Math.max(1, box[3] - box[1]));
+  r.scale = k; r.ox = W / 2 - ((box[0] + box[2]) / 2) * k; r.oy = H / 2 - ((box[1] + box[3]) / 2) * k;
+  r.draw({ doc, sim: null, running: false, theme, t: 0, probes: [], settings: st, selection: hi, selWires: new Set(), graph: new WireGraph(doc) });
+  paint(r, layout(notes, k, load, r.ctx), theme);
   return r;
 }
 
-function annotate(r, notes, th) {
+/** Parts, wires and the parts' labels (name and value) in world units. */
+function drawingBox(doc) {
+  let b = doc.bounds() || [0, 0, 100, 100];
+  for (const e of doc.elements) {
+    const val = e.valueLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
+    const q = e.labelRect(txt);
+    if (q) b = [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.max(b[2], q[2]), Math.max(b[3], q[3])];
+  }
+  return b;
+}
+
+/**
+ * Where each annotation goes, in pixels from a world anchor: { at, dx, dy, w, h, kind, … }.
+ * Around the load: a and b sit just outside its two ends on the outer side; a current arrow
+ * runs alongside it on the side its value label does not use; a question goes beside the gap.
+ */
+function layout(notes, k, load, ctx) {
+  const out = [];
+  const pill = (at, dx, dy, text, o = {}) => {
+    const size = o.size || 11;
+    ctx.font = `${o.bold === false ? 600 : 700} ${size}px ${FONT}`;
+    const w = ctx.measureText(text).width + 10;
+    out.push({ kind: 'pill', at, dx: dx + (o.left ? w / 2 : 0), dy, w, h: size + 7, text, ...o });
+  };
+  // the load's value label points this way from its centre (null when the load is not drawn)
+  let lab = null;
+  if (load) {
+    const [x1, y1, x2, y2] = load.worldBox(), [lx, ly] = load.labelAnchor();
+    lab = unit(lx - (x1 + x2) / 2, ly - (y1 + y2) / 2);
+  }
+  for (const n of notes) {
+    if (n.t === 'tag') pill(n.at, 0, 0, n.text, { left: n.left, size: 10, bold: false, muted: true });
+    else if (n.t === 'node') pill(n.at, 9, -11, n.text, { size: 10, fill: '#a855f7', color: '#fff' });
+    else if (n.t === 'term') {
+      const [ux, uy] = unit(n.at[0] - n.other[0], n.at[1] - n.other[1]), [ox, oy] = n.out;
+      out.push({ kind: 'ring', at: n.at, dx: 0, dy: 0, w: 12, h: 12 });
+      pill(n.at, ux * 10 + ox * 14, uy * 10 + oy * 14, n.text, { size: 12, accent: true });
+    } else if (n.t === 'ask') {
+      const mid = [(n.from[0] + n.to[0]) / 2, (n.from[1] + n.to[1]) / 2], [ox, oy] = n.out;
+      pill(mid, ox * 44, oy * 44, n.text, { size: 12, fill: n.volt ? '#f59e0b' : '#ec4899', color: '#fff' });
+      if (n.volt) { // + just inside the gap at a, − at b
+        const [ux, uy] = unit(n.to[0] - n.from[0], n.to[1] - n.from[1]);
+        out.push({ kind: 'glyph', at: n.from, dx: ux * 13 + ox * 9, dy: uy * 13 + oy * 9, w: 12, h: 16, text: '+' });
+        out.push({ kind: 'glyph', at: n.to, dx: -ux * 13 + ox * 9, dy: -uy * 13 + oy * 9, w: 12, h: 16, text: '−' });
+      }
+    } else if (n.t === 'short') out.push({ kind: 'line', at: n.from, to: n.to, dx: 0, dy: 0 });
+    else if (n.t === 'flow') {
+      const mid = [(n.from[0] + n.to[0]) / 2, (n.from[1] + n.to[1]) / 2];
+      let [sx, sy] = [-n.out[0], -n.out[1]]; // inside the circuit, unless the load's label is there
+      if (lab && lab[0] * sx + lab[1] * sy > 0.5) { sx = -sx; sy = -sy; }
+      const [ux, uy] = unit(n.to[0] - n.from[0], n.to[1] - n.from[1]);
+      out.push({ kind: 'arrow', at: mid, dx: sx * 14, dy: sy * 14, ux, uy, w: 30, h: 30 });
+      pill(mid, sx * 14 + (Math.abs(ux) > Math.abs(uy) ? 0 : sx * 18), sy * 14 + (Math.abs(ux) > Math.abs(uy) ? sy * 16 : 0), n.text, { fill: '#f59e0b', color: '#1c1300' });
+    }
+  }
+  return out;
+}
+
+function paint(r, items, th) {
   const ctx = r.ctx;
   ctx.setTransform(r.dpr, 0, 0, r.dpr, 0, 0);
-  const S = (p) => r.toScreen(p[0], p[1]);
-  const pill = (x, y, text, { fill, color, size = 11, bold = true, left = false } = {}) => {
-    ctx.font = `${bold ? 700 : 600} ${size}px Inter, system-ui, sans-serif`;
-    const w = ctx.measureText(text).width + 10, h = size + 7;
-    if (left) x += w / 2;
-    ctx.fillStyle = fill; roundRect(ctx, x - w / 2, y - h / 2, w, h, h / 2); ctx.fill();
-    ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, x, y + 0.5);
-  };
-  const arrow = (ax, ay, bx, by, col) => {
-    const L = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / L, uy = (by - ay) / L;
-    ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx - ux * 6, by - uy * 6); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - ux * 9 - uy * 5, by - uy * 9 + ux * 5); ctx.lineTo(bx - ux * 9 + uy * 5, by - uy * 9 - ux * 5); ctx.closePath(); ctx.fill();
-  };
   const accent = th.accent || '#22d3ee';
-  for (const n of notes) {
-    if (n.t === 'tag') { const [x, y] = S(n.at); pill(x, y, n.text, { fill: th.bg, color: th.muted || '#94a3b8', size: 10, bold: false, left: n.left }); }
-    else if (n.t === 'node') { const [x, y] = S(n.at); pill(x + 9, y - 11, n.text, { fill: '#a855f7', color: '#fff', size: 10 }); }
-    else if (n.t === 'term') {
-      const [x, y] = S(n.at), [ax, ay] = S(n.away);
-      // the label sits on the side away from the other terminal (or to the right of a ladder's load)
-      let dx = x - ax, dy = y - ay;
-      const L = Math.hypot(dx, dy) || 1;
-      dx /= L; dy /= L;
-      const [ox, oy] = n.right ? [16, 0] : [dx * 15, dy * 15];
+  for (const d of items) {
+    const [ax, ay] = r.toScreen(d.at[0], d.at[1]), x = ax + d.dx, y = ay + d.dy;
+    if (d.kind === 'pill') {
+      ctx.font = `${d.bold === false ? 600 : 700} ${d.size || 11}px ${FONT}`;
+      ctx.fillStyle = d.accent ? accent : d.muted ? th.bg : d.fill;
+      roundRect(ctx, x - d.w / 2, y - d.h / 2, d.w, d.h, d.h / 2); ctx.fill();
+      ctx.fillStyle = d.accent ? '#04121a' : d.muted ? th.muted || '#94a3b8' : d.color;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.text, x, y + 0.5);
+    } else if (d.kind === 'ring') {
       ctx.fillStyle = th.bg; ctx.strokeStyle = accent; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      pill(x + ox, y + oy, n.text, { fill: accent, color: '#04121a', size: 12 });
-    } else if (n.t === 'ask') {
-      const [x, y] = S(n.at);
-      pill(x, y, n.text, { fill: n.volt ? '#f59e0b' : '#ec4899', color: '#fff', size: 12 });
-      if (n.volt) { // + beside a, − beside b, on the question's side
-        const [ax, ay] = S(n.from), [bx, by] = S(n.to), [ox, oy] = n.volt;
-        ctx.font = '800 16px Inter, system-ui, sans-serif'; ctx.fillStyle = '#f59e0b'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('+', ax + ox * 18, ay + oy * 18);
-        ctx.fillText('−', bx + ox * 18, by + oy * 18);
-      }
-    } else if (n.t === 'short') {
-      const [ax, ay] = S(n.from), [bx, by] = S(n.to);
+    } else if (d.kind === 'glyph') {
+      ctx.font = `800 16px ${FONT}`; ctx.fillStyle = '#f59e0b'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(d.text, x, y);
+    } else if (d.kind === 'line') {
+      const [bx, by] = r.toScreen(d.to[0], d.to[1]);
       ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-    } else if (n.t === 'flow') {
-      const [ax, ay] = S(n.from), [bx, by] = S(n.to);
-      let px = -(by - ay), py = bx - ax;
-      const L = Math.hypot(px, py) || 1;
-      px = (px / L) * 16; py = (py / L) * 16;
-      const mx = (ax + bx) / 2 + px, my = (ay + by) / 2 + py, ux = (bx - ax) / (Math.hypot(bx - ax, by - ay) || 1), uy = (by - ay) / (Math.hypot(bx - ax, by - ay) || 1);
-      arrow(mx - ux * 14, my - uy * 14, mx + ux * 14, my + uy * 14, '#f59e0b');
-      pill(mx + px * 1.3, my + py * 1.3, n.text, { fill: '#f59e0b', color: '#1c1300', size: 11 });
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(bx, by); ctx.stroke();
+    } else if (d.kind === 'arrow') {
+      const L = 13, col = '#f59e0b';
+      const x0 = x - d.ux * L, y0 = y - d.uy * L, x1 = x + d.ux * L, y1 = y + d.uy * L;
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1 - d.ux * 6, y1 - d.uy * 6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1 - d.ux * 9 - d.uy * 5, y1 - d.uy * 9 + d.ux * 5); ctx.lineTo(x1 - d.ux * 9 + d.uy * 5, y1 - d.uy * 9 - d.ux * 5); ctx.closePath(); ctx.fill();
     }
   }
 }
