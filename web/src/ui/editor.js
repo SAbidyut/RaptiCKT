@@ -808,8 +808,9 @@ export class Editor {
   /**
    * Board mode, as in RaptiAuto. Wire (the default while the circuit is not running): tap two
    * terminals to draw a wire, drag parts to move them, tap to select. Operate (switched on by Run):
-   * tap switches, buttons and breakers to work them; dragging only pans, so nothing gets moved or
-   * wired by accident. Either one can be picked at any time with the switch on the board.
+   * tap switches, buttons and breakers to work them; terminals never start a wire, but parts can
+   * still be dragged to move them (empty space pans). Either one can be picked at any time with the
+   * switch on the board.
    */
   setMode(m, byUser) {
     const changed = m !== this.mode;
@@ -822,7 +823,7 @@ export class Editor {
     this.dirtyDraw = true;
     if (byUser) {
       this.haptic(8);
-      this.toast(m === 'operate' ? '✋ Operate: tap switches and buttons · drag to pan' : '🔌 Wire: tap two terminals to wire · drag parts to move them', 1800);
+      this.toast(m === 'operate' ? '✋ Operate: tap switches and buttons · drag parts to move them' : '🔌 Wire: tap two terminals to wire · drag parts to move them', 1800);
     }
   }
 
@@ -1760,7 +1761,8 @@ export class Editor {
     this.drag = true;
     if (h.kind !== 'none') this.cancelTapWire(); // panning keeps a pending tap-wire; other drags replace it
     if (h.kind === 'pin') { g.type = 'pin'; return; }
-    if (this.mode === 'operate') { // nothing is moved while operating: the finger pans the board
+    // operating: a part still moves when dragged (Run must not lock the board), anything else pans
+    if (this.mode === 'operate' && h.kind !== 'element') {
       g.type = this.multi && h.kind === 'none' ? 'marquee' : 'pan';
       if (g.type === 'marquee') this.marquee = [g.sx, g.sy, g.sx, g.sy];
       g.ox = this.renderer.ox; g.oy = this.renderer.oy;
@@ -1778,7 +1780,8 @@ export class Editor {
       this.splitAtJunctions(new Set(wires));
       g.els = els.map((e) => ({ e, x: e.x, y: e.y, posts: e.getPosts() }));
       g.wires = wires.map((w) => ({ w, pts: w.pts.map((p) => [...p]) }));
-      g.snapshot = this.snapshot();
+      // every wire's shape as the drag began (a cable or burnt wire is not a bare point list in the snapshot)
+      g.wirePts = this.doc.wires.map((w) => w.pts.map((p) => [...p]));
       // terminals touching a part that stays put: bridge them with a wire once the move starts
       const moving = new Set(els);
       const fixed = new Set(this.doc.elements.filter((e) => !moving.has(e)).flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
@@ -1852,8 +1855,7 @@ export class Editor {
 
   /** Put the dragged parts (and selected wires) at offset dx, dy from where the drag began. */
   applyMove(g, dx, dy) {
-    const cur = JSON.parse(g.snapshot);
-    this.doc.wires.forEach((w, i) => { if (cur.wires[i]) w.pts = cur.wires[i].map((p) => [...p]); });
+    this.doc.wires.forEach((w, i) => { if (g.wirePts[i]) w.pts = g.wirePts[i].map((p) => [...p]); });
     for (const o of g.els) { o.e.x = o.x + dx; o.e.y = o.y + dy; }
     const moved = new Set();
     for (const o of g.wires) { o.w.pts = o.pts.map(([x, y]) => [x + dx, y + dy]); moved.add(o.w); }
@@ -1886,7 +1888,7 @@ export class Editor {
         for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
         if (g.moved) {
           this.safeTidy(g.follow || []);
-          this.undoStack.push(g.undoSnap || g.snapshot); this.redoStack = []; this.updateToolbar();
+          this.undoStack.push(g.undoSnap); this.redoStack = []; this.updateToolbar();
           this.topologyChanged();
         }
         break;

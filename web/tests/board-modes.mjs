@@ -1,7 +1,7 @@
 // Operate / Wire board modes (as in RaptiAuto): Wire by default while stopped, Operate as soon as
 // Run is pressed, either one picked by hand at any time. Taps on a switch only work it in Operate;
-// in Wire they select it, and dragging moves parts. In Operate a drag pans and a terminal never
-// starts a wire.
+// in Wire they select it. Dragging a part moves it in both modes (empty space pans); in Operate a
+// terminal never starts a wire.
 // Usage: npm run build && node tests/board-modes.mjs
 import { chromium } from 'playwright';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
@@ -55,7 +55,8 @@ check(!s.wireFrom && s.closed === c0, 'Operate: a tap next to its terminal works
 const x0 = s.x, y0 = s.y;
 await drag(await at('body'), 90, 60);
 s = await st();
-check(s.x === x0 && s.y === y0, 'Operate: dragging a part pans, the part stays put');
+check((s.x !== x0 || s.y !== y0) && s.closed === c0, 'Operate: dragging a part moves it, without working it');
+await page.evaluate(() => window.app.editor.undo());
 await page.click('.mseg[data-mode=wire]'); await page.waitForTimeout(200);
 s = await st();
 check(s.mode === 'wire', 'Wire picked by hand');
@@ -63,6 +64,15 @@ await drag(await at('body'), 0, 80);
 s = await st();
 check(s.x !== x0 || s.y !== y0, 'Wire: dragging a part moves it');
 await page.evaluate(() => window.app.editor.undo());
+// a burnt wire or one with a cable is saved as {p, c, b}, not a bare point list: parts must still drag
+for (const kind of ['burnt', 'cable']) {
+  await page.evaluate((kind) => { const w = window.app.editor.doc.wires.at(-1); if (kind === 'burnt') w.burnt = true; else w.cable = { type: 'pvc', size: 1.5 }; }, kind);
+  const n0 = errs.length;
+  await drag(await at('body'), 0, 80);
+  s = await st();
+  check((s.x !== x0 || s.y !== y0) && errs.length === n0, `a ${kind} wire on the board: dragging a part still moves it`);
+  await page.evaluate(() => { const ed = window.app.editor; ed.undo(); const w = ed.doc.wires.at(-1); w.burnt = false; w.cable = null; });
+}
 await page.click('.toolbar [data-a=run]'); await page.waitForTimeout(500);
 s = await st();
 check(s.running && !s.paused && s.mode === 'operate' && s.seg === 'operate', 'Run → Operate');
