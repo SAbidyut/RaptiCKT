@@ -3,6 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <script>
+    // Small phones: lay the app out 400 px wide and let the screen scale it down evenly, so every
+    // bar, button and text keeps the proportions it has on a big phone instead of squeezing.
+    (function () {
+      var DESIGN = 400, meta = document.querySelector('meta[name=viewport]'), last = '';
+      function fit() {
+        var a = screen.width, b = screen.height, land = window.matchMedia && matchMedia('(orientation: landscape)').matches;
+        var w = land ? Math.max(a, b) : Math.min(a, b), c;
+        if (w > 0 && w < DESIGN) { var s = Math.round((w / DESIGN) * 1000) / 1000; c = 'width=' + DESIGN + ', initial-scale=' + s + ', minimum-scale=' + s + ', maximum-scale=' + s + ', user-scalable=no, viewport-fit=cover'; }
+        else c = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+        if (c !== last) { last = c; meta.setAttribute('content', c); document.documentElement.classList.toggle('scaled', w < DESIGN); }
+      }
+      fit();
+      window.addEventListener('orientationchange', function () { setTimeout(fit, 150); });
+      window.addEventListener('resize', fit);
+    })();
+  </script>
   <meta name="theme-color" content="#0b1120">
   <meta name="description" content="RaptiCKT – Resonance Automation circuit simulator: real-time analog, digital and mixed-signal simulation with oscilloscope, multimeter, Bode plots and SPICE export.">
   <title>RaptiCKT – Circuit Simulator</title>

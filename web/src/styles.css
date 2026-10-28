@@ -882,7 +882,7 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 /* the time chip gives way to the mode switch: it is cut short (…) instead of running under it */
 .hud-status { max-width: calc(100% - 222px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .editor.fs .hud-status { max-width: calc(100% - 288px - var(--cut-l) - var(--cut-r)); }
-@media (max-width: 400px) {
+@media (max-width: 399px) { /* (small phones are laid out 400 px wide and scaled: see index.html) */
   .hud-status { max-width: calc(100% - 116px); }
   .editor.fs .hud-status { max-width: calc(100% - 172px - var(--cut-l) - var(--cut-r)); }
   .mseg { padding: 0 9px; }
