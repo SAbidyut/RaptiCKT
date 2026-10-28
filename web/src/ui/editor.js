@@ -884,7 +884,7 @@ export class Editor {
     this.toast(palH ? `${e.name} added` : `${e.constructor.title} added — drag to move, tap two terminals to wire`);
   }
 
-  /** On small screens the value knob can sit on top of a new part: slide the board up a little. */
+  /** On small screens the value knob can sit on top of a new, dropped or picked part: slide the board up a little. */
   clearOfKnob(e) {
     const host = this.knob?.host;
     if (!host || !host.classList.contains('open')) return;
@@ -1890,6 +1890,8 @@ export class Editor {
           this.safeTidy(g.follow || []);
           this.undoStack.push(g.undoSnap); this.redoStack = []; this.updateToolbar();
           this.topologyChanged();
+          // dropped under the knob it opened: it could not be picked up again
+          if (this.selected()) this.clearOfKnob(this.selected());
         }
         break;
       case 'marquee': {
@@ -1938,8 +1940,7 @@ export class Editor {
         if (g.pressed) return;
         if (e.onTap && e.onTap()) { this.pressChanged(e); this.checkpointQuiet(); if (this.selected() === e) this.inspector.updateReadings(); return; }
       } else if (this.operable(e)) this.modeHint();
-      if (this.selected() !== e) this.select(e);
-      else this.inspector.updateReadings();
+      if (this.selected() !== e) { this.select(e); this.clearOfKnob(e); } else this.inspector.updateReadings();
       return;
     }
     if (h.kind === 'post') {

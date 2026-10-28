@@ -316,7 +316,9 @@ input.toggle:checked::after { transform: translateX(18px); }
 .selbar button.danger { color: var(--danger); }
 
 /* knob */
-.knob { position: absolute; right: 14px; bottom: calc(90px + var(--safe-b)); display: none; flex-direction: column; align-items: center; gap: 6px; z-index: 8; }
+.knob { position: absolute; right: 14px; bottom: calc(90px + var(--safe-b)); display: none; flex-direction: column; align-items: center; gap: 6px; z-index: 8; pointer-events: none; }
+/* only the dial and its − / + take touches: the label and the gaps let the board (and the parts under them) be dragged */
+.knob-dial, .knob-btn { pointer-events: auto; }
 .knob.open { display: flex; animation: rise 0.25s; }
 .knob-dial { position: relative; width: 104px; height: 104px; border-radius: 50%; touch-action: none; cursor: grab;
   background: radial-gradient(circle at 50% 35%, #2a3658, #111a2e 70%); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.55), inset 0 2px 2px rgba(255, 255, 255, 0.1), 0 0 0 1px rgba(148, 178, 230, 0.18); }
