@@ -314,8 +314,11 @@ class CPLoad extends TwoTerm {
 export class CFL extends Composite {
   static type = 'cfl'; static title = 'CFL (energy-saving lamp)'; static category = 'Electrical';
   static prefix = 'LP'; static keywords = 'cfl compact fluorescent lamp energy saving bulb electronic ballast power factor harmonics';
-  static props = [{ key: 'w', label: 'Rated power', unit: 'W', def: 15, min: 3, max: 100, knob: true }];
-  static description = 'Compact fluorescent lamp with an electronic ballast: a bridge rectifier charges a small reservoir capacitor, so mains current flows only in short peaks near the voltage maxima (power factor ≈0.6, rich in harmonics) while the ballast takes constant power. ≈60 lm/W.';
+  static props = [
+    { key: 'w', label: 'Rated power', unit: 'W', def: 15, min: 3, max: 100, knob: true },
+    { key: 'v', label: 'Rated voltage (RMS)', unit: 'V', def: 230, min: 12, max: 400 },
+  ];
+  static description = 'Compact fluorescent lamp with an electronic ballast: a bridge rectifier charges a small reservoir capacitor, so mains current flows only in short peaks near the voltage maxima (power factor ≈0.6, rich in harmonics) while the ballast takes constant power. ≈60 lm/W. More than ≈25 % above its rated voltage for a few seconds burns the ballast.';
   ownInternal() { return 3; }
   parts() {
     const BR = getType('bridge'), cp = new CPLoad();
@@ -324,7 +327,8 @@ export class CFL extends Composite {
   sync() {
     if (!this.subs) return;
     const [r, , c, cp] = this.subs.map((s) => s.el);
-    r.p.r = 20; c.p.c = (this.p.w / 15) * 4.7e-6; cp.pw = this.p.w / 0.9; cp.vmin = 60;
+    // a burnt ballast: its fusible input resistor has gone open
+    r.p.r = this.damaged ? 1e9 : 20; c.p.c = (this.p.w / 15) * 4.7e-6; cp.pw = this.damaged ? 0 : this.p.w / 0.9; cp.vmin = 60;
   }
   connectivity() { return null; }
   localPosts() { return [[-2 * G, 0], [2 * G, 0]]; }
@@ -336,6 +340,8 @@ export class CFL extends Composite {
     if (s.mode === 'dc') return;
     const v = s.v(this.nodes[0]) - s.v(this.nodes[1]), i = this.postCurrents[0];
     this.pin.push(v * i, s.dt); this.i2.push(i * i, s.dt); this.v2.push(v * v, s.dt);
+    // the reservoir capacitor and the ballast transistors are rated for the mains peak
+    if (this.overheat(s, this.v2.v / this.p.v ** 2, 2, 1.5625, () => `Ballast burnt — ${fmtShort(Math.sqrt(this.v2.v), 'V')} on a ${fmtShort(this.p.v, 'V')} lamp (over-voltage)`)) this.sync();
   }
   pf() { const S = Math.sqrt(this.v2?.v * this.i2?.v || 0); return S > 1e-9 ? (this.pin?.v || 0) / S : 0; }
   valueLabel() { return fmtQty(this.p.w, 'W').replace(' ', ''); }
@@ -365,10 +371,10 @@ export class LEDStrip extends TwoTerm {
     { key: 'is', label: 'LED Is', unit: 'A', def: 1e-20, min: 1e-30, max: 1e-6, log: true, hidden: true },
     { key: 'nn', label: 'LED n', unit: '', def: 2.6, min: 1, max: 5, hidden: true },
   ];
-  static description = 'LED tape: cut-able segments of a few LEDs in series with a current-setting resistor, all segments in parallel along the strip. Current (and brightness) collapse quickly below the rated voltage, and long strips need power fed at both ends because of the copper-track voltage drop.';
+  static description = 'LED tape: cut-able segments of a few LEDs in series with a current-setting resistor, all segments in parallel along the strip. Current (and brightness) collapse quickly below the rated voltage, and long strips need power fed at both ends because of the copper-track voltage drop. Each segment is made for ≈20 mA: on a higher-voltage supply (a 12 V strip on 24 V) the LEDs burn out within seconds.';
   nonlinear = true;
   segs() { return Math.max(1, Math.floor((this.p.len * this.p.perm) / Math.max(1, Math.round(this.p.leds)))); }
-  iv(v) { const n = this.segs(), r = stringIV(Math.abs(v), Math.round(this.p.leds), this.p.is, this.p.nn, this.p.rs); return { i: Math.sign(v) * n * r.i * (v >= 0 ? 1 : 1e-6), g: n * r.g * (v >= 0 ? 1 : 1e-6) + 1e-12 }; }
+  iv(v) { if (this.damaged) return { i: v * 1e-9, g: 1e-9 }; const n = this.segs(), r = stringIV(Math.abs(v), Math.round(this.p.leds), this.p.is, this.p.nn, this.p.rs); return { i: Math.sign(v) * n * r.i * (v >= 0 ? 1 : 1e-6), g: n * r.g * (v >= 0 ? 1 : 1e-6) + 1e-12 }; }
   reset() { this.vd = 0; this.setCurrent(0); }
   stampNL(s) {
     const [a, b] = this.nodes;
@@ -377,7 +383,11 @@ export class LEDStrip extends TwoTerm {
     this.vd = v;
     const { i, g } = this.iv(v); s.addG(a, b, g); s.addI(a, b, i - g * v);
   }
-  accept(s) { const v = this.voltageDiff(s); this.vd = v; this.setCurrent(this.iv(v).i); }
+  accept(s) {
+    const v = this.voltageDiff(s); this.vd = v; this.setCurrent(this.iv(v).i);
+    if (s.mode === 'dc') return;
+    this.overheat(s, (this.segI() / 0.02) ** 2, 2, 6.25, () => `LEDs burnt out — ${fmtShort(this.segI(), 'A')} per segment instead of ≈20 mA (supply voltage too high)`);
+  }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1e-9); }
   segI() { return Math.max(0, this.i || 0) / this.segs(); }
   valueLabel() { return fmtQty(this.p.len, 'm'); }
@@ -409,7 +419,9 @@ class MainsPowered extends withChip(Element) {
     this.vprev = v;
     if (s.mode !== 'dc') this.v2.push(v * v, s.dt);
     const vr = this.vrms();
-    this.gin = vr > 20 ? pin / (vr * vr) : 0;
+    this.gin = vr > 20 && !this.damaged ? pin / (vr * vr) : 0;
+    // universal-input supply (90–265 V): the input MOV and bulk capacitor fail above ≈300 V
+    if (s.mode !== 'dc') this.overheat(s, (vr / 230) ** 2, 2, 1.69, () => `Power supply burnt — ${fmtShort(vr, 'V')} on its mains input (over-voltage)`);
     return v;
   }
 }
@@ -457,7 +469,7 @@ export class LEDDriver extends MainsPowered {
     const iin = this.gin * vin + vin * 1e-7, iop = io + vo * 1e-6;
     this.postCurrents = [iin, -iin, -iop, iop]; this.i = iin;
     if (s.mode === 'dc') return;
-    const on = this.on ? this.vrms() > 75 : this.vrms() > 85;
+    const on = !this.damaged && (this.on ? this.vrms() > 75 : this.vrms() > 85);
     if (on !== this.on) { this.on = on; s.event = true; }
   }
   valueLabel() { return this.p.mode === 'cc' ? fmtShort(this.p.iset, 'A') : fmtShort(this.p.vset, 'V'); }
@@ -480,15 +492,18 @@ class AutoSwitch extends Element {
   leads() { return [[0, -2 * G, -G, -1.1 * G, -G], [1, -2 * G, G, -1.1 * G, G], [2, 2 * G, -G, 1.1 * G, -G]]; }
   connectivity() { return null; }
   resetSw() { this.on = false; this.v2 = new Ema(0.02); this.v2.v = 230 * 230; }
-  gsw() { return this.on ? 100 : 1e-9; }
+  gsw() { return this.on && !this.damaged ? 100 : 1e-9; }
   stamp(s) { const [l, n, ld] = this.nodes; s.addG(l, n, 1 / 105e3); s.addG(l, ld, this.gsw()); }
   stampAC(ac) { const [l, n, ld] = this.nodes; ac.addY(l, n, 1 / 105e3); ac.addY(l, ld, this.gsw()); }
-  powered() { return Math.sqrt(this.v2.v) > 100; }
+  powered() { return !this.damaged && Math.sqrt(this.v2.v) > 100; }
   setOn(s, on) { if (on !== this.on) { this.on = on; s.markEvent(); } }
   acceptSw(s) {
     const [l, n, ld] = this.nodes, v = s.v(l) - s.v(n), isw = (s.v(l) - s.v(ld)) * this.gsw(), iq = v / 105e3;
     this.postCurrents = [isw + iq, -iq, -isw]; this.i = isw;
-    if (s.mode !== 'dc') this.v2.push(v * v, s.dt);
+    if (s.mode === 'dc') return;
+    this.v2.push(v * v, s.dt);
+    // its little mains supply (and the relay coil) is rated 230 V: well above it, it burns
+    if (this.overheat(s, this.v2.v / 230 ** 2, 2, 1.69, () => `Burnt — ${fmtShort(Math.sqrt(this.v2.v), 'V')} on a 230 V switch (over-voltage)`)) this.on = false;
   }
   drawBase(g, tag) {
     g.box(-1.1 * G, -1.4 * G, 1.1 * G, 1.4 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 5 });
@@ -580,7 +595,7 @@ export class EmergencyLight extends MainsPowered {
     const cap = this.p.ah * 3600;
     if (mains) { this.q = Math.min(1, this.q + (0.1 * this.p.ah * s.dt) / cap); this.tFail = 0; }
     else { this.tFail += s.dt; if (this.tFail > 0.05 && this.q > 0) this.q = Math.max(0, this.q - (this.p.lamp / 3.6 / 0.9) * s.dt / cap); }
-    const lit = (mains && this.p.maint) || (!mains && this.tFail > 0.05 && this.q > 0.02);
+    const lit = !this.damaged && ((mains && this.p.maint) || (!mains && this.tFail > 0.05 && this.q > 0.02));
     if (lit !== this.lit) this.lit = lit;
   }
   valueLabel() { return this.lit ? 'LIT' : ''; }
@@ -889,12 +904,12 @@ export class DCFan extends TwoTerm {
     { key: 'rpm', label: 'Rated speed', unit: 'rpm', def: 2500, min: 100, max: 20000 },
     { key: 'cfm', label: 'Rated airflow', unit: 'CFM', def: 40, min: 0.1, max: 1000 },
   ];
-  static description = 'Brushless DC cooling fan (with built-in commutation and reverse-polarity protection): speed and airflow rise roughly in proportion to the voltage, the air load torque ∝ speed², and it stalls below about a third of the rated voltage. Current flows only with the correct polarity.';
+  static description = 'Brushless DC cooling fan (with built-in commutation and reverse-polarity protection): speed and airflow rise roughly in proportion to the voltage, the air load torque ∝ speed², and it stalls below about a third of the rated voltage. Current flows only with the correct polarity. Its driver IC stands about +15 %; on twice its rated voltage it burns out within seconds.';
   nonlinear = true;
   R() { return (0.35 * this.p.vr) / this.p.ir; }
   ke() { return (this.p.vr - 0.3 - this.p.ir * this.R()) / ((this.p.rpm * TAU) / 60); }
-  reset() { this.w = 0; this.ang = 0; this.vd = 0; this.setCurrent(0); }
-  iv(v) { return soft(v - this.ke() * this.w - 0.3, this.R(), 0.05); }
+  reset() { this.w = 0; this.ang = 0; this.vd = 0; this.v2 = 0; this.setCurrent(0); }
+  iv(v) { return this.damaged ? { i: v * 1e-9, g: 1e-9 } : soft(v - this.ke() * this.w - 0.3, this.R(), 0.05); }
   stampNL(s) { const [a, b] = this.nodes, v = s.v(a) - s.v(b), c = this.iv(v); s.addNLCurrent(a, b, c.i, [[a, b, c.g, v]]); }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1e-9); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1 / this.R()); }
@@ -903,6 +918,8 @@ export class DCFan extends TwoTerm {
     this.setCurrent(i);
     if (s.mode === 'dc') return;
     const wr = (this.p.rpm * TAU) / 60, ke = this.ke(), kf = (ke * this.p.ir) / (wr * wr), J = (2 * ke * this.p.ir * 0.3) / wr;
+    this.v2 = (this.v2 || 0) + (v * v - (this.v2 || 0)) * Math.min(1, s.dt / 0.05);
+    this.overheat(s, this.v2 / this.p.vr ** 2, 3, 1.69, () => `Burnt out — ${fmtShort(Math.sqrt(this.v2), 'V')} on a ${fmtShort(this.p.vr, 'V')} fan (over-voltage)`);
     const te = ke * i, stiction = 0.9 * ke * this.p.ir; // a stopped fan needs ≈1/3 of rated voltage to start
     if (this.w > 1e-3 * wr || te > stiction) this.w = Math.max(0, this.w + ((te - kf * this.w * this.w) / J) * s.dt);
     this.ang += this.w * s.dt * 0.05;

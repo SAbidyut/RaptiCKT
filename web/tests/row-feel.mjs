@@ -6,7 +6,10 @@ import http from 'node:http'; import fs from 'node:fs'; import path from 'node:p
 const root = path.resolve(process.argv[2] || 'dist');
 const server = http.createServer((req, res) => { const f = path.join(root, req.url === '/' ? 'index.html' : req.url.slice(1)); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html' }[path.extname(f)] || 'image/svg+xml' }); fs.createReadStream(f).pipe(res); }).listen(0);
 const browser = await chromium.launch();
+// Home shows a card row only for saved circuits: give it six
+const SEED = () => localStorage.setItem('raptickt.circuits.v1', JSON.stringify(Array.from({ length: 6 }, (_, k) => ({ id: 'c' + k, name: 'Circuit ' + (k + 1), updated: Date.now() - k * 6e4, doc: { elements: [], wires: [] } }))));
 const ctx = await browser.newContext({ viewport: { width: 412, height: 892 }, isMobile: true, hasTouch: true });
+await ctx.addInitScript(SEED);
 const page = await ctx.newPage();
 const errs = []; page.on('pageerror', (e) => errs.push(e.message));
 await page.goto(`http://127.0.0.1:${server.address().port}/`); await page.waitForTimeout(2300);

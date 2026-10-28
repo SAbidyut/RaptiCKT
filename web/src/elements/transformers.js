@@ -26,11 +26,21 @@ class WindingDevice extends Element {
   ends() { return this.windings().map(([p, q]) => [this.node(p), this.node(q)]); }
   branchCount() { return this.windings().length; }
   connectivity() { return this.windings().map((w) => [...w]); }
-  reset() { this.W = new Windings(this.windings().length); this.postCurrents.fill(0); this.i = 0; }
-  stamp(s) { this.W.stamp(s, this.ends(), this.branches, this.Lmat(), this.resist()); }
-  stampStep(s) { this.W.stampStep(s, this.branches, this.Lmat()); }
+  reset() { this.W = new Windings(this.windings().length); this.postCurrents.fill(0); this.i = 0; this.v2 = 0; }
+  // a burnt-out transformer: every winding open (no stored flux left to kick)
+  Lm() { const L = this.Lmat(); return this.damaged ? L.map((r) => r.map((x) => x * 1e-12)) : L; }
+  Rw() { const R = this.resist(); return this.damaged ? R.map(() => 1e9) : R; }
+  stamp(s) { this.W.stamp(s, this.ends(), this.branches, this.Lm(), this.Rw()); }
+  stampStep(s) { this.W.stampStep(s, this.branches, this.Lm()); }
   accept(s) {
-    this.W.accept(s, this.ends(), this.branches, this.resist());
+    this.W.accept(s, this.ends(), this.branches, this.Rw());
+    if (this.constructor.primaryRated && s.mode !== 'dc') {
+      // above its rated primary voltage the core saturates and the magnetising current soars:
+      // +10 % is fine, twice the rated voltage burns the primary within seconds
+      const v = this.wv(s, 0);
+      this.v2 = (this.v2 || 0) + (v * v - (this.v2 || 0)) * Math.min(1, s.dt / 0.1);
+      this.overheat(s, this.v2 / this.p.vp ** 2, 5, 1.69, () => `Primary burnt open — ${fmtShort(Math.sqrt(this.v2), 'V')} on a ${fmtShort(this.p.vp, 'V')} winding (over-voltage saturates the core)`);
+    }
     this.postCurrents.fill(0);
     this.windings().forEach(([p, q], k) => {
       if (typeof p === 'number') this.postCurrents[p] += this.W.i[k];
@@ -38,7 +48,7 @@ class WindingDevice extends Element {
     });
     this.i = this.W.i[0];
   }
-  stampAC(ac) { this.W.stampAC(ac, this.ends(), this.branches, this.Lmat(), this.resist()); }
+  stampAC(ac) { this.W.stampAC(ac, this.ends(), this.branches, this.Lm(), this.Rw()); }
   wv(s, k) { const [a, b] = this.ends()[k]; return s.v(a) - s.v(b); }
   /** coil drawing between (x, y1) and (x, y2), bulging towards dir */
   coil(g, x, y1, y2, dir, n, v1, v2) {
@@ -55,7 +65,7 @@ class WindingDevice extends Element {
 
 // ------------------------------------------------- centre-tap transformer
 export class CenterTapTransformer extends WindingDevice {
-  static type = 'xfmrct'; static title = 'Centre-Tap Transformer';
+  static type = 'xfmrct'; static title = 'Centre-Tap Transformer'; static primaryRated = true;
   static keywords = 'center tap centre tap transformer 12-0-12 full wave rectifier';
   static props = [
     { key: 'vp', label: 'Primary voltage (RMS)', unit: 'V', def: 230, min: 0.1, max: 1e6, log: true },
@@ -92,7 +102,7 @@ register(CenterTapTransformer);
 
 // ------------------------------------------------ dual-secondary transformer
 export class DualSecondaryTransformer extends WindingDevice {
-  static type = 'xfmr2s'; static title = 'Dual-Secondary Transformer';
+  static type = 'xfmr2s'; static title = 'Dual-Secondary Transformer'; static primaryRated = true;
   static keywords = 'transformer two secondary windings multi winding isolated dual output';
   static props = [
     { key: 'vp', label: 'Primary voltage (RMS)', unit: 'V', def: 230, min: 0.1, max: 1e6, log: true },

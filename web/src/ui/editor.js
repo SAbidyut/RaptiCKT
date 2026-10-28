@@ -1501,7 +1501,7 @@ export class Editor {
     store.setFlag('editorTips');
     this.app.showSheet('How to use the editor', `
       <ul class="tips">
-        <li>${icon('plus', 18)}<span><b>Add parts</b> with the + button. Search 330+ components by name.</span></li>
+        <li>${icon('plus', 18)}<span><b>Add parts</b> with the + button. Search 500+ components by name.</span></li>
         <li>${icon('wire', 18)}<span><b>Draw wires</b>: tap a terminal (small circle), then tap another terminal or wire — the wire is routed for you.</span></li>
         <li>${icon('hand', 18)}<span><b>Move</b> parts by dragging them – connected wires follow. Pinch to zoom, drag empty space to pan.</span></li>
         <li>${icon('play', 18)}<span><b>Run</b> to simulate: wires glow with voltage, yellow dots show current. Tap switches and buttons to operate them live.</span></li>

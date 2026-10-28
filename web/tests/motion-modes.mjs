@@ -14,8 +14,11 @@ const state = (page) => page.evaluate(() => ({
   rowWrapped: !!document.querySelector('.card-row .h-track'),
   reveal: document.querySelectorAll('.rv').length,
 }));
+// Home shows a card row only for saved circuits: give it six
+const SEED = () => localStorage.setItem('raptickt.circuits.v1', JSON.stringify(Array.from({ length: 6 }, (_, k) => ({ id: 'c' + k, name: 'Circuit ' + (k + 1), updated: Date.now() - k * 6e4, doc: { elements: [], wires: [] } }))));
 async function open(init) {
   const ctx = await browser.newContext({ viewport: { width: 412, height: 892 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(SEED);
   if (init) await ctx.addInitScript(init);
   const page = await ctx.newPage();
   const errs = []; page.on('pageerror', (e) => errs.push(e.message));
