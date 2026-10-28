@@ -188,7 +188,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 - The big area with the grid is your **canvas**. It is unlimited: pan and zoom freely.
 - The round **+** button (bottom right) adds a component.
 - The **✋ Operate | Wire** switch at the top right of the board picks what a finger does (chapter 4, *Operate and Wire mode*).
-- The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). It says **CPU-limited** when the phone cannot keep up.
+- The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). When the phone cannot keep up it shows, in amber, the speed actually reached, for example `1.5 s/s max`.
 - A red or yellow bar appears at the top when the circuit has a problem (chapter 21).
 - When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.
 - Messages (toasts) appear briefly at the bottom to confirm what happened.
@@ -397,7 +397,9 @@ Tap the chip at the top of the board (`t = … · …/s`). A small panel opens:
 - **Timestep Δt**: the internal step the solver uses (it is chosen automatically from the speed and the highest frequency).
 - **Automatic**: tick it to let the app choose a speed that suits your sources. Moving the slider switches Automatic off for this circuit.
 
-If the chip says **CPU-limited**, the phone cannot calculate as fast as you asked: lower the speed, or simplify the circuit. The app also lowers the drawing sharpness automatically on slow phones to keep animation smooth.
+Running faster than the automatic speed, mains circuits take bigger time steps (down to 40 per cycle, still accurate for RMS values, power and heating), so fast-forwarding a big circuit really is faster.
+
+If the chip turns **amber** — for example `1.5 s/s max` — the phone cannot calculate as fast as you asked: the circuit runs at the speed shown, and the Simulation speed panel says so. A higher setting does not help then; simplify the circuit or close the scope. While it is limited the app gives the simulation most of each frame (the board redraws about 30 times a second). It also lowers the drawing sharpness automatically on slow phones to keep animation smooth.
 
 #### Interactive parts
 
@@ -1745,7 +1747,7 @@ A warning that both terminals of a part are on the same net. Remove the extra wi
 - Probe the output wire with **Scope** so it appears under **Output**.
 - The stop frequency must be larger than the start frequency.
 
-#### "CPU-limited" or the app feels slow
+#### The speed chip is amber, or the app feels slow
 
 - Lower the **simulation speed**.
 - Settings → **Animations → Off**, and switch off **Live node voltages** and **Live currents**.

@@ -636,7 +636,8 @@ export class Renderer {
     const doc = st.doc;
     let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0);
     for (const w of doc.wires) sig += '|' + w.pts.join(';');
-    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + e.valueLabel();
+    // only the label's length counts (labelRect): a fan's rpm ticking over must not redo this every frame
+    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + e.valueLabel().length;
     if (this._sidesSig === sig) return;
     this._sidesSig = sig;
     const segs = [];
@@ -764,8 +765,9 @@ export class Renderer {
   liveLayout(st, sim) {
     const doc = st.doc;
     let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0);
-    // value-label text and side matter too: turning a knob changes the label's length
-    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + e.valueLabel() + (e.chosenSide ? e.chosenSide.join(':') : '');
+    // value-label length and side matter too: turning a knob changes the label's length (its
+    // text does not: a running fan's rpm changes every frame and must not redo the layout)
+    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + e.valueLabel().length + (e.chosenSide ? e.chosenSide.join(':') : '');
     for (const p of st.probes || []) if (p.pos) sig += '|p' + p.pos[0] + ',' + p.pos[1];
     if (this._live && this._live.sim === sim && this._live.sig === sig) return this._live;
 

@@ -433,6 +433,8 @@ input.toggle:checked::after { transform: translateX(18px); }
 .speed-val { font: 600 18px var(--mono); color: var(--accent); margin: 6px 0; }
 .speed-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 13px; color: var(--text2); }
 .speed-row label { display: flex; align-items: center; gap: 6px; }
+.speed-note { margin: 8px 0 0; font-size: 12px; line-height: 1.4; color: var(--amber); }
+.speed-note:empty { display: none; }
 
 /* analysis overlay */
 .overlay { position: absolute; inset: 0; z-index: 45; background: var(--bg); display: none; flex-direction: column; }

@@ -502,9 +502,17 @@ export class Editor {
   updateDt() {
     const ss = this.doc.simSettings;
     let dt = this.speed / 2400;
-    if (this.fmax > 0) dt = Math.min(dt, 1 / (this.fmax * 200));
     // a circuit may allow a longer step than the global cap (slow digital clocks): ss.maxStep
-    dt = Math.min(dt, ss.maxStep || this.settings.maxStep || 1e-4);
+    let cap = ss.maxStep || this.settings.maxStep || 1e-4;
+    if (this.fmax > 0) {
+      // 200 points per cycle at the normal speed; run faster than that (fast-forward, the
+      // waveform is a blur anyway) and it takes fewer, down to 40 — RMS values, power and
+      // heating stay within a fraction of a percent, and it needs 5× fewer steps
+      const ppc = Math.max(40, Math.min(200, 400 / (this.fmax * this.speed)));
+      dt = Math.min(dt, 1 / (this.fmax * ppc));
+      cap = Math.max(cap, 1 / (this.fmax * ppc));
+    }
+    dt = Math.min(dt, cap);
     if (ss.dt) dt = ss.dt;
     this.dt = Math.max(1e-12, dt);
   }
@@ -607,15 +615,25 @@ export class Editor {
     this.raf = requestAnimationFrame(this.loop);
     if (!this.active) return;
     const dtReal = Math.min(0.05, Math.max(0, (ts - this.last) / 1000));
-    this.adaptResolution(ts - this.last);
+    this.adaptResolution(ts - this.last - (this.simMs || 0)); // drawing speed only: a busy simulation is not a reason to blur the board
     this.last = ts;
     this.stepGlide(ts);
     if (this.needRebuild && !this.drag) this.rebuildNow();
     let frac = 1;
     const live = this.running && this.sim && this.sim.ready;
+    this.simMs = 0;
     if (live && !this.paused) {
-      frac = this.advance(this.speed * dtReal, Math.max(3, 10 - (this.drawMs || 0)));
+      // when the circuit cannot keep up with the speed asked for, give the simulation at least as
+      // much of the frame as the drawing takes (a fast-forward is fine at 20–30 fps) instead of
+      // the few ms left over at 60 fps
+      const dm = this.drawMs || 0;
+      const budget = this.slow ? Math.min(40, Math.max(8, dm, 26 - dm)) : Math.max(3, 10 - dm);
+      const t0 = performance.now(), s0 = this.sim.t;
+      frac = this.advance(this.speed * dtReal, budget);
+      this.simMs = performance.now() - t0;
       this.slow = frac < 0.9;
+      // the speed actually reached, shown when it falls short of the setting
+      if (dtReal > 0) this.realSpeed = 0.9 * (this.realSpeed ?? this.speed) + 0.1 * ((this.sim.t - s0) / dtReal);
     }
     if (live) {
       this.graph.solveCurrents(this.doc);
@@ -677,7 +695,10 @@ export class Editor {
     const s = this.q('.hud-status');
     if (!this.running) { s.innerHTML = `${icon('speed', 14)} ${fmtSI(this.speed, 's', 2)}/s`; return; }
     const t = this.sim ? this.sim.t : 0;
-    s.innerHTML = `<i class="dot ${this.paused ? '' : 'live'}"></i>t = ${fmtSI(t, 's', 4)} · ${fmtSI(this.speed, 's', 2)}/s${this.slow ? ' · <em>CPU-limited</em>' : ''}`;
+    const real = this.slow && !this.paused && this.realSpeed > 0 && this.realSpeed < 0.9 * this.speed;
+    s.innerHTML = `<i class="dot ${this.paused ? '' : 'live'}"></i>t = ${fmtSI(t, 's', 4)} · ${real ? `<em>${fmtSI(this.realSpeed, 's', 2)}/s max</em>` : `${fmtSI(this.speed, 's', 2)}/s`}`;
+    const note = this.q('.speed-pop.open .speed-note');
+    if (note) note.innerHTML = real ? `This circuit runs at most <b>${fmtSI(this.realSpeed, 's', 2)}/s</b> on this device — it cannot compute faster, so a higher setting does not help.` : '';
   }
 
   updateToolbar() {
@@ -1400,6 +1421,7 @@ export class Editor {
       <div class="speed-val">${fmtSI(this.speed, 's', 3)} per second</div>
       <input type="range" min="${lo * 100}" max="${hi * 100}" value="${Math.round(v * 100)}">
       <div class="speed-row"><span>Timestep Δt</span><b class="dt-val">${fmtSI(this.dt, 's', 3)}</b></div>
+      <p class="speed-note"></p>
       <div class="speed-row"><label><input type="checkbox" class="auto" ${this.doc.simSettings.speed ? '' : 'checked'}> Automatic</label><button class="btn sm" data-x="close">Done</button></div>`;
     const rng = pop.querySelector('input[type=range]');
     rng.addEventListener('input', () => {
