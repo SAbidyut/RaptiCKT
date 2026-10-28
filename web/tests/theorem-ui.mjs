@@ -51,7 +51,7 @@ for (const [th, n] of Object.entries(want)) {
   check(!/NaN|undefined|Infinity/.test(s.text), `${th}: no NaN / undefined in the text`);
 }
 const th = await page.evaluate(() => document.querySelector('.th-body').textContent);
-check(/Vs1 = Is1 × Req1/.test(th) && /Is1 = V1 \/ R1/.test(th), 'source transformation shows both transformations');
+check(/Vs1 = Is1 Req1/.test(th) && /Is1 = V1R1/.test(th), 'source transformation shows both transformations');
 
 // Millman on parallel batteries, reciprocity and a star–delta bridge on the Wheatstone example
 for (const [ex, load, th, expect] of [['millman', 'R4', 'millman', '961.9 mA'], ['wheatstone', 'R6', 'reciprocity', '305.6 mA'], ['wheatstone', 'R6', 'thevenin', '305.6 mA']]) {

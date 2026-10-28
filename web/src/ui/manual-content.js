@@ -614,7 +614,8 @@ export const CHAPTERS = [
       H('Test systems'),
       L([
         '**3-bus** textbook systems (Saadat): the hand-worked Gauss–Seidel and Newton–Raphson examples.',
-        '**5-bus** Stagg & El-Abiad, **6-bus** Wood & Wollenberg (with line ratings), **WSCC 9-bus** (Anderson & Fouad) and the **IEEE 14-bus** system.',
+        '**4-bus** Grainger & Stevenson (Birch, Elm, Pine, Maple, with a PV generator bus), **5-bus** Stagg & El-Abiad, **6-bus** Wood & Wollenberg (with line ratings), **WSCC 9-bus** (Anderson & Fouad) and the **IEEE 14-bus** system.',
+        '**None — start from scratch** gives an empty system: add buses with **+ Bus** (the first one is the slack bus).',
         'A **2-bus** template to start your own network. **Save** keeps it under My systems; **Import** / **Export** read and write MATPOWER case files (.m) and .json.',
       ]),
       H('Building a system'),

@@ -183,7 +183,7 @@ export class TheoremView {
 
   block(b) {
     if (b.t === 'p') return `<p>${inline(b.text)}</p>`;
-    if (b.t === 'f') return `<pre class="lf-f">${b.lines.map(esc).join('\n')}</pre>`;
+    if (b.t === 'f') return `<div class="th-math">${b.lines.map((l) => `<div class="ml${/^\s/.test(l) ? ' cont' : ''}">${mathHTML(l.trim())}</div>`).join('')}</div>`;
     if (b.t === 'tip') return `<div class="lf-tip">${icon('check', 16)}<span>${inline(b.text)}</span></div>`;
     if (b.t === 'table') {
       return `<div class="th-tw"><table class="th-tbl"><thead><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
@@ -228,4 +228,39 @@ function curveSVG({ pts, now, best, xl, yl }) {
     <circle cx="${X(now[0])}" cy="${Y(now[1])}" r="5" class="now"/>
     <text x="${X(now[0]) + (X(now[0]) > W / 2 ? -8 : 8)}" y="${Y(now[1]) + 17}" text-anchor="${X(now[0]) > W / 2 ? 'end' : 'start'}" class="lnow">now ${f(now[0], 'Ω')}</text>
   </svg>`;
+}
+
+/**
+ * Typeset formula markup the way a textbook prints it: \frac{a}{b} stacked over a bar,
+ * x_{s} with the letter in italics and s below, x^{2} above, \t{words} as plain words.
+ */
+function mathHTML(src) {
+  let i = 0;
+  const parse = (inGroup) => {
+    let out = '';
+    while (i < src.length) {
+      const c = src[i];
+      if (c === '}' && inGroup) { i++; return out; }
+      if (src.startsWith('\\frac{', i)) {
+        i += 6;
+        const num = parse(true);
+        let den = '';
+        if (src[i] === '{') { i++; den = parse(true); }
+        out += `<span class="mf"><span class="mn">${num}</span><span class="md">${den}</span></span>`;
+        continue;
+      }
+      if (src.startsWith('\\t{', i)) { i += 3; out += `<span class="mt">${parse(true)}</span>`; continue; }
+      if ((c === '_' || c === '^') && i + 1 < src.length) {
+        let g;
+        if (src[i + 1] === '{') { i += 2; g = parse(true); } else { g = esc(src[i + 1]); i += 2; }
+        if (c === '_') out = out.replace(/(^|[^A-Za-z])([A-Za-z])$/, '$1<i>$2</i>'); // a variable: its letter in italics
+        out += c === '_' ? `<sub>${g}</sub>` : `<sup>${g}</sup>`;
+        continue;
+      }
+      out += esc(c);
+      i++;
+    }
+    return out;
+  };
+  return parse(false);
 }

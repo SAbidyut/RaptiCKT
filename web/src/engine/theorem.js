@@ -22,6 +22,25 @@ const fI = (v) => fmt(v, 'A');
 const fP = (v) => fmt(v, 'W');
 /** a value inside a sum: negative ones in brackets, "(−2 mA)" */
 const fS = (v, f) => (tidy(v) < 0 ? `(${f(v)})` : f(v));
+// formula markup, typeset by the view the way a textbook prints it: fr(a, b) a fraction,
+// x_{sub} a subscript, tx(words) plain words inside a formula, ms('R1') → R₁
+const fr = (a, b) => `\\frac{${a}}{${b}}`;
+const tx = (w) => `\\t{${w}}`;
+export const ms = (n) => {
+  const r = /^r\((.+)\)$/.exec(n);
+  if (r) return `r_{${r[1]}}`;
+  const m = /^([A-Za-z])([A-Za-z0-9]+)$/.exec(n);
+  return m ? `${m[1]}_{${m[2]}}` : n;
+};
+/** Formula markup as plain text: \frac{a}{b} → (a)/(b), x_{s} → xs, \t{w} → w. */
+export function plainMath(str) {
+  let out = str, prev;
+  do {
+    prev = out;
+    out = out.replace(/\\t\{([^{}]*)\}/g, '$1').replace(/_\{([^{}]*)\}/g, '$1').replace(/\^\{([^{}]*)\}/g, '^$1').replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, '($1)/($2)');
+  } while (out !== prev);
+  return out;
+}
 
 const P = (text) => ({ t: 'p', text });
 const F = (...lines) => ({ t: 'f', lines: lines.flat() });
@@ -271,7 +290,7 @@ export function spTree(elems, s, t) {
 
 /** Equivalent resistance of a tree of resistors, writing one line per combination. Sets t.val and t.label. */
 function reduce(t, lines) {
-  if (t.k === 'L') { t.val = t.e.val; t.label = t.e.name; return t.val; }
+  if (t.k === 'L') { t.val = t.e.val; t.label = ms(t.e.name); return t.val; }
   const vals = t.kids.map((k) => reduce(k, lines)), labs = t.kids.map((k) => k.label);
   if (t.k === 'S') {
     t.val = vals.reduce((s, x) => s + x, 0);
@@ -279,14 +298,15 @@ function reduce(t, lines) {
     t.label = wrap(labs.join(' + '), t.val);
   } else {
     t.val = vals.some((x) => x === 0) ? 0 : 1 / vals.reduce((s, x) => s + 1 / x, 0);
+    const both = t.kids.every((k) => k.k === 'L'); // two parts by name: show the product-over-sum rule too
     lines.push(vals.length === 2
-      ? `${labs[0]} ∥ ${labs[1]} = (${fR(vals[0])} × ${fR(vals[1])}) / (${fR(vals[0])} + ${fR(vals[1])}) = ${fR(t.val)}`
-      : `${labs.join(' ∥ ')} = 1 / (${vals.map((x) => '1/' + fR(x)).join(' + ')}) = ${fR(t.val)}`);
+      ? `${labs[0]} ∥ ${labs[1]} = ${both ? fr(labs[0] + labs[1], `${labs[0]} + ${labs[1]}`) + ' = ' : ''}${fr(`${fR(vals[0])} × ${fR(vals[1])}`, `${fR(vals[0])} + ${fR(vals[1])}`)} = ${fR(t.val)}`
+      : `${labs.join(' ∥ ')} = ${fr('1', vals.map((x) => fr('1', fR(x))).join(' + '))} = ${fR(t.val)}`);
     t.label = wrap(labs.join(' ∥ '), t.val);
   }
   return t.val;
 }
-const wrap = (s, v) => (s.length <= 22 ? `(${s})` : fR(v));
+const wrap = (s, v) => (plainMath(s).length <= 22 ? `(${s})` : fR(v));
 
 /** Tree nodes from the root down to the leaf holding element e (or null). */
 function pathTo(t, e) {
@@ -302,7 +322,7 @@ function pathTo(t, e) {
  * the voltages that solve them. `sol` must be solved with `ref` at 0 V.
  */
 function nodalLines(elems, sol, ref, nm, max = 5) {
-  const V = (n) => 'V' + nm(n);
+  const V = (n) => `V_{${nm(n)}}`;
   const used = new Set([ref]);
   for (const e of elems) { used.add(e.n[0]); used.add(e.n[1]); }
   const known = new Map([[ref, 0]]), lines = [];
@@ -315,22 +335,22 @@ function nodalLines(elems, sol, ref, nm, max = 5) {
       // V(+) − V(−) = E
       const to = kp ? q : p, val = kp ? known.get(p) - e.val : known.get(q) + e.val;
       known.set(to, val);
-      lines.push(`${V(to)} = ${fV(val)}   (fixed by ${e.name} = ${fV(e.val)}, + at ${nm(p)})`);
+      lines.push(`${V(to)} = ${fV(val)}  ${tx(`(set by ${ms(e.name)} = ${fV(e.val)}, + at ${nm(p)})`)}`);
       grew = true;
     }
   }
   const unknown = [...used].filter((n) => !known.has(n)).sort((x, y) => x - y);
   if (!unknown.length) return lines;
-  if (unknown.length > max) return [...lines, `(${unknown.length} node equations, solved together)`, ...unknown.map((n) => `${V(n)} = ${fV(sol.v[n])}`)];
+  if (unknown.length > max) return [...lines, tx(`(${unknown.length} node equations, solved together)`), ...unknown.map((n) => `${V(n)} = ${fV(sol.v[n])}`)];
   const g = new UF();
   for (const n of unknown) g.find(n);
   for (const e of elems) if (e.kind === 'V' && !known.has(e.n[0]) && !known.has(e.n[1])) g.union(e.n[0], e.n[1]);
   const groups = new Map();
   for (const n of unknown) { const r = g.find(n); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(n); }
   const rTerm = (x, y, R) => {
-    if (!known.has(y)) return `(${V(x)} − ${V(y)})/${fR(R)}`;
+    if (!known.has(y)) return fr(`${V(x)} − ${V(y)}`, fR(R));
     const k = tidy(known.get(y));
-    return k === 0 ? `${V(x)}/${fR(R)}` : `(${V(x)} ${k > 0 ? '−' : '+'} ${fV(Math.abs(k))})/${fR(R)}`;
+    return k === 0 ? fr(V(x), fR(R)) : fr(`${V(x)} ${k > 0 ? '−' : '+'} ${fV(Math.abs(k))}`, fR(R));
   };
   for (const G of groups.values()) {
     const inG = new Set(G), terms = [];
@@ -342,10 +362,11 @@ function nodalLines(elems, sol, ref, nm, max = 5) {
       if (e.kind === 'R') terms.push(rTerm(x, y, e.val));
       else if (e.kind === 'I') inj += i0 ? -e.val : e.val; // current the source pushes into this node
     }
-    lines.push(G.length === 1 ? `KCL at ${nm(G[0])}:  ${terms.join(' + ') || '0'} = ${fI(inj)}` : `Supernode {${G.map(nm).join(', ')}}:  ${terms.join(' + ') || '0'} = ${fI(inj)}`);
-    for (const e of elems) if (e.kind === 'V' && inG.has(e.n[0]) && inG.has(e.n[1])) lines.push(`   and ${V(e.n[0])} − ${V(e.n[1])} = ${fV(e.val)}   (${e.name})`);
+    const rhs = tidy(inj) === 0 ? '0' : fI(inj);
+    lines.push(`${tx(G.length === 1 ? `KCL at ${nm(G[0])}:` : `Supernode (${G.map(nm).join(', ')}):`)} ${terms.join(' + ') || '0'} = ${rhs}`);
+    for (const e of elems) if (e.kind === 'V' && inG.has(e.n[0]) && inG.has(e.n[1])) lines.push(`${tx('and')} ${V(e.n[0])} − ${V(e.n[1])} = ${fV(e.val)}  ${tx(`(${ms(e.name)})`)}`);
   }
-  lines.push('Solving: ' + unknown.map((n) => `${V(n)} = ${fV(sol.v[n])}`).join(',  '));
+  lines.push(`${tx('Solving:')} ` + unknown.map((n) => `${V(n)} = ${fV(sol.v[n])}`).join(',  '));
   return lines;
 }
 
@@ -403,9 +424,10 @@ function killed(c, elems, keep = null) {
 
 function offLine(k) {
   const parts = [];
-  if (k.shorted.length) parts.push(`${names(k.shorted)} → short circuit (wire)`);
-  if (k.opened.length) parts.push(`${names(k.opened)} → open circuit (removed)`);
-  return parts.length ? [F('Turned off:  ' + parts.join(';  '))] : [];
+  const list = (l) => l.map((e) => ms(e.name)).join(', ');
+  if (k.shorted.length) parts.push(`${list(k.shorted)} → ${tx('short circuit (wire)')}`);
+  if (k.opened.length) parts.push(`${list(k.opened)} → ${tx('open circuit (removed)')}`);
+  return parts.length ? [F(`${tx('Turned off:')} ${parts.join(';  ')}`)] : [];
 }
 
 function droppedText(dropped) {
@@ -458,7 +480,7 @@ function starDelta(rs, A, B, c, sym) {
     if (!sp.tree) return null;
     const lines = [];
     const val = reduce(sp.tree, lines);
-    return { val, blocks: [P(intro), F(swap), ...droppedText(sp.dropped), P('Now everything is in series or in parallel:'), F(lines, `${sym} = ${fR(val)}`)] };
+    return { val, blocks: [P(intro), F(swap), ...droppedText(sp.dropped), P('Now everything is in series or in parallel:'), F(lines, `${ms(sym)} = ${fR(val)}`)] };
   };
   // delta → star: three resistors in a triangle
   for (const x of nodes) for (const y of nodes) for (const z of nodes) {
@@ -470,8 +492,8 @@ function starDelta(rs, A, B, c, sym) {
     const star = [arm(x, exy, exz), arm(y, exy, eyz), arm(z, exz, eyz)];
     const r = finish([...live.filter((e) => e !== exy && e !== eyz && e !== exz), ...star],
       `These resistors form a **bridge**, so they are not simply in series or in parallel. ${exy.name}, ${eyz.name} and ${exz.name} make a **delta (Δ)** — a triangle between ${nm(x)}, ${nm(y)} and ${nm(z)}. Turn it into an equivalent **star (Y)** with its centre at a new point o: each arm = the two delta resistors meeting at that corner, multiplied, ÷ the sum of all three.`,
-      [`ΣR = ${exy.name} + ${eyz.name} + ${exz.name} = ${fR(exy.val)} + ${fR(eyz.val)} + ${fR(exz.val)} = ${fR(S)}`,
-        ...star.flatMap((t) => [`${t.name} (${nm(t.n[0])}–o) = ${t.r1.name} × ${t.r2.name} / ΣR`, `   = ${fR(t.r1.val)} × ${fR(t.r2.val)} / ${fR(S)} = ${fR(t.val)}`])]);
+      [`ΣR = ${ms(exy.name)} + ${ms(eyz.name)} + ${ms(exz.name)} = ${fR(exy.val)} + ${fR(eyz.val)} + ${fR(exz.val)} = ${fR(S)}`,
+        ...star.map((t) => `${ms(t.name)} ${tx(`(${nm(t.n[0])}–o)`)} = ${fr(ms(t.r1.name) + ms(t.r2.name), 'ΣR')} = ${fr(`${fR(t.r1.val)} × ${fR(t.r2.val)}`, fR(S))} = ${fR(t.val)}`)]);
     if (r) return r;
   }
   // star → delta: a point (not a or b) where exactly three resistors meet
@@ -485,8 +507,8 @@ function starDelta(rs, A, B, c, sym) {
     const delta = [[0, 1, 2], [1, 2, 0], [0, 2, 1]].map(([i, j, opp]) => ({ kind: 'R', n: [ends[i], ends[j]], val: sum / at[opp].val, name: `R${nm(ends[i])}${nm(ends[j])}`, opp: at[opp] }));
     const r = finish([...live.filter((e) => !at.includes(e)), ...delta],
       `These resistors form a **bridge**, so they are not simply in series or in parallel. ${names(at)} make a **star (Y)** at ${nm(o)}. Turn it into an equivalent **delta (Δ)** between ${ends.map(nm).join(', ')}: each delta resistor = (sum of the products of the star arms taken two at a time) ÷ the arm opposite it.`,
-      [`ΣRR = ${at[0].name}·${at[1].name} + ${at[1].name}·${at[2].name} + ${at[2].name}·${at[0].name} = ${fmt(sum, 'Ω²')}`,
-        ...delta.flatMap((d) => [`${d.name} = ΣRR / ${d.opp.name}`, `   = ${fmt(sum, 'Ω²')} / ${fR(d.opp.val)} = ${fR(d.val)}`])]);
+      [`ΣRR = ${ms(at[0].name)}${ms(at[1].name)} + ${ms(at[1].name)}${ms(at[2].name)} + ${ms(at[2].name)}${ms(at[0].name)} = ${fmt(sum, 'Ω²')}`,
+        ...delta.map((d) => `${ms(d.name)} = ${fr('ΣRR', ms(d.opp.name))} = ${fr(fmt(sum, 'Ω²'), fR(d.opp.val))} = ${fR(d.val)}`)]);
     if (r) return r;
   }
   return null;
@@ -511,8 +533,8 @@ function resistanceStep(c, title, sym) {
     if (sp.tree) {
       const lines = [];
       val = reduce(sp.tree, lines);
-      if (sp.tree.k === 'L') blocks.push(F(`${sym} = ${sp.tree.e.name} = ${fR(val)}`));
-      else blocks.push(P('Combine the resistors in series and parallel, starting from the far end:'), F(lines, `${sym} = ${fR(val)}`));
+      if (sp.tree.k === 'L') blocks.push(F(`${ms(sym)} = ${ms(sp.tree.e.name)} = ${fR(val)}`));
+      else blocks.push(P('Combine the resistors in series and parallel, starting from the far end:'), F(lines, `${ms(sym)} = ${fR(val)}`));
     } else if (sp.open) {
       val = Infinity;
       blocks.push(P(`With the sources off nothing joins a to b, so ${sym} is infinite (an open circuit).`));
@@ -526,11 +548,11 @@ function resistanceStep(c, title, sym) {
       val = s ? s.v[A] - s.v[B] : NaN;
       blocks.push(
         P('These resistors are not simply in series or in parallel (they form a bridge). Push a 1 A test current into a and out of b, and find the voltage it makes:'),
-        F(`Va − Vb = ${fV(val)}   (with 1 A flowing in)`, `${sym} = (Va − Vb) / 1 A = ${fR(val)}`),
+        F(`V_a − V_b = ${fV(val)}  ${tx('(with 1 A flowing in)')}`, `${ms(sym)} = ${fr('V_a − V_b', '1 A')} = ${fR(val)}`),
       );
     }
   }
-  return { val, step: step(title, blocks, boardFig(c, { hide: [c.T.src], ab: true, show: sym, ...killSpec(k) }), [[sym, fR(val)]]) };
+  return { val, step: step(title, blocks, boardFig(c, { hide: [c.T.src], ab: true, show: sym, ...killSpec(k) }), [[sym.replace(/^([A-Z])(th|N)$/, '$1_$2'), fR(val)]]) };
 }
 
 function answerBlocks(c, I, V) {
@@ -564,7 +586,7 @@ function thevenin(c) {
   const I = Vth / (Rth + RL), V = I * RL;
   steps.push(step('Step 3 — Thevenin equivalent circuit', [
     P('Replace everything left of a–b by V_th in series with R_th, and connect R_L back between a and b. Now it is one simple loop:'),
-    F(`IL = Vth / (Rth + RL)`, `   = ${fV(Vth)} / (${fR(Rth)} + ${fR(RL)})`, `   = ${fI(I)}`, `VL = IL × RL = ${fI(I)} × ${fR(RL)} = ${fV(V)}`),
+    F(`I_L = ${fr('V_{th}', 'R_{th} + R_L')}`, `   = ${fr(fV(Vth), `${fR(Rth)} + ${fR(RL)}`)} = ${fI(I)}`, `V_L = I_L R_L = ${fI(I)} × ${fR(RL)} = ${fV(V)}`),
     ...answerBlocks(c, I, V),
     ...(Rth > 0 ? [TIP(`Maximum power transfer: R_L would take the most power, P_max = Vth² / (4·Rth) = ${fP((Vth * Vth) / (4 * Rth))}, when R_L = R_th = ${fR(Rth)}.`)] : []),
   ], ladderFig(c, Rth > 0 ? [
@@ -583,8 +605,8 @@ function vthStep(c, title) {
   return { Vth, step: step(title, [
     P('Turn the sources back on and leave a–b **open** (R_L still out). V_th is the voltage between a and b now. Solve the node voltages' + refText(c, c.ref)),
     F(nodalLines(others, sol, c.ref, c.nm)),
-    F(`Vth = Va − Vb = ${fS(sol.v[a], fV)} − ${fS(sol.v[b], fV)} = ${fV(Vth)}`),
-  ], boardFig(c, { hide: [T.src], ab: true, show: 'Vth', tags: tagNodes(c, others) }), [['Vth', fV(Vth)]]) };
+    F(`V_{th} = V_a − V_b = ${fS(sol.v[a], fV)} − ${fS(sol.v[b], fV)} = ${fV(Vth)}`),
+  ], boardFig(c, { hide: [T.src], ab: true, show: 'Vth', tags: tagNodes(c, others) }), [['V_th', fV(Vth)]]) };
 }
 const refText = (c, ref, nm = c.nm) => (nm(ref) === 'gnd' ? ' (ground = 0 V):' : ` (taking ${nm(ref)} as 0 V):`);
 
@@ -633,15 +655,15 @@ function norton(c) {
     P('With a and b joined they are one node. Solve the node voltages' + (nm2(ref) === 'gnd' ? ' (ground = 0 V):' : ` (taking ${nm2(ref)} = b as 0 V):`)),
     F(nodalLines(shorted, sol, ref, nm2)),
     P('By KCL at a, the current leaving through the short equals the current arriving at a from the rest of the circuit:'),
-    F(into.map(([o, x]) => `from ${o.name}:  ${fI(x)}`), `IN = ${into.map(([, x]) => fS(x, fI)).join(' + ') || '0'} = ${fI(In)}`),
-  ], boardFig(c, { hide: [T.src], ab: true, shortAB: true, show: 'IN', tags: tagNodes(c, others, nm2) }), [['IN', fI(In)]]));
+    F(into.map(([o, x]) => `${tx('current from')} ${ms(o.name)} = ${fI(x)}`), `I_N = ${into.map(([, x]) => fS(x, fI)).join(' + ') || '0'} = ${fI(In)}`),
+  ], boardFig(c, { hide: [T.src], ab: true, shortAB: true, show: 'IN', tags: tagNodes(c, others, nm2) }), [['I_N', fI(In)]]));
   const I = Number.isFinite(Rn) ? (In * Rn) / (Rn + RL) : In, V = I * RL;
   steps.push(step('Step 3 — Norton equivalent circuit', [
     P('Replace everything left of a–b by I_N in parallel with R_N, and connect R_L back. I_N splits between R_N and R_L (current divider):'),
     F(Number.isFinite(Rn)
-      ? [`IL = IN × RN / (RN + RL)`, `   = ${fI(In)} × ${fR(Rn)} / (${fR(Rn)} + ${fR(RL)})`, `   = ${fI(I)}`]
-      : [`RN is infinite, so all of IN flows in RL:  IL = IN = ${fI(I)}`],
-    `VL = IL × RL = ${fI(I)} × ${fR(RL)} = ${fV(V)}`),
+      ? [`I_L = I_N ${fr('R_N', 'R_N + R_L')}`, `   = ${fI(In)} × ${fr(fR(Rn), `${fR(Rn)} + ${fR(RL)}`)} = ${fI(I)}`]
+      : [`${tx('R_N is infinite, so all of I_N flows in R_L:')} I_L = I_N = ${fI(I)}`],
+    `V_L = I_L R_L = ${fI(I)} × ${fR(RL)} = ${fV(V)}`),
     ...answerBlocks(c, I, V),
     ...(Number.isFinite(Rn) ? [TIP(`Thevenin and Norton are the same circuit seen two ways: Vth = IN × RN = ${fV(In * Rn)}, and Rth = RN.`)] : []),
   ], ladderFig(c, [
@@ -671,29 +693,29 @@ function contribution(c, s) {
     const lines = [];
     const Req = reduce(sp.tree, lines);
     const path = pathTo(sp.tree, L);
-    blocks.push(P(`Resistance seen by ${s.name}:`), F(lines.length ? lines : [`${sp.tree.label}`], `Req = ${fR(Req)}`));
+    blocks.push(P(`Resistance seen by ${s.name}:`), F(lines.length ? lines : [`${sp.tree.label}`], `R_{eq} = ${fR(Req)}`));
     let Ix, Vx;
     const out = [];
-    if (S.kind === 'V') { Ix = S.val / Req; Vx = S.val; out.push(`I(${s.name}) = ${s.name} / Req = ${fV(S.val)} / ${fR(Req)} = ${fI(Ix)}`); }
-    else { Ix = S.val; Vx = S.val * Req; out.push(`V across ${s.name} = ${s.name} × Req = ${fI(S.val)} × ${fR(Req)} = ${fV(Vx)}`); }
+    if (S.kind === 'V') { Ix = S.val / Req; Vx = S.val; out.push(`I = ${fr(ms(s.name), 'R_{eq}')} = ${fr(fV(S.val), fR(Req))}`, `   = ${fI(Ix)}`); }
+    else { Ix = S.val; Vx = S.val * Req; out.push(`V = ${ms(s.name)} R_{eq} = ${fI(S.val)} × ${fR(Req)} = ${fV(Vx)}`); }
     if (path) {
       for (let i = 0; i + 1 < path.length; i++) {
         const X = path[i], Y = path[i + 1];
         if (X.k === 'S') {
           Vx = Ix * Y.val;
-          out.push(`${Y.k === 'L' ? 'VL' : `V across ${Y.label}`} = ${fI(Ix)} × ${fR(Y.val)} = ${fV(Vx)}`);
+          out.push(`${Y.k === 'L' ? 'V_L' : `${tx('V across')} ${Y.label}`} = ${fI(Ix)} × ${fR(Y.val)} = ${fV(Vx)}`);
         } else {
           Ix = Y.val ? Vx / Y.val : 0;
-          out.push(`${Y.k === 'L' ? 'IL' : `I in ${Y.label}`} = ${fV(Vx)} / ${fR(Y.val)} = ${fI(Ix)}`);
+          out.push(`${Y.k === 'L' ? 'I_L' : `${tx('I in')} ${Y.label}`} = ${fr(fV(Vx), fR(Y.val))} = ${fI(Ix)}`);
         }
       }
-      if (path[path.length - 1].k === 'L' && path.length > 1 && path[path.length - 2].k === 'S') out.push(`IL = ${fI(Ix)} (the same current flows through it)`);
+      if (path[path.length - 1].k === 'L' && path.length > 1 && path[path.length - 2].k === 'S') out.push(`I_L = ${fI(Ix)}  ${tx('(the same current flows through it)')}`);
       blocks.push(P('Follow the current from the source to R_L: in series the current is the same and the voltage divides; in parallel the voltage is the same and the current divides.'), F(out));
     } else blocks.push(F(out), P('No current from this source reaches R_L.'));
   } else {
     blocks.push(P('Solve this circuit by node voltages:'), F(nodalLines(k.elems, sol, k.m(c.ref), (n) => (n === A ? 'a' : n === B ? 'b' : c.nm(n)))));
   }
-  blocks.push(F(`IL(${s.name}) = ${fI(I)}   (a → b)${signNote(I, 'current')}`, `VL(${s.name}) = ${fV(I * c.RL)}`));
+  blocks.push(F(`I_L(${ms(s.name)}) = ${fI(I)}  ${tx(`(a → b)${signNote(I, 'current')}`)}`, `V_L(${ms(s.name)}) = ${fV(I * c.RL)}`));
   return { I, V: I * c.RL, blocks, kill: killSpec(k) };
 }
 
@@ -714,8 +736,8 @@ function superposition(c) {
   const sumP = parts.reduce((x, [, r]) => x + r.I * r.I * c.RL, 0);
   steps.push(step(`Step ${parts.length + 1} — Add the effects`, [
     P('With every source back on, the load current is the sum of the parts (each one taken from a to b, so a negative part subtracts):'),
-    F(`IL = ${parts.map(([s]) => `IL(${s.name})`).join(' + ') || '0'}`, `   = ${parts.map(([, r]) => fS(r.I, fI)).join(' + ') || '0'}`, `   = ${fI(I)}`,
-      `VL = ${parts.map(([, r]) => fS(r.V, fV)).join(' + ') || '0'} = ${fV(V)}`),
+    F(`I_L = ${parts.map(([s]) => `I_L(${ms(s.name)})`).join(' + ') || '0'}`, `   = ${parts.map(([, r]) => fS(r.I, fI)).join(' + ') || '0'} = ${fI(I)}`,
+      `V_L = ${parts.map(([, r]) => fS(r.V, fV)).join(' + ') || '0'} = ${fV(V)}`),
     ...answerBlocks(c, I, V),
     ...(parts.length > 1 ? [TIP(`Power does not add up: P_L = I_L² × R_L = ${fP(I * I * c.RL)}, but the powers of the parts would sum to ${fP(sumP)}. Superposition works for currents and voltages only.`)] : []),
   ], boardFig(c, { highlight: [T.src], ab: true, arrow: true }), [['I_L', fI(I)], ['V_L', fV(V)]]));
@@ -742,7 +764,7 @@ function maxPower(c) {
   const Vth = v.Vth, Pmax = (Vth * Vth) / (4 * Rth);
   steps.push(step('Step 3 — The load that takes the most power', [
     P('Draw the Thevenin equivalent and make R_L equal to R_th. Then half of V_th drops across R_th and half across R_L:'),
-    F(`RL = Rth = ${fR(Rth)}`, `IL = Vth / (2·Rth)`, `   = ${fV(Vth)} / ${fR(2 * Rth)} = ${fI(Vth / (2 * Rth))}`, `VL = Vth / 2 = ${fV(Vth / 2)}`, `Pmax = Vth² / (4·Rth)`, `     = (${fV(Vth)})² / (4 × ${fR(Rth)})`, `     = ${fP(Pmax)}`),
+    F(`R_L = R_{th} = ${fR(Rth)}`, `I_L = ${fr('V_{th}', '2R_{th}')} = ${fr(fV(Vth), fR(2 * Rth))} = ${fI(Vth / (2 * Rth))}`, `V_L = ${fr('V_{th}', '2')} = ${fV(Vth / 2)}`, `P_{max} = ${fr('V_{th}^{2}', '4R_{th}')}`, `   = ${fr(`(${fV(Vth)})^{2}`, `4 × ${fR(Rth)}`)} = ${fP(Pmax)}`),
     TIP('At maximum power the efficiency is only 50 %: R_th takes as much power as the load. Power systems run far from this point; matching is used in electronics (amplifier → speaker, antenna → receiver), where getting the most signal power matters.'),
   ], ladderFig(c, [{ id: 'Vth', kind: 'V', n: [-1, b], val: Vth, name: 'Vth' }, { id: 'Rth', kind: 'R', n: [-1, a], val: Rth, name: 'Rth' }], [], { val: Rth, name: 'RL' }), [['R_L', fR(Rth)], ['P_max', fP(Pmax)]]));
   const I = Vth / (Rth + RL), V = I * RL, Pnow = I * I * RL;
@@ -751,9 +773,9 @@ function maxPower(c) {
   for (let i = 0; i <= 80; i++) { const x = Math.pow(10, lo + ((hi - lo) * i) / 80); curve.push([x, (Vth * Vth * x) / (Rth + x) ** 2]); }
   steps.push(step(`Step 4 — ${c.T.name} as it is now`, [
     P(`With the present ${c.T.name} = ${fR(RL)} the load takes:`),
-    F(`IL = Vth / (Rth + RL)`, `   = ${fV(Vth)} / (${fR(Rth)} + ${fR(RL)}) = ${fI(I)}`, `PL = IL² × RL = ${fP(Pnow)}`, `   = ${pct(Pnow / Pmax)} of Pmax`),
+    F(`I_L = ${fr('V_{th}', 'R_{th} + R_L')}`, `   = ${fr(fV(Vth), `${fR(Rth)} + ${fR(RL)}`)} = ${fI(I)}`, `P_L = I_L^{2} R_L = ${fP(Pnow)} = ${pct(Pnow / Pmax)} ${tx('of')} P_{max}`),
     { t: 'curve', pts: curve, now: [RL, Pnow], best: [Rth, Pmax], xl: 'R_L', yl: 'P_L' },
-    F([0.25, 0.5, 1, 2, 4].map((m) => { const x = m * Rth; return `RL = ${m}·Rth = ${fR(x)} → PL = ${fP((Vth * Vth * x) / (Rth + x) ** 2)}`; })),
+    F([0.25, 0.5, 1, 2, 4].map((m) => { const x = m * Rth; return `R_L = ${m === 1 ? '' : m}R_{th} = ${fR(x)}  →  P_L = ${fP((Vth * Vth * x) / (Rth + x) ** 2)}`; })),
     ...answerBlocks(c, I, V),
   ], null, [['P_L', fP(Pnow)], ['P_max', fP(Pmax)]]));
   return done(c, 'maxpower', steps, I, V, { Rth, Vth, Pmax, head: { main: `P_max = ${fP(Pmax)}`, sub: `at R_L = R_th = ${fR(Rth)} · now ${c.T.name} = ${fR(RL)} takes ${fP(Pnow)}` } });
@@ -789,7 +811,7 @@ function millmanBranches(c) {
 function millman(c) {
   const { a, b, RL } = c;
   const steps = [givenStep(c, [P('Millman’s theorem: when several branches — each a voltage source with its series resistor, a plain resistor or a current source — are all connected **in parallel between the same two points**, they can be replaced by **one source V_M in series with one resistor R_M**:'),
-    F('VM = (E1/R1 + E2/R2 + … + I) / (1/R1 + 1/R2 + …)', 'RM = 1 / (1/R1 + 1/R2 + …)')])];
+    F(`V_M = ${fr(`${fr('E_1', 'R_1')} + ${fr('E_2', 'R_2')} + … + I`, `${fr('1', 'R_1')} + ${fr('1', 'R_2')} + …`)}`, `R_M = ${fr('1', `${fr('1', 'R_1')} + ${fr('1', 'R_2')} + …`)}`)])];
   const mb = millmanBranches(c);
   if (!mb.branches) {
     steps.push(step('Not a Millman circuit', [
@@ -803,39 +825,40 @@ function millman(c) {
     const rv = R.reduce((s, x) => s + x.e.val, 0);
     if (I.length) {
       const x = I[0], into = x.e.n[0] === x.from ? -x.e.val : x.e.val; // current it pushes into a
-      return { k: k + 1, kind: 'I', I: into, text: `${x.e.name} (current source${R.length + V.length ? `; ${names([...R, ...V].map((y) => y.e))} in series change nothing` : ''})  →  I${k + 1} = ${fI(into)} into a` };
+      return { k: k + 1, kind: 'I', I: into, text: `${ms(x.e.name)} ${tx(`(current source${R.length + V.length ? `; ${[...R, ...V].map((y) => ms(y.e.name)).join(', ')} in series change nothing` : ''})`)}  →  I_{${k + 1}} = ${fI(into)} ${tx('into a')}` };
     }
     const E = V.reduce((s, x) => s + (x.e.n[0] === x.from ? x.e.val : -x.e.val), 0); // + end toward a adds
-    const what = [...V.map((x) => x.e.name), ...R.map((x) => x.e.name)].join(' + ');
-    return { k: k + 1, kind: V.length ? 'V' : 'R', E, R: rv, text: `${what}  →  E${k + 1} = ${fV(E)},  R${k + 1} = ${R.length > 1 ? R.map((x) => fR(x.e.val)).join(' + ') + ' = ' : ''}${fR(rv)}` };
+    const what = [...V.map((x) => ms(x.e.name)), ...R.map((x) => ms(x.e.name))].join(' + ');
+    return { k: k + 1, kind: V.length ? 'V' : 'R', E, R: rv, text: `${what}  →  E_{${k + 1}} = ${fV(E)},  R_{${k + 1}} = ${R.length > 1 ? R.map((x) => fR(x.e.val)).join(' + ') + ' = ' : ''}${fR(rv)}` };
   });
   const ideal = br.find((x) => x.kind !== 'I' && x.R === 0);
   const res = br.filter((x) => x.kind !== 'I' && x.R > 0), cur = br.filter((x) => x.kind === 'I');
   steps.push(step('Step 1 — The branches between a and b', [
     P(`Taking R_L out leaves ${br.length} branch${br.length > 1 ? 'es' : ''}, all joined between a and b. For each: its source voltage E (counted + when it raises a above b) and its total resistance R:`),
-    F(br.map((x) => `Branch ${x.k}: ${x.text}`)),
+    F(br.map((x) => `${tx(`Branch ${x.k}:`)} ${x.text}`)),
   ], { ...ladderFig(c, c.elems.filter((e) => e !== c.T).map((e) => ({ ...e }))), columns: true }, []));
   let Vm, Rm, lines;
   if (ideal) {
     Vm = ideal.E; Rm = 0;
-    lines = [`Branch ${ideal.k} is a voltage source with no resistance: it fixes VM = ${fV(Vm)} and RM = 0`];
+    lines = [`${tx(`Branch ${ideal.k} is a voltage source with no resistance: it fixes`)} V_M = ${fV(Vm)}, R_M = 0`];
   } else {
     const G = res.reduce((s, x) => s + 1 / x.R, 0), J = res.reduce((s, x) => s + x.E / x.R, 0) + cur.reduce((s, x) => s + x.I, 0);
     Rm = G ? 1 / G : Infinity; Vm = G ? J / G : NaN;
-    const num = [...res.filter((x) => x.E).map((x) => `${fS(x.E, fV)}/${fR(x.R)}`), ...cur.map((x) => fS(x.I, fI))].join(' + ') || '0';
-    const den = res.map((x) => `1/${fR(x.R)}`).join(' + ');
+    const num = [...res.filter((x) => x.E).map((x) => fr(fS(x.E, fV), fR(x.R))), ...cur.map((x) => fS(x.I, fI))].join(' + ') || '0';
+    const den = res.map((x) => fr('1', fR(x.R))).join(' + ');
+    const symNum = res.filter((x) => x.E).map((x) => fr(`E_{${x.k}}`, `R_{${x.k}}`)).concat(cur.map((x) => `I_{${x.k}}`)).join(' + ') || '0';
     lines = G
-      ? [`VM = (${res.filter((x) => x.E).map((x) => `E${x.k}/R${x.k}`).concat(cur.map((x) => `I${x.k}`)).join(' + ') || '0'}) / (${res.map((x) => `1/R${x.k}`).join(' + ')})`,
-        `   = (${num}) / (${den})`, `   = ${fI(J)} / ${fmt(G, 'S')} = ${fV(Vm)}`,
-        `RM = 1 / (${den}) = ${fR(Rm)}`]
-      : [`Only current sources: they add up to ${fI(J)} into a, and RM is infinite`];
+      ? [`V_M = ${fr(symNum, res.map((x) => fr('1', `R_{${x.k}}`)).join(' + '))}`,
+        `   = ${fr(num, den)}`, `   = ${fr(fI(J), fmt(G, 'S'))} = ${fV(Vm)}`,
+        `R_M = ${fr('1', den)} = ${fR(Rm)}`]
+      : [`${tx(`Only current sources: they add up to ${fI(J)} into a, and`)} R_M ${tx('is infinite')}`];
     if (!G) Vm = J; // used below as the current
   }
   steps.push(step('Step 2 — Millman’s equivalent source', [F(lines)], null, Number.isFinite(Rm) ? [['V_M', fV(Vm)], ['R_M', fR(Rm)]] : []));
   const I = Number.isFinite(Rm) ? Vm / (Rm + RL) : Vm, V = I * RL;
   steps.push(step('Step 3 — Equivalent circuit', [
     P('Replace all the branches by V_M in series with R_M and put R_L back between a and b:'),
-    F(Number.isFinite(Rm) ? [`IL = VM / (RM + RL) = ${fV(Vm)} / (${fR(Rm)} + ${fR(RL)}) = ${fI(I)}`] : [`IL = ${fI(I)} (all the source current flows in RL)`], `VL = IL × RL = ${fV(V)}`),
+    F(Number.isFinite(Rm) ? [`I_L = ${fr('V_M', 'R_M + R_L')}`, `   = ${fr(fV(Vm), `${fR(Rm)} + ${fR(RL)}`)} = ${fI(I)}`] : [`I_L = ${fI(I)}  ${tx('(all the source current flows in R_L)')}`], `V_L = I_L R_L = ${fV(V)}`),
     ...answerBlocks(c, I, V),
   ], Number.isFinite(Rm) ? ladderFig(c, Rm > 0 ? [{ id: 'VM', kind: 'V', n: [-1, b], val: Vm, name: 'VM' }, { id: 'RM', kind: 'R', n: [-1, a], val: Rm, name: 'RM' }] : [{ id: 'VM', kind: 'V', n: [a, b], val: Vm, name: 'VM' }]) : null, [['I_L', fI(I)], ['V_L', fV(V)]]));
   return done(c, 'millman', steps, I, V, { Vm, Rm });
@@ -880,10 +903,10 @@ function reciprocity(c) {
       P(`Short ${S.name}’s old place (an ammeter there reads the current) and put ${S.name} in series with R_L so that it drives current through R_L from a to b (o is the new point between R_L and ${S.name}). Solve${refText(c, mp(c.ref), nmM)}`),
       F(nodalLines(all, sol, mp(c.ref), nmM)),
       P(`The current in the short (in the direction ${S.name} pushed it) is what leaves point ${c.nm(p)} into the rest of the circuit:`),
-      F(parts.length === 1 ? [`I = current into ${parts[0][0]} = ${fI(Ix)}`] : [...parts.map(([n, x]) => `into ${n}:  ${fI(x)}`), `I = ${parts.map(([, x]) => fS(x, fI)).join(' + ') || '0'} = ${fI(Ix)}`]),
+      F(parts.length === 1 ? [`I = ${tx('current into')} ${ms(parts[0][0])} = ${fI(Ix)}`] : [...parts.map(([n, x]) => `${tx('current into')} ${ms(n)} = ${fI(x)}`), `I = ${parts.map(([, x]) => fS(x, fI)).join(' + ') || '0'} = ${fI(Ix)}`]),
     ], boardFig(c, { highlight: [T.src], ab: true, arrow: `${S.name} here`, meter: { src: S.src, type: 'ammeter', text: 'I = ?' } }), [['I', fI(Ix)]]));
     steps.push(step('Step 3 — Compare', [
-      F(`Step 1: ${S.name} in its branch  →  current in ${T.name} = ${fI(one.I)}`, `Step 2: ${S.name} in ${T.name}’s branch  →  current where ${S.name} was = ${fI(Ix)}`),
+      F(`${tx(`Step 1 — ${ms(S.name)} in its own branch, current in`)} ${ms(T.name)} = ${fI(one.I)}`, `${tx(`Step 2 — ${ms(S.name)} in ${ms(T.name)}’s branch, current where it was`)} = ${fI(Ix)}`),
       P(Math.abs(Ix - one.I) <= 1e-6 * Math.max(Math.abs(one.I), 1e-9) + 1e-12
         ? `The two currents are equal: **reciprocity holds**. The ratio E / I = ${fR(S.val / one.I)} (the transfer resistance) is the same both ways.`
         : 'The two currents differ — this circuit is not reciprocal.'),
@@ -899,10 +922,10 @@ function reciprocity(c) {
   steps.push(step(`Step 2 — Move ${S.name} across the load`, [
     P(`Take ${S.name} out (open its old place; a voltmeter there reads the voltage) and connect it across R_L so that it pushes its current into a. Solve the node voltages${refText(c, c.ref)}`),
     F(nodalLines(all, sol, c.ref, c.nm)),
-    F(`V where ${S.name} was = V${c.nm(q)} − V${c.nm(p)} = ${fV(Vx)}   (+ on the side it pushed current into)`),
+    F(`V = V_{${c.nm(q)}} − V_{${c.nm(p)}} = ${fV(Vx)}  ${tx(`(where ${ms(S.name)} was; + on the side it pushed current into)`)}`),
   ], boardFig(c, { highlight: [T.src], ab: true, arrow: `${S.name} here`, meter: { src: S.src, type: 'voltmeter', text: 'V = ?' } }), [['V', fV(Vx)]]));
   steps.push(step('Step 3 — Compare', [
-    F(`Step 1: ${S.name} in place  →  voltage across ${T.name} = ${fV(one.V)}`, `Step 2: ${S.name} across ${T.name}  →  voltage where ${S.name} was = ${fV(Vx)}`),
+    F(`${tx(`Step 1 — ${ms(S.name)} in place, voltage across`)} ${ms(T.name)} = ${fV(one.V)}`, `${tx(`Step 2 — ${ms(S.name)} across ${ms(T.name)}, voltage where it was`)} = ${fV(Vx)}`),
     P(Math.abs(Vx - one.V) <= 1e-6 * Math.max(Math.abs(one.V), 1e-9) + 1e-12 ? `The two voltages are equal: **reciprocity holds** (transfer resistance V / I = ${fR(one.V / S.val)}).` : 'The two voltages differ — this circuit is not reciprocal.'),
     ...answerBlocks(c, c.full.I, c.full.V),
   ], null, [['V (Step 1)', fV(one.V)], ['V (Step 2)', fV(Vx)]]));
@@ -924,7 +947,9 @@ function tellegen(c) {
   const take = rows.filter((r) => tidy(r.p) > 0), give = rows.filter((r) => tidy(r.p) < 0);
   const Pin = give.reduce((s, r) => s - r.p, 0), Pout = take.reduce((s, r) => s + r.p, 0), sum = rows.reduce((s, r) => s + r.p, 0);
   steps.push(step('Step 3 — Add them up', [
-    F(`Delivered: ${give.map((r) => `${r.e.name} ${fP(-r.p)}`).join(' + ') || '0'} = ${fP(Pin)}`, `Taken:     ${take.map((r) => `${r.e.name} ${fP(r.p)}`).join(' + ') || '0'} = ${fP(Pout)}`, `Σ p = ${fP(Pout)} − ${fP(Pin)} = ${fP(Math.abs(sum) < 1e-9 * Math.max(Pin, 1e-12) ? 0 : sum)}`),
+    F(`P_{delivered} = ${give.map((r) => `P_{${r.e.name}}`).join(' + ') || '0'}`, `   = ${give.map((r) => fP(-r.p)).join(' + ') || '0'} = ${fP(Pin)}`,
+      `P_{taken} = ${take.map((r) => `P_{${r.e.name}}`).join(' + ') || '0'}`, `   = ${take.map((r) => fP(r.p)).join(' + ') || '0'} = ${fP(Pout)}`,
+      `Σ p = P_{taken} − P_{delivered} = ${fP(Pout)} − ${fP(Pin)} = ${fP(Math.abs(sum) < 1e-9 * Math.max(Pin, 1e-12) ? 0 : sum)}`),
     P(`The sum is zero: **Tellegen’s theorem holds** — every watt the sources deliver is taken by the resistors. ${T.name} takes ${fP(c.full.I * c.full.I * c.RL)} of the ${fP(Pin)}.`),
     ...answerBlocks(c, c.full.I, c.full.V),
   ], null, [['Σ p', '0 W'], ['Delivered', fP(Pin)]]));
@@ -976,12 +1001,12 @@ function sourceTransformation(c) {
     // parts that carry no current
     () => {
       const inc = incident(), out = [], gone = new Set();
-      for (const e of els) if (e !== T && e.n[0] === e.n[1]) { if (e.kind === 'V' && e.val) throw new Error(`${e.name} is shorted by a wire.`); gone.add(e); out.push(`${e.name} is shorted out (both ends on one node): remove it.`); }
+      for (const e of els) if (e !== T && e.n[0] === e.n[1]) { if (e.kind === 'V' && e.val) throw new Error(`${e.name} is shorted by a wire.`); gone.add(e); out.push(tx(`${ms(e.name)} is shorted out (both ends on one node): remove it.`)); }
       for (const [x, list] of inc) {
         if (x === a || x === b || list.length !== 1 || gone.has(list[0]) || list[0] === T) continue;
         const e = list[0];
         if (e.kind === 'I') throw new Error(`${e.name}'s current has no path back.`);
-        gone.add(e); out.push(`${e.name} has a free end: no current flows in it, remove it.`);
+        gone.add(e); out.push(tx(`${ms(e.name)} has a free end: no current flows in it, remove it.`));
       }
       if (!gone.size) return null;
       els = els.filter((e) => !gone.has(e));
@@ -1010,7 +1035,7 @@ function sourceTransformation(c) {
         const r = fresh('R', [L, Rn], chain.reduce((s, e) => s + e.val, 0));
         els = els.filter((e) => !chain.includes(e));
         els.push(r); hi.push(r.id);
-        out.push(`${chain.map((e) => e.name).join(' + ')} are in series:  ${r.name} = ${chain.map((e) => fR(e.val)).join(' + ')} = ${fR(r.val)}`);
+        out.push(`${chain.map((e) => ms(e.name)).join(' + ')} ${tx('are in series:')}  ${ms(r.name)} = ${chain.map((e) => fR(e.val)).join(' + ')} = ${fR(r.val)}`);
       }
       return out.length ? { title: 'Combine resistors in series', text: out, hi } : null;
     },
@@ -1025,8 +1050,8 @@ function sourceTransformation(c) {
         els = els.filter((e) => !g.includes(e));
         els.push(r); hi.push(r.id);
         out.push(g.length === 2
-          ? `${g[0].name} ∥ ${g[1].name}:  ${r.name} = (${fR(g[0].val)} × ${fR(g[1].val)}) / (${fR(g[0].val)} + ${fR(g[1].val)}) = ${fR(val)}`
-          : `${g.map((e) => e.name).join(' ∥ ')}:  ${r.name} = 1 / (${g.map((e) => '1/' + fR(e.val)).join(' + ')}) = ${fR(val)}`);
+          ? `${ms(r.name)} = ${ms(g[0].name)} ∥ ${ms(g[1].name)} = ${fr(`${fR(g[0].val)} × ${fR(g[1].val)}`, `${fR(g[0].val)} + ${fR(g[1].val)}`)} = ${fR(val)}`
+          : `${ms(r.name)} = ${g.map((e) => ms(e.name)).join(' ∥ ')} = ${fr('1', g.map((e) => fr('1', fR(e.val))).join(' + '))} = ${fR(val)}`);
       }
       return out.length ? { title: 'Combine resistors in parallel', text: out, hi } : null;
     },
@@ -1041,7 +1066,7 @@ function sourceTransformation(c) {
         const r = fresh('I', sum >= 0 ? [p, q] : [q, p], Math.abs(sum));
         els = els.filter((e) => !g.includes(e));
         els.push(r); hi.push(r.id);
-        out.push(`${g.map((e) => e.name).join(' and ')} are in parallel: they add (opposite arrows subtract):  ${r.name} = ${g.map((e) => fS(e.n[1] === q ? e.val : -e.val, fI)).join(' + ')} = ${fI(sum)}${sum < 0 ? ' (so the arrow turns round)' : ''}`);
+        out.push(tx(`${g.map((e) => ms(e.name)).join(' and ')} are in parallel: they add (opposite arrows subtract).`), `${ms(r.name)} = ${g.map((e) => fS(e.n[1] === q ? e.val : -e.val, fI)).join(' + ')} = ${fI(sum)}${sum < 0 ? `  ${tx('(so the arrow turns round)')}` : ''}`);
       }
       return out.length ? { title: 'Combine current sources in parallel', text: out, hi } : null;
     },
@@ -1056,7 +1081,7 @@ function sourceTransformation(c) {
         const v = fresh('V', rise >= 0 ? [q, p] : [p, q], Math.abs(rise));
         els = els.filter((e) => e !== e1 && e !== e2);
         els.push(v);
-        return { title: 'Combine voltage sources in series', text: [`${e1.name} and ${e2.name} are in series: their voltages add (or subtract when they face opposite ways):  ${v.name} = ${fV(Math.abs(rise))}`], hi: [v.id] };
+        return { title: 'Combine voltage sources in series', text: [tx(`${ms(e1.name)} and ${ms(e2.name)} are in series: their voltages add (or subtract when they face opposite ways).`), `${ms(v.name)} = ${fV(Math.abs(rise))}`], hi: [v.id] };
       }
       return null;
     },
@@ -1070,7 +1095,7 @@ function sourceTransformation(c) {
         const far = other(o, x);
         els = els.filter((e) => e !== o);
         i.n = i.n.map((n) => (n === x ? far : n));
-        return { title: `Remove ${o.name} (in series with ${i.name})`, text: [`${o.name} is in series with the current source ${i.name}. ${i.name} sets the current in that branch whatever else is in it, so ${o.name} changes nothing for the rest of the circuit: take it out (short it).`], hi: [i.id] };
+        return { title: `Remove ${o.name} (in series with ${i.name})`, text: [tx(`${ms(o.name)} is in series with the current source ${ms(i.name)}. ${ms(i.name)} sets the current in that branch whatever else is in it, so ${ms(o.name)} changes nothing for the rest of the circuit: take it out (short it).`)], hi: [i.id] };
       }
       return null;
     },
@@ -1080,7 +1105,7 @@ function sourceTransformation(c) {
         const o = els.find((e) => e !== v && e !== T && e.kind !== 'V' && pairKey(e) === pairKey(v));
         if (!o) continue;
         els = els.filter((e) => e !== o);
-        return { title: `Remove ${o.name} (in parallel with ${v.name})`, text: [`${o.name} is in parallel with the voltage source ${v.name}. ${v.name} sets the voltage across it whatever else is connected, so ${o.name} changes nothing for the rest of the circuit: take it out.`], hi: [v.id] };
+        return { title: `Remove ${o.name} (in parallel with ${v.name})`, text: [tx(`${ms(o.name)} is in parallel with the voltage source ${ms(v.name)}. ${ms(v.name)} sets the voltage across it whatever else is connected, so ${ms(o.name)} changes nothing for the rest of the circuit: take it out.`)], hi: [v.id] };
       }
       return null;
     },
@@ -1104,8 +1129,8 @@ function sourceTransformation(c) {
         r.n = [pv, pr];
         els.push(i);
         return { title: `Transform ${v.name} + ${r.name} into a current source`, text: [
-          `${v.name} in series with ${r.name}  →  current source ${i.name} in parallel with ${r.name}:`,
-          `${i.name} = ${v.name} / ${r.name} = ${fV(v.val)} / ${fR(r.val)} = ${fI(i.val)}   (arrow toward the + end of ${v.name})`,
+          tx(`${ms(v.name)} in series with ${ms(r.name)} → current source ${ms(i.name)} in parallel with ${ms(r.name)}:`),
+          `${ms(i.name)} = ${fr(ms(v.name), ms(r.name))} = ${fr(fV(v.val), fR(r.val))} = ${fI(i.val)}  ${tx(`(arrow toward the + end of ${ms(v.name)})`)}`,
         ], hi: [i.id, r.id] };
       }
       return null;
@@ -1130,8 +1155,8 @@ function sourceTransformation(c) {
         els = els.filter((e) => e !== i);
         els.push(v);
         return { title: `Transform ${i.name} ∥ ${r.name} into a voltage source`, text: [
-          `${i.name} in parallel with ${r.name}  →  voltage source ${v.name} in series with ${r.name}:`,
-          `${v.name} = ${i.name} × ${r.name} = ${fI(i.val)} × ${fR(r.val)} = ${fV(v.val)}   (+ end on the side the arrow of ${i.name} points to)`,
+          tx(`${ms(i.name)} in parallel with ${ms(r.name)} → voltage source ${ms(v.name)} in series with ${ms(r.name)}:`),
+          `${ms(v.name)} = ${ms(i.name)} ${ms(r.name)} = ${fI(i.val)} × ${fR(r.val)} = ${fV(v.val)}  ${tx(`(+ end on the side the arrow of ${ms(i.name)} points to)`)}`,
         ], hi: [v.id, r.id] };
       }
       return null;
@@ -1158,27 +1183,27 @@ function sourceTransformation(c) {
     return done(c, 'source', steps, c.full.I, c.full.V, { stuck: true });
   }
   let I, lines, kind;
-  if (fin.k === 'none') { I = 0; lines = ['No source is left feeding R_L, so IL = 0']; kind = 'No source left'; }
+  if (fin.k === 'none') { I = 0; lines = [`${tx('No source is left feeding R_L, so')} I_L = 0`]; kind = 'No source left'; }
   else if (fin.k === 'V') {
     const Vab = fin.V.n[0] === a ? fin.V.val : -fin.V.val;
     I = Vab / RL; kind = 'One voltage source across R_L';
-    lines = [`${fin.V.name} sits right across R_L:  VL = ${fV(Vab)}`, `IL = VL / RL = ${fV(Vab)} / ${fR(RL)} = ${fI(I)}`];
+    lines = [`${tx(`${ms(fin.V.name)} sits right across R_L:`)} V_L = ${fV(Vab)}`, `I_L = ${fr('V_L', 'R_L')} = ${fr(fV(Vab), fR(RL))} = ${fI(I)}`];
   } else if (fin.k === 'N') {
     const In = fin.I.n[1] === a ? fin.I.val : -fin.I.val;
     kind = 'Norton form: current source ∥ resistor';
     if (fin.R) {
       I = (In * fin.R.val) / (fin.R.val + RL);
-      lines = [`${fin.I.name} splits between ${fin.R.name} and RL (current divider):`, `IL = ${fin.I.name} × ${fin.R.name} / (${fin.R.name} + RL)`, `   = ${fI(In)} × ${fR(fin.R.val)} / (${fR(fin.R.val)} + ${fR(RL)})`, `   = ${fI(I)}`];
-    } else { I = In; lines = [`All of ${fin.I.name} flows in RL:  IL = ${fI(I)}`]; }
+      lines = [tx(`${ms(fin.I.name)} splits between ${ms(fin.R.name)} and R_L (current divider):`), `I_L = ${ms(fin.I.name)} ${fr(ms(fin.R.name), `${ms(fin.R.name)} + R_L`)}`, `   = ${fI(In)} × ${fr(fR(fin.R.val), `${fR(fin.R.val)} + ${fR(RL)}`)} = ${fI(I)}`];
+    } else { I = In; lines = [`${tx(`All of ${ms(fin.I.name)} flows in R_L:`)} I_L = ${fI(I)}`]; }
   } else {
     const { V: v, R: r, m } = fin;
     const vEnd = other(v, m); // the end of the source not at m
     const Vab = vEnd === a ? (v.n[0] === a ? v.val : -v.val) : (v.n[0] === m ? v.val : -v.val);
     I = Vab / (r.val + RL); kind = 'Thevenin form: voltage source + series resistor';
-    lines = [`One loop: ${v.name}, ${r.name} and RL in series:`, `IL = ${v.name} / (${r.name} + RL) = ${fV(Vab)} / (${fR(r.val)} + ${fR(RL)}) = ${fI(I)}`];
+    lines = [tx(`One loop: ${ms(v.name)}, ${ms(r.name)} and R_L in series:`), `I_L = ${fr(ms(v.name), `${ms(r.name)} + R_L`)}`, `   = ${fr(fV(Vab), `${fR(r.val)} + ${fR(RL)}`)} = ${fI(I)}`];
   }
   const V = I * RL;
-  steps.push(step(`Step ${steps.length - 1} — Solve the last loop (${kind})`, [F(lines, `VL = IL × RL = ${fI(I)} × ${fR(RL)} = ${fV(V)}`), ...answerBlocks(c, I, V)], snap([]), [['I_L', fI(I)], ['V_L', fV(V)]]));
+  steps.push(step(`Step ${steps.length - 1} — Solve the last loop (${kind})`, [F(lines, `V_L = I_L R_L = ${fI(I)} × ${fR(RL)} = ${fV(V)}`), ...answerBlocks(c, I, V)], snap([]), [['I_L', fI(I)], ['V_L', fV(V)]]));
   return done(c, 'source', steps, I, V);
 }
 

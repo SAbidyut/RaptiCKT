@@ -35,6 +35,19 @@ test('Saadat 3-bus examples (Gauss–Seidel and Newton–Raphson)', () => {
   near(bus(n, 3).Qg, 146.177, 0.01, 'Q3'); near(bus(n, 1).Pg, 218.423, 0.01, 'P1'); near(bus(n, 1).Qg, 140.852, 0.01, 'Q1');
 });
 
+test('Grainger & Stevenson 4-bus matches the published solution', () => {
+  // Power System Analysis, Examples 9.2–9.5: V2 0.982∠−0.976°, V3 0.969∠−1.872°, V4 1.02∠1.523°
+  for (const method of ['nr', 'gs', 'fd']) {
+    const r = solveLoadFlow(loadCase('gs4'), { method });
+    assert.ok(r.ok && r.converged, method);
+    near(bus(r, 2).V, 0.982, 0.0006, `${method} V2`); near(bus(r, 2).ang, -0.976, 0.002, `${method} δ2`);
+    near(bus(r, 3).V, 0.969, 0.0006, `${method} V3`); near(bus(r, 3).ang, -1.872, 0.002, `${method} δ3`);
+    near(bus(r, 4).ang, 1.523, 0.002, `${method} δ4`);
+    near(bus(r, 1).Pg, 186.81, 0.02, `${method} slack P`); near(bus(r, 1).Qg, 114.5, 0.02, `${method} slack Q`);
+    near(bus(r, 4).Qg, 181.43, 0.02, `${method} Maple Q`); near(r.totals.lossP, 4.81, 0.005, `${method} losses`);
+  }
+});
+
 test('Stagg 5-bus, Wood & Wollenberg 6-bus and WSCC 9-bus', () => {
   const s = solveLoadFlow(loadCase('stagg5'), { method: 'nr' });
   near(bus(s, 2).V, 1.0474, 2e-4, 'V2'); near(bus(s, 5).ang, -6.15, 0.01, 'δ5'); near(bus(s, 1).Pg, 129.59, 0.05, 'slack P');

@@ -33,6 +33,20 @@ export const LF_CASES = [
     },
   },
   {
+    id: 'gs4', title: '4-bus system (Grainger & Stevenson)',
+    desc: 'Four 230 kV buses in a ring: slack bus Birch at 1.00 pu, a 318 MW generator at Maple holding 1.02 pu, loads at every bus. The textbook example solved by Gauss–Seidel and Newton–Raphson (Grainger & Stevenson, Power System Analysis, Examples 9.2–9.5).',
+    sys: {
+      name: 'Grainger & Stevenson 4-bus', baseMVA: 100,
+      buses: [
+        bus(1, 'slack', { name: 'Birch', V: 1.0, Pd: 50, Qd: 30.99, kV: 230, x: 15, y: 22 }),
+        bus(2, 'pq', { name: 'Elm', Pd: 170, Qd: 105.35, kV: 230, x: 85, y: 22 }),
+        bus(3, 'pq', { name: 'Pine', Pd: 200, Qd: 123.94, kV: 230, x: 15, y: 80 }),
+        bus(4, 'pv', { name: 'Maple', V: 1.02, Pg: 318, Pd: 80, Qd: 49.58, kV: 230, x: 85, y: 80 }),
+      ],
+      branches: [br(1, 2, 0.01008, 0.0504, 0.1025), br(1, 3, 0.00744, 0.0372, 0.0775), br(2, 4, 0.00744, 0.0372, 0.0775), br(3, 4, 0.01272, 0.0636, 0.1275)],
+    },
+  },
+  {
     id: 'stagg5', title: '5-bus system (Stagg & El-Abiad)',
     desc: 'The 5-bus, 7-line network from Stagg & El-Abiad, Computer Methods in Power System Analysis: slack bus North, a 40 MW generator at South, three load buses.',
     sys: {
