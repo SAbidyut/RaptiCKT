@@ -60,7 +60,7 @@ export function boardFigure(src, fig, net, method = 'nodal') {
   if (fig.show === 'IN') notes.push({ t: 'flow', ...ab, text: 'IN' });
   if (fig.arrow) notes.push({ t: 'flow', ...ab, text: fig.arrow === true ? 'IL' : fig.arrow });
   // mesh analysis shows the mesh currents (clockwise loops) instead of the node names
-  if ((fig.mode || method) === 'mesh' && fig.meshes && fig.meshes.length) for (const m of fig.meshes) notes.push({ t: 'mesh', at: m.at, text: m.text });
+  if ((fig.mode || method) === 'mesh' && fig.meshes && fig.meshes.length) for (const m of fig.meshes) notes.push({ t: 'mesh', at: m.at, box: m.box, text: m.text });
   else for (const tg of fig.tags || []) if (net.nodePos.has(tg.node)) notes.push({ t: 'node', at: net.nodePos.get(tg.node), text: tg.text });
   return { doc, hi, notes, load };
 }
@@ -210,7 +210,7 @@ export function drawFigure(cv, built, theme, settings, maxH = 320) {
   for (let round = 0; round < 2; round++) {
     k = Math.min(1.2, (W - 2 * pad) / Math.max(1, box[2] - box[0]));
     box = [...base];
-    for (const d of layout(notes, k, load, ctx)) {
+    for (const d of layout(notes, k, load, ctx, doc)) {
       if (!d.w) continue;
       const cx = d.at[0] + d.dx / k, cy = d.at[1] + d.dy / k, hw = d.w / 2 / k, hh = d.h / 2 / k;
       box = [Math.min(box[0], cx - hw), Math.min(box[1], cy - hh), Math.max(box[2], cx + hw), Math.max(box[3], cy + hh)];
@@ -222,7 +222,7 @@ export function drawFigure(cv, built, theme, settings, maxH = 320) {
   k = Math.min(1.2, (W - 2 * pad) / Math.max(1, box[2] - box[0]), (H - 2 * pad) / Math.max(1, box[3] - box[1]));
   r.scale = k; r.ox = W / 2 - ((box[0] + box[2]) / 2) * k; r.oy = H / 2 - ((box[1] + box[3]) / 2) * k;
   r.draw({ doc, sim: null, running: false, theme, t: 0, probes: [], settings: st, selection: hi, selWires: new Set(), graph: new WireGraph(doc) });
-  paint(r, layout(notes, k, load, r.ctx), theme);
+  paint(r, layout(notes, k, load, r.ctx, doc), theme);
   return r;
 }
 
@@ -242,7 +242,7 @@ function drawingBox(doc) {
  * Around the load: a and b sit just outside its two ends on the outer side; a current arrow
  * runs alongside it on the side its value label does not use; a question goes beside the gap.
  */
-function layout(notes, k, load, ctx) {
+function layout(notes, k, load, ctx, doc) {
   const out = [];
   const pill = (at, dx, dy, text, o = {}) => {
     const size = o.size || 11;
@@ -256,22 +256,43 @@ function layout(notes, k, load, ctx) {
     const [x1, y1, x2, y2] = load.worldBox(), [lx, ly] = load.labelAnchor();
     lab = unit(lx - (x1 + x2) / 2, ly - (y1 + y2) / 2);
   }
+  const meshes = [];
   for (const n of notes) {
     if (n.t === 'tag') pill(n.at, 0, 0, n.text, { left: n.left, size: 10, bold: false, muted: true });
-    else if (n.t === 'node') pill(n.at, 9, -11, n.text, { size: 10, fill: '#a855f7', color: '#fff' });
-    else if (n.t === 'mesh') out.push({ kind: 'loop', at: n.at, dx: 0, dy: 0, w: 34, h: 34, text: n.text });
+    else if (n.t === 'node') {
+      // a node's name beside its point, on the side where it covers nothing
+      ctx.font = `700 10px ${FONT}`;
+      const pw = ctx.measureText(n.text).width + 10, ph = 17, cost = blockers(doc, k, out);
+      let bd = [9, -11], bc = Infinity;
+      [[9, -11], [-9, -11], [9, 11], [-9, 11], [16, 0], [-16, 0], [0, -16], [0, 16], [20, -20], [-20, -20], [20, 20], [-20, 20]].forEach(([dx, dy], j) => {
+        const c = cost(n.at[0] + dx / k, n.at[1] + dy / k, pw / 2 / k, ph / 2 / k) + j * 2 / (k * k);
+        if (c < bc) { bc = c; bd = [dx, dy]; }
+      });
+      pill(n.at, bd[0], bd[1], n.text, { size: 10, fill: '#a855f7', color: '#fff' });
+    }
+    else if (n.t === 'mesh') meshes.push(n);
     else if (n.t === 'term') {
       const [ux, uy] = unit(n.at[0] - n.other[0], n.at[1] - n.other[1]), [ox, oy] = n.out;
       out.push({ kind: 'ring', at: n.at, dx: 0, dy: 0, w: 12, h: 12 });
       pill(n.at, ux * 10 + ox * 14, uy * 10 + oy * 14, n.text, { size: 12, accent: true });
     } else if (n.t === 'ask') {
       const mid = [(n.from[0] + n.to[0]) / 2, (n.from[1] + n.to[1]) / 2], [ox, oy] = n.out;
-      pill(mid, ox * 44, oy * 44, n.text, { size: 12, fill: n.volt ? '#f59e0b' : '#ec4899', color: '#fff' });
       if (n.volt) { // + just inside the gap at a, − at b
         const [ux, uy] = unit(n.to[0] - n.from[0], n.to[1] - n.from[1]);
         out.push({ kind: 'glyph', at: n.from, dx: ux * 13 + ox * 9, dy: uy * 13 + oy * 9, w: 12, h: 16, text: '+' });
         out.push({ kind: 'glyph', at: n.to, dx: -ux * 13 + ox * 9, dy: -uy * 13 + oy * 9, w: 12, h: 16, text: '−' });
       }
+      // out beside the gap where it covers no label, part or wire: a little further out or
+      // shifted along first, the inner side of the gap when the outer side is crowded
+      ctx.font = `700 12px ${FONT}`;
+      const pw = ctx.measureText(n.text).width + 10, ph = 19, cost = blockers(doc, k, out);
+      let bd = [ox * 44, oy * 44], bc = Infinity;
+      for (const dist of [44, 58, 72, 30, -44, -58]) for (const side of [0, 1, -1, 2, -2]) {
+        const dx = ox * dist - oy * side * 34, dy = oy * dist + ox * side * 34;
+        const c = cost(mid[0] + dx / k, mid[1] + dy / k, pw / 2 / k, ph / 2 / k) + (side * side + Math.abs(Math.abs(dist) - 44) / 14 + (dist < 0 ? 2 : 0)) * 4 / (k * k);
+        if (c < bc) { bc = c; bd = [dx, dy]; }
+      }
+      pill(mid, bd[0], bd[1], n.text, { size: 12, fill: n.volt ? '#f59e0b' : '#ec4899', color: '#fff' });
     } else if (n.t === 'short') out.push({ kind: 'line', at: n.from, to: n.to, dx: 0, dy: 0 });
     else if (n.t === 'flow') {
       const mid = [(n.from[0] + n.to[0]) / 2, (n.from[1] + n.to[1]) / 2];
@@ -282,7 +303,57 @@ function layout(notes, k, load, ctx) {
       pill(mid, sx * 14 + (Math.abs(ux) > Math.abs(uy) ? 0 : sx * 18), sy * 14 + (Math.abs(ux) > Math.abs(uy) ? sy * 16 : 0), n.text, { fill: '#f59e0b', color: '#1c1300' });
     }
   }
+  if (meshes.length) placeMeshes(meshes, out, k, doc);
   return out;
+}
+
+/**
+ * A mesh current's loop goes where it covers the least: somewhere inside its window, clear of
+ * the parts, their name/value labels, the wires and the other annotations (world units).
+ */
+function placeMeshes(meshes, out, k, doc) {
+  const S = 28, half = S / 2 / k, F = [0.5, 0.38, 0.62, 0.28, 0.72, 0.2, 0.8];
+  for (const n of meshes) {
+    const cost = blockers(doc, k, out); // includes the loops already placed
+    let best = n.at, bc = Infinity;
+    const [x1, y1, x2, y2] = n.box || [n.at[0], n.at[1], n.at[0], n.at[1]];
+    for (const fx of F) for (const fy of F) {
+      const x = x1 + (x2 - x1) * fx, y = y1 + (y2 - y1) * fy;
+      const c = cost(x, y, half, half) + Math.hypot(x - n.at[0], y - n.at[1]) * 0.02 / k; // nearer the middle when it is a tie
+      if (c < bc) { bc = c; best = [x, y]; }
+    }
+    out.push({ kind: 'loop', at: best, dx: 0, dy: 0, w: S, h: S, text: n.text });
+  }
+}
+
+/**
+ * How much a box (centre x, y, half sizes hw, hh, world units) would cover of what is drawn:
+ * parts, their name/value labels (weighted most), wires and the annotations placed so far.
+ */
+function blockers(doc, k, out) {
+  const obs = [];
+  const add = (r, wgt) => obs.push([...r, wgt]);
+  if (doc) {
+    for (const e of doc.elements) {
+      add(e.worldBox(), 2);
+      const val = e.valueLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
+      const q = e.labelRect(txt);
+      if (q) add([q[0] - 2, q[1] - 2, q[2] + 2, q[3] + 2], 4);
+    }
+    for (const w of doc.wires) for (let i = 1; i < w.pts.length; i++) {
+      const [a, b] = [w.pts[i - 1], w.pts[i]], t = 3 / k;
+      add([Math.min(a[0], b[0]) - t, Math.min(a[1], b[1]) - t, Math.max(a[0], b[0]) + t, Math.max(a[1], b[1]) + t], 1);
+    }
+  }
+  for (const d of out) if (d.w) add([d.at[0] + (d.dx - d.w / 2) / k, d.at[1] + (d.dy - d.h / 2) / k, d.at[0] + (d.dx + d.w / 2) / k, d.at[1] + (d.dy + d.h / 2) / k], 4);
+  return (x, y, hw, hh) => {
+    let c = 0;
+    for (const [x1, y1, x2, y2, wgt] of obs) {
+      const w = Math.min(x + hw, x2) - Math.max(x - hw, x1), h = Math.min(y + hh, y2) - Math.max(y - hh, y1);
+      if (w > 0 && h > 0) c += w * h * wgt;
+    }
+    return c;
+  };
 }
 
 function paint(r, items, th) {
@@ -308,12 +379,12 @@ function paint(r, items, th) {
       ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(bx, by); ctx.stroke();
     } else if (d.kind === 'loop') { // a clockwise mesh current: an open circle with an arrowhead, its name inside
-      const R = 13, col = '#22c55e', a0 = -Math.PI * 0.35, a1 = a0 + Math.PI * 1.6;
+      const R = 10.5, col = '#22c55e', a0 = -Math.PI * 0.35, a1 = a0 + Math.PI * 1.6;
       ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, y, R, a0, a1); ctx.stroke();
       const hx = x + R * Math.cos(a1), hy = y + R * Math.sin(a1), tx = -Math.sin(a1), ty = Math.cos(a1); // clockwise tangent
-      ctx.beginPath(); ctx.moveTo(hx + tx * 6, hy + ty * 6); ctx.lineTo(hx - tx * 2 - ty * 5, hy - ty * 2 + tx * 5); ctx.lineTo(hx - tx * 2 + ty * 5, hy - ty * 2 - tx * 5); ctx.closePath(); ctx.fill();
-      ctx.font = `italic 700 12px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.beginPath(); ctx.moveTo(hx + tx * 5, hy + ty * 5); ctx.lineTo(hx - tx * 2 - ty * 4, hy - ty * 2 + tx * 4); ctx.lineTo(hx - tx * 2 + ty * 4, hy - ty * 2 - tx * 4); ctx.closePath(); ctx.fill();
+      ctx.font = `italic 700 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(d.text.replace(/\d/g, (c) => '₀₁₂₃₄₅₆₇₈₉'[c]), x, y + 0.5);
     } else if (d.kind === 'arrow') {
       const L = 13, col = '#f59e0b';

@@ -263,3 +263,18 @@ test('nodal analysis writes KCL at the nodes and agrees', () => {
   close(r.answer.I, r.full.I, 'IL');
   assert.match(plain(r), /KCL at/);
 });
+
+test('mesh analysis on a drawing takes its windows as the meshes', async () => {
+  const { EXAMPLES, buildExample } = await import('../src/ui/examples.js');
+  const doc = buildExample(EXAMPLES.find((e) => e.id === 'millman'));
+  const p = prepareTheorem(doc);
+  const load = doc.elements.findIndex((e) => e.name === 'R4');
+  const r = runTheorem(p, 'mesh', load);
+  assert.ok(r.ok, r.error);
+  close(r.answer.I, r.full.I, 'IL');
+  // three branches side by side and the load: three windows, the load in the last one only
+  const list = r.steps[1].blocks[1].lines.map(plainMath);
+  assert.equal(list.length, 3, list.join(' | '));
+  assert.equal(list.filter((l) => /R4/.test(l)).length, 1, list.join(' | '));
+  assert.ok(r.steps[1].fig.meshes.every((m) => m.box), 'each mesh has its window on the drawing');
+});

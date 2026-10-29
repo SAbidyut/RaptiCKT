@@ -404,19 +404,8 @@ function findMeshes(elems, geo) {
       if (!cands.has(id)) cands.set(id, es);
     });
   }
-  // the shortest independent ones (elimination over GF(2), one bit per edge)
-  const basis = new Map(), chosen = [];
-  for (const es of [...cands.values()].sort((s, t) => s.length - t.length || s.join(',').localeCompare(t.join(',')))) {
-    let vec = 0n;
-    for (const k of es) vec ^= 1n << BigInt(k);
-    while (vec) { const p = vec.toString(2).length - 1; if (!basis.has(p)) break; vec ^= basis.get(p); }
-    if (!vec) continue;
-    basis.set(vec.toString(2).length - 1, vec);
-    chosen.push(es);
-    if (chosen.length === want) break;
-  }
-  const meshes = chosen.map((es) => {
-    // walk round the loop
+  // walk round a loop: its edges in order, each with the direction it is run in
+  const walk = (es) => {
     const left = new Set(es), first = es[0], edges = [{ e: E[first], o: 1 }];
     left.delete(first);
     let at = E[first].n[1];
@@ -426,20 +415,50 @@ function findMeshes(elems, geo) {
       edges.push({ e: E[k], o: E[k].n[0] === at ? 1 : -1 });
       at = other(k, at); left.delete(k);
     }
-    // clockwise on the drawing (screen y points down): positive shoelace area of the loop
-    // traced through the parts' terminals
+    return edges;
+  };
+  // the loop traced through the parts' terminals on the drawing (null without a drawing)
+  const outline = (edges) => {
     const pts = [];
-    for (const { e, o } of edges) { const ps = geo && geo.el(e); if (!ps) { pts.length = 0; pts.push(null); break; } pts.push(...(o > 0 ? ps : [ps[1], ps[0]])); }
-    let pos = null;
-    if (pts.length > 2 && pts.every(Boolean)) {
+    for (const { e, o } of edges) { const ps = geo && geo.el(e); if (!ps) return null; pts.push(...(o > 0 ? ps : [ps[1], ps[0]])); }
+    return pts.length > 2 ? pts : null;
+  };
+  // how long a loop is: round the drawing when there is one (so the meshes are its windows),
+  // else the number of parts in it
+  const size = (es) => {
+    const pts = outline(walk(es));
+    if (!pts) return es.length;
+    let len = 0;
+    pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; len += Math.hypot(q[0] - p[0], q[1] - p[1]); });
+    return 1e6 + len; // drawn loops all sort after any count, but among themselves by length
+  };
+  // the shortest independent ones (elimination over GF(2), one bit per edge)
+  const basis = new Map(), chosen = [];
+  const ranked = [...cands.values()].map((es) => ({ es, sz: size(es) })).sort((x, y) => x.sz - y.sz || x.es.join(',').localeCompare(y.es.join(',')));
+  for (const { es } of ranked) {
+    let vec = 0n;
+    for (const k of es) vec ^= 1n << BigInt(k);
+    while (vec) { const p = vec.toString(2).length - 1; if (!basis.has(p)) break; vec ^= basis.get(p); }
+    if (!vec) continue;
+    basis.set(vec.toString(2).length - 1, vec);
+    chosen.push(es);
+    if (chosen.length === want) break;
+  }
+  const meshes = chosen.map((es) => {
+    const edges = walk(es);
+    // clockwise on the drawing (screen y points down): positive shoelace area of the loop
+    const pts = outline(edges);
+    let pos = null, box = null;
+    if (pts) {
       let area = 0;
       pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; area += p[0] * q[1] - q[0] * p[1]; });
       if (area < 0) { edges.reverse(); edges.forEach((x) => { x.o = -x.o; }); }
       // the label in the middle of the window
       const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-      pos = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+      box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+      pos = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
     }
-    return { edges, at: pos };
+    return { edges, at: pos, box };
   });
   // numbered as a book does: left to right, then top to bottom
   if (meshes.every((m) => m.at)) meshes.sort((m1, m2) => Math.round(m1.at[0] / 40) - Math.round(m2.at[0] / 40) || m1.at[1] - m2.at[1]);
@@ -470,7 +489,7 @@ const sumText = (xs, f) => xs.reduce((s, x, j) => (j ? `${s} ${tidy(x) < 0 ? 'âˆ
 function meshLines(elems, sol, nm, geo, { need = [], ref = 0, max = 5 } = {}) {
   const { meshes, co } = findMeshes(elems, geo);
   const M = meshes.length;
-  const lines = [], marks = meshes.filter((m) => m.at).map((m, k) => ({ at: m.at, text: `i${k + 1}` }));
+  const lines = [], marks = meshes.map((m, k) => ({ at: m.at, box: m.box, text: `i${k + 1}` })).filter((m) => m.at);
   if (!M) return { lines: [tx('There is no closed loop, so no current flows.')], marks, meshes, co, val: [] };
   lines.push(`${tx('Meshes, clockwise:')} ${meshes.map((m, k) => `${mi(k)} ${tx(`(${m.edges.map(({ e }) => e.name).join(', ')})`)}`).join(',  ')}`);
   // the mesh currents, from the branch currents of the solved circuit
