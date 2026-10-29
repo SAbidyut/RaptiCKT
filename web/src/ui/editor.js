@@ -723,7 +723,8 @@ export class Editor {
   updateHint() {
     const h = this.q('.hint');
     if (!this.doc.elements.length) {
-      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Tap two terminals to draw a wire. Press <b>Run</b> to simulate.</span></div>`;
+      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Tap two terminals to draw a wire. Press <b>Run</b> to simulate.</span><button class="btn hint-photo">${icon('camera', 18)} Or start from a photo</button></div>`;
+      h.querySelector('.hint-photo').addEventListener('click', () => this.app.openPhoto());
       h.classList.add('show');
     } else h.classList.remove('show');
   }
@@ -1448,7 +1449,7 @@ export class Editor {
     const items = [
       ['book', 'theorem', 'Run with theorem'],
       ['save', 'save', 'Save to My Circuits'], ['copy', 'saveas', 'Save as copy'], ['edit', 'info', 'Circuit name & notes'],
-      ['download', 'export', 'Export file (.rckt)'], ['upload', 'import', 'Open file…'], ['share', 'share', 'Share circuit'],
+      ['download', 'export', 'Export file (.rckt)'], ['upload', 'import', 'Open file…'], ['camera', 'photo', 'Circuit from photo'], ['share', 'share', 'Share circuit'],
       ['code', 'netlist', 'SPICE netlist'], ['camera', 'shot', 'Export image (PNG)'], ['table', 'op', 'Operating point'],
       ['reset', 'repair', 'Replace burnt parts & wires'], ['tower', 'loadflow', 'Load flow analysis'],
       ['sliders', 'settings', 'Settings'], ['manual', 'manual', 'User manual'], ['help', 'help', 'Help & gestures'], ['trash', 'clear', 'Clear circuit'],
@@ -1472,6 +1473,7 @@ export class Editor {
       case 'info': this.editInfo(); break;
       case 'export': app.bridge.saveFile(this.doc.name.replace(/[^\w\- ]+/g, '_') + '.rckt', 'application/json', JSON.stringify(this.doc.toJSON(), null, 1)); break;
       case 'import': app.importFile(); break;
+      case 'photo': app.openPhoto(); break;
       case 'share': app.bridge.share(this.doc.name + ' – RaptiCKT circuit', JSON.stringify(this.doc.toJSON())); break;
       case 'netlist': this.analysis.open('net'); break;
       case 'op': this.analysis.open('op'); break;

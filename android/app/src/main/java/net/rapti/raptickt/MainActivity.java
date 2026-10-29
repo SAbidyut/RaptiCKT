@@ -4,13 +4,20 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Insets;
+import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -18,6 +25,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.util.Base64;
 import android.view.View;
@@ -34,11 +42,22 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * RaptiCKT host activity. The simulator itself is a self-contained web
@@ -49,6 +68,12 @@ public class MainActivity extends Activity {
 
     private static final int REQ_SAVE = 41;
     private static final int REQ_OPEN = 42;
+    private static final int REQ_CAMERA = 43;
+    private static final int REQ_IMAGE = 44;
+    /** long side of a picture handed to the page: the size Claude reads best */
+    private static final int IMAGE_MAX = 1568;
+    /** the only host the page may reach through the native HTTP bridge */
+    private static final String API_HOST = "https://api.anthropic.com/";
     private static final int BG = Color.parseColor("#0B1120");
 
     private WebView web;
@@ -60,6 +85,7 @@ public class MainActivity extends Activity {
     private boolean pageReady;
     private boolean immersive;
     private final Handler ui = new Handler(Looper.getMainLooper());
+    private final Map<String, HttpURLConnection> requests = new ConcurrentHashMap<>();
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -330,6 +356,134 @@ public class MainActivity extends Activity {
             } else {
                 web.evaluateJavascript("window.__raptiFileError && window.__raptiFileError('cancelled')", null);
             }
+        } else if (requestCode == REQ_CAMERA || requestCode == REQ_IMAGE) {
+            Uri uri = requestCode == REQ_IMAGE && data != null ? data.getData() : null;
+            if (resultCode != RESULT_OK || (requestCode == REQ_IMAGE && uri == null)) {
+                imageError("cancelled");
+                return;
+            }
+            new Thread(() -> {
+                try {
+                    byte[] raw = requestCode == REQ_CAMERA ? readFile(PhotoProvider.file(this)) : readAll(uri);
+                    String b64 = Base64.encodeToString(shrinkImage(raw), Base64.NO_WRAP);
+                    ui.post(() -> web.evaluateJavascript("window.__raptiImage && window.__raptiImage('" + b64 + "')", null));
+                } catch (Exception e) {
+                    imageError("Could not read the picture (" + e.getMessage() + ")");
+                } finally {
+                    if (requestCode == REQ_CAMERA) PhotoProvider.file(this).delete();
+                }
+            }, "rapti-image").start();
+        }
+    }
+
+    // ------------------------------------------------------------ pictures
+    private void imageError(String msg) {
+        ui.post(() -> web.evaluateJavascript("window.__raptiImageError && window.__raptiImageError(" + JSONObject.quote(msg) + ")", null));
+    }
+
+    private byte[] readFile(File f) throws Exception {
+        if (!f.exists() || f.length() == 0) throw new Exception("no photo was taken");
+        try (InputStream in = new FileInputStream(f); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            return out.toByteArray();
+        }
+    }
+
+    /** Any picture → upright JPEG on white, long side at most IMAGE_MAX px. */
+    private byte[] shrinkImage(byte[] raw) throws Exception {
+        BitmapFactory.Options o = new BitmapFactory.Options();
+        o.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(raw, 0, raw.length, o);
+        if (o.outWidth <= 0 || o.outHeight <= 0) throw new Exception("not a picture");
+        int sample = 1;
+        while (Math.max(o.outWidth, o.outHeight) / (sample * 2) >= IMAGE_MAX) sample *= 2;
+        o = new BitmapFactory.Options();
+        o.inSampleSize = sample;
+        Bitmap src = BitmapFactory.decodeByteArray(raw, 0, raw.length, o);
+        if (src == null) throw new Exception("not a picture");
+        int deg = 0;
+        try {
+            int t = new ExifInterface(new ByteArrayInputStream(raw)).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+            deg = t == ExifInterface.ORIENTATION_ROTATE_90 ? 90 : t == ExifInterface.ORIENTATION_ROTATE_180 ? 180 : t == ExifInterface.ORIENTATION_ROTATE_270 ? 270 : 0;
+        } catch (Exception ignored) {
+            // no EXIF (a PNG, a screenshot): as decoded
+        }
+        int sw = src.getWidth(), sh = src.getHeight();
+        float k = Math.min(1f, (float) IMAGE_MAX / Math.max(sw, sh));
+        int w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+        boolean side = deg == 90 || deg == 270;
+        Bitmap out = Bitmap.createBitmap(side ? h : w, side ? w : h, Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(out);
+        c.drawColor(Color.WHITE); // transparent PNGs read as white paper
+        Matrix m = new Matrix();
+        m.postScale(k, k);
+        m.postRotate(deg);
+        if (deg == 90) m.postTranslate(h, 0);
+        else if (deg == 180) m.postTranslate(w, h);
+        else if (deg == 270) m.postTranslate(0, w);
+        c.drawBitmap(src, m, new Paint(Paint.FILTER_BITMAP_FLAG));
+        src.recycle();
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        out.compress(Bitmap.CompressFormat.JPEG, 85, bytes);
+        out.recycle();
+        return bytes.toByteArray();
+    }
+
+    // ------------------------------------------------------------ HTTP for the page
+    /**
+     * One request to the Claude API, streamed back to the page in pieces: head (status and
+     * headers), data (base64 chunks), then end or error. The page's own fetch is not used
+     * because it runs from file://, which the API's CORS rules need not accept.
+     */
+    private void httpRun(String id, String method, String url, String headersJson, String body) {
+        HttpURLConnection con = null;
+        try {
+            if (url == null || !url.startsWith(API_HOST)) throw new Exception("blocked: " + url);
+            con = (HttpURLConnection) new URL(url).openConnection();
+            requests.put(id, con);
+            con.setConnectTimeout(30000);
+            con.setReadTimeout(600000);
+            con.setRequestMethod(method == null || method.isEmpty() ? "GET" : method);
+            JSONObject h = new JSONObject(headersJson == null ? "{}" : headersJson);
+            for (Iterator<String> it = h.keys(); it.hasNext(); ) {
+                String k = it.next(), lk = k.toLowerCase();
+                if (lk.equals("content-length") || lk.equals("host") || lk.equals("connection") || lk.equals("accept-encoding")) continue;
+                con.setRequestProperty(k, h.getString(k));
+            }
+            if (body != null && !"GET".equals(con.getRequestMethod())) {
+                byte[] b = body.getBytes(StandardCharsets.UTF_8);
+                con.setDoOutput(true);
+                con.setFixedLengthStreamingMode(b.length);
+                try (OutputStream os = con.getOutputStream()) { os.write(b); }
+            }
+            int status = con.getResponseCode();
+            JSONArray head = new JSONArray();
+            for (Map.Entry<String, List<String>> e : con.getHeaderFields().entrySet()) {
+                if (e.getKey() == null) continue; // the status line
+                head.put(new JSONArray().put(e.getKey()).put(String.join(", ", e.getValue())));
+            }
+            String js = "window.__raptiHttpHead && window.__raptiHttpHead(" + JSONObject.quote(id) + "," + status + "," + JSONObject.quote(head.toString()) + ")";
+            ui.post(() -> web.evaluateJavascript(js, null));
+            InputStream in = status >= 400 ? con.getErrorStream() : con.getInputStream();
+            if (in != null) {
+                try (InputStream s = in) {
+                    byte[] buf = new byte[16384];
+                    int n;
+                    while ((n = s.read(buf)) > 0) {
+                        String chunk = Base64.encodeToString(buf, 0, n, Base64.NO_WRAP);
+                        ui.post(() -> web.evaluateJavascript("window.__raptiHttpData && window.__raptiHttpData(" + JSONObject.quote(id) + ",'" + chunk + "')", null));
+                    }
+                }
+            }
+            ui.post(() -> web.evaluateJavascript("window.__raptiHttpEnd && window.__raptiHttpEnd(" + JSONObject.quote(id) + ")", null));
+        } catch (Exception e) {
+            String msg = String.valueOf(e.getMessage());
+            ui.post(() -> web.evaluateJavascript("window.__raptiHttpError && window.__raptiHttpError(" + JSONObject.quote(id) + "," + JSONObject.quote(msg) + ")", null));
+        } finally {
+            requests.remove(id);
+            if (con != null) con.disconnect();
         }
     }
 
@@ -416,6 +570,45 @@ public class MainActivity extends Activity {
                     Toast.makeText(MainActivity.this, "No file manager available", Toast.LENGTH_SHORT).show();
                 }
             });
+        }
+
+        /** A picture for "Circuit from photo": the camera, or one chosen from the gallery. */
+        @JavascriptInterface
+        public void pickImage(boolean camera) {
+            ui.post(() -> {
+                try {
+                    if (camera) {
+                        PhotoProvider.file(MainActivity.this).delete();
+                        Uri out = PhotoProvider.uri(MainActivity.this);
+                        Intent i = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        i.putExtra(MediaStore.EXTRA_OUTPUT, out);
+                        i.setClipData(ClipData.newRawUri("", out));
+                        i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivityForResult(i, REQ_CAMERA);
+                    } else {
+                        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                        i.addCategory(Intent.CATEGORY_OPENABLE);
+                        i.setType("image/*");
+                        startActivityForResult(i, REQ_IMAGE);
+                    }
+                } catch (ActivityNotFoundException e) {
+                    imageError(camera ? "No camera app found" : "No gallery app found");
+                } catch (Exception e) {
+                    imageError(String.valueOf(e.getMessage()));
+                }
+            });
+        }
+
+        /** Start one HTTP request to the Claude API (see httpRun); the answer comes back in pieces. */
+        @JavascriptInterface
+        public void httpRequest(String id, String method, String url, String headersJson, String body) {
+            new Thread(() -> httpRun(id, method, url, headersJson, body), "rapti-http").start();
+        }
+
+        @JavascriptInterface
+        public void httpAbort(String id) {
+            HttpURLConnection con = requests.remove(id);
+            if (con != null) new Thread(con::disconnect).start();
         }
 
         @JavascriptInterface

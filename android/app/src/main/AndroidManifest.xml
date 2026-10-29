@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- "Circuit from photo" sends the picture to the Claude API -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="true"
@@ -41,5 +43,12 @@
                 <data android:mimeType="application/json" />
             </intent-filter>
         </activity>
+
+        <!-- the file the camera app writes a "Circuit from photo" picture into -->
+        <provider
+            android:name=".PhotoProvider"
+            android:authorities="${applicationId}.photo"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

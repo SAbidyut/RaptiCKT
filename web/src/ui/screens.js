@@ -179,6 +179,7 @@ export class HomeScreen {
       </section>
       ${auto && auto.elements && auto.elements.length ? `
       <button class="resume" data-h="resume">${icon('play', 18)}<div><b>Continue where you left off</b><span>${esc(auto.name)} · ${auto.elements.length} components</span></div>${icon('back', 18, 'flipx')}</button>` : ''}
+      <button class="lf-banner ph-banner" data-h="photo"><span class="lf-ico">${icon('camera', 26)}</span><div><b>Circuit from photo</b><span>Snap a textbook figure or a sketch — it is redrawn on the board with its values, ready to run</span></div>${icon('back', 18, 'flipx')}</button>
       <button class="lf-banner" data-h="loadflow"><span class="lf-ico">${icon('tower', 26)}</span><div><b>Load Flow Analysis</b><span>Power-system bus voltages, line flows & losses · Newton–Raphson, Gauss–Seidel, Fast Decoupled, DC · IEEE test systems</span></div>${icon('back', 18, 'flipx')}</button>
       ${lib.length ? `<h3 class="sec-title">Recent circuits <button class="link" data-tab2="library">See all</button></h3>
       <div class="card-row">${lib.slice(0, 6).map((c) => this.circuitCard(c)).join('')}</div>` : `
@@ -194,6 +195,7 @@ export class HomeScreen {
     body.querySelector('[data-h=open]').addEventListener('click', () => this.app.importFile());
     body.querySelector('[data-h=resume]')?.addEventListener('click', () => this.app.resume());
     body.querySelector('[data-h=loadflow]').addEventListener('click', () => this.app.openLoadFlow());
+    body.querySelector('[data-h=photo]').addEventListener('click', () => this.app.openPhoto());
     body.querySelector('[data-h=about]').addEventListener('click', () => this.openInstitute());
     body.querySelectorAll('[data-tab2]').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.tab2; this.render(); }));
     this.drawThumbs(body);

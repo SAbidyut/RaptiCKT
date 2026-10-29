@@ -40,16 +40,17 @@ export const CHAPTERS = [
     id: 'welcome', icon: 'bolt',
     title: 'Welcome to RaptiCKT',
     blocks: [
-      P('**RaptiCKT** is a circuit simulator that runs on your phone. You draw a circuit, press **Run**, and the app calculates what every wire and part is doing, live: voltages glow on the wires, small dots show current flowing, and you can measure with an oscilloscope and a multimeter. Nothing needs an internet connection.'),
+      P('**RaptiCKT** is a circuit simulator that runs on your phone. You draw a circuit, press **Run**, and the app calculates what every wire and part is doing, live: voltages glow on the wires, small dots show current flowing, and you can measure with an oscilloscope and a multimeter. Nothing needs an internet connection, except reading a circuit from a photo.'),
       H('What you can do with it'),
       L([
         'Build analog, digital and mixed circuits on an unlimited canvas.',
-        'Pick from **520 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
+        'Pick from **521 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
         'Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.',
         'Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.',
         'Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).',
         'Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.',
         'Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**).',
+        'Take a **photo of a circuit diagram** — a textbook figure, an exam question, a neat sketch — and it is redrawn on the board with its values, dependent sources included, ready to run (**Circuit from photo**).',
         'Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.',
         'Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
         'Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).',
@@ -57,7 +58,7 @@ export const CHAPTERS = [
       H('Who it is for'),
       P('Electrical and electronic engineering students, teachers, technicians, hobbyists and researchers. It is made by **RAPTI — Resonance Automation Professional Training Institute**.'),
       H('Requirements'),
-      L(['Android 8.0 or newer.', 'No internet needed. Everything, including your saved circuits, stays on your phone.']),
+      L(['Android 8.0 or newer.', 'No internet needed, except for **Circuit from photo** (which also needs your own Anthropic API key). Everything else, including your saved circuits, stays on your phone.']),
       H('How to read this manual'),
       P('If you are new, read chapters 2 to 6 first (about 10 minutes). The rest is a reference: come back when you need a feature. Use the search box at the top, or tap a chapter in the contents.'),
     ],
@@ -216,7 +217,7 @@ export const CHAPTERS = [
       ]),
       TIP('The **Recent** tab remembers the parts you used last, so common parts are one tap away.'),
       TIP('Always add a **Ground** to your circuit (see {{ch:wiring}}). Many examples show where it goes.'),
-      P('The complete list of all 520 components, with what each one does and which values you can change, is in the chapter **Component library**.'),
+      P('The complete list of all 521 components, with what each one does and which values you can change, is in the chapter **Component library**.'),
     ],
   },
 
@@ -604,6 +605,39 @@ export const CHAPTERS = [
     ],
   },
 
+  // ------------------------------------------------------------------ 12a
+  {
+    id: 'photo', icon: 'camera',
+    title: 'Circuit from photo',
+    blocks: [
+      P('Take a photo of a circuit diagram — a figure in your textbook, an exam question, a neat sketch on paper — or choose a picture or a screenshot, and the circuit is redrawn on the board with every value, ready to run. It reads independent and **dependent sources** (the diamonds: 0.1vₓ, 4iₓ, 0.5V₀ …), resistors, capacitors, inductors and switches, and marks the voltages and currents the drawing names.'),
+      P('Open it from the **Circuit from photo** card on Home, from **⋮ → Circuit from photo** in the editor, or from **Or start from a photo** on an empty board.'),
+      H('Reading a circuit'),
+      S([
+        'The first time, paste your **Anthropic API key** and tap **Save** (see below).',
+        'Tap **Take a photo** (the camera opens) or **Choose an image** (a picture or screenshot from the gallery).',
+        'Wait while Claude reads the circuit — usually well under a minute. **Cancel** stops it.',
+        'Check the redrawn circuit against the picture (tap **The photo** to see it again). A page with several figures lists them all: tap the one you want.',
+        'Tap **Open on the board**. The circuit opens as a new circuit (also saved in My Circuits), named after the figure. Press **Run**: the live labels show every node voltage and branch current, so the asked quantity (vₓ, i, I₀ …) can be read straight off the board.',
+      ]),
+      H('Your API key'),
+      L([
+        'Photos are read by **Claude**, Anthropic’s AI model. You need your own API key: create one at **console.anthropic.com → API keys** (the **Get a key** link opens it). Reading a photo uses a small amount of your API credit.',
+        'The key is kept **only on this phone**, in the app’s settings. It is not put in circuit files, backups or shares, and it is sent only to Anthropic, together with the photo.',
+        '**Change** removes the saved key so you can paste another one.',
+      ]),
+      H('Getting a good result'),
+      L([
+        'Hold the phone flat over the page, with the whole circuit in the frame, in focus and in good light. Crop away other figures if you can: one circuit per photo reads best.',
+        'Every value should be readable in the photo. Claude names anything it was unsure of under the drawing.',
+        'Warnings under the drawing say what could not be rebuilt as read — a part end joined to nothing, a dependent source whose controlling quantity is not marked — so you can fix it on the board.',
+        'Nodes with a voltage written next to them (vₓ, v₁ …) get a **net label** with that name. Dependent sources are the **Dependent Source (diamond)** part: its **Controlled by** setting says what drives it (`node:vx`, `v:R2` or `i:R4`) and its gain carries the sign the drawing marks.',
+        'If the drawing has no ground symbol, the bottom wire is taken as 0 V.',
+      ]),
+      WARN('Always compare the redrawn circuit with the photo before you trust the answer: a misread value or a missed wire gives a different circuit.'),
+    ],
+  },
+
   // ------------------------------------------------------------------ 12b
   {
     id: 'loadflow', icon: 'tower',
@@ -665,6 +699,7 @@ export const CHAPTERS = [
         ['Circuit name & notes', 'Change the name and add a note (up to 500 characters).'],
         ['Export file (.rckt)', 'Saves the circuit as a file you can keep or send.'],
         ['Open file…', 'Opens a `.rckt` circuit or a backup file.'],
+        ['Circuit from photo', 'Reads a circuit diagram from a photo or a picture and opens it as a new circuit (see the chapter **Circuit from photo**).'],
         ['Share circuit', 'Sends the circuit through any app on your phone.'],
         ['SPICE netlist', 'Opens Analysis on the netlist tab.'],
         ['Export image (PNG)', 'Saves a picture of the board with the circuit name and RAPTI credit, good for reports.'],
@@ -749,7 +784,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 15 (library: generated)
   {
     id: 'library', icon: 'chip', generated: 'library',
-    title: 'Component library (all 520)',
+    title: 'Component library (all 521)',
     blocks: [
       P('Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.'),
     ],
@@ -820,7 +855,7 @@ export const CHAPTERS = [
       H('My circuits disappeared'),
       P('Circuits live inside the app on your phone. Clearing the app\'s data or uninstalling the app removes them. Restore from a backup file if you made one (**Open file / Restore backup**). Make backups regularly.'),
       H('Can I use it without internet?'),
-      P('Yes. Only the buttons that open the RAPTI website, WhatsApp, email or map need internet.'),
+      P('Yes. Only **Circuit from photo** and the buttons that open the RAPTI website, WhatsApp, email or map need internet.'),
       H('Is the result exactly like a real circuit?'),
       P('The engine follows SPICE methods and has been checked against textbook answers (RC and RL time constants, resonance, diode, BJT and MOSFET equations, op-amp gain, transformer ratio, logic truth tables, 555 frequency and more). Blocks such as logic gates, the 555, regulators, sensors and protection devices are **idealised models**. Always confirm important designs with datasheets and real measurements, and use **SPICE netlist** to cross-check in ngspice or LTspice.'),
     ],
@@ -889,6 +924,7 @@ export const SUMMARY = {
   meter: 'Voltage, current, resistance and power',
   analysis: 'AC sweep, DC sweep, operating point, SPICE',
   theorems: 'Thevenin, Norton, superposition, source transformation',
+  photo: 'Snap a circuit diagram, get a circuit you can run',
   loadflow: 'Power-system load flow: NR, GS, FDLF, DC, IEEE cases',
   saving: 'Autosave, files, sharing and backup',
   settings: 'Every setting explained',

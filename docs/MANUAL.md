@@ -20,30 +20,32 @@ Everything in the app, explained step by step.
 12. [Multimeter](#ch-meter)
 13. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
 14. [Network theorems, step by step](#ch-theorems)
-15. [Load Flow Analysis (power systems)](#ch-loadflow)
-16. [Saving, opening and sharing](#ch-saving)
-17. [Settings reference](#ch-settings)
-18. [Component library (all 520)](#ch-library)
-19. [Examples (all 104)](#ch-examples)
-20. [Quick reference: formulas and units](#ch-formulas)
-21. [Troubleshooting and FAQ](#ch-troubleshooting)
-22. [About RAPTI and contact](#ch-about)
+15. [Circuit from photo](#ch-photo)
+16. [Load Flow Analysis (power systems)](#ch-loadflow)
+17. [Saving, opening and sharing](#ch-saving)
+18. [Settings reference](#ch-settings)
+19. [Component library (all 521)](#ch-library)
+20. [Examples (all 104)](#ch-examples)
+21. [Quick reference: formulas and units](#ch-formulas)
+22. [Troubleshooting and FAQ](#ch-troubleshooting)
+23. [About RAPTI and contact](#ch-about)
 
 <a id="ch-welcome"></a>
 
 ## 1. Welcome to RaptiCKT
 
-**RaptiCKT** is a circuit simulator that runs on your phone. You draw a circuit, press **Run**, and the app calculates what every wire and part is doing, live: voltages glow on the wires, small dots show current flowing, and you can measure with an oscilloscope and a multimeter. Nothing needs an internet connection.
+**RaptiCKT** is a circuit simulator that runs on your phone. You draw a circuit, press **Run**, and the app calculates what every wire and part is doing, live: voltages glow on the wires, small dots show current flowing, and you can measure with an oscilloscope and a multimeter. Nothing needs an internet connection, except reading a circuit from a photo.
 
 #### What you can do with it
 
 - Build analog, digital and mixed circuits on an unlimited canvas.
-- Pick from **520 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
+- Pick from **521 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
 - Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.
 - Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
 - Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**).
+- Take a **photo of a circuit diagram** — a textbook figure, an exam question, a neat sketch — and it is redrawn on the board with its values, dependent sources included, ready to run (**Circuit from photo**).
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
 - Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
@@ -55,7 +57,7 @@ Electrical and electronic engineering students, teachers, technicians, hobbyists
 #### Requirements
 
 - Android 8.0 or newer.
-- No internet needed. Everything, including your saved circuits, stays on your phone.
+- No internet needed, except for **Circuit from photo** (which also needs your own Anthropic API key). Everything else, including your saved circuits, stays on your phone.
 
 #### How to read this manual
 
@@ -189,7 +191,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 - The round **+** button (bottom right) adds a component.
 - The **✋ Operate | Wire** switch at the top right of the board picks what a finger does (chapter 4, *Operate and Wire mode*).
 - The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). When the phone cannot keep up it shows, in amber, the speed actually reached, for example `1.5 s/s max`.
-- A red or yellow bar appears at the top when the circuit has a problem (chapter 21).
+- A red or yellow bar appears at the top when the circuit has a problem (chapter 22).
 - When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.
 - Messages (toasts) appear briefly at the bottom to confirm what happened.
 
@@ -225,7 +227,7 @@ On a computer browser you can also use: **Delete** (remove), **R** (rotate), **S
 
 > **Tip:** Always add a **Ground** to your circuit (see chapter 7). Many examples show where it goes.
 
-The complete list of all 520 components, with what each one does and which values you can change, is in the chapter **Component library**.
+The complete list of all 521 components, with what each one does and which values you can change, is in the chapter **Component library**.
 
 <a id="ch-editing"></a>
 
@@ -657,9 +659,41 @@ The ends of the load are named **a** and **b**: a is the end at the higher volta
 
 > **Tip:** Superposition adds currents and voltages, not powers: the last step shows the difference.
 
+<a id="ch-photo"></a>
+
+## 15. Circuit from photo
+
+Take a photo of a circuit diagram — a figure in your textbook, an exam question, a neat sketch on paper — or choose a picture or a screenshot, and the circuit is redrawn on the board with every value, ready to run. It reads independent and **dependent sources** (the diamonds: 0.1vₓ, 4iₓ, 0.5V₀ …), resistors, capacitors, inductors and switches, and marks the voltages and currents the drawing names.
+
+Open it from the **Circuit from photo** card on Home, from **⋮ → Circuit from photo** in the editor, or from **Or start from a photo** on an empty board.
+
+#### Reading a circuit
+
+1. The first time, paste your **Anthropic API key** and tap **Save** (see below).
+2. Tap **Take a photo** (the camera opens) or **Choose an image** (a picture or screenshot from the gallery).
+3. Wait while Claude reads the circuit — usually well under a minute. **Cancel** stops it.
+4. Check the redrawn circuit against the picture (tap **The photo** to see it again). A page with several figures lists them all: tap the one you want.
+5. Tap **Open on the board**. The circuit opens as a new circuit (also saved in My Circuits), named after the figure. Press **Run**: the live labels show every node voltage and branch current, so the asked quantity (vₓ, i, I₀ …) can be read straight off the board.
+
+#### Your API key
+
+- Photos are read by **Claude**, Anthropic’s AI model. You need your own API key: create one at **console.anthropic.com → API keys** (the **Get a key** link opens it). Reading a photo uses a small amount of your API credit.
+- The key is kept **only on this phone**, in the app’s settings. It is not put in circuit files, backups or shares, and it is sent only to Anthropic, together with the photo.
+- **Change** removes the saved key so you can paste another one.
+
+#### Getting a good result
+
+- Hold the phone flat over the page, with the whole circuit in the frame, in focus and in good light. Crop away other figures if you can: one circuit per photo reads best.
+- Every value should be readable in the photo. Claude names anything it was unsure of under the drawing.
+- Warnings under the drawing say what could not be rebuilt as read — a part end joined to nothing, a dependent source whose controlling quantity is not marked — so you can fix it on the board.
+- Nodes with a voltage written next to them (vₓ, v₁ …) get a **net label** with that name. Dependent sources are the **Dependent Source (diamond)** part: its **Controlled by** setting says what drives it (`node:vx`, `v:R2` or `i:R4`) and its gain carries the sign the drawing marks.
+- If the drawing has no ground symbol, the bottom wire is taken as 0 V.
+
+> **Warning:** Always compare the redrawn circuit with the photo before you trust the answer: a misread value or a missed wire gives a different circuit.
+
 <a id="ch-loadflow"></a>
 
-## 15. Load Flow Analysis (power systems)
+## 16. Load Flow Analysis (power systems)
 
 A separate section for **power-system load flow (power flow) studies**: the bus voltages |V|∠δ, the real and reactive power in every line and transformer, the slack-bus generation and the losses of a transmission network. Open it from the **Load Flow Analysis** card on Home, or from **⋮ → Load flow analysis** in the editor. Back returns to where you came from.
 
@@ -709,7 +743,7 @@ It works on bus and branch data (like MATPOWER or the IEEE common data format), 
 
 <a id="ch-saving"></a>
 
-## 16. Saving, opening and sharing
+## 17. Saving, opening and sharing
 
 #### Automatic saving
 
@@ -724,6 +758,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 | Circuit name & notes | Change the name and add a note (up to 500 characters). |
 | Export file (.rckt) | Saves the circuit as a file you can keep or send. |
 | Open file… | Opens a `.rckt` circuit or a backup file. |
+| Circuit from photo | Reads a circuit diagram from a photo or a picture and opens it as a new circuit (see the chapter **Circuit from photo**). |
 | Share circuit | Sends the circuit through any app on your phone. |
 | SPICE netlist | Opens Analysis on the netlist tab. |
 | Export image (PNG) | Saves a picture of the board with the circuit name and RAPTI credit, good for reports. |
@@ -750,7 +785,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 
 <a id="ch-settings"></a>
 
-## 17. Settings reference
+## 18. Settings reference
 
 Open Settings from the sliders icon on Home or from **⋮ → Settings** in the editor. Every change is saved at once.
 
@@ -813,11 +848,11 @@ These are the same defaults SPICE uses. Change them only if you know why; **Rese
 
 <a id="ch-library"></a>
 
-## 18. Component library (all 520)
+## 19. Component library (all 521)
 
 Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.
 
-### Sources — 34
+### Sources — 35
 
 Every circuit needs a source. **DC Voltage** is a battery-like source; **AC Voltage**, **Square**, **Pulse**, **Triangle**, **Sawtooth**, **Sweep**, **Noise**, **AM/FM**, **Step**, **Exponential**, **Damped sine**, **Piecewise-linear** and **f(t)** are signal generators for testing. **AC Mains** and the **3-phase** supplies are for power and house-wiring circuits (values are RMS). **Ground**, **Protective Earth** and **Chassis Ground** are all 0 V. The controlled sources (VCVS, VCCS, CCVS, CCCS) copy a measurement from one pair of terminals to another.
 
@@ -857,6 +892,7 @@ Every circuit needs a source. **DC Voltage** is a battery-like source; **AC Volt
 | **VCCS** | Voltage-controlled current source: Iout = gm · Vin, flowing through the source from + to −. <br>*Settings:* Transconductance (S) |
 | **CCVS** | Current-controlled voltage source: Vout = r · Iin, where Iin flows through the left terminals (0 V sense). <br>*Settings:* Transresistance (Ω) |
 | **CCCS** | Current-controlled current source: Iout = β · Iin, where Iin flows through the left terminals. <br>*Settings:* Current gain (A/A) |
+| **Dependent Source (diamond)** | A dependent (controlled) source drawn as a diamond in its branch, like in a textbook. "Controlled by": node:NAME — the voltage of the net label NAME to ground; v:PART — the voltage across a part (+ at its first terminal); i:PART — the current through a part (from its first terminal to its second). A current type pushes gain × control in the direction of the arrow; a voltage type keeps + at the first terminal. <br>*Settings:* Type, Gain, Controlled by, Symbol (as in the book) |
 
 ### Batteries — 16
 
@@ -1493,7 +1529,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="ch-examples"></a>
 
-## 19. Examples (all 104)
+## 20. Examples (all 104)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1654,7 +1690,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-formulas"></a>
 
-## 20. Quick reference: formulas and units
+## 21. Quick reference: formulas and units
 
 #### Ohm's law and power
 
@@ -1705,7 +1741,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-troubleshooting"></a>
 
-## 21. Troubleshooting and FAQ
+## 22. Troubleshooting and FAQ
 
 #### Nothing happens when I press Run
 
@@ -1775,7 +1811,7 @@ Circuits live inside the app on your phone. Clearing the app's data or uninstall
 
 #### Can I use it without internet?
 
-Yes. Only the buttons that open the RAPTI website, WhatsApp, email or map need internet.
+Yes. Only **Circuit from photo** and the buttons that open the RAPTI website, WhatsApp, email or map need internet.
 
 #### Is the result exactly like a real circuit?
 
@@ -1783,7 +1819,7 @@ The engine follows SPICE methods and has been checked against textbook answers (
 
 <a id="ch-about"></a>
 
-## 22. About RAPTI and contact
+## 23. About RAPTI and contact
 
 **Resonance Automation Professional Training Institute** (RAPTI) was established in 2019. Established in 2019 with one goal: developing skilled manpower for the automation industry. Courses at RAPTI are designed by experienced, competent engineers so that every student can work independently in any industry after completing a course — with the knowledge and skills that real job positions demand.
 

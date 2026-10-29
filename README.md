@@ -16,8 +16,8 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## Features
 
-- **520 components** in 22 categories, each with a physical simulation model:
-  - Sources (34): DC/AC/pulse/triangle/saw/noise/chirp, AM/FM, PWM, step, ramp, exponential, damped sine, PWL, f(t) expression, single-phase mains presets, 3-phase star/delta supply, bench PSU (CV/CC), dual PSU, PV module, rails, net labels, controlled sources, earth/chassis
+- **521 components** in 22 categories, each with a physical simulation model:
+  - Sources (35): DC/AC/pulse/triangle/saw/noise/chirp, AM/FM, PWM, step, ramp, exponential, damped sine, PWL, f(t) expression, single-phase mains presets, 3-phase star/delta supply, bench PSU (CV/CC), dual PSU, PV module, rails, net labels, controlled sources (including the textbook diamond), earth/chassis
   - Batteries (16): AA, 9 V, coin cell, NiMH, NiCd, Li-ion, 2S Li-Po, LiFePO₄ cell and 12.8 V battery, lead-acid, AGM, gel, configurable S/P pack, supercapacitor, BMS protection board, CC-CV charger — all with state-of-charge models that collapse when exhausted
   - Renewables (7): PV array, MPPT and PWM solar charge controllers, off-grid and grid-tie (anti-islanding) inverters, wind turbine, PEM fuel cell
   - Passive (25): R, shunt, fusible resistor, pots, rheostat, C (electrolytic, non-polar, tantalum, MLCC, film, PET, PP, silver-mica, variable, ESR/ESL model), L (variable, saturating iron core), ferrite bead, crystal, ceramic resonator, transmission line, memristor
@@ -54,6 +54,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - Monte Carlo tolerance analysis
   - Power / efficiency table
   - SPICE netlist
+- **Circuit from photo** (the card on Home, **⋮ → Circuit from photo**, or the button on an empty board): take a photo of a circuit diagram — a textbook figure, an exam question, a sketch — or choose a picture, and Claude (Anthropic) reads it into a circuit on the board with its values, dependent sources (the textbook diamonds such as 0.1vₓ or 4iₓ) and marked voltages, ready to run. A page with several figures lists them to pick from. Uses your own Anthropic API key, kept only on the phone; the photo is sent to the Claude API (from the Android app the request goes out natively, so it works from the bundled `file://` page).
 - **Load Flow Analysis** (its own section: the card on Home or **⋮ → Load flow analysis**): power-system power flow on bus / branch data
   - Newton–Raphson (polar), Gauss–Seidel (with acceleration factor), Fast Decoupled (XB) and DC load flow, with generator Q limits (PV → PQ switching), flat start, tolerance and iteration settings
   - Test systems: Saadat 3-bus (GS and NR examples), Stagg & El-Abiad 5-bus, Wood & Wollenberg 6-bus, WSCC 9-bus, IEEE 14-bus, plus a template for your own; add / edit buses, lines and tap / phase-shifting transformers, save them, and import / export MATPOWER case files
@@ -85,7 +86,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 
 ## User manual
 
-A complete, step-by-step manual is built into the app: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 520 components and 101 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
+A complete, step-by-step manual is built into the app: open it from the **Manual** tab on Home or from **⋮ → User manual** inside the editor. It has a searchable contents page, a full tour of every screen and tool, the live list of all 521 components and 101 examples (with an "Open this example" button), formulas, troubleshooting and an FAQ.
 
 The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md). It is generated from `web/src/ui/manual-content.js` with `cd web && npm run manual`; re-run it after editing the manual. `web/tests/manual-content.test.js` fails if a component, example, setting or menu item is added to the app without being covered by the manual.
 

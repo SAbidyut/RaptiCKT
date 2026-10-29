@@ -1,0 +1,253 @@
+// Circuit from photo: drawings as Claude describes them become board circuits that solve to the
+// textbook answers, dependent sources follow the marked polarity, and the request to the Claude
+// API carries the picture and asks for the structured drawing.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { buildFromDrawing, PHOTO_SCHEMA, KINDS } from '../src/ui/photo-circuit.js';
+import { readCircuitPhoto, PhotoError, PHOTO_MODEL } from '../src/ui/photo-ai.js';
+import { Simulator } from '../src/engine/sim.js';
+
+const P = (x, y) => ({ x, y });
+const part = (kind, text, value, from, to, polarity = 'none', control = '') => ({ kind, text, value, from, to, polarity, control });
+const wire = (a, b) => ({ from: a, to: b });
+const circuit = (o) => ({ title: 'test', parts: [], wires: [], ground: [], quantities: [], asked: [], ...o });
+
+/** build, solve the DC operating point, and return { doc, warnings, sim, el(name), v(name) } */
+function solve(c) {
+  const { doc, warnings, asked } = buildFromDrawing(c);
+  const sim = new Simulator().build(doc.elements, doc.wires);
+  assert.ok(sim.start(), sim.error);
+  for (let i = 0; i < 50; i++) assert.ok(sim.step(1e-4), sim.error);
+  const el = (n) => doc.elements.find((e) => e.name === n);
+  const label = (n) => doc.elements.find((e) => e.constructor.type === 'netlabel' && e.p.name === n);
+  return { doc, warnings, asked, sim, el, v: (n) => sim.v(label(n).nodes[0]) };
+}
+const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-6 * Math.max(1, Math.abs(b)), `${msg}: ${a} ≠ ${b}`);
+
+// Fig. 1 of the photos: 20 V, 20 Ω, 4 A, 4 Ω and a 0.1vx dependent current source; vx = 25 V
+const FIG1 = circuit({
+  title: 'Find vx',
+  parts: [
+    part('voltage_source', '20 V', 20, P(0, 0), P(0, 1), 'from'),
+    part('resistor', '20 Ω', 20, P(0, 0), P(1, 0)),
+    part('current_source', '4 A', 4, P(1, 1), P(1, 0), 'to'),
+    part('resistor', '4 Ω', 4, P(2, 0), P(2, 1)),
+    part('dependent_current_source', '0.1vx', 0.1, P(3, 1), P(3, 0), 'to', 'vx'),
+  ],
+  wires: [wire(P(1, 0), P(3, 0)), wire(P(0, 1), P(3, 1))],
+  ground: [P(2, 1)],
+  quantities: [{ name: 'vx', kind: 'node_voltage', at: P(1, 0), part: -1, positive: 'none' }],
+  asked: ['vx'],
+});
+
+// Fig. 4.12 (Alexander & Sadiku): 24 V, 8 Ω, 4 Ω, 4 Ω, 3 Ω, 12 V, 3 A; i = 2 A down the 3 Ω
+const FIG412 = circuit({
+  title: 'Figure 4.12',
+  parts: [
+    part('voltage_source', '24 V', 24, P(0, 0), P(1, 0), 'from'),
+    part('resistor', '8 Ω', 8, P(1, 0), P(2, 0)),
+    part('resistor', '4 Ω', 4, P(0, 1), P(1, 1)),
+    part('resistor', '4 Ω', 4, P(1, 1), P(2, 1)),
+    part('resistor', '3 Ω', 3, P(1, 1), P(1, 2)),
+    part('voltage_source', '12 V', 12, P(0, 1), P(0, 2), 'from'),
+    part('current_source', '3 A', 3, P(2, 2), P(2, 1), 'to'),
+  ],
+  wires: [wire(P(0, 0), P(0, 1)), wire(P(2, 0), P(2, 1)), wire(P(0, 2), P(2, 2))],
+  quantities: [{ name: 'i', kind: 'current_through', at: P(1, 1), part: 4, positive: 'to' }],
+  asked: ['i'],
+});
+
+test('Fig. 1 from the photo: vx = 25 V, nothing left loose', () => {
+  const r = solve(FIG1);
+  assert.deepEqual(r.warnings, []);
+  near(r.v('vx'), 25, 'vx');
+  assert.deepEqual(r.asked, ['vx']);
+  const d = r.el('D1');
+  assert.equal(d.p.kind, 'vccs');
+  assert.equal(d.p.ctrl, 'node:vx');
+  near(d.i, 2.5, '0.1vx');
+});
+
+test('Fig. 4.12 from the photo: i = 2 A down the 3 Ω, with no ground drawn', () => {
+  const r = solve(FIG412);
+  assert.deepEqual(r.warnings, []);
+  const R = r.doc.elements.filter((e) => e.constructor.type === 'resistor');
+  assert.deepEqual(R.map((e) => e.p.r), [8, 4, 4, 3]);
+  near(r.el('R4').i, 2, 'i');
+  assert.ok(r.doc.elements.some((e) => e.constructor.type === 'ground'), 'a reference was added');
+});
+
+// 10 V, R1 = 2 Ω (ix through it), R2 = 4 Ω down, then R3 = 2 Ω to a 2ix dependent voltage source
+function ccvs({ arrow = 'right', r1Reversed = false } = {}) {
+  const r1 = r1Reversed ? part('resistor', '2 Ω', 2, P(1, 0), P(0, 0)) : part('resistor', '2 Ω', 2, P(0, 0), P(1, 0));
+  const toRight = r1Reversed ? 'from' : 'to';
+  return circuit({
+    parts: [
+      part('voltage_source', '10 V', 10, P(0, 0), P(0, 1), 'from'),
+      r1,
+      part('resistor', '4 Ω', 4, P(1, 0), P(1, 1)),
+      part('resistor', '2 Ω', 2, P(1, 0), P(2, 0)),
+      part('dependent_voltage_source', '2ix', 2, P(2, 1), P(2, 0), 'to', 'ix'),
+    ],
+    wires: [wire(P(0, 1), P(2, 1))],
+    ground: [P(0, 1)],
+    quantities: [
+      { name: 'ix', kind: 'current_through', at: r1.from, part: 1, positive: arrow === 'right' ? toRight : toRight === 'to' ? 'from' : 'to' },
+      { name: 'va', kind: 'node_voltage', at: P(1, 0), part: -1, positive: 'none' },
+    ],
+  });
+}
+
+test('a current-controlled source follows the direction of the marked current', () => {
+  // ix to the right: VA = 5/0.875 V, ix = (10 − VA)/2
+  const a = solve(ccvs());
+  near(a.v('va'), 5 / 0.875, 'VA');
+  assert.equal(a.el('D1').p.kind, 'ccvs');
+  // the same drawing with the resistor described the other way round reads the same
+  const b = solve(ccvs({ r1Reversed: true }));
+  near(b.v('va'), 5 / 0.875, 'VA (R1 drawn right to left)');
+  // ix marked to the left is a different circuit: VA = 0, 5 A through R1
+  const c = solve(ccvs({ arrow: 'left' }));
+  near(c.v('va'), 0, 'VA (ix to the left)');
+  near(Math.abs(c.el('R1').i), 5, 'R1 current');
+  const d = solve(ccvs({ arrow: 'left', r1Reversed: true }));
+  near(d.v('va'), 0, 'VA (ix to the left, R1 right to left)');
+});
+
+// 12 V, R1 = 2 Ω, R2 = 4 Ω with Vo across it, R3 = 2 Ω to node B fed by a 0.5Vo current source
+function vccs({ plus = 'top', r2Reversed = false } = {}) {
+  const r2 = r2Reversed ? part('resistor', '4 Ω', 4, P(1, 1), P(1, 0)) : part('resistor', '4 Ω', 4, P(1, 0), P(1, 1));
+  const topEnd = r2Reversed ? 'to' : 'from';
+  return circuit({
+    parts: [
+      part('voltage_source', '12 V', 12, P(0, 0), P(0, 1), 'from'),
+      part('resistor', '2 Ω', 2, P(0, 0), P(1, 0)),
+      r2,
+      part('resistor', '2 Ω', 2, P(1, 0), P(2, 0)),
+      part('dependent_current_source', '0.5Vo', 0.5, P(2, 1), P(2, 0), 'to', 'Vo'),
+    ],
+    wires: [wire(P(0, 1), P(2, 1))],
+    ground: [P(1, 1)],
+    quantities: [
+      { name: 'Vo', kind: 'voltage_across', at: r2.from, part: 2, positive: plus === 'top' ? topEnd : topEnd === 'from' ? 'to' : 'from' },
+      { name: 'va', kind: 'node_voltage', at: P(1, 0), part: -1, positive: 'none' },
+      { name: 'vb', kind: 'node_voltage', at: P(2, 0), part: -1, positive: 'none' },
+    ],
+  });
+}
+
+test('a voltage-controlled source follows the + of the marked voltage', () => {
+  for (const r2Reversed of [false, true]) {
+    const a = solve(vccs({ r2Reversed }));
+    near(a.v('va'), 24, `VA (+ on top, reversed ${r2Reversed})`);
+    near(a.v('vb'), 48, `VB (+ on top, reversed ${r2Reversed})`);
+    assert.equal(a.el('D1').p.kind, 'vccs');
+    const b = solve(vccs({ plus: 'bottom', r2Reversed }));
+    near(b.v('va'), 4.8, `VA (+ at the bottom, reversed ${r2Reversed})`);
+    near(b.v('vb'), 0, `VB (+ at the bottom, reversed ${r2Reversed})`);
+  }
+});
+
+test('what cannot be rebuilt is said, not hidden', () => {
+  // a resistor hanging off the circuit by one end, and a control nobody marked
+  const c = circuit({
+    parts: [
+      part('voltage_source', '5 V', 5, P(0, 0), P(0, 1), 'from'),
+      part('resistor', '1 kΩ', 1000, P(0, 0), P(1, 0)),
+      part('resistor', '1 kΩ', 1000, P(1, 0), P(1, 1)),
+      part('resistor', '2 kΩ', 2000, P(1, 0), P(2, 0)),
+      part('dependent_current_source', '3ix', 3, P(3, 1), P(3, 0), 'to', 'ix'),
+    ],
+    wires: [wire(P(0, 1), P(1, 1))],
+    ground: [P(0, 1)],
+  });
+  const { warnings } = buildFromDrawing(c);
+  assert.ok(warnings.some((w) => /Not joined.*R3/.test(w)), warnings.join(' | '));
+  assert.ok(warnings.some((w) => /"ix".*not marked/.test(w)), warnings.join(' | '));
+  // node voltages with no ground drawn: the bottom wire is taken as 0 V
+  const g = buildFromDrawing({ ...FIG1, ground: [] });
+  assert.ok(g.warnings.some((w) => /No ground/.test(w)), g.warnings.join(' | '));
+  assert.ok(g.doc.elements.some((e) => e.constructor.type === 'ground'));
+  // a part with both ends on one point is left out
+  const z = buildFromDrawing(circuit({ parts: [part('resistor', '1 Ω', 1, P(0, 0), P(0, 0))] }));
+  assert.ok(z.warnings.some((w) => /left out/.test(w)));
+});
+
+test('the drawing schema suits structured outputs: every object closed, every property required', () => {
+  const walk = (s, path) => {
+    if (s.type === 'object') {
+      assert.equal(s.additionalProperties, false, `${path} is not closed`);
+      assert.deepEqual([...s.required].sort(), Object.keys(s.properties).sort(), `${path} leaves a property optional`);
+      for (const [k, v] of Object.entries(s.properties)) walk(v, `${path}.${k}`);
+    }
+    if (s.type === 'array') walk(s.items, `${path}[]`);
+  };
+  walk(PHOTO_SCHEMA, 'answer');
+  assert.ok(KINDS.includes('dependent_current_source') && KINDS.includes('dependent_voltage_source'));
+});
+
+// ------------------------------------------------------------------ the API call (fetch faked)
+const sse = (events) => events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+function answer(text, stop = 'end_turn') {
+  const half = Math.floor(text.length / 2);
+  return sse([
+    { type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: PHOTO_MODEL, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1200, output_tokens: 1 } } },
+    { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: text.slice(0, half) } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: text.slice(half) } },
+    { type: 'content_block_stop', index: 0 },
+    { type: 'message_delta', delta: { stop_reason: stop, stop_sequence: null }, usage: { output_tokens: 300 } },
+    { type: 'message_stop' },
+  ]);
+}
+async function withFetch(reply, fn) {
+  const real = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, init) => { seen.push({ url: String(url), init }); return reply(url, init); };
+  try { return await fn(seen); } finally { globalThis.fetch = real; }
+}
+
+test('the picture goes to Claude with the drawing schema, and the answer is parsed', async () => {
+  const out = { circuits: [FIG1], problem: '' };
+  await withFetch(() => new Response(answer(JSON.stringify(out)), { status: 200, headers: { 'content-type': 'text/event-stream' } }), async (seen) => {
+    const progress = [];
+    const got = await readCircuitPhoto({ apiKey: 'test-key', data: 'AAAA', mediaType: 'image/jpeg', onProgress: (n) => progress.push(n) });
+    assert.deepEqual(got, out);
+    assert.ok(progress.length >= 2 && progress.at(-1) === JSON.stringify(out).length, 'progress as the text arrives');
+    assert.equal(seen.length, 1);
+    const { url, init } = seen[0];
+    assert.match(url, /^https:\/\/api\.anthropic\.com\/v1\/messages/);
+    const h = new Headers(init.headers);
+    assert.ok(h.get('x-api-key') === 'test-key' || h.get('authorization') === 'Bearer test-key', 'the key goes with the request');
+    assert.equal(h.get('anthropic-dangerous-direct-browser-access'), 'true');
+    assert.match(h.get('anthropic-beta') || '', /server-side-fallback-2026-07-01/);
+    const body = JSON.parse(init.body);
+    assert.equal(body.model, 'claude-opus-5-5');
+    assert.equal(body.stream, true);
+    assert.equal(body.fallbacks, 'default');
+    assert.equal(body.output_config.format.type, 'json_schema');
+    assert.deepEqual(body.output_config.format.schema, PHOTO_SCHEMA);
+    const [img, txt] = body.messages[0].content;
+    assert.deepEqual(img, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } });
+    assert.equal(txt.type, 'text');
+  });
+});
+
+test('API failures become advice the reader can act on', async () => {
+  const err = (status, type) => () => new Response(JSON.stringify({ type: 'error', error: { type, message: 'nope' } }), { status, headers: { 'content-type': 'application/json' } });
+  const code = async (reply) => withFetch(reply, async () => {
+    try { await readCircuitPhoto({ apiKey: 'k', data: 'AAAA' }); return 'ok'; } catch (e) { assert.ok(e instanceof PhotoError, String(e)); return e.code; }
+  });
+  assert.equal(await code(err(401, 'authentication_error')), 'key');
+  assert.equal(await code(err(403, 'permission_error')), 'key');
+  assert.equal(await code(err(400, 'invalid_request_error')), 'bad');
+  assert.equal(await code(() => new Response(answer('', 'refusal'), { status: 200, headers: { 'content-type': 'text/event-stream' } })), 'refused');
+  assert.equal(await code(() => new Response(answer('{"circuits": [', 'max_tokens'), { status: 200, headers: { 'content-type': 'text/event-stream' } })), 'big');
+  await assert.rejects(readCircuitPhoto({ apiKey: '', data: 'AAAA' }), (e) => e.code === 'key');
+  // cancelled by the reader
+  const ctl = new AbortController();
+  ctl.abort();
+  assert.equal(await withFetch(err(500, 'api_error'), async () => {
+    try { await readCircuitPhoto({ apiKey: 'k', data: 'AAAA', signal: ctl.signal }); return 'ok'; } catch (e) { return e.code; }
+  }), 'cancelled');
+});

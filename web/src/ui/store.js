@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = {
   gmin: 1e-12,
   maxIter: 60,
   autoStart: true,
+  claudeKey: '',       // the reader's Anthropic API key, for "Circuit from photo" (kept on this device)
   damage: true,        // parts burn out and cables catch fire when over-stressed
   heatClock: 'real',   // 'real' | 'fast' | 'sim': clock for trips, heating and burning
   newWire: 'hw1.5',    // cable given to newly drawn wires (elements/cables.js WIRE_PRESETS)
@@ -93,8 +94,69 @@ export const store = {
   setFlag(name, v = true) { const f = read(K.flags, {}); f[name] = v; write(K.flags, f); },
 };
 
+/** A picture file → JPEG with its long side at most `max` px (the camera's rotation applied). */
+export async function shrinkImage(file, max = 1568) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(bmp.width * k)); cv.height = Math.max(1, Math.round(bmp.height * k));
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); // transparent PNGs read as white paper
+  ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+  bmp.close?.();
+  return { data: cv.toDataURL('image/jpeg', 0.88).split(',')[1], mediaType: 'image/jpeg' };
+}
+
 // ----------------------------------------------------------- native bridge
 const A = () => (typeof window !== 'undefined' ? window.RaptiAndroid : undefined);
+
+// requests in flight through the Android app: id → { resolve, reject, ctl, done }
+const pending = new Map();
+let nextReq = 1;
+const unb64 = (b64) => { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; };
+const abortError = () => (typeof DOMException === 'function' ? new DOMException('The request was aborted.', 'AbortError') : Object.assign(new Error('aborted'), { name: 'AbortError' }));
+
+/** fetch(url, init) done by the Android app: resolves a Response whose body streams as it arrives. */
+function nativeFetch(url, init = {}) {
+  return new Promise((resolve, reject) => {
+    const id = 'r' + nextReq++;
+    const sig = init.signal;
+    if (sig?.aborted) { reject(abortError()); return; }
+    const r = { resolve, reject, ctl: null, done: false };
+    pending.set(id, r);
+    const onAbort = () => {
+      try { A().httpAbort(id); } catch { /* gone already */ }
+      finish(id, abortError());
+    };
+    r.cleanup = () => sig?.removeEventListener('abort', onAbort);
+    sig?.addEventListener('abort', onAbort, { once: true });
+    const headers = {};
+    new Headers(init.headers || {}).forEach((v, k) => { headers[k] = v; });
+    const body = init.body == null ? null : String(init.body);
+    try { A().httpRequest(id, String(init.method || 'GET'), String(url), JSON.stringify(headers), body); } catch (e) { finish(id, new TypeError(String(e?.message || e))); }
+  });
+}
+function finish(id, err) {
+  const r = pending.get(id);
+  if (!r) return;
+  pending.delete(id);
+  r.cleanup?.();
+  if (err) { if (r.ctl) { try { r.ctl.error(err); } catch { /* closed */ } } else r.reject(err); return; }
+  try { r.ctl?.close(); } catch { /* closed */ }
+}
+if (typeof window !== 'undefined') {
+  window.__raptiHttpHead = (id, status, head) => {
+    const r = pending.get(id);
+    if (!r) return;
+    const body = status === 204 || status === 205 || status === 304 ? null : new ReadableStream({ start(c) { r.ctl = c; } });
+    const h = new Headers();
+    for (const [k, v] of JSON.parse(head || '[]')) { try { h.append(k, v); } catch { /* not allowed here */ } }
+    r.resolve(new Response(body, { status, headers: h }));
+  };
+  window.__raptiHttpData = (id, b64) => { const r = pending.get(id); if (r?.ctl) r.ctl.enqueue(unb64(b64)); };
+  window.__raptiHttpEnd = (id) => finish(id, null);
+  window.__raptiHttpError = (id, msg) => finish(id, new TypeError('Network request failed: ' + msg));
+}
 
 export const bridge = {
   isAndroid: () => !!A(),
@@ -146,6 +208,37 @@ export const bridge = {
       };
       inp.click();
     });
+  },
+  /**
+   * A picture from the camera (camera = true) or the gallery, made smaller (long side ≤ 1568 px,
+   * the size Claude reads best) as JPEG. Resolves { data (base64), mediaType }.
+   */
+  pickImage(camera = false) {
+    return new Promise((resolve, reject) => {
+      if (A() && A().pickImage) {
+        window.__raptiImage = (b64) => resolve({ data: b64, mediaType: 'image/jpeg' });
+        window.__raptiImageError = (msg) => reject(new Error(msg));
+        try { A().pickImage(!!camera); } catch (e) { reject(e); }
+        return;
+      }
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'image/*';
+      if (camera) inp.setAttribute('capture', 'environment');
+      inp.onchange = () => {
+        const f = inp.files[0];
+        if (!f) { reject(new Error('cancelled')); return; }
+        shrinkImage(f).then(resolve, reject);
+      };
+      inp.click();
+    });
+  },
+  /**
+   * A fetch for the Claude API. In the Android app the page runs from file://, so the request
+   * goes out through the app itself and streams back in pieces; elsewhere the browser's fetch.
+   */
+  apiFetch() {
+    if (!(A() && A().httpRequest)) return undefined;
+    return nativeFetch;
   },
   keepScreenOn(on) { try { A()?.keepScreenOn(!!on); } catch { /* ignore */ } },
   /** Full screen: Android hides the status and navigation bars; a browser uses the Fullscreen API. */
