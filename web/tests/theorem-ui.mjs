@@ -21,7 +21,7 @@ await page.waitForTimeout(900);
 await page.click('[data-a=more]'); await page.waitForTimeout(250);
 await page.click('.more-menu [data-m=theorem]'); await page.waitForTimeout(400);
 check(await page.isVisible('.overlay.theorem.open'), '⋮ → Run with theorem opens the page');
-check(await page.$$eval('.th-card:not([disabled])', (x) => x.length) === 8, 'eight theorems to pick from');
+check(await page.$$eval('.th-card:not([disabled])', (x) => x.length) === 10, 'eight theorems and two analysis methods to pick from');
 
 // tap R2 on the drawing to pick it, then R4 from the list
 await page.click('[data-th=thevenin]'); await page.waitForTimeout(500);
@@ -52,6 +52,19 @@ for (const [th, n] of Object.entries(want)) {
 }
 const th = await page.evaluate(() => document.querySelector('.th-body').textContent);
 check(/Vs1 = Is1 Req1/.test(th) && /Is1 = V1R1/.test(th), 'source transformation shows both transformations');
+
+// V_th by nodal or mesh analysis: the switch swaps the working, the answer stays
+await page.evaluate(() => { app.editor.theorem.theorem = 'thevenin'; app.editor.theorem.go('target'); }); await page.waitForTimeout(300);
+await page.click('.th-go'); await page.waitForTimeout(700);
+await page.click('.th-alt [data-m=mesh]'); await page.waitForTimeout(400);
+const mesh = await page.evaluate(() => ({ shown: [...document.querySelectorAll('.th-alt-b')].filter((b) => !b.hidden).map((b) => b.dataset.b), text: [...document.querySelectorAll('.th-alt-b:not([hidden])')].map((b) => b.textContent).join(' '), answer: document.querySelector('.th-answer b').textContent }));
+check(mesh.shown.every((m) => m === 'mesh') && /KVL round mesh/.test(mesh.text) && mesh.answer.includes('1.731 A'), 'Mesh analysis switch shows KVL with mesh currents, same answer');
+await page.click('.th-alt [data-m=nodal]'); await page.waitForTimeout(300);
+for (const [th, expect] of [['nodal', 'KCL at'], ['mesh', 'KVL round mesh']]) {
+  await page.evaluate((t) => { app.editor.theorem.theorem = t; app.editor.theorem.go('solve'); }, th); await page.waitForTimeout(600);
+  const s = await page.evaluate(() => ({ answer: document.querySelector('.th-answer b').textContent, text: document.querySelector('.th-body').textContent }));
+  check(s.answer.includes('1.731 A') && s.text.includes(expect) && !/NaN|undefined/.test(s.text), `${th} analysis: ${s.answer}`);
+}
 
 // Millman on parallel batteries, reciprocity and a star–delta bridge on the Wheatstone example
 for (const [ex, load, th, expect] of [['millman', 'R4', 'millman', '961.9 mA'], ['wheatstone', 'R6', 'reciprocity', '305.6 mA'], ['wheatstone', 'R6', 'thevenin', '305.6 mA']]) {
@@ -90,7 +103,7 @@ check(!run.open && run.running && run.sel === 'R4', `Run the circuit: board runn
 await page.evaluate(() => { app.editor.setRunning(false); app.goHome(); app.openExample('ceamp'); }); await page.waitForTimeout(900);
 await page.evaluate(() => app.editor.theorem.open()); await page.waitForTimeout(300);
 const warn = await page.textContent('.th-warn').catch(() => '');
-check(/Q1/.test(warn) && (await page.$$eval('.th-card[disabled]', (x) => x.length)) === 8, 'a transistor circuit is refused, naming the part');
+check(/Q1/.test(warn) && (await page.$$eval('.th-card[disabled]', (x) => x.length)) === 10, 'a transistor circuit is refused, naming the part');
 
 check(!errs.length, `no page errors ${errs.join(' | ')}`);
 await browser.close(); server.close();

@@ -43,7 +43,7 @@ Everything in the app, explained step by step.
 - Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
-- Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — with every intermediate circuit drawn (**⋮ → Run with theorem**).
+- Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**).
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
 - Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
@@ -625,7 +625,7 @@ Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` com
 **⋮ → Run with theorem** solves your circuit the way it is done in class and in exams. Pick a theorem, pick the resistor whose current or voltage you want, and read the solution step by step. Every step has its own circuit drawing, the formulas with your values in them, and the result — down to the final equivalent circuit and the answer.
 
 1. Build a circuit with resistors and DC sources (or open **Basics → Network theorems practice**, **Parallel batteries (Millman’s theorem)** or **Unbalanced Wheatstone bridge**).
-2. Tap **⋮ → Run with theorem** and choose a theorem: **Thevenin**, **Norton**, **Superposition**, **Source transformation**, **Maximum power transfer**, **Millman**, **Reciprocity** or **Tellegen**.
+2. Tap **⋮ → Run with theorem** and choose a theorem — **Thevenin**, **Norton**, **Superposition**, **Source transformation**, **Maximum power transfer**, **Millman**, **Reciprocity** or **Tellegen** — or, under **Analysis methods**, **Nodal analysis** or **Mesh analysis**.
 3. Choose the resistor (the load): tap it on the drawing or in the list. Choose **Current I** or **Voltage V**.
 4. Tap **Solve step by step**. Scroll through the steps. **Run the circuit** at the end goes back to the board, runs the simulation and selects the load, so you can compare with the live reading.
 
@@ -641,6 +641,12 @@ Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` com
 | Millman | For branches that all run in parallel between the load’s two ends (batteries with their internal resistances, resistors, current sources): each branch’s E and R, then V_M = (ΣE/R + ΣI) / Σ(1/R), R_M = 1 / Σ(1/R), and the equivalent circuit. A circuit of another shape is named as not a Millman circuit. |
 | Reciprocity | For a circuit with one source: the current in the load with the source where it is, then the source moved into the load’s branch and an ammeter in its old place — the two currents are equal. (For a current source: the voltages.) |
 | Tellegen | The circuit solved by node voltages, then a table of every part’s voltage, current and power: the power the sources deliver equals the power the resistors take, so the sum is zero. |
+| Nodal analysis | 1. The nodes named on the drawing, the reference at 0 V, and KCL written at each node (a voltage source fixes its node or makes a supernode), solved. 2. V_L = V_a − V_b and I_L = V_L / R_L. |
+| Mesh analysis | 1. The meshes (the windows of the circuit) drawn with a clockwise current i₁, i₂, … in each. 2. KVL round each mesh — a current source sets its mesh’s current, or joins two meshes into a supermesh — solved. 3. The load current from the mesh currents through it (their difference when the load is shared by two meshes). |
+
+#### Nodal or mesh analysis inside a theorem
+
+Where a theorem has to solve a circuit — V_th, I_N, Tellegen, a superposition step that is not series–parallel, reciprocity — the step has a **Nodal analysis | Mesh analysis** switch. Nodal writes KCL with the node voltages; mesh writes KVL with the mesh currents (the drawing then shows the clockwise mesh currents instead of the node names), the branch currents and then the node voltages the step needs. Both give the same result; the switch is remembered for the next solution.
 
 The ends of the load are named **a** and **b**: a is the end at the higher voltage, so the load current flows from a to b. Other nodes used in the equations are tagged c, d, e … on the drawings. The last step always checks the answer against a direct solution of the whole circuit.
 
@@ -722,7 +728,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 | SPICE netlist | Opens Analysis on the netlist tab. |
 | Export image (PNG) | Saves a picture of the board with the circuit name and RAPTI credit, good for reports. |
 | Operating point | Opens Analysis on the operating-point tab. |
-| Run with theorem | Solves the circuit step by step with a network theorem: Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen (see the chapter on network theorems). |
+| Run with theorem | Solves the circuit step by step with a network theorem — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by nodal or mesh analysis (see the chapter on network theorems). |
 | Settings | Opens Settings. |
 | User manual | Opens this manual. |
 | Help & gestures | Shows the short how-to card. |

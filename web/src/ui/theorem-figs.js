@@ -15,7 +15,7 @@ const C = 6 * GRID; // one ladder cell: an 80-unit part with a short lead at eac
  * The user's circuit as the step sees it. Returns { doc, hi, notes, load }: notes are annotations
  * anchored at world points (laid out in pixels when drawn), load the drawn load if it is shown.
  */
-export function boardFigure(src, fig, net) {
+export function boardFigure(src, fig, net, method = 'nodal') {
   const doc = CircuitDoc.fromJSON(JSON.parse(JSON.stringify(src.toJSON())));
   const els = [...doc.elements];
   const posts = net.posts;
@@ -59,7 +59,9 @@ export function boardFigure(src, fig, net) {
   if (fig.show === 'Vth') notes.push({ t: 'ask', ...ab, text: 'Vth = ?', volt: true });
   if (fig.show === 'IN') notes.push({ t: 'flow', ...ab, text: 'IN' });
   if (fig.arrow) notes.push({ t: 'flow', ...ab, text: fig.arrow === true ? 'IL' : fig.arrow });
-  for (const tg of fig.tags || []) if (net.nodePos.has(tg.node)) notes.push({ t: 'node', at: net.nodePos.get(tg.node), text: tg.text });
+  // mesh analysis shows the mesh currents (clockwise loops) instead of the node names
+  if ((fig.mode || method) === 'mesh' && fig.meshes && fig.meshes.length) for (const m of fig.meshes) notes.push({ t: 'mesh', at: m.at, text: m.text });
+  else for (const tg of fig.tags || []) if (net.nodePos.has(tg.node)) notes.push({ t: 'node', at: net.nodePos.get(tg.node), text: tg.text });
   return { doc, hi, notes, load };
 }
 
@@ -257,6 +259,7 @@ function layout(notes, k, load, ctx) {
   for (const n of notes) {
     if (n.t === 'tag') pill(n.at, 0, 0, n.text, { left: n.left, size: 10, bold: false, muted: true });
     else if (n.t === 'node') pill(n.at, 9, -11, n.text, { size: 10, fill: '#a855f7', color: '#fff' });
+    else if (n.t === 'mesh') out.push({ kind: 'loop', at: n.at, dx: 0, dy: 0, w: 34, h: 34, text: n.text });
     else if (n.t === 'term') {
       const [ux, uy] = unit(n.at[0] - n.other[0], n.at[1] - n.other[1]), [ox, oy] = n.out;
       out.push({ kind: 'ring', at: n.at, dx: 0, dy: 0, w: 12, h: 12 });
@@ -304,6 +307,14 @@ function paint(r, items, th) {
       const [bx, by] = r.toScreen(d.to[0], d.to[1]);
       ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(bx, by); ctx.stroke();
+    } else if (d.kind === 'loop') { // a clockwise mesh current: an open circle with an arrowhead, its name inside
+      const R = 13, col = '#22c55e', a0 = -Math.PI * 0.35, a1 = a0 + Math.PI * 1.6;
+      ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, R, a0, a1); ctx.stroke();
+      const hx = x + R * Math.cos(a1), hy = y + R * Math.sin(a1), tx = -Math.sin(a1), ty = Math.cos(a1); // clockwise tangent
+      ctx.beginPath(); ctx.moveTo(hx + tx * 6, hy + ty * 6); ctx.lineTo(hx - tx * 2 - ty * 5, hy - ty * 2 + tx * 5); ctx.lineTo(hx - tx * 2 + ty * 5, hy - ty * 2 - tx * 5); ctx.closePath(); ctx.fill();
+      ctx.font = `italic 700 12px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(d.text.replace(/\d/g, (c) => '₀₁₂₃₄₅₆₇₈₉'[c]), x, y + 0.5);
     } else if (d.kind === 'arrow') {
       const L = 13, col = '#f59e0b';
       const x0 = x - d.ux * L, y0 = y - d.uy * L, x1 = x + d.ux * L, y1 = y + d.uy * L;
