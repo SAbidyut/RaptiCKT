@@ -148,28 +148,33 @@ export class Speaker extends TwoTerm {
     { key: 'le', label: 'Voice-coil inductance', unit: 'H', def: 0.3e-3, min: 1e-7, max: 1, log: true },
     { key: 'w', label: 'Power rating', unit: 'W', def: 1, min: 0.01, max: 1000, log: true },
   ];
-  static description = 'Moving-coil speaker (Re + Le voice coil). Plays the detected fundamental frequency through the device speaker when sound is enabled; the cone moves with the current.';
+  static description = 'Moving-coil speaker (Re + Le voice coil). Plays the detected fundamental frequency through the device speaker when sound is enabled; the cone moves with the current. Driven at much more than its power rating (or with DC straight from a battery) the voice coil burns open within seconds.';
   constructor(x, y) { super(x, y); this.m = new CycleMeter(0.1); }
   branchCount() { return 1; }
   reset() { this.il = 0; this.vl = 0; this.m = new CycleMeter(0.1); this.setCurrent(0); this.sounding = false; }
+  /** voice coil R and L — a burnt coil is open */
+  re() { return this.damaged ? 1e9 : this.p.re; }
+  le() { return this.damaged ? 0 : this.p.le; }
   stamp(s) {
     const k = this.branches[0], [a, b] = this.nodes;
     s.addBranchKCL(a, b, k); s.addA(k, a - 1, 1); s.addA(k, b - 1, -1);
-    s.addA(k, k, -(this.p.re + (s.mode === 'dc' ? 0 : (s.method === 'be' ? 1 : 2) * this.p.le / s.dt)));
+    s.addA(k, k, -(this.re() + (s.mode === 'dc' ? 0 : (s.method === 'be' ? 1 : 2) * this.le() / s.dt)));
   }
-  stampStep(s) { if (s.mode !== 'dc') s.b[this.branches[0]] += s.method === 'be' ? -(this.p.le / s.dt) * this.il : -(2 * this.p.le / s.dt) * this.il - this.vl; }
+  stampStep(s) { if (s.mode !== 'dc') s.b[this.branches[0]] += s.method === 'be' ? -(this.le() / s.dt) * this.il : -(2 * this.le() / s.dt) * this.il - this.vl; }
   accept(s) {
     const i = s.x[this.branches[0]];
-    this.vl = s.mode === 'dc' ? 0 : this.voltageDiff(s) - this.p.re * i;
+    this.vl = s.mode === 'dc' ? 0 : this.voltageDiff(s) - this.re() * i;
     this.il = i; this.setCurrent(i);
     if (s.mode === 'dc') return;
+    // music peaks are fine; ≈2.5 × the rated power for a couple of seconds melts the voice coil
+    this.overheat(s, (i * i * this.p.re) / this.p.w, 2, 2.5, () => `Voice coil burnt open — about ${fmtShort(this._hav * this.p.w, 'W')} in a ${fmtShort(this.p.w, 'W')} speaker`);
     this.m.push(s.t, s.dt, i);
     const f = this.m.f;
     this.sounding = this.m.vrms > 1e-3 && f > 20 && f < 16000;
     this.tone = f;
   }
   get soundTone() { return this.tone || 440; }
-  stampAC(ac) { const k = this.branches[0], [a, b] = this.nodes; ac.addBranchKCL(a, b, k); ac.addA(k, a - 1, 1); ac.addA(k, b - 1, -1); ac.addA(k, k, -this.p.re, -ac.omega * this.p.le); }
+  stampAC(ac) { const k = this.branches[0], [a, b] = this.nodes; ac.addBranchKCL(a, b, k); ac.addA(k, a - 1, 1); ac.addA(k, b - 1, -1); ac.addA(k, k, -this.re(), -ac.omega * this.le()); }
   valueLabel() { return fmtShort(this.p.re + 1.5, 'Ω'); }
   readings() { return [['Current (RMS)', this.m.vrms, 'A'], ['Power (avg)', this.m.vrms ** 2 * this.p.re, 'W'], ['Frequency', this.m.f, 'Hz']]; }
   localBox() { return [-2 * G, -1.2 * G, 2 * G, 1.2 * G]; }

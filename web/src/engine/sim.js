@@ -3,7 +3,7 @@
 // transient analysis, DC operating point with gmin- and source-stepping, and
 // small-signal AC analysis around the operating point.
 
-import { RealLU, complexSolve } from './matrix.js';
+import { RealLU, SchurLU, complexSolve } from './matrix.js';
 
 export const DEFAULT_OPTIONS = {
   method: 'trap',        // 'trap' | 'be'
@@ -331,7 +331,67 @@ export class Simulator {
     for (const e of this.elements) if (e.stamp) e.stamp(this);
     this.Alin.set(this.A);
     this.linFactored = false;
+    this.schurLin = 0; // the linear part must be eliminated again
+    this.aClean = false;
     this.dirty = false;
+  }
+
+  /**
+   * Matrix rows / columns the nonlinear parts write to: their own terminals, internal nodes
+   * and branches, plus anything a trial stamp touches.
+   */
+  nlIndices() {
+    const set = new Set();
+    for (const e of this.nonlinear) {
+      for (const nd of [...e.nodes, ...(e.inodes || [])]) if (nd > 0) set.add(nd - 1);
+      for (const k of e.branches || []) set.add(k);
+    }
+    const m = this.size, A = this.A, b = this.b, a0 = Float64Array.from(A), b0 = Float64Array.from(b);
+    A.fill(0); b.fill(0);
+    for (const e of this.nonlinear) e.stampNL(this);
+    for (let i = 0; i < m; i++) {
+      if (b[i] !== 0) set.add(i);
+      for (let j = 0; j < m; j++) if (A[i * m + j] !== 0) { set.add(i); set.add(j); }
+    }
+    A.set(a0); b.set(b0);
+    return [...set].sort((x, y) => x - y);
+  }
+
+  /**
+   * The Schur-complement solver for Newton iterations, ready for the current linear matrix,
+   * or null when the full LU is the better (or only) choice.
+   */
+  schur() {
+    if (this.schurOff || this.size < 24) return null;
+    if (!this.tail) {
+      this.tail = this.nlIndices();
+      if (!this.tail.length || this.tail.length > 0.4 * this.size) { this.schurOff = true; return null; }
+      this.sch = new SchurLU(this.size, this.tail);
+      this.schurLin = 0; this.schurChecks = 0;
+    }
+    if (!this.schurLin) this.schurLin = this.sch.factorLinear(this.Alin) ? 1 : -1;
+    return this.schurLin > 0 ? this.sch : null;
+  }
+
+  /**
+   * Now and then make sure the nonlinear stamps stayed inside the tail block (a part could
+   * write somewhere new); if not, widen the tail. Returns false when this solve must use the
+   * full LU.
+   */
+  schurValid() {
+    if ((this.schurChecks++ & 31) !== 0 && this.schurChecks > 8) return true;
+    const m = this.size, A = this.A, L = this.Alin, isT = new Uint8Array(m), extra = new Set();
+    for (const t of this.tail) isT[t] = 1;
+    for (let i = 0; i < m; i++) {
+      if (!isT[i] && this.b[i] !== this.bStep[i]) extra.add(i);
+      const ri = i * m;
+      for (let j = 0; j < m; j++) if (A[ri + j] !== L[ri + j] && !(isT[i] && isT[j])) { extra.add(i); extra.add(j); }
+    }
+    if (!extra.size) return true;
+    this.tail = [...new Set([...this.tail, ...extra])].sort((x, y) => x - y);
+    if (this.tail.length > 0.4 * m) this.schurOff = true;
+    else { this.sch = new SchurLU(m, this.tail); this.schurLin = 0; }
+    return false;
   }
 
   buildStepRHS() {
@@ -348,22 +408,33 @@ export class Simulator {
     this.buildStepRHS();
     if (this.nonlinear.length === 0) {
       if (!this.linFactored) {
-        if (!this.lu.factor(this.Alin)) return this.singular();
-        this.linFactored = true;
+        // a sparse-ordered factorisation for bigger circuits (the dense one names a singular part)
+        if (m >= 24) this.linSch = this.linSch || new SchurLU(m, []);
+        this.linFactored = m >= 24 && this.linSch.factorLinear(this.Alin) ? 'sparse' : 'dense';
+        if (this.linFactored === 'dense' && !this.lu.factor(this.Alin)) { this.linFactored = false; return this.singular(); }
       }
-      this.lu.solveRefined(this.Alin, this.bStep, this.x, 1);
+      (this.linFactored === 'sparse' ? this.linSch : this.lu).solveRefined(this.Alin, this.bStep, this.x, 1);
       return this.checkFinite();
     }
     const { reltol, vntol, abstol } = this.opt;
     const nNodes = this.nodeCount - 1;
     const xn = this.xIter;
     for (let it = 0; it < maxIter; it++) {
-      this.A.set(this.Alin);
+      // only the nonlinear parts' rows change between iterations: solve through the small
+      // Schur complement when that works (and then only its block needs resetting), else
+      // factor the whole matrix
+      const sch = this.schur();
+      if (sch && this.aClean) sch.restoreTail(this.A, this.Alin); else this.A.set(this.Alin);
+      this.aClean = !!sch;
       this.b.set(this.bStep);
       this.limited = false;
       for (const e of this.nonlinear) e.stampNL(this);
-      if (!this.lu.factor(this.A)) return this.singular();
-      this.lu.solveRefined(this.A, this.b, xn, 2);
+      if (sch && this.schurValid() && sch.factor(this.A, this.Alin)) sch.solveRefined(this.A, this.b, xn, 2);
+      else {
+        this.aClean = false;
+        if (!this.lu.factor(this.A)) return this.singular();
+        this.lu.solveRefined(this.A, this.b, xn, 2);
+      }
       let conv = !this.limited && it > 0;
       for (let i = 0; i < m && conv; i++) {
         const tol = i < nNodes ? vntol : abstol;

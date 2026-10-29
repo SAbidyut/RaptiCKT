@@ -101,10 +101,16 @@ export class Supercap extends Composite {
     { key: 'rleak', label: 'Leakage resistance', unit: 'Ω', def: 1e5, min: 10, max: 1e9, log: true },
     { key: 'vmax', label: 'Rated voltage', unit: 'V', def: 2.7, min: 0.5, max: 100 },
   ];
-  static description = 'Electric double-layer capacitor: large C with series ESR and self-discharge (leakage) resistance.';
+  static description = 'Electric double-layer capacitor: large C with series ESR and self-discharge (leakage) resistance. Charged well above its rated voltage (or reversed) the electrolyte breaks down and it vents open.';
   ownInternal() { return 1; }
   parts() { return [[new Resistor(0, 0), [0, 'i0']], [new Capacitor(0, 0), ['i0', 1]], [new Resistor(0, 0), ['i0', 1]]]; }
-  sync() { if (!this.subs) return; const [r, c, l] = this.subs.map((s) => s.el); r.p.r = this.p.esr; c.p.c = this.p.c; l.p.r = this.p.rleak; }
+  sync() { if (!this.subs) return; const [r, c, l] = this.subs.map((s) => s.el); r.p.r = this.damaged ? 1e9 : this.p.esr; c.p.c = this.p.c; l.p.r = this.p.rleak; }
+  accept(s) {
+    super.accept(s);
+    if (s.mode === 'dc' || this.damaged) return;
+    const v = s.v(this.nodes[0]) - s.v(this.nodes[1]), x = v > 0 ? (v / this.p.vmax) ** 2 : (1 - v / 0.5) ** 2;
+    if (this.overheat(s, x, 2, 1.69, () => v < 0 ? `Vented — charged the wrong way round (${fmtShort(v, 'V')})` : `Vented — ${fmtShort(v, 'V')} on a ${fmtShort(this.p.vmax, 'V')} supercapacitor (over-voltage)`)) this.sync();
+  }
   leads() { return [[0, -2 * G, 0, -G * 0.3, 0], [1, 2 * G, 0, G * 0.3, 0]]; }
   valueLabel() { return fmtShort(this.p.c, 'F'); }
   readings(s) { const v = s.v(this.nodes[0]) - s.v(this.nodes[1]); return [['Voltage', v, 'V'], ['Current', this.postCurrents[0], 'A'], ['Energy', 0.5 * this.p.c * s.v(this.inodes[0]) ** 2, 'J']]; }

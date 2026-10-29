@@ -19,14 +19,15 @@ Everything in the app, explained step by step.
 11. [Oscilloscope](#ch-scope)
 12. [Multimeter](#ch-meter)
 13. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
-14. [Load Flow Analysis (power systems)](#ch-loadflow)
-15. [Saving, opening and sharing](#ch-saving)
-16. [Settings reference](#ch-settings)
-17. [Component library (all 520)](#ch-library)
-18. [Examples (all 101)](#ch-examples)
-19. [Quick reference: formulas and units](#ch-formulas)
-20. [Troubleshooting and FAQ](#ch-troubleshooting)
-21. [About RAPTI and contact](#ch-about)
+14. [Network theorems, step by step](#ch-theorems)
+15. [Load Flow Analysis (power systems)](#ch-loadflow)
+16. [Saving, opening and sharing](#ch-saving)
+17. [Settings reference](#ch-settings)
+18. [Component library (all 520)](#ch-library)
+19. [Examples (all 104)](#ch-examples)
+20. [Quick reference: formulas and units](#ch-formulas)
+21. [Troubleshooting and FAQ](#ch-troubleshooting)
+22. [About RAPTI and contact](#ch-about)
 
 <a id="ch-welcome"></a>
 
@@ -42,8 +43,9 @@ Everything in the app, explained step by step.
 - Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
+- Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — with every intermediate circuit drawn (**⋮ → Run with theorem**).
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
-- Learn from **101 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
+- Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
 
 #### Who it is for
@@ -90,14 +92,14 @@ When the app opens you see a short splash, then the **Home** screen. The bar at 
 - **New circuit**: opens an empty board.
 - **Open file**: opens a `.rckt` circuit file or a backup file from your phone.
 - **Continue where you left off**: appears when there is an unfinished circuit. One tap returns to it.
-- Feature tiles (Oscilloscope, Multimeter, Bode plots, DC sweep, SPICE export) open a new board; **Sensors** opens the Examples page.
-- **Recent circuits** and **Start with an example**: tap a card to open it.
+- **Load Flow Analysis**: opens the power-system load-flow tool (see the chapter **Load Flow Analysis**).
+- **Recent circuits**: your last saved circuits; tap a card to open it, **See all** opens My Circuits. Ready-made circuits are on the **Examples** page.
 - Tap the **RAPTI logo** (top left) or the RAPTI banner to read about the institute.
 - The **sliders** icon (top right) opens **Settings**.
 
 #### Examples
 
-37 ready-made circuits, each with an explanation. Filter by category with the chips at the top. Opening an example starts it running by itself (press Pause to stop it). If you change an example, it is saved as your own circuit when you go back; the original example is never damaged.
+104 ready-made circuits, each with an explanation. Filter by category with the chips at the top. Opening an example starts it running by itself (press Pause to stop it). If you change an example, it is saved as your own circuit when you go back; the original example is never damaged.
 
 The full list is in the chapter **Examples**.
 
@@ -186,8 +188,8 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 - The big area with the grid is your **canvas**. It is unlimited: pan and zoom freely.
 - The round **+** button (bottom right) adds a component.
 - The **✋ Operate | Wire** switch at the top right of the board picks what a finger does (chapter 4, *Operate and Wire mode*).
-- The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). It says **CPU-limited** when the phone cannot keep up.
-- A red or yellow bar appears at the top when the circuit has a problem (chapter 20).
+- The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). When the phone cannot keep up it shows, in amber, the speed actually reached, for example `1.5 s/s max`.
+- A red or yellow bar appears at the top when the circuit has a problem (chapter 21).
 - When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.
 - Messages (toasts) appear briefly at the bottom to confirm what happened.
 
@@ -395,7 +397,9 @@ Tap the chip at the top of the board (`t = … · …/s`). A small panel opens:
 - **Timestep Δt**: the internal step the solver uses (it is chosen automatically from the speed and the highest frequency).
 - **Automatic**: tick it to let the app choose a speed that suits your sources. Moving the slider switches Automatic off for this circuit.
 
-If the chip says **CPU-limited**, the phone cannot calculate as fast as you asked: lower the speed, or simplify the circuit. The app also lowers the drawing sharpness automatically on slow phones to keep animation smooth.
+Running faster than the automatic speed, mains circuits take bigger time steps (down to 40 per cycle, still accurate for RMS values, power and heating), so fast-forwarding a big circuit really is faster.
+
+If the chip turns **amber** — for example `1.5 s/s max` — the phone cannot calculate as fast as you asked: the circuit runs at the speed shown, and the Simulation speed panel says so. A higher setting does not help then; simplify the circuit or close the scope. While it is limited the app gives the simulation most of each frame (the board redraws about 30 times a second). It also lowers the drawing sharpness automatically on slow phones to keep animation smooth.
 
 #### Interactive parts
 
@@ -434,7 +438,14 @@ Parts in RaptiCKT have the limits of real parts. Too much voltage or current **b
 | Fuse | Blows when its I²t is exceeded, and stays blown until replaced. |
 | MCB, MCCB, RCBO | Trips on overload or short circuit (tap to reset). A fault current above its **breaking capacity Icn** (6 kA for an MCB) destroys it. |
 | RCCB | Has no overcurrent protection: a long overload above its In burns it. Always fit an MCB before it. |
-| Ceiling fan, heater, LED bulb | Too high a supply voltage: the winding, the element or the driver burns. |
+| Ceiling fan | Its winding burns on a long overload, and within seconds on a much higher supply voltage (on 460 V the core saturates and the current shoots up). ±10 % of 230 V is always fine. |
+| Heater, LED bulb, CFL, LED panel | More than about 25–35 % above the rated voltage: the element, the driver or the electronic ballast burns within seconds. |
+| Socket appliances | The appliance plugged into a socket burns on a supply well above its rated voltage: a lamp at once, a TV, computer or microwave within seconds, motors (fan, pump, fridge, washing machine, AC) and heaters a little later. |
+| Tube-light ballast, bell, transformer | The winding overheats and burns open well above its rating (twice the mains voltage, or a 230 V transformer primary on 460 V). |
+| Relay, contactor, ladder coil | About 1.5 × its rated coil voltage for a few seconds burns the coil open — the contacts drop out. |
+| DC fan, LED strip, speaker | A 12 V fan or strip on 24 V burns within seconds; a speaker driven far above its power rating (or straight from a battery) burns its voice coil. |
+| Ceramic, film, PF and supercapacitors | Held well above the voltage rating the dielectric breaks down: ceramic and mica capacitors fail **short**, film and PF capacitors fail open, a supercapacitor vents. |
+| Photocell / PIR switch, LED driver, emergency light | Their mains electronics are made for 90–265 V: above about 300 V they burn. |
 | Wires and cables | Current above the cable rating Iz heats them; far above it they smoke, catch fire and burn through. |
 
 When something burns you see a flash, flames and smoke, hear a bang and get a message saying why. The part turns dark with a red **!** badge.
@@ -607,9 +618,42 @@ Runs the circuit and averages the power flowing into every component over the la
 
 Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` commands, that you can open in **ngspice** or **LTspice** to cross-check results or continue research. Buttons: **Copy**, **Save .cir**, **Share**. Parts without a SPICE equivalent (such as digital blocks) are written as comments.
 
+<a id="ch-theorems"></a>
+
+## 14. Network theorems, step by step
+
+**⋮ → Run with theorem** solves your circuit the way it is done in class and in exams. Pick a theorem, pick the resistor whose current or voltage you want, and read the solution step by step. Every step has its own circuit drawing, the formulas with your values in them, and the result — down to the final equivalent circuit and the answer.
+
+1. Build a circuit with resistors and DC sources (or open **Basics → Network theorems practice**, **Parallel batteries (Millman’s theorem)** or **Unbalanced Wheatstone bridge**).
+2. Tap **⋮ → Run with theorem** and choose a theorem: **Thevenin**, **Norton**, **Superposition**, **Source transformation**, **Maximum power transfer**, **Millman**, **Reciprocity** or **Tellegen**.
+3. Choose the resistor (the load): tap it on the drawing or in the list. Choose **Current I** or **Voltage V**.
+4. Tap **Solve step by step**. Scroll through the steps. **Run the circuit** at the end goes back to the board, runs the simulation and selects the load, so you can compare with the live reading.
+
+#### What each theorem shows
+
+| Theorem | Steps and circuits |
+| --- | --- |
+| Thevenin | 1. R_th: the load is taken out and the sources are turned off (voltage source → wire, current source → open); the resistors are combined in series and parallel, one line per combination. 2. V_th: the open-circuit voltage between a and b, found by node voltages (KCL). 3. The Thevenin equivalent (V_th in series with R_th, the load back on) and I_L = V_th / (R_th + R_L). |
+| Norton | 1. R_N (the same as R_th). 2. I_N: a and b are shorted and I_N is the current in that short, found by node voltages and KCL at a. 3. The Norton equivalent (I_N in parallel with R_N and the load) and the current divider I_L = I_N·R_N / (R_N + R_L). |
+| Superposition | One step per independent source, with the others turned off. Each step finds the resistance the source sees and follows the current to the load with voltage and current dividers. The last step adds the parts (with their signs). |
+| Source transformation | The circuit is redrawn as a ladder with the load on the right. Then, one figure per step: V in series with R ⇄ I in parallel with R, resistors combined in series and parallel, current sources in parallel added — until one source and one resistor feed the load. |
+| Maximum power transfer | R_th and V_th as for Thevenin, then the best load R_L = R_th with P_max = V_th² / (4·R_th) drawn as an equivalent circuit, and the power of your present load with a curve of P_L against R_L that peaks at R_th. |
+| Millman | For branches that all run in parallel between the load’s two ends (batteries with their internal resistances, resistors, current sources): each branch’s E and R, then V_M = (ΣE/R + ΣI) / Σ(1/R), R_M = 1 / Σ(1/R), and the equivalent circuit. A circuit of another shape is named as not a Millman circuit. |
+| Reciprocity | For a circuit with one source: the current in the load with the source where it is, then the source moved into the load’s branch and an ammeter in its old place — the two currents are equal. (For a current source: the voltages.) |
+| Tellegen | The circuit solved by node voltages, then a table of every part’s voltage, current and power: the power the sources deliver equals the power the resistors take, so the sum is zero. |
+
+The ends of the load are named **a** and **b**: a is the end at the higher voltage, so the load current flows from a to b. Other nodes used in the equations are tagged c, d, e … on the drawings. The last step always checks the answer against a direct solution of the whole circuit.
+
+- **Works with:** resistors, DC voltage sources (with their internal resistance), DC current sources, voltage rails, ground, switches and push buttons (closed = wire, open = gap), ammeters (wire) and voltmeters (open). In DC a capacitor is open and an inductor is a wire.
+- **Not for:** transistors, diodes, op-amps, AC sources and other non-linear or time-varying parts: the theorems are for linear DC circuits. The first screen lists any such parts.
+- If the resistors form a **bridge** (not simply series or parallel), R_th is found with a **delta → star (Δ–Y)** or star → delta swap, each new resistor worked out — or, when no single swap opens the bridge, with a 1 A test current. Source transformation stops when no step applies and says so.
+- If R_th is infinite (only a current source feeds the load) there is no Thevenin equivalent; if R_N is 0 (a voltage source sits right across the load) there is no Norton equivalent. The solution says which theorem to use instead.
+
+> **Tip:** Superposition adds currents and voltages, not powers: the last step shows the difference.
+
 <a id="ch-loadflow"></a>
 
-## 14. Load Flow Analysis (power systems)
+## 15. Load Flow Analysis (power systems)
 
 A separate section for **power-system load flow (power flow) studies**: the bus voltages |V|∠δ, the real and reactive power in every line and transformer, the slack-bus generation and the losses of a transmission network. Open it from the **Load Flow Analysis** card on Home, or from **⋮ → Load flow analysis** in the editor. Back returns to where you came from.
 
@@ -632,7 +676,8 @@ It works on bus and branch data (like MATPOWER or the IEEE common data format), 
 #### Test systems
 
 - **3-bus** textbook systems (Saadat): the hand-worked Gauss–Seidel and Newton–Raphson examples.
-- **5-bus** Stagg & El-Abiad, **6-bus** Wood & Wollenberg (with line ratings), **WSCC 9-bus** (Anderson & Fouad) and the **IEEE 14-bus** system.
+- **4-bus** Grainger & Stevenson (Birch, Elm, Pine, Maple, with a PV generator bus), **5-bus** Stagg & El-Abiad, **6-bus** Wood & Wollenberg (with line ratings), **WSCC 9-bus** (Anderson & Fouad) and the **IEEE 14-bus** system.
+- **None — start from scratch** gives an empty system: add buses with **+ Bus** (the first one is the slack bus).
 - A **2-bus** template to start your own network. **Save** keeps it under My systems; **Import** / **Export** read and write MATPOWER case files (.m) and .json.
 
 #### Building a system
@@ -658,7 +703,7 @@ It works on bus and branch data (like MATPOWER or the IEEE common data format), 
 
 <a id="ch-saving"></a>
 
-## 15. Saving, opening and sharing
+## 16. Saving, opening and sharing
 
 #### Automatic saving
 
@@ -677,6 +722,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 | SPICE netlist | Opens Analysis on the netlist tab. |
 | Export image (PNG) | Saves a picture of the board with the circuit name and RAPTI credit, good for reports. |
 | Operating point | Opens Analysis on the operating-point tab. |
+| Run with theorem | Solves the circuit step by step with a network theorem: Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen (see the chapter on network theorems). |
 | Settings | Opens Settings. |
 | User manual | Opens this manual. |
 | Help & gestures | Shows the short how-to card. |
@@ -698,7 +744,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 
 <a id="ch-settings"></a>
 
-## 16. Settings reference
+## 17. Settings reference
 
 Open Settings from the sliders icon on Home or from **⋮ → Settings** in the editor. Every change is saved at once.
 
@@ -761,7 +807,7 @@ These are the same defaults SPICE uses. Change them only if you know why; **Rese
 
 <a id="ch-library"></a>
 
-## 17. Component library (all 520)
+## 18. Component library (all 520)
 
 Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.
 
@@ -825,7 +871,7 @@ Each battery has a **state of charge** (%), a capacity (Ah) and an internal resi
 | **AGM Battery 12 V** | Absorbed-glass-mat (VRLA) lead-acid battery: sealed, very low internal resistance (high surge current) — UPS and solar banks. Charge at 14.4 V absorption / 13.6 V float. <br>*Settings:* State of charge (%), Capacity (Ah), Internal resistance (Ω) |
 | **Gel Battery 12 V** | Gel-electrolyte lead-acid battery: deep-cycle, tolerant of heat, with a higher internal resistance than AGM. Charge at 14.1 V absorption / 13.5 V float. <br>*Settings:* State of charge (%), Capacity (Ah), Internal resistance (Ω) |
 | **Battery Pack (configurable S/P)** | Battery pack of S cells in series and P in parallel: voltage = S × cell voltage (state-of-charge curve of the chosen chemistry), capacity = P × cell capacity, internal resistance = S/P × cell resistance. E.g. 13S4P Li-ion = 48 V e-bike pack. <br>*Settings:* State of charge (%), Chemistry, Cells in series (S), Cells in parallel (P), Cell capacity (Ah), Cell internal resistance (Ω) |
-| **Supercapacitor** | Electric double-layer capacitor: large C with series ESR and self-discharge (leakage) resistance. <br>*Settings:* Capacitance (F), ESR (Ω), Leakage resistance (Ω), Rated voltage (V) |
+| **Supercapacitor** | Electric double-layer capacitor: large C with series ESR and self-discharge (leakage) resistance. Charged well above its rated voltage (or reversed) the electrolyte breaks down and it vents open. <br>*Settings:* Capacitance (F), ESR (Ω), Leakage resistance (Ω), Rated voltage (V) |
 | **Battery Protection Board (BMS)** | Li-ion protection board (DW01 + dual MOSFET style). B+/B− go to the cells, P+/P− to the load or charger. Two back-to-back MOSFETs in the negative lead: the discharge FET opens on over-discharge (released only when a charger is connected and the cell recovers) or over-current (released when the load is removed); the charge FET opens on over-charge. Each FET’s body diode still lets current flow the other way, so a cut-off pack can always be charged and an over-charged pack can still be discharged. <br>*Settings:* Cells in series, Over-charge cut-off (per cell) (V), Over-charge release (V), Over-discharge cut-off (per cell) (V), Over-discharge release (charger connected) (V), Over-current trip (A), MOSFET on-resistance (each) (Ω) |
 | **CC-CV Battery Charger** | Lithium/lead-acid charger IC: below the pre-charge threshold it trickles at 10 % of the set current; then constant current until the battery reaches the CV voltage; then holds that voltage while the current tapers; charging terminates when the current falls below the termination level and restarts when the battery drops below the recharge threshold. The linear type draws the same current from VIN as it delivers (TP4056); the switching type draws P/η. <br>*Settings:* Battery type, Charge current (CC) (A), Charge voltage (CV) (V), Termination current (% of CC), Pre-charge below (V), Recharge below (V), Type, Efficiency (switching) |
 
@@ -993,21 +1039,21 @@ Parts for house wiring and lighting: bulbs, tube light with choke and starter, f
 | **Lamp** | Incandescent lamp modelled at its hot resistance R = V²/P; brightness follows dissipated power. <br>*Settings:* Rated voltage (V), Rated power (W) |
 | **Halogen Lamp** | Tungsten-halogen lamp (e.g. 12 V 50 W MR16): a hotter filament than an ordinary bulb (≈18 lm/W, whiter light) in a quartz envelope; like any filament it draws ≈10–15× inrush current when cold. <br>*Settings:* Rated voltage (V), Rated power (W), Filament time constant (s) |
 | **Fluorescent Tube Light** | Hot-cathode fluorescent tube. Wire: L → ballast → left filament; left & right filaments’ inner ends to the starter; right filament → N. The starter pre-heats the filaments, then opens; the ballast kick strikes the arc, which then runs at ≈100 V. <br>*Settings:* Arc (running) voltage (V), Strike voltage (cold) (V), Strike voltage (pre-heated) (V), Arc resistance (Ω), Filament resistance (each) (Ω), Rated power (W) |
-| **Choke / Ballast** | Magnetic ballast (iron-cored choke) for a 40 W tube on 230 V 50 Hz: limits the arc current and produces the high-voltage kick when the starter opens. <br>*Settings:* Inductance (H), Winding resistance (Ω) |
+| **Choke / Ballast** | Magnetic ballast (iron-cored choke) for a 40 W tube on 230 V 50 Hz: limits the arc current and produces the high-voltage kick when the starter opens. Run well above its rated current (e.g. on twice the mains voltage) its winding overheats and burns open. <br>*Settings:* Inductance (H), Winding resistance (Ω), Rated current (A) |
 | **Glow Starter** | Glow starter: a neon glow heats a bimetal strip until its contacts close (pre-heating the tube filaments); with the glow gone it cools and snaps open, giving the ballast kick. Stays idle once the tube runs at ~100 V. <br>*Settings:* Glow ignition voltage (V), Bimetal heating time (s), Contact opening time (s) |
 | **LED Bulb (AC)** | LED lamp with a linear driver: the LED string only conducts when \|v\| exceeds its string voltage (so the current flows in pulses near the peaks and the power factor is below 1). Sized for rated power at rated voltage. <br>*Settings:* Rated voltage (RMS) (V), Rated power (W), LED string voltage (V) |
-| **CFL (energy-saving lamp)** | Compact fluorescent lamp with an electronic ballast: a bridge rectifier charges a small reservoir capacitor, so mains current flows only in short peaks near the voltage maxima (power factor ≈0.6, rich in harmonics) while the ballast takes constant power. ≈60 lm/W. <br>*Settings:* Rated power (W) |
-| **LED Strip** | LED tape: cut-able segments of a few LEDs in series with a current-setting resistor, all segments in parallel along the strip. Current (and brightness) collapse quickly below the rated voltage, and long strips need power fed at both ends because of the copper-track voltage drop. <br>*Settings:* Length (m), Strip, LEDs per metre, LEDs per segment, Resistor per segment (Ω) |
+| **CFL (energy-saving lamp)** | Compact fluorescent lamp with an electronic ballast: a bridge rectifier charges a small reservoir capacitor, so mains current flows only in short peaks near the voltage maxima (power factor ≈0.6, rich in harmonics) while the ballast takes constant power. ≈60 lm/W. More than ≈25 % above its rated voltage for a few seconds burns the ballast. <br>*Settings:* Rated power (W), Rated voltage (RMS) (V) |
+| **LED Strip** | LED tape: cut-able segments of a few LEDs in series with a current-setting resistor, all segments in parallel along the strip. Current (and brightness) collapse quickly below the rated voltage, and long strips need power fed at both ends because of the copper-track voltage drop. Each segment is made for ≈20 mA: on a higher-voltage supply (a 12 V strip on 24 V) the LEDs burn out within seconds. <br>*Settings:* Length (m), Strip, LEDs per metre, LEDs per segment, Resistor per segment (Ω) |
 | **LED Driver (CC / CV)** | Mains LED driver with active power-factor correction (it draws a sinusoidal current, PF ≈ 1). Constant-current type: regulates the LED current whatever the forward voltage (up to Vmax) — for COB modules and high-power LEDs. Constant-voltage type: a regulated voltage with a current limit — for LED strips. Isolated output; switches off below ≈85 V input. <br>*Settings:* Type, Output current (CC) (A), Maximum output voltage (CC) (V), Output voltage (CV) (V), Current limit (CV) (A), Efficiency |
-| **LED Panel Light (PFC driver)** | Flat LED panel with a power-factor-corrected constant-current driver: it draws its rated power as a sinusoidal current in phase with the mains (PF ≈ 0.95+) from about 100 V to 250 V; below ≈90 V the driver drops out. <br>*Settings:* Rated power (W), Efficacy (lm/W) |
+| **LED Panel Light (PFC driver)** | Flat LED panel with a power-factor-corrected constant-current driver: it draws its rated power as a sinusoidal current in phase with the mains (PF ≈ 0.95+) from about 100 V to 250 V; below ≈90 V the driver drops out, and more than ≈25 % above its rated voltage for a few seconds burns the driver. <br>*Settings:* Rated power (W), Efficacy (lm/W), Rated voltage (RMS) (V) |
 | **Neon Indicator Lamp** | Neon glow lamp: strikes at ≈90 V, then maintains ≈60 V. Use a series resistor (e.g. 100 kΩ on 230 V). Classic relaxation oscillator element. <br>*Settings:* Striking voltage (V), Maintaining voltage (V), Internal resistance (Ω) |
 | **Ceiling Fan** | Ceiling fan as an equivalent series R–L load (from rated power and power factor). Speed follows the winding current (its share of the rated current equals the share of rated voltage reaching the fan) with the fan load curve and the blade inertia; stalls below ≈35 % — try it with a regulator. Switched off, it carries no current and runs down. <br>*Settings:* Rated voltage (RMS) (V), Rated power (W), Power factor, Rated speed (rpm), Rated frequency (Hz) |
 | **Heater / Iron / Kettle** | Resistive heating element (R = V²/P) with a first-order thermal model: temperature rises towards ΔT ∝ P. <br>*Settings:* Rated voltage (V), Rated power (W), Thermal time constant (s) |
-| **Socket Outlet + Appliance** | 3-pin socket (L, N, E) with a selectable appliance modelled as an R–L load of its rated power and power factor. "Faulty appliance" leaks 50 mA to earth — an RCD must trip. <br>*Settings:* Plugged-in appliance, Rated voltage (V), Frequency (Hz) |
+| **Socket Outlet + Appliance** | 3-pin socket (L, N, E) with a selectable appliance modelled as an R–L load of its rated power and power factor. "Faulty appliance" leaks 50 mA to earth — an RCD must trip. Plugged into a supply well above its rated voltage, the appliance burns out (a lamp at once, electronics within seconds, motors and heaters a little later). <br>*Settings:* Plugged-in appliance, Rated voltage (V), Frequency (Hz) |
 | **Dimmer / Electronic Regulator** | TRIAC phase-angle controller in series with the load. Each half-cycle it waits for the firing angle α = (1 − level)·180° after the zero crossing, fires, and conducts until the current falls to zero. <br>*Settings:* Level (%), Mains frequency (Hz), TRIAC holding current (A) |
 | **Fan Regulator (resistive)** | Old-style step regulator: a tapped wire-wound resistor in series with the fan (steps 1–4 drop voltage, step 5 is direct). Wastes power as heat — compare with the capacitive regulator. <br>*Settings:* Step (0 = off … 5 = full), Resistance scale (×) |
 | **Fan Regulator (capacitive)** | Capacitor-type step regulator: series capacitors (1.5–4.7 µF) drop the fan voltage with almost no power loss (reactive drop), with a 470 kΩ bleeder. Step 5 connects the fan directly. <br>*Settings:* Step (0 = off … 5 = full) |
-| **Electric Bell** | Electromagnetic bell: a coil (R–L) that rings when its RMS current exceeds the operating current. <br>*Settings:* Coil resistance (Ω), Coil inductance (H), Operating current (A) |
+| **Electric Bell** | Electromagnetic bell: a coil (R–L) that rings when its RMS current exceeds the operating current. Well above its rated voltage the coil burns open within seconds. <br>*Settings:* Coil resistance (Ω), Coil inductance (H), Operating current (A), Rated voltage (RMS) (V) |
 | **Earth Electrode** | Earth rod: connects its terminal to true earth (0 V) through the soil resistance. Fault current and touch voltage depend on it. <br>*Settings:* Earth resistance (Ω) |
 | **Photocell Switch (dusk-to-dawn)** | Dusk-to-dawn photo control for street and garden lights: an LDR-driven relay closes L → LOAD when the ambient light falls below the switch-on level and opens again above the (higher) switch-off level, after a delay that ignores car headlights and lightning. Needs mains (L–N) to work. <br>*Settings:* Ambient light (lx), Switch on below (lx), Switch off above (lx), Delay (s) |
 | **PIR Light Switch (motion)** | Passive-infrared occupancy switch for corridors and stairs: when it sees motion in the dark (ambient light below the threshold) it closes L → LOAD and keeps the light on for the hold time after the last movement (re-triggerable). Tap it to simulate someone walking past. <br>*Settings:* Motion detected, Ambient light (lx), Works only below (lx), Hold time after last motion (s) |
@@ -1024,7 +1070,7 @@ Rated loads (R-L, R-C, 3-phase star and delta), a power-factor correction capaci
 | **Capacitive Load (P, pf lead)** | Series R–C load specified by real power and leading power factor at rated voltage and frequency. <br>*Settings:* Real power P (at rated V) (W), Power factor, Rated voltage (RMS) (V), Frequency (Hz) |
 | **3-Phase Load (Star)** | Balanced star-connected R–L load (R, Y, B and neutral N). Set "imbalance" to load phase B differently and watch the neutral current. <br>*Settings:* Total real power P (W), Power factor (lag), Rated line voltage (V), Frequency (Hz), Phase B imbalance (%) |
 | **3-Phase Load (Delta)** | Balanced delta-connected R–L load across R–Y, Y–B, B–R. Line current = √3 × phase current. <br>*Settings:* Total real power P (W), Power factor (lag), Rated line voltage (V), Frequency (Hz), Phase B imbalance (%) |
-| **PF Correction Capacitor (kVAR)** | Shunt capacitor rated in VAR: C = Q / (2πf·V²). Connect across an inductive load to raise the power factor. <br>*Settings:* Reactive power Q (VAR), Rated voltage (RMS) (V), Frequency (Hz) |
+| **PF Correction Capacitor (kVAR)** | Shunt capacitor rated in VAR: C = Q / (2πf·V²). Connect across an inductive load to raise the power factor. It stands +10 % (IEC 60831); held well above its rated voltage the dielectric fails and its internal pressure disconnector opens it. <br>*Settings:* Reactive power Q (VAR), Rated voltage (RMS) (V), Frequency (Hz) |
 | **Short Transmission Line** | Short line model (< 80 km): series impedance Z = (r + jx)·length. Shows voltage drop and losses. <br>*Settings:* Length (km), Resistance per km (Ω), Reactance per km (at f) (Ω), Frequency (Hz) |
 | **Medium Line (Nominal-π)** | Nominal-π line: series Z = (r + jx)·ℓ with half the shunt capacitance Y/2 at each end. Sending end on the left, receiving end on the right, common return at the bottom. Try an open receiving end to see the Ferranti effect. <br>*Settings:* Length (km), Resistance per km (Ω), Reactance per km (Ω), Shunt susceptance per km (S), Frequency (Hz) |
 | **Cable (1 core, with length)** | One conductor of a real cable: R = ρ·L/S (IEC 60228) rising with temperature, a current rating Iz from IEC 60364-5-52 for the chosen insulation and installation, and a thermal model. Above Iz it overheats; far above, the insulation smokes, catches fire and the cable burns open. Select a burnt cable and tap Replace to put in a new one. <br>*Settings:* Length (m), Cable type, Conductor size, Conductor (IEC 60228), Installation method |
@@ -1390,7 +1436,7 @@ LEDs (single, RGB, bicolour, infrared, laser), a bar graph, 7-segment and hex di
 | **LED Bar Graph (LM3914)** | Ten-LED level meter driver: segment k lights when Vin ≥ k/10 of full scale (linear) or at 3 dB steps (log, VU-meter style). High-impedance input. <br>*Settings:* Full-scale voltage (V), Mode, Scale |
 | **Buzzer** | Active buzzer: sounds (if device sound is enabled) when current exceeds the sounding current. <br>*Settings:* Resistance (Ω), Sounding current (A), Tone (Hz) |
 | **Piezo Buzzer (passive)** | Passive piezo transducer: electrically a capacitor. It sounds at the frequency you drive it with (unlike the active buzzer, it needs an AC / PWM signal). <br>*Settings:* Capacitance (F) |
-| **Loudspeaker (8 Ω)** | Moving-coil speaker (Re + Le voice coil). Plays the detected fundamental frequency through the device speaker when sound is enabled; the cone moves with the current. <br>*Settings:* Voice-coil resistance (Ω), Voice-coil inductance (H), Power rating (W) |
+| **Loudspeaker (8 Ω)** | Moving-coil speaker (Re + Le voice coil). Plays the detected fundamental frequency through the device speaker when sound is enabled; the cone moves with the current. Driven at much more than its power rating (or with DC straight from a battery) the voice coil burns open within seconds. <br>*Settings:* Voice-coil resistance (Ω), Voice-coil inductance (H), Power rating (W) |
 | **Headphone (32 Ω)** | Dynamic headphone driver: a 32 Ω (typ.) load; the sound level is sensitivity + 10·log10(P / 1 mW). Above ≈85 dB SPL long listening damages hearing; 1 mW already gives 100 dB on sensitive earbuds. <br>*Settings:* Impedance (Ω), Sensitivity (dB SPL/mW) |
 | **Audio Preamplifier** | Audio preamplifier: flat gain between the low and high cut-off frequencies (1st-order roll-offs), 47 kΩ input, 100 Ω output, soft clipping near the supply rails. Raises microphone / pickup levels (mV) to line level (≈1 V). <br>*Settings:* Gain (dB), Low cut-off (Hz), High cut-off (Hz), Clipping level (V) |
 | **Tone Control (bass / treble)** | Baxandall-style tone control: first-order shelving boost/cut below the bass turnover and above the treble turnover (±15 dB), flat in the middle, plus a volume setting. 47 kΩ input, 100 Ω output. <br>*Settings:* Bass (dB), Treble (dB), Bass turnover (Hz), Treble turnover (Hz), Volume (dB) |
@@ -1398,7 +1444,7 @@ LEDs (single, RGB, bicolour, infrared, laser), a bar graph, 7-segment and hex di
 | **Solenoid Actuator** | Pull-type solenoid: an R–L coil whose plunger pulls in when the current exceeds the pull-in value (drop-out at 50 %). Remember the flyback diode! <br>*Settings:* Coil resistance (Ω), Coil inductance (H), Pull-in current (A) |
 | **RC Servo Motor** | Hobby servo: measures the width of each high pulse on SIG (1–2 ms, typically every 20 ms) and turns its arm to 0–180° at a limited speed. Input impedance ≈10 kΩ. <br>*Settings:* Pulse for 0° (s), Pulse for 180° (s), Slew rate (°/s) |
 | **Peltier Module (TEC1-12706)** | Thermoelectric (Peltier) module: current I pumps heat Qc = α·I·Tc − ½I²R − K·ΔT from the cold face to the hot face, which must be cooled by a heatsink (Qh = Qc + V·I). Electrically V = I·R + α·(Th − Tc): the Seebeck back-EMF grows with the temperature difference. Too much current heats more than it pumps — there is an optimum. <br>*Settings:* Heat load on the cold side (W), Seebeck coefficient (V/K), Electrical resistance (Ω), Thermal conductance (W/K), Hot-side heatsink (K/W), Cold-side heat capacity (J/K), Hot-side heat capacity (J/K), Ambient (°C) |
-| **DC Fan (brushless, 12 V)** | Brushless DC cooling fan (with built-in commutation and reverse-polarity protection): speed and airflow rise roughly in proportion to the voltage, the air load torque ∝ speed², and it stalls below about a third of the rated voltage. Current flows only with the correct polarity. <br>*Settings:* Rated voltage (V), Rated current (A), Rated speed (rpm), Rated airflow (CFM) |
+| **DC Fan (brushless, 12 V)** | Brushless DC cooling fan (with built-in commutation and reverse-polarity protection): speed and airflow rise roughly in proportion to the voltage, the air load torque ∝ speed², and it stalls below about a third of the rated voltage. Current flows only with the correct polarity. Its driver IC stands about +15 %; on twice its rated voltage it burns out within seconds. <br>*Settings:* Rated voltage (V), Rated current (A), Rated speed (rpm), Rated airflow (CFM) |
 | **Electromagnet** | U-core electromagnet holding an iron armature across two air gaps: the flux density B = μ0·N·I / (2g) (limited by core saturation), the inductance L = μ0·N²·A / (2g), and the holding force F = B²·A/μ0 (both poles). Force rises with the square of the current and falls steeply as the gap opens. <br>*Settings:* Turns, Coil resistance (Ω), Air gap (each pole) (mm), Pole face area (each) (cm²), Core saturation (T) |
 
 ### Vacuum Tubes — 3
@@ -1441,7 +1487,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="ch-examples"></a>
 
-## 18. Examples (all 101)
+## 19. Examples (all 104)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1450,6 +1496,9 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 - **LED with switch**: The "hello world" of electronics. Tap the switch to turn the LED on. The resistor limits current to I = (9 V − Vf)/470 Ω ≈ 15 mA.
 - **Voltage divider & potentiometer**: Vout = Vin·R2/(R1+R2) = 12 V · 4.7k/14.7k ≈ 3.84 V. Select the potentiometer and turn the knob to vary its wiper voltage continuously.
 - **Series–parallel resistors**: Equivalent resistance: 100 Ω + (200‖200) + (300‖300‖300) = 300 Ω, so the source supplies 3 V / 300 Ω = 10 mA. Watch how the current splits at every junction (Kirchhoff's current law).
+- **Network theorems practice**: Find the current in R4 (5 Ω) with Thevenin, Norton, superposition or source transformation: tap ⋮ → Run with theorem and follow the steps. Answer: Vth = 18 V, Rth = 5.4 Ω, I = 18 / (5.4 + 5) ≈ 1.731 A.
+- **Parallel batteries (Millman’s theorem)**: Three batteries, each with its internal resistance (R1, R2, R3), feed R4 in parallel. Millman: VM = (12/2 + 10/4 + 8/5) / (1/2 + 1/4 + 1/5) = 10.63 V, RM = 1.053 Ω, so I = 10.63 / (1.053 + 10) ≈ 0.962 A. Try ⋮ → Run with theorem → Millman’s theorem.
+- **Unbalanced Wheatstone bridge**: Find the current in the bridge arm R6 (5 Ω). With V1 turned off its resistance R1 stays in the circuit, so the bridge is not simple series–parallel: Thevenin’s R_th needs a delta → star (Δ–Y) step. Answer: Rth = 3.296 Ω, Vth = 2.535 V, I ≈ 0.306 A. ⋮ → Run with theorem.
 - **RC charging & discharging**: Close the switch to charge the 100 µF capacitor through 1 kΩ (τ = RC = 0.1 s): after one τ it reaches 63 % of the supply. Open it and hold the push button to discharge through 100 Ω.
 - **LRC oscillator**: With the switch closed the inductor carries 50 mA. Open the switch: the stored energy rings between L and C at f = 1/(2π√LC) ≈ 71 Hz, decaying with α = R/2L = 25 s⁻¹.
 - **Diode I–V characteristic**: Open Analysis → DC Sweep, sweep V1 from 0 to 3 V and measure I(D1) to trace the exponential Shockley curve. Try the Zener or LED models too.
@@ -1599,7 +1648,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-formulas"></a>
 
-## 19. Quick reference: formulas and units
+## 20. Quick reference: formulas and units
 
 #### Ohm's law and power
 
@@ -1650,7 +1699,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-troubleshooting"></a>
 
-## 20. Troubleshooting and FAQ
+## 21. Troubleshooting and FAQ
 
 #### Nothing happens when I press Run
 
@@ -1698,7 +1747,7 @@ A warning that both terminals of a part are on the same net. Remove the extra wi
 - Probe the output wire with **Scope** so it appears under **Output**.
 - The stop frequency must be larger than the start frequency.
 
-#### "CPU-limited" or the app feels slow
+#### The speed chip is amber, or the app feels slow
 
 - Lower the **simulation speed**.
 - Settings → **Animations → Off**, and switch off **Live node voltages** and **Live currents**.
@@ -1728,7 +1777,7 @@ The engine follows SPICE methods and has been checked against textbook answers (
 
 <a id="ch-about"></a>
 
-## 21. About RAPTI and contact
+## 22. About RAPTI and contact
 
 **Resonance Automation Professional Training Institute** (RAPTI) was established in 2019. Established in 2019 with one goal: developing skilled manpower for the automation industry. Courses at RAPTI are designed by experienced, competent engineers so that every student can work independently in any industry after completing a course — with the knowledge and skills that real job positions demand.
 

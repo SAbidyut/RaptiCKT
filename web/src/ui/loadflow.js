@@ -163,12 +163,14 @@ export class LoadFlowScreen {
       <div class="lf-card">
         <label class="lf-lab">Test system
           <select data-k="case">
+            <option value="none" ${this.caseId === 'none' ? 'selected' : ''}>None — start from scratch</option>
             <optgroup label="Standard test systems">${LF_CASES.map((c) => `<option value="${c.id}" ${c.id === this.caseId ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</optgroup>
             ${saved.length ? `<optgroup label="My systems">${saved.map((s) => `<option value="saved:${s.id}" ${'saved:' + s.id === this.caseId ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</optgroup>` : ''}
             ${this.caseId === 'custom' ? '<option value="custom" selected>(edited / imported system)</option>' : ''}
           </select>
         </label>
         ${caseInfo ? `<p class="lf-desc">${esc(caseInfo.desc)}</p>` : ''}
+        ${this.caseId === 'none' ? '<p class="lf-desc">An empty system. Add buses with <b>+ Bus</b> (the first one becomes the slack bus) and join them with lines or transformers.</p>' : ''}
         <div class="form-grid lf-grid2">
           <label>System name<input data-k="name" value="${esc(sys.name)}"></label>
           <label>Base MVA<input data-k="base" type="number" inputmode="decimal" value="${sys.baseMVA}"></label>
@@ -266,7 +268,8 @@ export class LoadFlowScreen {
       const s = store.lfSaved().find((x) => 'saved:' + x.id === v);
       if (!s) return;
       this.sys = JSON.parse(JSON.stringify(s.sys));
-    } else if (v !== 'custom') this.sys = loadCase(v);
+    } else if (v === 'none') this.sys = { name: 'My system', baseMVA: 100, buses: [], branches: [] };
+    else if (v !== 'custom') this.sys = loadCase(v);
     this.caseId = v;
     this._view = null;
     this.changed();
@@ -342,7 +345,9 @@ export class LoadFlowScreen {
   addBus() {
     const ids = this.sys.buses.map((b) => +b.id);
     const id = (ids.length ? Math.max(...ids) : 0) + 1;
-    this.sys.buses.push(newBus(id, 'pq', { Pd: 0, Qd: 0, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60 }));
+    // a network needs one slack bus: the first bus of a new system is it
+    const slack = !this.sys.buses.some((b) => b.type === 'slack');
+    this.sys.buses.push(newBus(id, slack ? 'slack' : 'pq', { Pd: 0, Qd: 0, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60 }));
     this.markCustom(); this.changed();
     this.editBus(this.sys.buses.length - 1, true);
   }

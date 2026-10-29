@@ -154,6 +154,18 @@ export class Element {
    * time). Parts use it to decide when a sustained overload has cooked them.
    */
   heatAvg(s, x, tau) { this._hav = (this._hav || 0) + (x - (this._hav || 0)) * Math.min(1, s.heatDt() / tau); return this._hav; }
+  /**
+   * Burn out on a sustained overload. `x` is the heating against the rating (1 = rated, e.g.
+   * (V/Vr)² or (I/Ir)²), averaged over `tau` seconds on the heat clock; once the average passes
+   * `lim` the part fails with the reason why() gives. The warning glow starts at 1.2 (≈ +10 %),
+   * so the normal ±10 % swing of the mains never stresses it. Returns true the step it fails.
+   */
+  overheat(s, x, tau, lim, why) {
+    if (this.damaged) return false;
+    const th = this.heatAvg(s, x, tau);
+    this.stress = Math.max(0, Math.min(1, (th - 1.2) / (lim - 1.2)));
+    return th > lim && this.setDamage(s, why());
+  }
   /** 0 … 1: how close the part is to failing (drawn as a warning glow). */
   stressLevel() { return this.stress || 0; }
 

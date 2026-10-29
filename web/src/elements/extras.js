@@ -91,14 +91,15 @@ export class LEDPanel extends Element {
   static props = [
     { key: 'w', label: 'Rated power', unit: 'W', def: 36, min: 1, max: 500, knob: true },
     { key: 'eff', label: 'Efficacy', unit: 'lm/W', def: 100, min: 10, max: 250 },
+    { key: 'v', label: 'Rated voltage (RMS)', unit: 'V', def: 230, min: 12, max: 400 },
   ];
-  static description = 'Flat LED panel with a power-factor-corrected constant-current driver: it draws its rated power as a sinusoidal current in phase with the mains (PF ≈ 0.95+) from about 100 V to 250 V; below ≈90 V the driver drops out.';
+  static description = 'Flat LED panel with a power-factor-corrected constant-current driver: it draws its rated power as a sinusoidal current in phase with the mains (PF ≈ 0.95+) from about 100 V to 250 V; below ≈90 V the driver drops out, and more than ≈25 % above its rated voltage for a few seconds burns the driver.';
   constructor(x, y) { super(x, y); this.postCurrents = [0, 0]; }
   localPosts() { return [[-2 * G, 0], [2 * G, 0]]; }
   localBox() { return [-2 * G, -0.9 * G, 2 * G, 0.6 * G]; }
   leads() { return [[0, -2 * G, 0, -1.4 * G, 0], [1, 2 * G, 0, 1.4 * G, 0]]; }
-  reset() { this.v2 = 230 * 230; this.vprev = 0; this.on = true; this.pin = 0; this.postCurrents = [0, 0]; }
-  gin() { return this.on ? (this.p.w / 0.92) / Math.max(this.v2, 100) : 0; }
+  reset() { this.v2 = this.p.v ** 2; this.vprev = 0; this.on = true; this.pin = 0; this.postCurrents = [0, 0]; }
+  gin() { return this.on && !this.damaged ? (this.p.w / 0.92) / Math.max(this.v2, 100) : 0; }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1e-7); }
   stampStep(s) { s.addI(this.nodes[0], this.nodes[1], this.gin() * this.vprev); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1e-7); }
@@ -110,9 +111,10 @@ export class LEDPanel extends Element {
     this.pin += (v * i - this.pin) * Math.min(1, s.dt / 0.05);
     const on = this.on ? this.v2 > 80 * 80 : this.v2 > 95 * 95;
     if (on !== this.on) { this.on = on; s.event = true; }
+    this.overheat(s, this.v2 / this.p.v ** 2, 2, 1.5625, () => `Driver burnt — ${fmtShort(Math.sqrt(this.v2), 'V')} on a ${fmtShort(this.p.v, 'V')} panel (over-voltage)`);
   }
   valueLabel() { return fmtQty(this.p.w, 'W').replace(' ', ''); }
-  readings() { return [['Input power', this.pin || 0, 'W'], ['Light output', (this.pin || 0) * 0.92 * this.p.eff, 'lm'], ['Supply (RMS)', Math.sqrt(this.v2 || 0), 'V'], ['Driver', this.on ? 'ON' : 'off (low voltage)', '']]; }
+  readings() { return [['Input power', this.pin || 0, 'W'], ['Light output', (this.pin || 0) * 0.92 * this.p.eff, 'lm'], ['Supply (RMS)', Math.sqrt(this.v2 || 0), 'V'], ['Driver', this.damaged ? 'burnt' : this.on ? 'ON' : 'off (low voltage)', '']]; }
   draw(g) {
     const b = g.running ? clamp((this.pin || 0) / (this.p.w / 0.92), 0, 1.1) : 0;
     if (b > 0.03) g.glow(0, -0.15 * G, 1.6 * G, '240,248,255', Math.min(0.8, b));

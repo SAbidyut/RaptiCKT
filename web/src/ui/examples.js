@@ -88,6 +88,54 @@ const BASE = [
     },
   },
   {
+    id: 'theorems', cat: 'Basics', title: 'Network theorems practice',
+    desc: 'Find the current in R4 (5 Ω) with Thevenin, Norton, superposition or source transformation: tap ⋮ → Run with theorem and follow the steps. Answer: Vth = 18 V, Rth = 5.4 Ω, I = 18 / (5.4 + 5) ≈ 1.731 A.',
+    build(b) {
+      b.v('dcv', 0, 0, { amp: 12 });
+      b.h('resistor', 4, -4, { r: 4 });
+      b.v('resistor', 8, 0, { r: 6 });
+      b.h('resistor', 12, -4, { r: 3 });
+      b.vr('dci', 16, 0, { amp: 2 });
+      const rl = b.v('resistor', 22, 0, { r: 5 });
+      b.el('ground', 0, 4);
+      b.w([0, -2], [0, -4], [2, -4]); b.w([6, -4], [10, -4]); b.w([8, -4], [8, -2]);
+      b.w([14, -4], [22, -4], [22, -2]); b.w([16, -4], [16, -2]);
+      b.w([0, 2], [0, 4], [22, 4], [22, 2]); b.w([8, 2], [8, 4]); b.w([16, 2], [16, 4]);
+      b.cur(rl, C[0]);
+    },
+  },
+  {
+    id: 'millman', cat: 'Basics', title: 'Parallel batteries (Millman’s theorem)',
+    desc: 'Three batteries, each with its internal resistance (R1, R2, R3), feed R4 in parallel. Millman: VM = (12/2 + 10/4 + 8/5) / (1/2 + 1/4 + 1/5) = 10.63 V, RM = 1.053 Ω, so I = 10.63 / (1.053 + 10) ≈ 0.962 A. Try ⋮ → Run with theorem → Millman’s theorem.',
+    build(b) {
+      [[0, 2, 12], [6, 4, 10], [12, 5, 8]].forEach(([x, r, v]) => {
+        b.v('resistor', x, -3, { r });
+        b.v('dcv', x, 3, { amp: v });
+        b.w([x, -6], [x, -5]); b.w([x, -1], [x, 1]); b.w([x, 5], [x, 6]);
+      });
+      const rl = b.v('resistor', 18, 0, { r: 10 });
+      b.w([0, -6], [18, -6], [18, -2]); b.w([0, 6], [18, 6], [18, 2]);
+      b.el('ground', 0, 6);
+      b.cur(rl, C[0]);
+    },
+  },
+  {
+    id: 'wheatstone', cat: 'Basics', title: 'Unbalanced Wheatstone bridge',
+    desc: 'Find the current in the bridge arm R6 (5 Ω). With V1 turned off its resistance R1 stays in the circuit, so the bridge is not simple series–parallel: Thevenin’s R_th needs a delta → star (Δ–Y) step. Answer: Rth = 3.296 Ω, Vth = 2.535 V, I ≈ 0.306 A. ⋮ → Run with theorem.',
+    build(b) {
+      b.v('dcv', -4, 0, { amp: 10 });
+      b.h('resistor', 0, -6, { r: 1 });
+      b.v('resistor', 4, -3, { r: 2 }); b.v('resistor', 16, -3, { r: 4 });
+      b.v('resistor', 4, 3, { r: 6 }); b.v('resistor', 16, 3, { r: 3 });
+      const g = b.h('resistor', 10, 0, { r: 5 });
+      b.el('ground', -4, 6);
+      b.w([-4, -2], [-4, -6], [-2, -6]); b.w([2, -6], [16, -6], [16, -5]); b.w([4, -6], [4, -5]);
+      b.w([4, -1], [4, 1]); b.w([16, -1], [16, 1]); b.w([4, 0], [8, 0]); b.w([12, 0], [16, 0]);
+      b.w([-4, 2], [-4, 6], [16, 6], [16, 5]); b.w([4, 5], [4, 6]);
+      b.cur(g, C[0]);
+    },
+  },
+  {
     id: 'rc', cat: 'Basics', title: 'RC charging & discharging',
     desc: 'Close the switch to charge the 100 µF capacitor through 1 kΩ (τ = RC = 0.1 s): after one τ it reaches 63 % of the supply. Open it and hold the push button to discharge through 100 Ω.',
     build(b) {

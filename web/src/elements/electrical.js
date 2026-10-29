@@ -201,15 +201,24 @@ export class Ballast extends TwoTerm {
   static props = [
     { key: 'l', label: 'Inductance', unit: 'H', def: 1.2, min: 1e-3, max: 100, log: true, knob: true },
     { key: 'r', label: 'Winding resistance', unit: 'Ω', def: 35, min: 0.01, max: 1e4, log: true },
+    { key: 'irated', label: 'Rated current', unit: 'A', def: 0.43, min: 1e-3, max: 100, log: true },
   ];
-  static description = 'Magnetic ballast (iron-cored choke) for a 40 W tube on 230 V 50 Hz: limits the arc current and produces the high-voltage kick when the starter opens.';
-  constructor(x, y) { super(x, y); this.rl = new RLBranch(); }
+  static description = 'Magnetic ballast (iron-cored choke) for a 40 W tube on 230 V 50 Hz: limits the arc current and produces the high-voltage kick when the starter opens. Run well above its rated current (e.g. on twice the mains voltage) its winding overheats and burns open.';
+  constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.irms = new Rms(0.1); }
   branchCount() { return 1; }
-  reset() { this.rl.reset(); this.setCurrent(0); }
-  stamp(s) { this.rl.stamp(s, this.nodes[0], this.nodes[1], this.branches[0], this.p.r, this.p.l); }
-  stampStep(s) { this.rl.step(s, this.branches[0], this.p.l); }
-  accept(s) { this.rl.accept(s, this.nodes[0], this.nodes[1], this.branches[0], this.p.r); this.setCurrent(this.rl.i); }
-  stampAC(ac) { this.rl.ac(ac, this.nodes[0], this.nodes[1], this.branches[0], this.p.r, this.p.l); }
+  rl0() { return this.damaged ? [1e9, 0] : [this.p.r, this.p.l]; }
+  reset() { this.rl.reset(); this.irms = new Rms(0.1); this.setCurrent(0); }
+  stamp(s) { const [R, L] = this.rl0(); this.rl.stamp(s, this.nodes[0], this.nodes[1], this.branches[0], R, L); }
+  stampStep(s) { this.rl.step(s, this.branches[0], this.rl0()[1]); }
+  accept(s) {
+    this.rl.accept(s, this.nodes[0], this.nodes[1], this.branches[0], this.rl0()[0]); this.setCurrent(this.rl.i);
+    if (s.mode === 'dc') return;
+    const ir = this.irms.push(this.rl.i, s.dt) / this.p.irated;
+    // a stuck starter (≈1.4 × rated) only runs it hot; on twice the mains it burns in seconds
+    this.overheat(s, ir * ir, 15, 2.56, () => `Winding burnt open — ${fmtShort(this.irms.v, 'A')} through a ${fmtShort(this.p.irated, 'A')} ballast (over-voltage or wrong tube)`);
+  }
+  stampAC(ac) { const [R, L] = this.rl0(); this.rl.ac(ac, this.nodes[0], this.nodes[1], this.branches[0], R, L); }
+  readings(s) { return [['Current (RMS)', this.irms.v, 'A'], ['Rated current', this.p.irated, 'A'], ['Voltage', this.voltageDiff(s), 'V'], ['Current', this.i, 'A']]; }
   valueLabel() { return fmtShort(this.p.l, 'H'); }
   localBox() { return [-2 * G, -0.9 * G, 2 * G, 0.6 * G]; }
   draw(g) {
@@ -392,10 +401,13 @@ export class CeilingFan extends TwoTerm {
     const vr = this.irms.push(this.rl.i, s.dt) / this.irated();
     this.icyc.push(this.rl.i, s.dt);
     if (!this.damaged) {
-      // winding temperature follows I²: about 1.5 × its rated current for a minute burns the insulation
-      const th = this.heatAvg(s, vr * vr, 40);
-      this.stress = Math.max(0, Math.min(1, (th - 1.2) / 1.05));
-      if (th > 2.25) this.setDamage(s, `Winding burnt — ${fmtShort(this.irms.v, 'A')} for too long (rated ${fmtShort(this.irated(), 'A')}); check the supply voltage`);
+      // winding temperature follows I²: about 1.5 × its rated current for a minute burns the
+      // insulation. Above +10 % of its rated voltage the iron saturates as well and the heating
+      // climbs steeply: on twice its rated voltage the winding burns within seconds.
+      const k = Math.max(1, this.rms.v / (1.1 * this.p.v));
+      this.overheat(s, vr * vr * k ** 4, 40, 2.25, () => k > 1.05
+        ? `Winding burnt — ${fmtShort(this.rms.v, 'V')} on a ${fmtShort(this.p.v, 'V')} fan (over-voltage: the core saturates and the current shoots up)`
+        : `Winding burnt — ${fmtShort(this.irms.v, 'A')} for too long (rated ${fmtShort(this.irated(), 'A')}); check the supply voltage`);
     }
     const target = vr < 0.35 ? 0 : this.p.rpm * Math.min(1.05, Math.pow((vr - 0.35) / 0.65, 0.6));
     this.speed += (target - this.speed) * Math.min(1, s.dt / 0.3); // quick spin-up, so it settles at mains simulation speeds
@@ -458,21 +470,30 @@ export class Heater extends TwoTerm {
 }
 register(Heater);
 
+// burn: how an appliance dies on a sustained over-voltage — tau (s on the heat clock) and the
+// voltage it stands (× rated): filaments go at once, electronics within seconds, motors and
+// heating elements take a little longer. ±10 % mains never hurts any of them.
+const BURN = {
+  lamp: { tau: 0.3, lim: 1.3, why: 'filament burnt out' },
+  heat: { tau: 8, lim: 1.35, why: 'heating element burnt open' },
+  motor: { tau: 6, lim: 1.25, why: 'motor winding burnt' },
+  elec: { tau: 1.5, lim: 1.25, why: 'power supply burnt' },
+};
 const APPLIANCES = {
   none: { name: 'Nothing plugged in' },
-  lamp: { name: 'Lamp 60 W', w: 60, pf: 1 },
-  fan: { name: 'Fan 75 W (PF 0.9)', w: 75, pf: 0.9 },
-  tv: { name: 'TV 120 W (PF 0.95)', w: 120, pf: 0.95 },
-  heater: { name: 'Heater 1 kW', w: 1000, pf: 1 },
-  iron: { name: 'Iron 1.2 kW', w: 1200, pf: 1 },
-  motor: { name: 'Pump motor 750 W (PF 0.8)', w: 750, pf: 0.8 },
-  fridge: { name: 'Refrigerator 150 W (PF 0.8)', w: 150, pf: 0.8 },
-  computer: { name: 'Computer 200 W (PF 0.95)', w: 200, pf: 0.95 },
-  washer: { name: 'Washing machine 500 W (PF 0.85)', w: 500, pf: 0.85 },
-  ricecooker: { name: 'Rice cooker 700 W', w: 700, pf: 1 },
-  microwave: { name: 'Microwave oven 1.2 kW (PF 0.95)', w: 1200, pf: 0.95 },
-  ac: { name: 'Air conditioner 1.5 ton, 1.5 kW (PF 0.9)', w: 1500, pf: 0.9 },
-  fault: { name: 'Faulty appliance: 30 W + 50 mA L–E leak', w: 30, pf: 1, leak: 0.05 },
+  lamp: { name: 'Lamp 60 W', w: 60, pf: 1, burn: 'lamp' },
+  fan: { name: 'Fan 75 W (PF 0.9)', w: 75, pf: 0.9, burn: 'motor' },
+  tv: { name: 'TV 120 W (PF 0.95)', w: 120, pf: 0.95, burn: 'elec' },
+  heater: { name: 'Heater 1 kW', w: 1000, pf: 1, burn: 'heat' },
+  iron: { name: 'Iron 1.2 kW', w: 1200, pf: 1, burn: 'heat' },
+  motor: { name: 'Pump motor 750 W (PF 0.8)', w: 750, pf: 0.8, burn: 'motor' },
+  fridge: { name: 'Refrigerator 150 W (PF 0.8)', w: 150, pf: 0.8, burn: 'motor' },
+  computer: { name: 'Computer 200 W (PF 0.95)', w: 200, pf: 0.95, burn: 'elec' },
+  washer: { name: 'Washing machine 500 W (PF 0.85)', w: 500, pf: 0.85, burn: 'motor' },
+  ricecooker: { name: 'Rice cooker 700 W', w: 700, pf: 1, burn: 'heat' },
+  microwave: { name: 'Microwave oven 1.2 kW (PF 0.95)', w: 1200, pf: 0.95, burn: 'elec' },
+  ac: { name: 'Air conditioner 1.5 ton, 1.5 kW (PF 0.9)', w: 1500, pf: 0.9, burn: 'motor' },
+  fault: { name: 'Faulty appliance: 30 W + 50 mA L–E leak', w: 30, pf: 1, leak: 0.05, burn: 'elec' },
   short: { name: 'Short circuit L–N', short: true },
 };
 
@@ -484,8 +505,8 @@ export class Socket extends Element {
     { key: 'v', label: 'Rated voltage', unit: 'V', def: 230, min: 12, max: 480 },
     { key: 'freq', label: 'Frequency', unit: 'Hz', def: 50, min: 1, max: 400 },
   ];
-  static description = '3-pin socket (L, N, E) with a selectable appliance modelled as an R–L load of its rated power and power factor. "Faulty appliance" leaks 50 mA to earth — an RCD must trip.';
-  constructor(x, y) { super(x, y); this.postCurrents = [0, 0, 0]; this.rl = new RLBranch(); }
+  static description = '3-pin socket (L, N, E) with a selectable appliance modelled as an R–L load of its rated power and power factor. "Faulty appliance" leaks 50 mA to earth — an RCD must trip. Plugged into a supply well above its rated voltage, the appliance burns out (a lamp at once, electronics within seconds, motors and heaters a little later).';
+  constructor(x, y) { super(x, y); this.postCurrents = [0, 0, 0]; this.rl = new RLBranch(); this.rms = new Rms(0.1); }
   localPosts() { return [[-2 * G, -G], [-2 * G, G], [0, 2 * G]]; }
   localBox() { return [-2 * G, -1.8 * G, 1.6 * G, 2 * G]; }
   leads() { return [[0, -2 * G, -G, -1.2 * G, -G], [1, -2 * G, G, -1.2 * G, G], [2, 0, 2 * G, 0, 1.4 * G]]; }
@@ -495,12 +516,12 @@ export class Socket extends Element {
   rl0() {
     const a = this.app();
     if (a.short) return [0.01, 0];
-    if (!a.w) return [1e9, 0];
+    if (!a.w || this.damaged) return [1e9, 0];
     const S = a.w / a.pf, Z = (this.p.v * this.p.v) / S;
     return [Z * a.pf, (Z * Math.sqrt(1 - a.pf * a.pf)) / (TAU * this.p.freq)];
   }
   gleak() { const a = this.app(); return a.leak ? a.leak / this.p.v : 0; }
-  reset() { this.rl.reset(); this.postCurrents.fill(0); }
+  reset() { this.rl.reset(); this.rms = new Rms(0.1); this.postCurrents.fill(0); }
   stamp(s) {
     const [l, n, e] = this.nodes, [R, L] = this.rl0();
     this.rl.stamp(s, l, n, this.branches[0], R, L);
@@ -512,6 +533,10 @@ export class Socket extends Element {
     this.rl.accept(s, l, n, this.branches[0], R);
     const il = (s.v(l) - s.v(e)) * this.gleak();
     this.postCurrents = [this.rl.i + il, -this.rl.i, -il]; this.i = this.rl.i + il;
+    const b = BURN[this.app().burn];
+    if (s.mode === 'dc' || !b) return;
+    const vr = this.rms.push(s.v(l) - s.v(n), s.dt);
+    this.overheat(s, (vr / this.p.v) ** 2, b.tau, b.lim * b.lim, () => `${this.app().name}: ${b.why} — ${fmtShort(vr, 'V')} on a ${fmtShort(this.p.v, 'V')} appliance (over-voltage)`);
   }
   stampAC(ac) {
     const [l, n, e] = this.nodes, [R, L] = this.rl0();
@@ -519,7 +544,7 @@ export class Socket extends Element {
     if (this.gleak()) ac.addY(l, e, this.gleak());
   }
   valueLabel() { const a = this.app(); return a.w ? fmtQty(a.w, 'W').replace(' ', '') : a.short ? 'SHORT' : ''; }
-  readings(s) { return [['Appliance', this.app().name, ''], ['Voltage L–N', s.v(this.nodes[0]) - s.v(this.nodes[1]), 'V'], ['Current (L)', this.postCurrents[0], 'A'], ['Earth leakage', -this.postCurrents[2], 'A']]; }
+  readings(s) { return [['Appliance', this.app().name + (this.damaged ? ' — burnt' : ''), ''], ['Voltage L–N', s.v(this.nodes[0]) - s.v(this.nodes[1]), 'V'], ['Current (L)', this.postCurrents[0], 'A'], ['Earth leakage', -this.postCurrents[2], 'A']]; }
   draw(g) {
     g.box(-1.2 * G, -1.6 * G, 1.4 * G, 1.4 * G, { stroke: g.body, width: g.lw * 0.9, fill: g.fill, r: 5 });
     g.upright(() => {
@@ -641,20 +666,25 @@ export class Bell extends TwoTerm {
     { key: 'r', label: 'Coil resistance', unit: 'Ω', def: 600, min: 0.1, max: 1e5, log: true },
     { key: 'l', label: 'Coil inductance', unit: 'H', def: 0.8, min: 1e-4, max: 100, log: true },
     { key: 'ion', label: 'Operating current', unit: 'A', def: 0.1, min: 1e-4, max: 10, log: true },
+    { key: 'v', label: 'Rated voltage (RMS)', unit: 'V', def: 230, min: 1, max: 1000 },
   ];
-  static description = 'Electromagnetic bell: a coil (R–L) that rings when its RMS current exceeds the operating current.';
-  constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.rms = new Rms(0.05); }
+  static description = 'Electromagnetic bell: a coil (R–L) that rings when its RMS current exceeds the operating current. Well above its rated voltage the coil burns open within seconds.';
+  constructor(x, y) { super(x, y); this.rl = new RLBranch(); this.rms = new Rms(0.05); this.vrms = new Rms(0.1); }
   branchCount() { return 1; }
-  reset() { this.rl.reset(); this.rms = new Rms(0.05); this.sounding = false; this.setCurrent(0); }
-  stamp(s) { this.rl.stamp(s, this.nodes[0], this.nodes[1], this.branches[0], this.p.r, this.p.l); }
-  stampStep(s) { this.rl.step(s, this.branches[0], this.p.l); }
+  rl0() { return this.damaged ? [1e9, 0] : [this.p.r, this.p.l]; }
+  reset() { this.rl.reset(); this.rms = new Rms(0.05); this.vrms = new Rms(0.1); this.sounding = false; this.setCurrent(0); }
+  stamp(s) { const [R, L] = this.rl0(); this.rl.stamp(s, this.nodes[0], this.nodes[1], this.branches[0], R, L); }
+  stampStep(s) { this.rl.step(s, this.branches[0], this.rl0()[1]); }
   accept(s) {
-    this.rl.accept(s, this.nodes[0], this.nodes[1], this.branches[0], this.p.r);
+    this.rl.accept(s, this.nodes[0], this.nodes[1], this.branches[0], this.rl0()[0]);
     this.setCurrent(this.rl.i);
-    if (s.mode !== 'dc') this.sounding = this.rms.push(this.rl.i, s.dt) > this.p.ion;
+    if (s.mode === 'dc') return;
+    this.sounding = this.rms.push(this.rl.i, s.dt) > this.p.ion;
+    const vr = this.vrms.push(this.voltageDiff(s), s.dt);
+    this.overheat(s, (vr / this.p.v) ** 2, 5, 1.69, () => `Coil burnt open — ${fmtShort(vr, 'V')} on a ${fmtShort(this.p.v, 'V')} bell (over-voltage)`);
   }
   get soundTone() { return 1250; }
-  stampAC(ac) { this.rl.ac(ac, this.nodes[0], this.nodes[1], this.branches[0], this.p.r, this.p.l); }
+  stampAC(ac) { const [R, L] = this.rl0(); this.rl.ac(ac, this.nodes[0], this.nodes[1], this.branches[0], R, L); }
   valueLabel() { return ''; }
   readings(s) { return [['State', this.sounding ? 'Ringing' : 'Silent', ''], ['Current (RMS)', this.rms.v, 'A'], ['Voltage', this.voltageDiff(s), 'V']]; }
   localBox() { return [-2 * G, -1.1 * G, 2 * G, 0.6 * G]; }
@@ -773,13 +803,18 @@ export class PFCapacitor extends TwoTerm {
     { key: 'v', label: 'Rated voltage (RMS)', unit: 'V', def: 230, min: 1, max: 1e6, log: true },
     { key: 'freq', label: 'Frequency', unit: 'Hz', def: 50, min: 1, max: 1e4 },
   ];
-  static description = 'Shunt capacitor rated in VAR: C = Q / (2πf·V²). Connect across an inductive load to raise the power factor.';
-  constructor(x, y) { super(x, y); this.cap = new CapHelper(); }
-  C() { return this.p.q / (TAU * this.p.freq * this.p.v * this.p.v); }
-  reset() { this.cap.reset(0); this.setCurrent(0); }
+  static description = 'Shunt capacitor rated in VAR: C = Q / (2πf·V²). Connect across an inductive load to raise the power factor. It stands +10 % (IEC 60831); held well above its rated voltage the dielectric fails and its internal pressure disconnector opens it.';
+  constructor(x, y) { super(x, y); this.cap = new CapHelper(); this.rms = new Rms(0.1); }
+  C() { return this.damaged ? 1e-15 : this.p.q / (TAU * this.p.freq * this.p.v * this.p.v); }
+  reset() { this.cap.reset(0); this.rms = new Rms(0.1); this.setCurrent(0); }
   stamp(s) { this.cap.stamp(s, this.nodes[0], this.nodes[1], this.C()); s.addG(this.nodes[0], this.nodes[1], 1e-9); }
   stampStep(s) { this.cap.step(s, this.nodes[0], this.nodes[1], this.C()); }
-  accept(s) { this.cap.accept(s, this.nodes[0], this.nodes[1], this.C()); this.setCurrent(this.cap.i); }
+  accept(s) {
+    this.cap.accept(s, this.nodes[0], this.nodes[1], this.C()); this.setCurrent(this.cap.i);
+    if (s.mode === 'dc') return;
+    const vr = this.rms.push(this.voltageDiff(s), s.dt);
+    this.overheat(s, (vr / this.p.v) ** 2, 5, 1.69, () => `Failed open — ${fmtShort(vr, 'V')} on a ${fmtShort(this.p.v, 'V')} capacitor (over-voltage)`);
+  }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1e-9, ac.omega * this.C()); }
   valueLabel() { return fmtShort(this.p.q, 'VAR'); }
   readings(s) { return [['Capacitance', this.C(), 'F'], ['Voltage', this.voltageDiff(s), 'V'], ['Current', this.i, 'A']]; }

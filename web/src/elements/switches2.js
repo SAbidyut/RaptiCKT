@@ -390,25 +390,35 @@ export class CoilRelay extends withChip(Element) {
   constructor(x, y) { super(x, y); this.postCurrents = new Array(this.localPosts().length).fill(0); this.on = false; }
   connectivity() { return [this.constructor.coil, ...this.constructor.contacts.map(([a, b]) => [a, b])]; }
   branchCount() { return 1 + this.constructor.contacts.length; }
-  reset() { this.on = false; this.iavg = 0; this.il = 0; this.vl = 0; this.postCurrents.fill(0); this.timer = 0; this.out = false; }
+  reset() { this.on = false; this.iavg = 0; this.ih = 0; this.il = 0; this.vl = 0; this.postCurrents.fill(0); this.timer = 0; this.out = false; }
   irated() {
     const z = this.p.ac ? Math.hypot(this.p.rcoil, 2 * Math.PI * this.p.freq * this.p.lcoil) : this.p.rcoil;
     return (this.p.vcoil / z) * (this.p.ac ? 0.9 : 1); // rectified mean for AC
   }
   contactsClosed() { return this.out ?? this.on; }
+  /** coil R and L — a burnt coil is open */
+  rc() { return this.damaged ? 1e9 : this.p.rcoil; }
+  lc() { return this.damaged ? 0 : this.p.lcoil; }
   stamp(s) {
     const [c1, c2] = this.constructor.coil.map((i) => this.nodes[i]), k = this.branches[0];
     s.addBranchKCL(c1, c2, k); s.addA(k, c1 - 1, 1); s.addA(k, c2 - 1, -1);
-    s.addA(k, k, -(this.p.rcoil + (s.mode === 'dc' ? 0 : this.p.lcoil / s.dt)));
+    s.addA(k, k, -(this.rc() + (s.mode === 'dc' ? 0 : this.lc() / s.dt)));
     const on = this.contactsClosed();
     this.constructor.contacts.forEach(([a, b, t], j) => stampSw(s, this.nodes[a], this.nodes[b], this.branches[1 + j], t === 'NO' ? on : !on, 0.005));
   }
-  stampStep(s) { if (s.mode !== 'dc') s.b[this.branches[0]] += -(this.p.lcoil / s.dt) * this.il; }
+  stampStep(s) { if (s.mode !== 'dc') s.b[this.branches[0]] += -(this.lc() / s.dt) * this.il; }
   accept(s) {
     const i = s.x[this.branches[0]];
     this.il = i;
     const ir = this.irated();
-    if (s.mode === 'dc') this.iavg = Math.abs(i); else this.iavg += (Math.abs(i) - this.iavg) * Math.min(1, s.dt / 0.005);
+    if (s.mode === 'dc') this.iavg = Math.abs(i);
+    else {
+      this.iavg += (Math.abs(i) - this.iavg) * Math.min(1, s.dt / 0.005);
+      // coil heating goes as I²: it stands +10 %, but 1.5 × its rated voltage cooks the insulation
+      // (averaged over 0.1 s so the switch-on inrush of an AC coil does not count)
+      this.ih = (this.ih || 0) + (Math.abs(i) - (this.ih || 0)) * Math.min(1, s.dt / 0.1);
+      this.overheat(s, (this.ih / ir) ** 2, 10, 2.25, () => `Coil burnt open — ${fmtShort(this.ih / ir * this.p.vcoil, 'V')} on a ${fmtShort(this.p.vcoil, 'V')} coil (over-voltage)`);
+    }
     const next = this.on ? this.iavg > 0.35 * ir : this.iavg > 0.7 * ir;
     if (next !== this.on) { this.on = next; this.onChange(s); }
     this.tick(s);
@@ -427,7 +437,7 @@ export class CoilRelay extends withChip(Element) {
   }
   stampAC(ac) {
     const [c1, c2] = this.constructor.coil.map((i) => this.nodes[i]), k = this.branches[0];
-    ac.addBranchKCL(c1, c2, k); ac.addA(k, c1 - 1, 1); ac.addA(k, c2 - 1, -1); ac.addA(k, k, -this.p.rcoil, -ac.omega * this.p.lcoil);
+    ac.addBranchKCL(c1, c2, k); ac.addA(k, c1 - 1, 1); ac.addA(k, c2 - 1, -1); ac.addA(k, k, -this.rc(), -ac.omega * this.lc());
     const on = this.contactsClosed();
     this.constructor.contacts.forEach(([a, b, t], j) => stampSwAC(ac, this.nodes[a], this.nodes[b], this.branches[1 + j], t === 'NO' ? on : !on, 0.005));
   }

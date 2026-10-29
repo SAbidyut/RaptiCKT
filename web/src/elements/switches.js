@@ -148,8 +148,11 @@ export class Relay extends Element {
   branchCount() { return 3; }
   valueLabel() { return fmtShort(this.p.vcoil, 'V'); }
   labelSide() { return [-1, 0]; }
-  reset() { this.on = false; this.iPrev = 0; this.vlPrev = 0; }
-  req(s) { return this.p.rcoil + (s.mode === 'dc' ? 0 : (s.method === 'be' ? 1 : 2) * this.p.lcoil / s.dt); }
+  reset() { this.on = false; this.iPrev = 0; this.vlPrev = 0; this.i2 = 0; }
+  /** coil R and L — a burnt coil is open */
+  rc() { return this.damaged ? 1e9 : this.p.rcoil; }
+  lc() { return this.damaged ? 0 : this.p.lcoil; }
+  req(s) { return this.rc() + (s.mode === 'dc' ? 0 : (s.method === 'be' ? 1 : 2) * this.lc() / s.dt); }
   stamp(s) {
     const [c1, c2, com, nc, no] = this.nodes, [kc, k1, k2] = this.branches;
     s.addBranchKCL(c1, c2, kc); s.addA(kc, c1 - 1, 1); s.addA(kc, c2 - 1, -1); s.addA(kc, kc, -this.req(s));
@@ -158,15 +161,20 @@ export class Relay extends Element {
   }
   stampStep(s) {
     if (s.mode === 'dc') return;
-    const L = this.p.lcoil;
+    const L = this.lc();
     s.b[this.branches[0]] += s.method === 'be' ? -(L / s.dt) * this.iPrev : -(2 * L / s.dt) * this.iPrev - this.vlPrev;
   }
   accept(s) {
     const [c1, c2] = this.nodes, [kc, k1, k2] = this.branches;
     const i = s.x[kc];
     this.iPrev = i;
-    this.vlPrev = s.mode === 'dc' ? 0 : s.v(c1) - s.v(c2) - this.p.rcoil * i;
+    this.vlPrev = s.mode === 'dc' ? 0 : s.v(c1) - s.v(c2) - this.rc() * i;
     const irated = this.p.vcoil / this.p.rcoil;
+    if (s.mode !== 'dc') {
+      // coil heating goes as I²: it stands +10 %, but 1.5 × its rated voltage cooks the insulation
+      this.i2 = (this.i2 || 0) + (i * i - (this.i2 || 0)) * Math.min(1, s.dt / 0.1);
+      this.overheat(s, this.i2 / irated ** 2, 10, 2.25, () => `Coil burnt open — ${fmtShort(Math.sqrt(this.i2) * this.p.rcoil, 'V')} on a ${fmtShort(this.p.vcoil, 'V')} coil (over-voltage)`);
+    }
     const a = Math.abs(i);
     const nextOn = this.on ? a > irated * this.p.drop / 100 : a > irated * this.p.pull / 100;
     if (nextOn !== this.on) { this.on = nextOn; s.markEvent(); }
@@ -182,7 +190,7 @@ export class Relay extends Element {
   }
   stampAC(ac) {
     const [c1, c2, com, nc, no] = this.nodes, [kc, k1, k2] = this.branches;
-    ac.addBranchKCL(c1, c2, kc); ac.addA(kc, c1 - 1, 1); ac.addA(kc, c2 - 1, -1); ac.addA(kc, kc, -this.p.rcoil, -ac.omega * this.p.lcoil);
+    ac.addBranchKCL(c1, c2, kc); ac.addA(kc, c1 - 1, 1); ac.addA(kc, c2 - 1, -1); ac.addA(kc, kc, -this.rc(), -ac.omega * this.lc());
     stampSwitchAC(ac, com, nc, k1, !this.on, 0.01);
     stampSwitchAC(ac, com, no, k2, this.on, 0.01);
   }

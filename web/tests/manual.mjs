@@ -2,6 +2,7 @@
 // library and examples, and "Open this example" without losing the circuit being edited.
 // Usage: npm run build && node tests/manual.mjs [shots-dir]
 import { chromium } from 'playwright';
+import { CHAPTERS } from '../src/ui/manual-content.js';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root = path.resolve('dist');
 const server = http.createServer((req, res) => { const f = path.join(root, req.url === '/' ? 'index.html' : req.url.slice(1)); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html' }[path.extname(f)] || 'image/svg+xml' }); fs.createReadStream(f).pipe(res); }).listen(0);
@@ -28,7 +29,7 @@ const back = () => page.evaluate(() => window.raptiBack()).then(() => page.waitF
 await page.click('[data-tab=manual]'); await page.waitForTimeout(500);
 ok('Manual tab opens the manual inside Home', await screen() === 'home' && await page.locator('.home-body .man-bar').count() === 1);
 ok('the RaptiCKT header and bottom menu stay', await page.locator('.screen.home .home-head .brand').isVisible() && await page.locator('.screen.home .bottom-nav [data-tab=manual].on').count() === 1);
-ok('contents page lists 19 chapters', await page.locator('.man-card[data-nav^="ch:"]').count() === 19);
+ok(`contents page lists all ${CHAPTERS.length} chapters`, await page.locator('.man-card[data-nav^="ch:"]').count() === CHAPTERS.length);
 ok('contents page is short (no chapter text on it)', await page.locator('.man-inner .man-b').count() === 0);
 ok('opens on the contents page', await title() === 'User Manual');
 await shot('1-contents');
@@ -60,7 +61,11 @@ ok('a category lists its components', await page.locator('.man-item').count() ==
 await shot('4-category');
 await back(); await back();
 // chapter links inside text
-await nav('ch:editor'); await nav('sec:editor/3');
+await nav('ch:editor');
+for (let k = 0; k < 12 && !(await page.locator('.man-ref[data-nav="ch:running"]').count()); k++) {
+  if (k) await back();
+  await nav(`sec:editor/${k}`);
+}
 await tap(page.locator('.man-ref[data-nav="ch:running"]'));
 ok('chapter references are links', await title() === 'Running the simulation');
 await back(); await back(); await back();
@@ -75,7 +80,7 @@ ok('Back from a result returns to the search', await page.locator('.man-card.res
 await page.fill('.man-search input', 'zzzzqqq'); await page.waitForTimeout(400);
 ok('no-result message', await page.locator('.man-empty').count() === 1);
 await page.fill('.man-search input', ''); await page.waitForTimeout(400);
-ok('clearing the search shows the contents again', await page.locator('.man-card[data-nav^="ch:"]').count() === 19);
+ok('clearing the search shows the contents again', await page.locator('.man-card[data-nav^="ch:"]').count() === CHAPTERS.length);
 await back();
 ok('Back from the contents goes to the Home tab', await screen() === 'home' && await page.evaluate(() => app.home.tab) === 'home');
 
@@ -123,10 +128,10 @@ await page.evaluate(() => window.raptiBack()); await page.waitForTimeout(300);
 await page.evaluate(() => app.goHome()); await page.waitForTimeout(400);
 ok('Settings has no manual section', await (async () => { await page.click('[data-h=settings]'); await page.waitForTimeout(400); return (await page.locator('.screen.settings [data-x=manual]').count()) === 0; })());
 await page.evaluate(() => window.raptiBack()); await page.waitForTimeout(300);
-// banner on Home
+// the Manual tab in the bottom bar of Home
 await page.evaluate(() => { app.home.tab = 'home'; app.home.render(); }); await page.waitForTimeout(500);
-await page.click('[data-h=manual]'); await page.waitForTimeout(400);
-ok('Home banner opens the Manual tab', await screen() === 'home' && await page.evaluate(() => app.home.tab) === 'manual');
+await page.click('.bottom-nav [data-tab=manual]'); await page.waitForTimeout(400);
+ok('the bottom bar opens the Manual tab', await screen() === 'home' && await page.evaluate(() => app.home.tab) === 'manual');
 
 // About: tapping a course opens a small popup with what it is and how long it takes
 await page.evaluate(() => app.goHome && app.closeManual());

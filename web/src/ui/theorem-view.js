@@ -1,0 +1,266 @@
+// "Run with theorem": pick Thevenin, Norton, superposition or source transformation, pick the
+// resistor whose current or voltage is wanted, then read the solution step by step — each step
+// with its own circuit drawn — down to the final equivalent and the answer.
+
+import { prepareTheorem, runTheorem, THEOREMS } from '../engine/theorem.js';
+import { fmtSI } from '../engine/units.js';
+import { boardFigure, ladderFigure, drawFigure } from './theorem-figs.js';
+import { THEMES } from './theme.js';
+import { icon } from './icons.js';
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/** **bold** and X_sub → X<sub>sub</sub> */
+const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\b([A-Za-z])_([A-Za-z0-9]+)/g, '$1<sub>$2</sub>');
+const BADGE = { thevenin: 'Vth', norton: 'IN', superposition: 'Σ', source: 'V⇄I', maxpower: 'Pmax', millman: 'VM', reciprocity: 'x⇄y', tellegen: 'Σp=0' };
+
+export class TheoremView {
+  constructor(editor, host) {
+    this.ed = editor;
+    this.host = host;
+    this.stage = 'pick';
+    this.want = 'I';
+  }
+
+  get isOpen() { return this.host.classList.contains('open'); }
+
+  open() {
+    const doc = this.ed.doc;
+    this.prep = prepareTheorem(doc);
+    const sel = this.ed.selected();
+    const pre = sel && this.prep.targets.find((t) => doc.elements[t.src] === sel);
+    this.target = pre ? pre.src : this.target != null && this.prep.targets.some((t) => t.src === this.target) ? this.target : null;
+    this.stage = 'pick';
+    this.host.classList.add('open');
+    this.ed.overlayOpen('theorem');
+    this.render();
+  }
+
+  close() { this.host.classList.remove('open'); this.ed.overlayClosed('theorem'); }
+
+  /** Android back: one stage back, then close. */
+  back() {
+    if (this.stage === 'solve') this.go('target');
+    else if (this.stage === 'target') this.go('pick');
+    else this.close();
+    return true;
+  }
+
+  go(stage) { this.stage = stage; this.render(); }
+
+  render() {
+    const th = THEOREMS.find((t) => t.id === this.theorem);
+    const title = this.stage === 'pick' ? 'Run with theorem' : th.title;
+    this.host.innerHTML = `
+      <div class="an-head">
+        <button class="icon-btn" data-x="back" title="Back">${icon('back', 22)}</button>
+        <b>${esc(title)}</b>
+        <span class="grow"></span>
+        <div class="th-crumbs">${['Theorem', 'Component', 'Solution'].map((s, i) => `<i class="${['pick', 'target', 'solve'].indexOf(this.stage) >= i ? 'on' : ''}">${i + 1}</i>`).join('')}</div>
+      </div>
+      <div class="an-body th-body"></div>`;
+    this.host.querySelector('[data-x=back]').addEventListener('click', () => this.back());
+    const body = this.host.querySelector('.th-body');
+    ({ pick: () => this.pickUI(body), target: () => this.targetUI(body), solve: () => this.solveUI(body) })[this.stage]();
+    body.scrollTop = 0;
+  }
+
+  // ---------------------------------------------------------- 1. theorem
+  pickUI(body) {
+    const { prep } = this;
+    const issues = [];
+    if (!this.ed.doc.elements.length) issues.push('The board is empty. Build a circuit with resistors and DC sources first.');
+    else {
+      if (prep.bad.length) issues.push(`Network theorems work on <b>linear DC circuits</b>: resistors, DC voltage and current sources, switches and meters. These parts can't be handled: ${esc(prep.bad.join(', '))}.`);
+      if (!prep.targets.length) issues.push('Add a resistor: the theorem finds the current or voltage of a resistor (the load).');
+      else if (!prep.sources.length) issues.push('There is no DC voltage or current source, so every current is zero.');
+    }
+    const blocked = !this.ed.doc.elements.length || prep.bad.length > 0 || !prep.targets.length;
+    body.innerHTML = `
+      <p class="an-help">Solve this circuit by hand, the way it is done in class: pick a network theorem, pick the resistor you want, and follow every step — each one with its circuit drawn — to the final equivalent circuit and the answer.</p>
+      ${issues.map((t) => `<div class="th-warn">${icon('info', 16)}<span>${t}</span></div>`).join('')}
+      <div class="th-cards">${THEOREMS.map((t) => `
+        <button class="th-card" data-th="${t.id}" ${blocked ? 'disabled' : ''}>
+          <i class="th-badge">${esc(BADGE[t.id])}</i>
+          <span><b>${esc(t.title)}</b><small>${inline(t.desc)}</small></span>
+          ${icon('chevLeft', 18)}
+        </button>`).join('')}
+      </div>`;
+    body.querySelectorAll('[data-th]').forEach((b) => b.addEventListener('click', () => { this.theorem = b.dataset.th; this.go('target'); }));
+  }
+
+  // ---------------------------------------------------------- 2. component
+  targetUI(body) {
+    const { prep } = this;
+    const els = this.ed.doc.elements;
+    if (this.target == null || !prep.targets.some((t) => t.src === this.target)) this.target = prep.targets[prep.targets.length - 1].src;
+    body.innerHTML = `
+      <p class="th-q">Which resistor? <span>Tap it on the drawing or in the list.</span></p>
+      <canvas class="th-fig th-pick"></canvas>
+      <div class="th-chips">${prep.targets.map((t) => `<button class="chip2 ${t.src === this.target ? 'on' : ''}" data-t="${t.src}">${esc(t.name)} · ${esc(fmtSI(t.val, 'Ω', 4))}</button>`).join('')}</div>
+      <p class="th-q">Find its</p>
+      <div class="th-seg">
+        <button data-w="I" class="${this.want === 'I' ? 'on' : ''}">Current I</button>
+        <button data-w="V" class="${this.want === 'V' ? 'on' : ''}">Voltage V</button>
+      </div>
+      <div class="btn-row"><button class="btn primary big th-go">${icon('play', 18)} Solve step by step</button></div>`;
+    const cv = body.querySelector('.th-pick');
+    const draw = () => {
+      const built = boardFigure(this.ed.doc, { target: this.target, highlight: [this.target], a: -1 }, prep.net);
+      this.pickView = drawFigure(cv, built, this.theme(), this.ed.settings, 300);
+    };
+    requestAnimationFrame(draw);
+    const choose = (src) => {
+      this.target = src;
+      body.querySelectorAll('[data-t]').forEach((b) => b.classList.toggle('on', +b.dataset.t === src));
+      draw();
+    };
+    body.querySelectorAll('[data-t]').forEach((b) => b.addEventListener('click', () => choose(+b.dataset.t)));
+    cv.addEventListener('click', (ev) => {
+      const r = this.pickView, rect = cv.getBoundingClientRect();
+      if (!r) return;
+      const [wx, wy] = r.toWorld(ev.clientX - rect.left, ev.clientY - rect.top);
+      const hit = prep.targets.find((t) => els[t.src].hitTest(wx, wy, 6 / r.scale));
+      if (hit) choose(hit.src);
+    });
+    body.querySelectorAll('[data-w]').forEach((b) => b.addEventListener('click', () => {
+      this.want = b.dataset.w;
+      body.querySelectorAll('[data-w]').forEach((x) => x.classList.toggle('on', x === b));
+    }));
+    body.querySelector('.th-go').addEventListener('click', () => this.go('solve'));
+  }
+
+  // ---------------------------------------------------------- 3. solution
+  solveUI(body) {
+    const prep = this.prep;
+    const t = prep.targets.find((x) => x.src === this.target);
+    prep.style = this.ed.doc.elements[this.target]?.p.style;
+    const res = runTheorem(prep, this.theorem, this.target, this.want);
+    if (!res.ok) {
+      body.innerHTML = `<div class="th-warn">${icon('info', 16)}<span>${esc(res.error)}</span></div>
+        <div class="btn-row"><button class="btn" data-x="target">${icon('back', 16)} Choose another resistor</button></div>`;
+      body.querySelector('[data-x=target]').addEventListener('click', () => this.go('target'));
+      return;
+    }
+    const main = this.want === 'V' ? ['V', res.answer.V, 'V'] : ['I', res.answer.I, 'A'];
+    // a theorem whose result is not the load current (maximum power, Tellegen) says what it found
+    const head = res.head
+      ? `<b>${inline(res.head.main)}</b><small>${inline(res.head.sub)}</small>`
+      : `<b>${main[0]}<sub>L</sub> = ${esc(fmtSI(main[1], main[2], 4))}</b>
+        <small>I<sub>L</sub> = ${esc(fmtSI(res.answer.I, 'A', 4))} · V<sub>L</sub> = ${esc(fmtSI(res.answer.V, 'V', 4))} · P<sub>L</sub> = ${esc(fmtSI(res.answer.P, 'W', 4))}</small>`;
+    body.innerHTML = `
+      <div class="th-answer">
+        <span>${esc(THEOREMS.find((x) => x.id === this.theorem).short)} · ${esc(t.name)} (${esc(fmtSI(t.val, 'Ω', 4))})</span>
+        ${head}
+      </div>
+      ${res.steps.map((s) => {
+        // "Step 2 — Find V_th": the number goes in the badge
+        const m = s.title.match(/^Step (\d+) — (.*)$/);
+        return `
+        <section class="th-step">
+          <h3><i class="${m ? '' : 'dot'}">${m ? m[1] : ''}</i><span>${inline(m ? m[2] : s.title)}</span></h3>
+          ${s.fig ? '<canvas class="th-fig"></canvas>' : ''}
+          ${s.blocks.map((b) => this.block(b)).join('')}
+          ${s.result.length ? `<div class="th-res">${s.result.map(([k, v]) => `<span>${inline(k)} = <b>${esc(v)}</b></span>`).join('')}</div>` : ''}
+        </section>`;
+      }).join('')}
+      <div class="btn-row th-end">
+        <button class="btn" data-x="pick">${icon('layers', 16)} Another theorem</button>
+        <button class="btn" data-x="target">${icon('target', 16)} Another resistor</button>
+        <button class="btn primary" data-x="run">${icon('play', 16)} Run the circuit</button>
+      </div>`;
+    body.querySelector('[data-x=pick]').addEventListener('click', () => this.go('pick'));
+    body.querySelector('[data-x=target]').addEventListener('click', () => this.go('target'));
+    body.querySelector('[data-x=run]').addEventListener('click', () => this.runCircuit());
+    const cvs = body.querySelectorAll('.th-step');
+    requestAnimationFrame(() => res.steps.forEach((s, i) => {
+      const cv = cvs[i].querySelector('canvas');
+      if (!cv) return;
+      const built = s.fig.kind === 'board' ? boardFigure(this.ed.doc, s.fig, prep.net) : ladderFigure(s.fig);
+      if (built) drawFigure(cv, built, this.theme(), this.ed.settings);
+      else cv.remove();
+    }));
+  }
+
+  block(b) {
+    if (b.t === 'p') return `<p>${inline(b.text)}</p>`;
+    if (b.t === 'f') return `<div class="th-math">${b.lines.map((l) => `<div class="ml${/^\s/.test(l) ? ' cont' : ''}">${mathHTML(l.trim())}</div>`).join('')}</div>`;
+    if (b.t === 'tip') return `<div class="lf-tip">${icon('check', 16)}<span>${inline(b.text)}</span></div>`;
+    if (b.t === 'table') {
+      return `<div class="th-tw"><table class="th-tbl"><thead><tr>${b.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${b.rows.map((r, i) => `<tr class="${i === b.mark ? 'mark' : ''}">${r.map((x) => `<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    }
+    if (b.t === 'curve') return curveSVG(b);
+    return '';
+  }
+
+  theme() { return THEMES[this.ed.settings.theme] || THEMES.dark; }
+
+  /** Back to the board, running, with the load selected so its live reading shows. */
+  runCircuit() {
+    const el = this.ed.doc.elements[this.target];
+    this.close();
+    if (!this.ed.running || this.ed.paused) this.ed.setRunning(true);
+    if (el) this.ed.select(el);
+  }
+}
+
+/** P_L against R_L (log scale) with the peak at R_th and the present load marked. */
+function curveSVG({ pts, now, best, xl, yl }) {
+  const W = 320, H = 170, L = 44, R = 34, T = 16, B = 30;
+  const x0 = Math.log10(pts[0][0]), x1 = Math.log10(pts[pts.length - 1][0]);
+  const ymax = best[1] * 1.12;
+  const X = (x) => L + ((Math.log10(Math.min(Math.max(x, pts[0][0]), pts[pts.length - 1][0])) - x0) / (x1 - x0)) * (W - L - R);
+  const Y = (y) => T + (1 - y / ymax) * (H - T - B);
+  const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${X(x).toFixed(1)},${Y(y).toFixed(1)}`).join('');
+  const f = (v, u) => esc(fmtSI(v, u, 3));
+  const sub = (t) => esc(t).replace(/_(\w+)/g, '<tspan baseline-shift="sub" font-size="80%">$1</tspan>');
+  const ticks = [pts[0][0], best[0], pts[pts.length - 1][0]];
+  return `<svg class="th-curve" viewBox="0 0 ${W} ${H}" role="img" aria-label="Load power against load resistance">
+    <line x1="${L}" y1="${Y(0)}" x2="${W - R}" y2="${Y(0)}" class="ax"/><line x1="${L}" y1="${T}" x2="${L}" y2="${Y(0)}" class="ax"/>
+    <line x1="${X(best[0])}" y1="${T}" x2="${X(best[0])}" y2="${Y(0)}" class="grid"/>
+    ${ticks.map((x) => `<text x="${X(x)}" y="${H - 14}" text-anchor="middle">${f(x, 'Ω')}</text>`).join('')}
+    <text x="${W - R}" y="${Y(0) - 6}" text-anchor="end">${sub(xl)}</text>
+    <text x="${L - 4}" y="${Y(best[1]) + 4}" text-anchor="end">${f(best[1], 'W')}</text>
+    <text x="${L - 4}" y="${T - 2}" text-anchor="end">${sub(yl)}</text>
+    <path d="${d}" class="line"/>
+    <circle cx="${X(best[0])}" cy="${Y(best[1])}" r="5" class="best"/>
+    <text x="${X(best[0]) + 8}" y="${Y(best[1]) - 6}" class="lbest">${sub('max at R_th')}</text>
+    <circle cx="${X(now[0])}" cy="${Y(now[1])}" r="5" class="now"/>
+    <text x="${X(now[0]) + (X(now[0]) > W / 2 ? -8 : 8)}" y="${Y(now[1]) + 17}" text-anchor="${X(now[0]) > W / 2 ? 'end' : 'start'}" class="lnow">now ${f(now[0], 'Ω')}</text>
+  </svg>`;
+}
+
+/**
+ * Typeset formula markup the way a textbook prints it: \frac{a}{b} stacked over a bar,
+ * x_{s} with the letter in italics and s below, x^{2} above, \t{words} as plain words.
+ */
+function mathHTML(src) {
+  let i = 0;
+  const parse = (inGroup) => {
+    let out = '';
+    while (i < src.length) {
+      const c = src[i];
+      if (c === '}' && inGroup) { i++; return out; }
+      if (src.startsWith('\\frac{', i)) {
+        i += 6;
+        const num = parse(true);
+        let den = '';
+        if (src[i] === '{') { i++; den = parse(true); }
+        out += `<span class="mf"><span class="mn">${num}</span><span class="md">${den}</span></span>`;
+        continue;
+      }
+      if (src.startsWith('\\t{', i)) { i += 3; out += `<span class="mt">${parse(true)}</span>`; continue; }
+      if ((c === '_' || c === '^') && i + 1 < src.length) {
+        let g;
+        if (src[i + 1] === '{') { i += 2; g = parse(true); } else { g = esc(src[i + 1]); i += 2; }
+        if (c === '_') out = out.replace(/(^|[^A-Za-z])([A-Za-z])$/, '$1<i>$2</i>'); // a variable: its letter in italics
+        out += c === '_' ? `<sub>${g}</sub>` : `<sup>${g}</sup>`;
+        continue;
+      }
+      out += esc(c);
+      i++;
+    }
+    return out;
+  };
+  return parse(false);
+}

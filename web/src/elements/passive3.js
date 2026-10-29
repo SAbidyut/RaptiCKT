@@ -127,6 +127,22 @@ function capType(type, title, d, glyph, keywords, desc) {
     if (Math.abs(s.v(this.nodes[0]) - s.v(this.nodes[1])) > this.p.vr) r.unshift(['Warning', 'OVERVOLTAGE — above voltage rating', '']);
     return r;
   };
+  // a burnt dielectric: ceramic and mica punch through to a short, film caps fail open
+  C.prototype.sync = function () {
+    RealCap.prototype.sync.call(this);
+    if (!this.subs || !this.damaged) return;
+    const [r, , , lk] = this.subs.map((x) => x.el);
+    if (d.failShort) lk.p.r = 0.05; else r.p.r = 1e9;
+  };
+  C.prototype.accept = function (s) {
+    RealCap.prototype.accept.call(this, s);
+    if (s.mode === 'dc' || this.damaged) return;
+    // the peak voltage stresses the dielectric: it stands its test voltage (≈1.5 × rated) for a
+    // moment; held above that it breaks down
+    const v = Math.abs(s.v(this.nodes[0]) - s.v(this.nodes[1]));
+    this.vpk = Math.max(v, (this.vpk || 0) * (1 - Math.min(1, s.dt / 0.05)));
+    if (this.overheat(s, (this.vpk / this.p.vr) ** 2, 0.5, 2.25, () => `Dielectric broke down — ${fmtShort(this.vpk, 'V')} peak on a ${fmtShort(this.p.vr, 'V')} capacitor (${d.failShort ? 'now a short' : 'now open'})`)) this.sync();
+  };
   C.prototype.draw = function (g) {
     g.line(-0.22 * G, -0.7 * G, -0.22 * G, 0.7 * G, g.vc(g.pv(0)), g.lw * 1.4);
     g.line(0.22 * G, -0.7 * G, 0.22 * G, 0.7 * G, g.vc(g.pv(1)), g.lw * 1.4);
@@ -136,7 +152,7 @@ function capType(type, title, d, glyph, keywords, desc) {
   return C;
 }
 
-capType('ceramiccap', 'Ceramic Capacitor (MLCC)', { c: 100e-9, esr: 0.01, esl: 0.5e-9, rleak: 1e10, vr: 50 }, 'MLCC',
+capType('ceramiccap', 'Ceramic Capacitor (MLCC)', { c: 100e-9, esr: 0.01, esl: 0.5e-9, rleak: 1e10, vr: 50, failShort: true }, 'MLCC',
   'ceramic capacitor mlcc x7r c0g np0 decoupling 100nf 104',
   'Multilayer ceramic capacitor: very low ESR (≈10 mΩ) and ESL (≈0.5 nH), so it is the best decoupling capacitor at high frequency. X7R/Y5V types lose capacitance with DC bias; C0G/NP0 types are stable.');
 capType('filmcap', 'Film Capacitor', { c: 1e-6, esr: 0.005, esl: 10e-9, rleak: 5e10, vr: 250 }, 'FILM',
@@ -148,6 +164,6 @@ capType('polyestercap', 'Polyester (PET) Capacitor', { c: 100e-9, esr: 0.03, esl
 capType('ppcap', 'Polypropylene (PP) Capacitor', { c: 470e-9, esr: 0.003, esl: 8e-9, rleak: 1e11, vr: 400 }, 'PP',
   'polypropylene capacitor mkp pp x2 class x snubber resonant low loss',
   'Polypropylene film capacitor (MKP): the lowest dielectric loss (tan δ ≈ 0.02 %) — used in resonant converters, snubbers, X2 mains filters and precision timing.');
-capType('micacap', 'Silver-Mica Capacitor', { c: 100e-12, esr: 0.05, esl: 1e-9, rleak: 1e12, vr: 500 }, 'MICA',
+capType('micacap', 'Silver-Mica Capacitor', { c: 100e-12, esr: 0.05, esl: 1e-9, rleak: 1e12, vr: 500, failShort: true }, 'MICA',
   'mica capacitor silver mica rf oscillator stable high q pf',
   'Silver-mica capacitor: picofarad values with excellent stability and very high Q — used in RF oscillators and filters.');
