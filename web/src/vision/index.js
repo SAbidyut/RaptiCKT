@@ -4,7 +4,7 @@
 
 import { prepare } from './image.js';
 import { findFigures } from './figures.js';
-import { readStructure } from './circuit.js';
+import { readStructure, plateGap } from './circuit.js';
 import { findText } from './text.js';
 import { readWords } from './labels.js';
 import { assignLabels } from './assign.js';
@@ -24,6 +24,26 @@ function readingOrder(figs) {
 }
 
 /**
+ * A capacitor or a battery drawn by hand with its plates wide apart can cut a drawing in two (or
+ * more): join the figures whose loose plates face each other, and read the joined one again.
+ * figs: [{ box, parts, near }], S: their structures. Returns the joined lists.
+ */
+export function joinAcrossPlates(img, figs, S) {
+  for (;;) {
+    const loose = S.map((s) => s.plates.filter((P) => !P.paired));
+    let hit = null;
+    for (let i = 0; i < figs.length && !hit; i++) {
+      for (let j = i + 1; j < figs.length && !hit; j++) if (loose[i].some((P) => loose[j].some((Q) => plateGap(P, Q, img.sw) >= 0))) hit = [i, j];
+    }
+    if (!hit) return { figs, S };
+    const [a, b] = hit.map((k) => figs[k]);
+    const f = { box: [Math.min(a.box[0], b.box[0]), Math.min(a.box[1], b.box[1]), Math.max(a.box[2], b.box[2]), Math.max(a.box[3], b.box[3])], parts: [...a.parts, ...b.parts], near: [...a.near, ...b.near] };
+    figs = [...figs.filter((_, k) => !hit.includes(k)), f];
+    S = [...S.filter((_, k) => !hit.includes(k)), readStructure(img, f)];
+  }
+}
+
+/**
  * Read every circuit diagram in a picture ({ width, height, data } RGBA, e.g. canvas ImageData).
  * onProgress(fraction, what) is called as it goes; the work yields between figures so the page
  * stays responsive. Returns { circuits: [drawing], problem }.
@@ -35,12 +55,19 @@ export async function readPicture(picture, { onProgress, signal } = {}) {
   await step(0.25, 'Finding the circuits');
   const F = findFigures(p.ink, p.w, p.h, p.sw);
   const img = { ...p, labels: F.labels, comps: F.comps };
-  const figs = readingOrder(F.figures);
+  let figs = readingOrder(F.figures), all = [];
+  for (let k = 0; k < figs.length; k++) {
+    await step(0.3 + (0.3 * k) / figs.length, 'Finding the parts');
+    all.push(readStructure(img, figs[k]));
+  }
+  ({ figs, S: all } = joinAcrossPlates(img, figs, all));
+  const order = readingOrder(figs);
+  all = order.map((f) => all[figs.indexOf(f)]);
+  figs = order;
   const circuits = [];
   for (let k = 0; k < figs.length; k++) {
-    await step(0.3 + (0.65 * k) / Math.max(1, figs.length), `Reading circuit ${k + 1} of ${figs.length}`);
-    const fig = figs[k];
-    const S = readStructure(img, fig);
+    await step(0.6 + (0.35 * k) / Math.max(1, figs.length), `Reading circuit ${k + 1} of ${figs.length}`);
+    const fig = figs[k], S = all[k];
     const parts = S.parts.filter((q) => q.a != null && q.type !== 'loose');
     if (parts.length < 2) continue;
     const T = findText(img, fig, S);

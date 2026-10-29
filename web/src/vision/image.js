@@ -270,8 +270,172 @@ export function strokeWidth(ink, w, h) {
 }
 
 /**
+ * Erase the printed lines of ruled or squared paper from an ink mask, in place: straight lines
+ * near level or upright across most of the picture, three or more evenly spaced (a circuit's own
+ * wires turn at their ends and are not a ruled family). A pen stroke crossing a line stays, and
+ * where the pen is clearly darker than the lines, a wire drawn along one stays too. Returns how
+ * many it erased.
+ */
+export function eraseRules(ink, contrast, w, h) {
+  const n = eraseLevelRules(ink, contrast, w, h);
+  const T = (a) => { const t = new Uint8Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) t[x * h + y] = a[y * w + x]; return t; };
+  const ti = T(ink), m = eraseLevelRules(ti, T(contrast), h, w);
+  if (m) for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) ink[y * w + x] = ti[x * h + y];
+  return n + m;
+}
+
+function eraseLevelRules(ink, contrast, w, h) {
+  // a Hough over small slopes (a page photographed a little turned, its lines a little apart)
+  const NS = 81, off = Math.ceil(0.1 * w) + 2, n = h + 2 * off;
+  const acc = new Uint32Array(NS * n);
+  const slope = (k) => -0.1 + (0.2 * k) / (NS - 1);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!ink[y * w + x]) continue;
+      for (let k = 0; k < NS; k++) acc[k * n + Math.round(y - slope(k) * x) + off]++;
+    }
+  }
+  const peaks = [];
+  for (let k = 0; k < NS; k++) {
+    for (let c = 1; c < n - 1; c++) {
+      const v = acc[k * n + c] + Math.max(acc[k * n + c - 1], acc[k * n + c + 1]);
+      if (v >= 0.4 * w && acc[k * n + c] >= acc[k * n + c - 1] && acc[k * n + c] >= acc[k * n + c + 1]) peaks.push({ s: slope(k), c: c - off, v });
+    }
+  }
+  peaks.sort((a, b) => b.v - a.v);
+  const mid = (q) => q.c + q.s * w / 2;
+  // the vertical ink run through (x, y)
+  const runAt = (x, y) => { let a = y, b = y; while (a > 0 && ink[(a - 1) * w + x]) a--; while (b < h - 1 && ink[(b + 1) * w + x]) b++; return [a, b]; };
+  // a line: thin runs on it across most of the width that no stronger line has taken already
+  const claimed = new Uint8Array(w * h);
+  const lines = [];
+  for (const q of peaks) {
+    if (lines.length > 60) break;
+    let cover = 0;
+    const runs = [];
+    for (let x = 0; x < w; x++) {
+      const yp = Math.round(q.c + q.s * x);
+      for (let d = 0; d <= 3; d = d > 0 ? -d : 1 - d) {
+        const y = yp + d;
+        if (y < 0 || y >= h || !ink[y * w + x] || claimed[y * w + x]) continue;
+        const [a, b] = runAt(x, y);
+        if (b - a + 1 <= 9) { cover++; runs.push(b - a + 1); }
+        break;
+      }
+    }
+    if (cover < 0.45 * w) continue;
+    runs.sort((p1, p2) => p1 - p2);
+    const line = { ...q, thick: runs[Math.floor(runs.length * 0.75)], cover: cover / w };
+    lines.push(line);
+    for (let x = 0; x < w; x++) for (let d = -3; d <= 3; d++) { const y = Math.round(q.c + q.s * x) + d; if (y >= 0 && y < h) claimed[y * w + x] = 1; }
+  }
+  if (lines.length < 3) return 0;
+  // the evenly spaced family: gaps one (or two, a line lost) times their usual gap
+  lines.sort((a, b) => mid(a) - mid(b));
+  const gaps = lines.slice(1).map((q, k) => mid(q) - mid(lines[k])).sort((a, b) => a - b);
+  const g = gaps[gaps.length >> 1];
+  const even = (d) => [1, 2].some((m) => Math.abs(d - m * g) <= 0.2 * g);
+  const fam = lines.filter((q, k) => (k > 0 && even(mid(q) - mid(lines[k - 1]))) || (k < lines.length - 1 && even(mid(lines[k + 1]) - mid(q))));
+  // (and printed: at least two of them right across the page, not just across a drawing)
+  if (fam.length < 3 || fam.filter((q) => q.cover >= 0.7).length < 2) return 0;
+  // each line along its course (a page bends a little: follow it): per column its own thin run
+  // and how dark it is (a run thicker than a line is a stroke across it, and stays)
+  const prof = fam.map((q) => {
+    let drift = 0;
+    const at = new Array(w).fill(null);
+    for (let x = 0; x < w; x++) {
+      const yp = q.c + q.s * x + drift;
+      let best = -1, bd = Infinity;
+      for (let y = Math.max(0, Math.round(yp - 3)); y <= Math.min(h - 1, Math.round(yp + 3)); y++) if (ink[y * w + x] && Math.abs(y - yp) < bd) { bd = Math.abs(y - yp); best = y; }
+      if (best < 0) continue;
+      const [a, b] = runAt(x, best);
+      if (b - a + 1 > q.thick + 1) continue;
+      drift = Math.max(-4, Math.min(4, drift + 0.3 * ((a + b) / 2 - yp)));
+      let c = 0;
+      for (let y = a; y <= b; y++) c = Math.max(c, contrast[y * w + x]);
+      at[x] = { a, b, c };
+    }
+    return at;
+  });
+  // how dark each line is around each point (light and focus change across a page)
+  const sm = prof.map((at, i) => {
+    const R = Math.max(4, 3 * fam[i].thick), sum = new Float64Array(w + 1), cnt = new Uint32Array(w + 1);
+    for (let x = 0; x < w; x++) { sum[x + 1] = sum[x] + (at[x] ? at[x].c : 0); cnt[x + 1] = cnt[x] + (at[x] ? 1 : 0); }
+    const out = new Float32Array(w).fill(NaN);
+    for (let x = 0; x < w; x++) {
+      const a = Math.max(0, x - R), b = Math.min(w, x + R + 1), n = cnt[b] - cnt[a];
+      if (n >= R) out[x] = (sum[b] - sum[a]) / n;
+    }
+    return out;
+  });
+  // erase the bare lines; a pen drawn along one (a wire on squared paper) is darker there than
+  // the lines beside it, and stays
+  fam.forEach((q, i) => {
+    const nb = [i - 2, i - 1, i + 1, i + 2].filter((j) => j >= 0 && j < fam.length);
+    for (let x = 0; x < w; x++) {
+      const r = prof[i][x];
+      if (!r) continue;
+      const refs = nb.map((j) => sm[j][x]).filter((v) => v === v).sort((p1, p2) => p1 - p2);
+      const ref = refs.length ? refs[refs.length >> 1] : 0;
+      if (ref && sm[i][x] >= 1.3 * ref) continue;
+      // (and a pen stroke much darker than the line keeps its own pixels: a letter's bar on it)
+      for (let y = r.a; y <= r.b; y++) if (!ref || contrast[y * w + x] < 1.6 * ref) ink[y * w + x] = 0;
+    }
+  });
+  return fam.length;
+}
+
+/**
+ * How far a line drawing is turned (radians, within ±30°; positive: its level lines run down to
+ * the right): the turn that lines its ink up best with rows and columns.
+ */
+export function skewOf(ink, w, h) {
+  let n = 0;
+  for (let i = 0; i < w * h; i++) n += ink[i];
+  const every = Math.max(1, Math.round(n / 60000)), pts = [];
+  for (let i = 0, c = 0; i < w * h; i++) if (ink[i] && c++ % every === 0) pts.push(i % w - w / 2, Math.floor(i / w) - h / 2);
+  const D = Math.ceil(Math.hypot(w, h) / 2) + 2, hr = new Float64Array(2 * D + 1), hc = new Float64Array(2 * D + 1);
+  // ink piled up in few rows and columns: lines along them
+  const score = (deg) => {
+    const a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+    hr.fill(0); hc.fill(0);
+    for (let k = 0; k < pts.length; k += 2) { const x = pts[k], y = pts[k + 1]; hr[Math.round(y * c - x * s) + D]++; hc[Math.round(x * c + y * s) + D]++; }
+    let t = 0;
+    for (let i = 0; i < hr.length; i++) t += hr[i] * hr[i] + hc[i] * hc[i];
+    return t;
+  };
+  let best = 0, bs = -1;
+  for (let deg = -30; deg <= 30; deg++) { const v = score(deg); if (v > bs) { bs = v; best = deg; } }
+  let fine = best;
+  for (let deg = best - 0.9; deg <= best + 0.95; deg += 0.1) { const v = score(deg); if (v > bs) { bs = v; fine = deg; } }
+  return (fine * Math.PI) / 180;
+}
+
+/**
+ * A one-channel image turned back by a (radians, as skewOf gives it) about its middle, on a
+ * canvas that holds all of it; what lies beyond the picture's edge repeats its edge.
+ */
+export function unturn(src, w, h, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  const W = Math.ceil(Math.abs(w * c) + Math.abs(h * s)), H = Math.ceil(Math.abs(w * s) + Math.abs(h * c));
+  const out = new Uint8Array(W * H);
+  for (let Y = 0; Y < H; Y++) {
+    for (let X = 0; X < W; X++) {
+      const dx = X - W / 2, dy = Y - H / 2;
+      const x = Math.min(w - 1.001, Math.max(0, c * dx - s * dy + w / 2)), y = Math.min(h - 1.001, Math.max(0, s * dx + c * dy + h / 2));
+      const x0 = Math.floor(x), y0 = Math.floor(y), tx = x - x0, ty = y - y0, i = y0 * w + x0;
+      out[Y * W + X] = Math.round((src[i] * (1 - tx) + src[i + 1] * tx) * (1 - ty) + (src[i + w] * (1 - tx) + src[i + w + 1] * tx) * ty);
+    }
+  }
+  return { d: out, w: W, h: H };
+}
+
+/**
  * From a picture to ink at a working scale where strokes are about `target` px thick.
- * Returns { w, h, scale (working px per source px), ink, dark (the resampled darkness), sw }.
+ * Returns { w, h, scale (working px per source px), turned (null, or how the picture was
+ * straightened: { a, w, h, W, H }, the turn and its size before and after, shrunk to at most
+ * 2600 px a side), ink, erased (null, or the ruled paper's lines taken out of the ink), dark (the
+ * resampled darkness), sw }.
  */
 export function prepare(img, { target = 4.5, maxSide = 3200 } = {}) {
   let w = img.width, h = img.height;
@@ -282,7 +446,20 @@ export function prepare(img, { target = 4.5, maxSide = 3200 } = {}) {
     const W = Math.round(w * pre), H = Math.round(h * pre);
     d = resample(d, w, h, W, H); w = W; h = H;
   }
-  const first = inkMask(d, w, h, Math.max(16, Math.round(Math.max(w, h) / 60)));
+  let first = inkMask(d, w, h, Math.max(16, Math.round(Math.max(w, h) / 60)));
+  // a photo taken well turned: straighten it, so the wires run level and upright (a few degrees
+  // the reading takes in its stride, sharper for not being resampled)
+  const turn = skewOf(first.ink, w, h);
+  let turned = null;
+  if (Math.abs(turn) > (6 * Math.PI) / 180) {
+    const r = unturn(d, w, h, turn);
+    turned = { a: turn, w, h, W: r.w, H: r.h };
+    d = r.d; w = r.w; h = r.h;
+    first = inkMask(d, w, h, Math.max(16, Math.round(Math.max(w, h) / 60)));
+  }
+  // a page of ruled paper: its lines are not the drawing's (nor is their width its line width)
+  const before = first.ink.slice();
+  const ruled = eraseRules(first.ink, first.contrast, w, h);
   const sw0 = strokeWidth(first.ink, w, h);
   let k = Math.min(3, Math.max(0.15, target / Math.max(0.8, sw0)));
   if (Math.max(w, h) * k > maxSide) k = maxSide / Math.max(w, h);
@@ -290,9 +467,17 @@ export function prepare(img, { target = 4.5, maxSide = 3200 } = {}) {
   const W = Math.round(w * k), H = Math.round(h * k);
   const dd = k === 1 ? d : resample(d, w, h, W, H);
   const { ink, contrast } = k === 1 ? first : inkMask(dd, W, H, Math.max(16, Math.round(Math.max(W, H) / 60)));
+  // (what was erased: the rest of a line crossing a label is no part of its characters)
+  let erased = null;
+  if (ruled) {
+    const was = k === 1 ? before : ink.slice();
+    if (k !== 1) eraseRules(ink, contrast, W, H);
+    erased = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) erased[i] = was[i] && !ink[i] ? 1 : 0;
+  }
   const sw = strokeWidth(ink, W, H);
   // the sharper of the two images for reading text: the source (when the working image is a
   // reduction of it) or the working image itself
   const src = k < 1 ? { d, w, h, k } : { d: dd, w: W, h: H, k: 1 };
-  return { w: W, h: H, scale: pre * k, ink, dark: dd, contrast, sw, src };
+  return { w: W, h: H, scale: pre * k, turned, ink, erased, dark: dd, contrast, sw, src };
 }

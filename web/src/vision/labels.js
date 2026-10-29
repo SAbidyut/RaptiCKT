@@ -237,10 +237,14 @@ export function readWords(all, mainH, img, tilt = 0) {
       // tells only if it reads as a label both ways, or clearly one way)
       if (!hand[k] || ((hand[k].text ?? '') === (print[k].text ?? '') && sc(print[k]) > -0.5)) return;
       if (print[k].type === 'sign' || hand[k].type === 'sign' || /^[kMmμn]?[ΩvAFH]$/.test(hand[k].raw)) return;
-      if (!(print[k].type && hand[k].type) && !clear(print[k]) && !clear(hand[k])) return;
+      // (a value with its unit read by hand where print reads nothing tells, unless very
+      // unsure)
+      const handOnly = !print[k].type && hand[k].type === 'value' && !!hand[k].unit && hand[k].score > -4;
+      if (!handOnly && !(print[k].type && hand[k].type) && !clear(print[k]) && !clear(hand[k])) return;
       n++;
-      const d = sc(hand[k]) - sc(print[k]);
-      if (d > 0.2) win++; else if (d < -0.2) lose++;
+      // (read alike, the hand-writing model's surer reading tells less: it is surer of most)
+      const d = sc(hand[k]) - sc(print[k]), m = (hand[k].text ?? '') === (print[k].text ?? '') ? 0.4 : 0.2;
+      if (d > m) win++; else if (d < -m) lose++;
     });
     return win >= 2 && win >= 0.5 * n && win >= 2 * lose;
   };

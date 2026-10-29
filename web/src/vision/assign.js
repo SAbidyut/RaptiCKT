@@ -2,7 +2,7 @@
 // expressions to the dependent sources, "+ vₓ −" to the voltage across a part, an arrow with its
 // "i" to the current through one, a lone "vₓ" to the node it marks, and the figure's caption.
 
-const UNIT_FOR = { resistor: ['Ω', ''], unknown: ['Ω', ''], capacitor: ['F'], inductor: ['H'], battery: ['V', ''] };
+const UNIT_FOR = { resistor: ['Ω', ''], unknown: ['Ω', ''], capacitor: ['F'], inductor: ['H'], battery: ['V', ''], switch: [] };
 
 /** Gap between two boxes [x0, y0, x1, y1] (0 when they overlap). */
 function gap(a, b) {

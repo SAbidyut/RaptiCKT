@@ -72,6 +72,36 @@ export function findFigures(ink, w, h, sw) {
     if (!hasH || !hasV) continue;
     figures.push({ box, parts: g.map((c) => c.id) });
   }
+  // a source body drawn by hand, its wires stopping just short of it: a ring beside a drawing,
+  // bigger than any letter, with the drawing's ink close by (ink all round its middle at about
+  // one distance, not an open curve)
+  for (const c of comps) {
+    if (c.lineArt) continue;
+    const bw = c.x1 - c.x0 + 1, bh = c.y1 - c.y0 + 1;
+    if (Math.min(bw, bh) < 12 * sw || Math.max(bw, bh) > 60 * sw || bw > 1.7 * bh || bh > 1.7 * bw || c.fill > 0.3) continue;
+    const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2, R = (bw + bh) / 4;
+    let round = 0;
+    for (let k = 0; k < 24; k++) {
+      const a = (k * Math.PI) / 12;
+      let far = 0;
+      for (let t = 0.3 * R; t <= 1.3 * R; t += 1) {
+        const x = Math.round(cx + t * Math.cos(a)), y = Math.round(cy + t * Math.sin(a));
+        if (x >= 0 && y >= 0 && x < w && y < h && labels[y * w + x] === c.id) far = t;
+      }
+      if (far >= 0.75 * R && far <= 1.25 * R) round++;
+    }
+    if (round < 21) continue;
+    const m = Math.round(3 * sw);
+    const f = figures.find((g) => {
+      const own = new Set(g.parts);
+      for (let y = Math.max(0, c.y0 - m); y <= Math.min(h - 1, c.y1 + m); y++) for (let x = Math.max(0, c.x0 - m); x <= Math.min(w - 1, c.x1 + m); x++) if (own.has(labels[y * w + x])) return true;
+      return false;
+    });
+    if (!f) continue;
+    f.parts.push(c.id);
+    c.lineArt = true;
+    f.box = [Math.min(f.box[0], c.x0), Math.min(f.box[1], c.y0), Math.max(f.box[2], c.x1), Math.max(f.box[3], c.y1)];
+  }
   // the other ink near each figure: within a margin of its box, and nearer to it than to any other
   const margin = (f) => Math.max(26 * sw, 0.3 * Math.min(f.box[2] - f.box[0], f.box[3] - f.box[1]));
   for (const f of figures) f.near = [];

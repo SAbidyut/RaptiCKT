@@ -10,7 +10,8 @@ import { glyphFeatures, glyphFeaturesHand } from './glyph-features.js';
 export { glyphFeatures, glyphFeaturesHand };
 
 export const CLASSES = MODEL.classes;
-if (HAND.classes.join() !== CLASSES.join()) throw new Error('glyph models disagree on their classes');
+// (the hand-writing model knows one more: 'pair', two characters run together)
+if (HAND.classes.slice(0, CLASSES.length).join() !== CLASSES.join()) throw new Error('glyph models disagree on their classes');
 /** each class's usual log(width / height): [low, high], printed and hand-written */
 export const ASPECT = MODEL.aspect || {};
 export const HAND_ASPECT = HAND.aspect || {};
@@ -31,7 +32,8 @@ function load(model) {
 
 /**
  * Class probabilities of a character bitmap: Float32Array, one per CLASSES entry. hand: read it
- * as hand-writing (the network that has also seen hand-written characters).
+ * as hand-writing (the network that has also seen hand-written characters; what it gives two
+ * characters run together is left out, so a blot that is two reads as no one character well).
  */
 export function classify(bm, hand = false) {
   const model = hand ? HAND : MODEL;
@@ -52,7 +54,7 @@ export function classify(bm, hand = false) {
   let z = 0;
   for (let i = 0; i < x.length; i++) { x[i] = Math.exp(x[i] - m); z += x[i]; }
   for (let i = 0; i < x.length; i++) x[i] /= z;
-  return x;
+  return x.length > CLASSES.length ? x.slice(0, CLASSES.length) : x;
 }
 
 /** The k likeliest classes: [{ c, p }]. */

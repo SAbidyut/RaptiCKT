@@ -2,7 +2,8 @@
 // grainy, slightly turned photos, and as rough ones (turned further, dusty, small, squeezed hard)
 // — and drawings made by hand, in pen, labels written by hand (tests/fixtures, made by
 // tools/glyphs/figures.py) are read into circuits whose parts, values, marked quantities and
-// answers are right.
+// answers are right; so are they on ruled or squared paper and photographed well turned, and a
+// circuit drawn here with an open switch and a coil drawn in loops.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -139,6 +140,86 @@ for (const name of ['sketch-rlc.png', 'sketch-rlc-photo.jpg']) {
     assert.ok(r.c.ground.length >= 1, 'the ground is read');
   });
 }
+
+/** The picture on a page of ruled (or squared) paper: blue lines, a little aslant, under the ink. */
+function onPaper(pic, gap, squared) {
+  const { width: w, height: h } = pic, data = Uint8ClampedArray.from(pic.data);
+  const lay = (x, y) => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const i = 4 * (y * w + x);
+    [110, 140, 200].forEach((v, c) => { data[i + c] = Math.min(data[i + c], v); });
+  };
+  for (let y0 = gap / 2; y0 < h + 0.02 * w; y0 += gap) for (let x = 0; x < w; x++) { const y = Math.round(y0 - 0.02 * x); lay(x, y); lay(x, y + 1); }
+  if (squared) for (let x0 = gap / 2; x0 < w + 0.02 * h; x0 += gap) for (let y = 0; y < h; y++) { const x = Math.round(x0 + 0.02 * y - 0.02 * h); lay(x, y); lay(x + 1, y); }
+  return { width: w, height: h, data };
+}
+
+/** The picture photographed turned by deg degrees: white beyond its edges. */
+function turned(pic, deg) {
+  const { width: w, height: h, data } = pic, a = (deg * Math.PI) / 180, c = Math.cos(a), s = Math.sin(a);
+  const W = Math.ceil(Math.abs(w * c) + Math.abs(h * s)), H = Math.ceil(Math.abs(w * s) + Math.abs(h * c));
+  const out = new Uint8ClampedArray(W * H * 4).fill(255);
+  for (let Y = 0; Y < H; Y++) {
+    for (let X = 0; X < W; X++) {
+      const dx = X - W / 2, dy = Y - H / 2, x = Math.round(c * dx + s * dy + w / 2), y = Math.round(-s * dx + c * dy + h / 2);
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      for (let k = 0; k < 4; k++) out[4 * (Y * W + X) + k] = data[4 * (y * w + x) + k];
+    }
+  }
+  return { width: W, height: H, data: out };
+}
+
+const parts = (c) => c.parts.map((p) => `${p.kind} ${p.text}`).sort();
+for (const [name, what, make] of [
+  ['sketch-rlc.png', 'on ruled paper', (p) => onPaper(p, 40, false)],
+  ['sketch-divider.png', 'on squared paper', (p) => onPaper(p, 40, true)],
+  ['meshes.png', 'on ruled paper', (p) => onPaper(p, 40, false)],
+  ['meshes.png', 'on squared paper', (p) => onPaper(p, 40, true)],
+  ['sketch-rlc.png', 'photographed turned by 12°', (p) => turned(p, 12)],
+  ['meshes.png', 'photographed turned by −15°', (p) => turned(p, -15)],
+]) {
+  test(`${name} ${what}: read as on a clean page, straight`, async () => {
+    const clean = (await readPicture(load(name))).circuits[0];
+    const out = await readPicture(make(load(name)));
+    assert.equal(out.circuits.length, 1, out.problem);
+    const c = out.circuits[0];
+    assert.deepEqual(parts(c), parts(clean));
+    assert.deepEqual(c.quantities.map((q) => q.name), clean.quantities.map((q) => q.name));
+  });
+}
+
+test('drawn in code: a switch left open and a coil drawn in loops (a spring seen from the side)', async () => {
+  const w = 820, h = 600, data = new Uint8ClampedArray(w * h * 4).fill(255);
+  const dot = (x, y) => {
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      const X = Math.round(x + dx), Y = Math.round(y + dy);
+      if (dx * dx + dy * dy <= 6.25 && X >= 0 && Y >= 0 && X < w && Y < h) data.fill(30, 4 * (Y * w + X), 4 * (Y * w + X) + 3);
+    }
+  };
+  const stroke = (pts) => {
+    for (let k = 1; k < pts.length; k++) {
+      const [x0, y0] = pts[k - 1], [x1, y1] = pts[k], n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
+      for (let t = 0; t <= n; t++) dot(x0 + ((x1 - x0) * t) / n, y0 + ((y1 - y0) * t) / n);
+    }
+  };
+  const coil = [];
+  for (let t = 0; t <= 8 * Math.PI; t += 0.05) coil.push([700 + 24 * Math.sin(t), 246 + (30 * t) / (2 * Math.PI) - 16 * Math.cos(t)]);
+  const end = coil[coil.length - 1];
+  const zig = [[340, 500]];
+  for (let k = 0; k < 6; k++) zig.push([350 + 20 * k, 500 + (k % 2 ? 16 : -16)]);
+  zig.push([460, 500]);
+  for (const s of [
+    [[100, 280], [100, 100], [300, 100]], [[300, 100], [392, 58]], [[400, 100], [700, 100], [700, 230]], coil,
+    [end, [700, 500], [460, 500]], zig, [[340, 500], [100, 500], [100, 312]], [[60, 280], [140, 280]], [[80, 312], [120, 312]],
+  ]) stroke(s);
+  const out = await readPicture({ width: w, height: h, data });
+  assert.equal(out.circuits.length, 1, out.problem);
+  const c = out.circuits[0];
+  assert.deepEqual(c.parts.map((p) => p.kind).sort(), ['inductor', 'open_switch', 'resistor', 'voltage_source']);
+  const { doc } = buildFromDrawing(c);
+  const sw = doc.elements.find((e) => e.constructor.type === 'switch');
+  assert.equal(sw.p.closed, false, 'the switch is drawn open');
+});
 
 test('laid out as compactly as drawn by hand, turned or not: parts come out at their own size', async () => {
   const size = async (name) => {

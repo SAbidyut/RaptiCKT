@@ -208,9 +208,10 @@ export function cutGlyph(img, g) {
   const EX1 = Math.min(src.w - 1, X1 + M), EY1 = Math.min(src.h - 1, Y1 + M);
   const EW = EX1 - EX0 + 1, EH = EY1 - EY0 + 1;
   // what the working image says about a source pixel: 1 this character's ink (or next to it),
-  // 2 another piece's ink (or next to it), 0 paper
+  // 2 another piece's ink (or next to it), or a ruled line taken out, 0 paper
   const whose = (x, y, r) => {
     const wx = Math.min(img.w - 1, Math.floor(x * k)), wy = Math.min(img.h - 1, Math.floor(y * k));
+    if (img.erased?.[wy * w + wx]) return 2;
     let res = 0;
     for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       const X = wx + dx, Y = wy + dy;

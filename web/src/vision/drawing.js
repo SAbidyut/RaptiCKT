@@ -9,6 +9,7 @@ const KIND = {
   source: (p) => (p.kind === 'current' ? 'current_source' : p.kind === 'ac' ? 'ac_voltage_source' : 'voltage_source'),
   depsource: (p) => (p.kind === 'current' ? 'dependent_current_source' : 'dependent_voltage_source'),
   unknown: () => 'resistor',
+  switch: () => 'open_switch',
 };
 
 /**

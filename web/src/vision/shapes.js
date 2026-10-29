@@ -36,6 +36,33 @@ export function holes(mask, w, x0, y0, x1, y1) {
   return out;
 }
 
+/** A 0/1 mask closed by r px (grown, then shrunk back): gaps up to 2r wide shut. */
+function closed(mask, w, h, r) {
+  const grow = (src, on) => {
+    // a square's reach, row then column, in two passes
+    const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      let last = -Infinity;
+      for (let x = 0; x < w; x++) { if (src[y * w + x] === on) last = x; if (x - last <= r) tmp[y * w + x] = 1; }
+      last = Infinity;
+      for (let x = w - 1; x >= 0; x--) { if (src[y * w + x] === on) last = x; if (last - x <= r) tmp[y * w + x] = 1; }
+    }
+    for (let x = 0; x < w; x++) {
+      let last = -Infinity;
+      for (let y = 0; y < h; y++) { if (tmp[y * w + x]) last = y; if (y - last <= r) out[y * w + x] = 1; }
+      last = Infinity;
+      for (let y = h - 1; y >= 0; y--) { if (tmp[y * w + x]) last = y; if (last - y <= r) out[y * w + x] = 1; }
+    }
+    return out;
+  };
+  const g = grow(mask, 1);
+  // shrink: what is within r of paper (outside the grown ink) goes again
+  const paper = grow(g, 0);
+  const out = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) out[i] = g[i] && !paper[i] ? 1 : 0;
+  return out;
+}
+
 /** Point on a shape's outline at parameter u ∈ [0, 1) (circle or diamond), with its outward normal. */
 function outline(kind, cx, cy, r, u) {
   if (kind === 'circle') {
@@ -68,6 +95,28 @@ export function fitScore(mask, w, h, kind, cx, cy, r, tol, n = 48) {
     if (ink(ix, iy)) inner++;
   }
   return { score: hit / n, outer: outer / n, inner: inner / n };
+}
+
+/** fitScore for an oval (rx across, ry down): the share of its outline with ink on it. */
+function ovalScore(mask, w, h, cx, cy, rx, ry, tol, n = 48) {
+  let hit = 0, outer = 0;
+  const ink = (x, y) => {
+    const X = Math.round(x), Y = Math.round(y);
+    return X >= 0 && Y >= 0 && X < w && Y < h && mask[Y * w + X] === 1;
+  };
+  for (let k = 0; k < n; k++) {
+    const a = ((k + 0.5) / n) * 2 * Math.PI, c = Math.cos(a), s = Math.sin(a);
+    // the outward normal of an ellipse at that point
+    let nx = c / rx, ny = s / ry;
+    const nl = Math.hypot(nx, ny);
+    nx /= nl; ny /= nl;
+    const x = cx + rx * c, y = cy + ry * s;
+    let on = false;
+    for (let d = -tol; d <= tol + 1e-9 && !on; d += Math.max(0.5, tol / 2)) on = ink(x + nx * d, y + ny * d);
+    if (on) hit++;
+    if (ink(cx + (rx * 1.4 + tol) * c, cy + (ry * 1.4 + tol) * s)) outer++;
+  }
+  return { score: hit / n, outer: outer / n };
 }
 
 /**
@@ -141,13 +190,21 @@ export function outlineKind(mask, w, h, cx, cy, r, sw) {
  */
 export function findShapes(mask, w, h, box, sw) {
   const [bx0, by0, bx1, by1] = box;
+  // (a body drawn by hand may not quite close where the pen started: look for big holes with
+  // gaps of a line's width or two shut too — small ones so made are only the narrow corners of
+  // a zigzag or a coil)
   const hs = holes(mask, w, bx0, by0, bx1, by1);
+  for (const ho of holes(closed(mask, w, h, Math.max(1, Math.round(1.2 * sw))), w, bx0, by0, bx1, by1)) {
+    if (ho.area >= Math.PI * 25 * sw * sw && !hs.some((o) => Math.hypot(o.cx - ho.cx, o.cy - ho.cy) < 2 * sw && o.area > 0.5 * ho.area)) hs.push(ho);
+  }
   const minR = 1.6 * sw, maxR = 16 * sw;
   const cands = [];
   for (const ho of hs) {
     const req = Math.sqrt(ho.area / Math.PI);
     const hw = ho.x1 - ho.x0 + 1, hh = ho.y1 - ho.y0 + 1;
-    if (req < minR * 0.5 || req > maxR) continue;
+    // (a source drawn by hand with a thin pen is big for its line: an oval hole up to twice as
+    // big is looked at as an oval only)
+    if (req < minR * 0.5 || req > 2 * maxR || (req > maxR && ho.area > 0.84 * hw * hh)) continue;
     if (Math.max(hw, hh) > 2.6 * Math.min(hw, hh)) continue;
     // a window of the circuit (a mesh) is a near-rectangle; a disc fills π/4 of its box, a
     // diamond half, a half disc about 0.8
@@ -155,6 +212,7 @@ export function findShapes(mask, w, h, box, sw) {
     cands.push(ho);
   }
   const found = [];
+  const hw = (ho) => ho.x1 - ho.x0 + 1, hh = (ho) => ho.y1 - ho.y0 + 1;
   const score = (f) => f.score - 0.5 * Math.max(0, f.outer - 0.2) - 0.3 * Math.max(0, f.inner - 0.35);
   for (const ho of cands) {
     const req = Math.sqrt(ho.area / Math.PI);
@@ -163,7 +221,7 @@ export function findShapes(mask, w, h, box, sw) {
     const span = Math.max(ho.x1 - ho.x0, ho.y1 - ho.y0) * 0.75 + sw;
     const coarse = Math.max(1, sw * 0.75);
     let pick = null;
-    for (const kind of ['circle', 'diamond']) {
+    for (const kind of req > maxR ? [] : ['circle', 'diamond']) {
       // coarse search over centre and size, then a finer one with a tighter band
       let best = null;
       const search = (sp) => {
@@ -194,6 +252,24 @@ export function findShapes(mask, w, h, box, sw) {
       }
       if (ref && (!pick || ref.v > pick.v)) pick = ref;
     }
+    // drawn by hand (or photographed askew) a body is often an oval: fit one to the hole
+    if ((!pick || pick.v < 0.7) && Math.min(hw(ho), hh(ho)) >= 8 * sw && Math.max(hw(ho), hh(ho)) <= 1.8 * Math.min(hw(ho), hh(ho)) && ho.area >= 0.68 * hw(ho) * hh(ho) && ho.area <= 0.84 * hw(ho) * hh(ho)) {
+      let best = null;
+      const st = Math.max(1, sw / 2);
+      for (let dy = -st; dy <= st; dy += st) {
+        for (let dx = -st; dx <= st; dx += st) {
+          for (let ex = -st; ex <= 2 * st; ex += st) {
+            for (let ey = -st; ey <= 2 * st; ey += st) {
+              const rx = hw(ho) / 2 + ex, ry = hh(ho) / 2 + ey;
+              const f = ovalScore(mask, w, h, ho.cx + dx, ho.cy + dy, rx, ry, Math.max(1.5, sw * 0.7));
+              const v = f.score - 0.5 * Math.max(0, f.outer - 0.2);
+              if (!best || v > best.v) best = { cx: ho.cx + dx, cy: ho.cy + dy, rx, ry, v };
+            }
+          }
+        }
+      }
+      if (best && best.v >= 0.75) { found.push({ kind: 'circle', cx: best.cx, cy: best.cy, r: (best.rx + best.ry) / 2, rx: best.rx, ry: best.ry, score: best.v }); continue; }
+    }
     if (!pick || pick.v < 0.7) continue;
     // a small ring (an open terminal) is too small to tell its outline's shape
     if (pick.r < 3 * sw) { found.push({ kind: 'circle', cx: pick.cx, cy: pick.cy, r: pick.r, score: pick.v }); continue; }
@@ -205,6 +281,16 @@ export function findShapes(mask, w, h, box, sw) {
   // one shape per place: keep the best of overlapping fits
   found.sort((a, b) => b.score - a.score);
   const out = [];
-  for (const s of found) if (!out.some((o) => Math.hypot(o.cx - s.cx, o.cy - s.cy) < Math.max(o.r, s.r) * 0.8)) out.push(s);
+  const inside = (s, ho) => (s.kind === 'diamond' ? Math.abs(ho.cx - s.cx) + Math.abs(ho.cy - s.cy) : Math.hypot((ho.cx - s.cx) / (s.rx || s.r), (ho.cy - s.cy) / (s.ry || s.r)) * s.r) < s.r;
+  for (const s of found) {
+    if (out.some((o) => Math.hypot(o.cx - s.cx, o.cy - s.cy) < Math.max(o.r, s.r) * 0.8)) continue;
+    // a body is hollow: the holes inside it fill most of it (a coil's loops fit a circle or a
+    // diamond drawn round one of them, its other strokes on the outline)
+    const area = s.kind === 'diamond' ? 2 * s.r * s.r : Math.PI * (s.rx || s.r) * (s.ry || s.r);
+    if (hs.filter((ho) => inside(s, ho)).reduce((t, ho) => t + ho.area, 0) < 0.5 * area) continue;
+    // and stands alone: a little ring in a row of them is a turn of a coil drawn in loops
+    if (s.r < 3 * sw && hs.filter((ho) => ho.area >= 0.3 * area && ho.area <= 3 * area && Math.hypot(ho.cx - s.cx, ho.cy - s.cy) > s.r && Math.hypot(ho.cx - s.cx, ho.cy - s.cy) < 5 * s.r).length >= 2) continue;
+    out.push(s);
+  }
   return out;
 }

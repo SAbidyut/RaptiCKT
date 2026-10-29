@@ -4,8 +4,10 @@ model as a JS module the app loads (weights as int8, one scale per layer).
     python3 train.py DATA_DIR[,DATA_DIR ...] OUT_JS [HIDDEN=256] [EPOCHS=40] [WHAT]
 
 e.g. the printed characters (render.py) alone for glyph-model.js, with the hand-written ones
-(hand.py) for glyph-model-hand.js; WHAT names the model in the file's header. FEATURES=hand
-(environment) trains on features-hand.f32 (features.mjs DIR hand) instead of features.f32.
+(hand.py, hasy.py) and the run-together pairs (pairs.py) for glyph-model-hand.js; WHAT names
+the model in the file's header. FEATURES=hand (environment) trains on features-hand.f32
+(features.mjs DIR hand) instead of features.f32; EXTRA=pair adds classes after the shared ones
+(pairs.py's 'pair': two characters run together, no one character).
 """
 import base64, json, os, sys
 import numpy as np
@@ -14,6 +16,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from render import CLASSES  # noqa: E402
 
 KIND = os.environ.get('FEATURES', '')
+CLASSES = CLASSES + [c for c in os.environ.get('EXTRA', '').split(',') if c]
 FEAT = 'features-hand.f32' if KIND == 'hand' else 'features.f32'
 # where the log aspect sits (glyph-features.js): after the 16 × 16 coverage, or after the 5 × 5 × 8
 # directions and the 8 × 8 coverage; what comes before it gets a little noise in training

@@ -680,13 +680,14 @@ The picture is read **on this phone**: no internet, no account or key, and the p
 
 #### What the phone reads
 
-- Straight wires and the joints between them; resistors (zigzags), coils, capacitors and batteries (plates: the long plate is +), grounds.
-- Circles as independent sources — **+ −** marks make a voltage source, an arrow a current source — and diamonds as **dependent sources**, with the expression written beside them (0.1vₓ, 4iₓ).
+- Straight wires and the joints between them; resistors (zigzags), coils (bumps, or loops like a spring seen from the side), capacitors and batteries (plates: the long plate is +), grounds, and open switches (a lever slanting from one wire end towards the next).
+- Circles (or ovals) as independent sources — **+ −** marks make a voltage source, **~** an AC source, an arrow a current source — and diamonds as **dependent sources**, with the expression written beside them (0.1vₓ, 4iₓ).
 - Values with their units and prefixes: 20 Ω, 4.7 kΩ, 2 mH, 10 μF, 9 V, 3 A.
 - Marked quantities: **+ vₓ −** across a part, an arrow with **i** beside a branch, a name like **vₓ** at a node. A dependent source is tied to the quantity its expression names.
 - The figure number (**Figure 4.12**) names the circuit; a page with several figures gives each its own.
-- Sketches drawn by hand in pen, with their values written by hand: wavy lines, corners that overshoot, rings that do not quite close, rounded zigzags, a unit written a little apart from its value (2  Ω), a current arrow drawn with two strokes.
-- Switches, transistors and other symbols, and untidy or crowded sketches, are not read: draw those parts on the board yourself.
+- Sketches drawn by hand in pen, with their values written by hand: wavy lines, corners that overshoot, rings that do not quite close, rounded zigzags, capacitor plates drawn far apart, a unit written a little apart from its value (2  Ω), a current arrow drawn with two strokes.
+- Drawings on ruled or squared paper (the printed lines are left out, a wire drawn along one is kept) and photos taken a little turned (they are straightened first).
+- Transistors, diodes and other symbols, and untidy or crowded sketches, are not read: draw those parts on the board yourself.
 
 #### Getting a good result
 
@@ -698,6 +699,8 @@ The picture is read **on this phone**: no internet, no account or key, and the p
 - If the drawing has no ground symbol, the bottom wire is taken as 0 V.
 
 > **Warning:** Always compare the redrawn circuit with the photo before you trust the answer: a misread value or a missed wire gives a different circuit.
+
+Reading handwriting was learned in part from **HASYv2**, a set of hand-written symbols by Martin Thoma, made available under the Open Database License (ODbL) 1.0.
 
 <a id="ch-loadflow"></a>
 
