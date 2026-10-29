@@ -100,18 +100,21 @@ for (const name of ['thevenin.png', 'thevenin-photo.jpg']) {
   });
 }
 
-test('a turned, rough photo is laid out like the clean drawing, in its proportions', async () => {
+test('laid out as compactly as drawn by hand, turned or not: parts come out at their own size', async () => {
   const size = async (name) => {
     const c = (await readPicture(load(name))).circuits[0];
     const pts = [...c.parts.flatMap((p) => [p.from, p.to]), ...c.wires.flatMap((w) => [w.from, w.to])];
     const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
     return [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
   };
-  const [w, h] = await size('depsource.png');
-  // four branches side by side, twice as wide as tall: their ends a little higher or lower
-  // are not rows of their own
-  assert.ok(w >= 1.8 * h, `${w} × ${h}`);
-  assert.deepEqual(await size('depsource-rough.jpg'), [w, h]);
+  // four branches side by side: three units wide, one tall (each part one unit long, as Claude
+  // draws the same figure), the leads and the ground's stub folded away
+  assert.deepEqual(await size('depsource.png'), [3, 1]);
+  assert.deepEqual(await size('depsource-rough.jpg'), [3, 1]);
+  // three meshes; a capacitor and a battery with long leads; open terminals keep their stubs
+  assert.deepEqual(await size('meshes.png'), [2, 2]);
+  assert.deepEqual(await size('rlc.png'), [2, 1]);
+  assert.deepEqual(await size('thevenin.png'), [2, 1]);
 });
 
 test('nothing to read: a blank page says so', async () => {
