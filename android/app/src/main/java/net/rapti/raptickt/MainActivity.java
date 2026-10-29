@@ -70,8 +70,9 @@ public class MainActivity extends Activity {
     private static final int REQ_OPEN = 42;
     private static final int REQ_CAMERA = 43;
     private static final int REQ_IMAGE = 44;
-    /** long side of a picture handed to the page: the size Claude reads best */
+    /** long side of a picture handed to the page, unless the page asks for another size */
     private static final int IMAGE_MAX = 1568;
+    private volatile int imageMax = IMAGE_MAX;
     /** the only host the page may reach through the native HTTP bridge */
     private static final String API_HOST = "https://api.anthropic.com/";
     private static final int BG = Color.parseColor("#0B1120");
@@ -391,14 +392,15 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Any picture → upright JPEG on white, long side at most IMAGE_MAX px. */
+    /** Any picture → upright JPEG on white, long side at most imageMax px. */
     private byte[] shrinkImage(byte[] raw) throws Exception {
         BitmapFactory.Options o = new BitmapFactory.Options();
         o.inJustDecodeBounds = true;
         BitmapFactory.decodeByteArray(raw, 0, raw.length, o);
         if (o.outWidth <= 0 || o.outHeight <= 0) throw new Exception("not a picture");
         int sample = 1;
-        while (Math.max(o.outWidth, o.outHeight) / (sample * 2) >= IMAGE_MAX) sample *= 2;
+        final int max = imageMax;
+        while (Math.max(o.outWidth, o.outHeight) / (sample * 2) >= max) sample *= 2;
         o = new BitmapFactory.Options();
         o.inSampleSize = sample;
         Bitmap src = BitmapFactory.decodeByteArray(raw, 0, raw.length, o);
@@ -411,7 +413,7 @@ public class MainActivity extends Activity {
             // no EXIF (a PNG, a screenshot): as decoded
         }
         int sw = src.getWidth(), sh = src.getHeight();
-        float k = Math.min(1f, (float) IMAGE_MAX / Math.max(sw, sh));
+        float k = Math.min(1f, (float) max / Math.max(sw, sh));
         int w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
         boolean side = deg == 90 || deg == 270;
         Bitmap out = Bitmap.createBitmap(side ? h : w, side ? w : h, Bitmap.Config.ARGB_8888);
@@ -572,9 +574,13 @@ public class MainActivity extends Activity {
             });
         }
 
-        /** A picture for "Circuit from photo": the camera, or one chosen from the gallery. */
+        /**
+         * A picture for "Circuit from photo": the camera, or one chosen from the gallery, handed
+         * back with its long side at most max px.
+         */
         @JavascriptInterface
-        public void pickImage(boolean camera) {
+        public void pickImage(boolean camera, int max) {
+            imageMax = Math.max(400, Math.min(4096, max));
             ui.post(() -> {
                 try {
                     if (camera) {

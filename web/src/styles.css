@@ -1181,6 +1181,10 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(236, 72, 153, 0.12) 70%, var(--surface)); }
 .ph-hero p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--text2); }
 .ph-ico { flex: none; width: 52px; height: 52px; border-radius: 15px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #f59e0b, #ec4899); }
+.ph-mode { margin: 0 0 6px; }
+.ph-mode-note { margin: 0 0 4px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.ph-mode-note b { color: var(--text2); }
+.ph-by { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
 .ph-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
 .ph-btns .btn { padding: 0 10px; }
 .ph-key { padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; }

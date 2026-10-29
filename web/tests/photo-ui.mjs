@@ -1,11 +1,13 @@
-// Circuit from photo, end to end with the Claude API faked: Home → the photo page → the API key →
-// a picture → the redrawn circuit (a page of two, pick one) → open on the board → Run gives the
-// textbook answer. Once in the browser (the page's own fetch, a chosen file) and once as in the
-// Android app (camera picture and HTTP through the native bridge, no fetch from the page).
-// Cancel and a refused key are checked too.
+// Circuit from photo, end to end. On the phone (the default, no network): a textbook-style photo
+// → the redrawn circuit → open on the board → Run gives the answer. With Claude (API faked):
+// the API key → a picture → the redrawn circuit (a page of two, pick one) → the board. Once in
+// the browser (the page's own fetch, a chosen file) and once as in the Android app (camera
+// picture and HTTP through the native bridge, no fetch from the page). Cancel, a refused key and
+// "Read with Claude AI" after a reading on the phone are checked too.
 // Usage: npm run build && node tests/photo-ui.mjs
 import { chromium } from 'playwright';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+// (fs and path also load the test picture from tests/fixtures)
 
 const root = path.resolve('dist');
 const server = http.createServer((req, res) => { const f = path.join(root, req.url === '/' ? 'index.html' : req.url.slice(1)); if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html' }[path.extname(f)] || 'image/svg+xml' }); fs.createReadStream(f).pipe(res); }).listen(0);
@@ -109,6 +111,30 @@ async function runAndRead(page, name) {
   check(await page.isVisible('.ph-banner'), 'Home shows "Circuit from photo"');
   await page.click('.ph-banner'); await page.waitForTimeout(400);
   check(await page.isVisible('.screen.photo.active .ph-btns'), 'the photo page opens with Take a photo / Choose an image');
+
+  // ---- on this phone (the default): no key, no network
+  check(await page.isVisible('.ph-mode [data-mode=offline].on') && !(await page.isVisible('.ph-key')), 'reading on the phone is the default, and needs no key');
+  const fixture = fs.readFileSync(path.resolve('tests/fixtures/depsource-photo.jpg'));
+  {
+    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('[data-x=gallery]')]);
+    await fc.setFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: fixture });
+  }
+  await page.waitForFunction(() => app.photo.stage === 'result', null, { timeout: 30000 });
+  const off = await page.evaluate(() => ({ parts: [...document.querySelectorAll('.ph-parts span')].map((s) => s.textContent).sort(), by: !!document.querySelector('.ph-by'), claude: !!document.querySelector('[data-x=claude]'), warn: document.querySelectorAll('.th-warn').length }));
+  check(JSON.stringify(off.parts) === JSON.stringify(['D1 0.1vx', 'I1 4 A', 'R1 4 Ω', 'R2 20 Ω', 'V1 20 V'].sort()) || off.parts.length === 5 && off.parts.includes('D1 0.1vx') && off.parts.includes('V1 20 V'), `read on the phone: ${off.parts.join(', ')}`);
+  check(off.by && off.claude && off.warn === 0, 'says it was read on the phone, offers Claude AI, no warnings');
+  check(bodies.length === 0, 'nothing was sent anywhere');
+  await page.click('[data-x=open]'); await page.waitForTimeout(900);
+  const vx = await runAndRead(page, 'vx');
+  check(Math.abs(vx - 25) < 1e-6, `Run: vx = ${vx.toFixed(4)} V (read on the phone)`);
+  await page.evaluate(() => { app.editor.setRunning(false); app.goHome(); });
+  await page.waitForTimeout(400);
+  await page.click('.ph-banner'); await page.waitForTimeout(400);
+  await page.click('[data-x=again]'); await page.waitForTimeout(200);
+
+  // ---- with Claude AI
+  await page.click('.ph-mode [data-mode=claude]'); await page.waitForTimeout(200);
+  check(await page.isVisible('.ph-key') && await page.evaluate(() => app.settings.photoReader === 'claude'), 'Claude AI mode shows the key card, and is remembered');
   await page.click('[data-x=camera]'); await page.waitForTimeout(200);
   check(await page.isVisible('.ph-key.need') && (await stage(page)) === 'start', 'without an API key it asks for one first');
   await page.fill('[data-x=key-in]', 'sk-ant-test-1234');
@@ -181,7 +207,7 @@ async function runAndRead(page, name) {
     window.RaptiAndroid = {
       appVersion: () => 'Android test', deviceInfo: () => '{}', vibrate() {}, openUrl() {}, shareText() {}, saveFile() {}, openFile() {},
       setImmersive() {}, setOrientation() {}, keepScreenOn() {},
-      pickImage(camera) { calls.push(['pickImage', camera]); later(() => window.__raptiImage(jpeg)); },
+      pickImage(camera, max) { calls.push(['pickImage', camera, max]); later(() => window.__raptiImage(jpeg)); },
       httpAbort(id) { calls.push(['httpAbort', id]); },
       httpRequest(id, method, url, headers, body) {
         calls.push(['httpRequest', id, method, url, JSON.parse(headers), JSON.parse(body)]);
@@ -210,9 +236,15 @@ async function runAndRead(page, name) {
   check(await page.isVisible('.hint .hint-photo'), 'an empty board offers "Or start from a photo"');
   await page.click('.hint .hint-photo'); await page.waitForTimeout(400);
   await page.click('[data-x=camera]');
+  // read on the phone first: a 1-pixel picture holds no circuit, so it says so and offers Claude
   await page.waitForFunction(() => app.photo.stage === 'result', null, { timeout: 15000 });
-  const calls = await page.evaluate(() => window.__nativeCalls);
-  check(calls[0][0] === 'pickImage' && calls[0][1] === true, 'Take a photo asks the app for the camera');
+  check(await page.isVisible('.ph-empty') && await page.isVisible('[data-x=claude]'), 'no circuit read on the phone: it says so and offers Claude AI');
+  let calls = await page.evaluate(() => window.__nativeCalls);
+  check(calls[0][0] === 'pickImage' && calls[0][1] === true && calls[0][2] === 2600, 'Take a photo asks the app for the camera, in more detail for reading on the phone');
+  check(!calls.some((c) => c[0] === 'httpRequest'), 'reading on the phone sends nothing');
+  await page.click('[data-x=claude]');
+  await page.waitForFunction(() => app.photo.stage === 'result' && app.photo.answer?.by === 'claude', null, { timeout: 15000 });
+  calls = await page.evaluate(() => window.__nativeCalls);
   const req = calls.find((c) => c[0] === 'httpRequest');
   check(!!req && req[2] === 'POST' && /^https:\/\/api\.anthropic\.com\/v1\/messages/.test(req[3]), 'the request goes through the app (POST /v1/messages)');
   check(req && req[5].model === 'claude-opus-5-5' && req[5].messages[0].content[0].source.data.startsWith('/9j/'), 'with the camera picture');

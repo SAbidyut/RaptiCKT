@@ -10,3 +10,4 @@ android/local.properties
 .DS_Store
 web/shots/
 web/shots-small/
+__pycache__/

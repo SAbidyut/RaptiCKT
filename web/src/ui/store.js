@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS = {
   maxIter: 60,
   autoStart: true,
   claudeKey: '',       // the reader's Anthropic API key, for "Circuit from photo" (kept on this device)
+  photoReader: 'offline', // "Circuit from photo" reads on the phone ('offline') or with Claude ('claude')
   damage: true,        // parts burn out and cables catch fire when over-stressed
   heatClock: 'real',   // 'real' | 'fast' | 'sim': clock for trips, heating and burning
   newWire: 'hw1.5',    // cable given to newly drawn wires (elements/cables.js WIRE_PRESETS)
@@ -93,6 +94,21 @@ export const store = {
   flag(name) { return !!read(K.flags, {})[name]; },
   setFlag(name, v = true) { const f = read(K.flags, {}); f[name] = v; write(K.flags, f); },
 };
+
+/** A picture ({ data: base64, mediaType }) → its pixels (ImageData), on white. */
+export async function decodeImage({ data, mediaType }) {
+  const bin = atob(data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const bmp = await createImageBitmap(new Blob([bytes], { type: mediaType || 'image/jpeg' }));
+  const cv = document.createElement('canvas');
+  cv.width = bmp.width; cv.height = bmp.height;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.drawImage(bmp, 0, 0);
+  bmp.close?.();
+  return ctx.getImageData(0, 0, cv.width, cv.height);
+}
 
 /** A picture file → JPEG with its long side at most `max` px (the camera's rotation applied). */
 export async function shrinkImage(file, max = 1568) {
@@ -210,15 +226,16 @@ export const bridge = {
     });
   },
   /**
-   * A picture from the camera (camera = true) or the gallery, made smaller (long side ≤ 1568 px,
-   * the size Claude reads best) as JPEG. Resolves { data (base64), mediaType }.
+   * A picture from the camera (camera = true) or the gallery, made smaller (long side ≤ max px:
+   * 1568 is what Claude reads best; reading on the phone wants more detail) as JPEG.
+   * Resolves { data (base64), mediaType }.
    */
-  pickImage(camera = false) {
+  pickImage(camera = false, max = 1568) {
     return new Promise((resolve, reject) => {
       if (A() && A().pickImage) {
         window.__raptiImage = (b64) => resolve({ data: b64, mediaType: 'image/jpeg' });
         window.__raptiImageError = (msg) => reject(new Error(msg));
-        try { A().pickImage(!!camera); } catch (e) { reject(e); }
+        try { A().pickImage(!!camera, Math.round(max)); } catch (e) { reject(e); }
         return;
       }
       const inp = document.createElement('input');
@@ -227,7 +244,7 @@ export const bridge = {
       inp.onchange = () => {
         const f = inp.files[0];
         if (!f) { reject(new Error('cancelled')); return; }
-        shrinkImage(f).then(resolve, reject);
+        shrinkImage(f, max).then(resolve, reject);
       };
       inp.click();
     });
