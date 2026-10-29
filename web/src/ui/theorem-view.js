@@ -11,7 +11,7 @@ import { icon } from './icons.js';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 /** **bold** and X_sub → X<sub>sub</sub> */
 const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\b([A-Za-z])_([A-Za-z0-9]+)/g, '$1<sub>$2</sub>');
-const BADGE = { thevenin: 'Vth', norton: 'IN', superposition: 'Σ', source: 'V⇄I', maxpower: 'Pmax', millman: 'VM', reciprocity: 'x⇄y', tellegen: 'Σp=0', nodal: 'KCL', mesh: 'KVL' };
+const BADGE = { thevenin: 'V_th', norton: 'I_N', superposition: 'Σ', source: 'V⇄I', maxpower: 'P_max', millman: 'V_M', reciprocity: 'x⇄y', tellegen: 'Σp=0', nodal: 'KCL', mesh: 'KVL' };
 const METHOD_KEY = 'raptickt.theorem.method';
 
 export class TheoremView {
@@ -85,7 +85,7 @@ export class TheoremView {
       <h4 class="th-group">${head}</h4>
       <div class="th-cards">${list.map((t) => `
         <button class="th-card" data-th="${t.id}" ${blocked ? 'disabled' : ''}>
-          <i class="th-badge">${esc(BADGE[t.id])}</i>
+          <i class="th-badge"><span>${inline(BADGE[t.id])}</span></i>
           <span><b>${esc(t.title)}</b><small>${inline(t.desc)}</small></span>
           ${icon('chevLeft', 18)}
         </button>`).join('')}

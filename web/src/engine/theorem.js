@@ -804,7 +804,7 @@ function thevenin(c) {
     P('Replace everything left of a–b by V_th in series with R_th, and connect R_L back between a and b. Now it is one simple loop:'),
     F(`I_L = ${fr('V_{th}', 'R_{th} + R_L')}`, `   = ${fr(fV(Vth), `${fR(Rth)} + ${fR(RL)}`)} = ${fI(I)}`, `V_L = I_L R_L = ${fI(I)} × ${fR(RL)} = ${fV(V)}`),
     ...answerBlocks(c, I, V),
-    ...(Rth > 0 ? [TIP(`Maximum power transfer: R_L would take the most power, P_max = Vth² / (4·Rth) = ${fP((Vth * Vth) / (4 * Rth))}, when R_L = R_th = ${fR(Rth)}.`)] : []),
+    ...(Rth > 0 ? [TIP(`Maximum power transfer: R_L would take the most power, P_max = V_th² / (4·R_th) = ${fP((Vth * Vth) / (4 * Rth))}, when R_L = R_th = ${fR(Rth)}.`)] : []),
   ], ladderFig(c, Rth > 0 ? [
     { id: 'Vth', kind: 'V', n: [-1, b], val: Vth, name: 'Vth' },
     { id: 'Rth', kind: 'R', n: [-1, a], val: Rth, name: 'Rth' },
@@ -915,7 +915,7 @@ function norton(c) {
       : [`${tx('R_N is infinite, so all of I_N flows in R_L:')} I_L = I_N = ${fI(I)}`],
     `V_L = I_L R_L = ${fI(I)} × ${fR(RL)} = ${fV(V)}`),
     ...answerBlocks(c, I, V),
-    ...(Number.isFinite(Rn) ? [TIP(`Thevenin and Norton are the same circuit seen two ways: Vth = IN × RN = ${fV(In * Rn)}, and Rth = RN.`)] : []),
+    ...(Number.isFinite(Rn) ? [TIP(`Thevenin and Norton are the same circuit seen two ways: V_th = I_N × R_N = ${fV(In * Rn)}, and R_th = R_N.`)] : []),
   ], ladderFig(c, [
     { id: 'IN', kind: 'I', n: [b, a], val: In, name: 'IN' },
     ...(Number.isFinite(Rn) ? [{ id: 'RN', kind: 'R', n: [a, b], val: Rn, name: 'RN' }] : []),
@@ -1505,7 +1505,7 @@ export const THEOREMS = [
   { id: 'norton', title: 'Norton’s theorem', short: 'Norton', desc: 'Replace it with one current source I_N in parallel with R_N.' },
   { id: 'superposition', title: 'Superposition theorem', short: 'Superposition', desc: 'Take one source at a time (the others off), then add up the effects.' },
   { id: 'source', title: 'Source transformation', short: 'Source transformation', desc: 'Swap V + series R ⇄ I ∥ R and combine, step by step, until one source and one resistor are left.' },
-  { id: 'maxpower', title: 'Maximum power transfer theorem', short: 'Maximum power transfer', desc: 'The load takes the most power when R_L = R_th: find R_th, V_th and P_max = V_th² / 4R_th.' },
+  { id: 'maxpower', title: 'Maximum power transfer theorem', short: 'Maximum power transfer', desc: 'The load takes the most power when R_L = R_th: find R_th, V_th and P_max = V_th² / (4·R_th).' },
   { id: 'millman', title: 'Millman’s theorem', short: 'Millman', desc: 'Parallel branches (sources with series resistors) between two points → one source V_M with R_M.' },
   { id: 'reciprocity', title: 'Reciprocity theorem', short: 'Reciprocity', desc: 'Move the single source into the load’s branch: the current where it was is the same.' },
   { id: 'tellegen', title: 'Tellegen’s theorem', short: 'Tellegen (power balance)', desc: 'The powers of all the branches add up to zero: sources deliver what the resistors take.' },

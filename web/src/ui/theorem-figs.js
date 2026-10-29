@@ -6,9 +6,11 @@
 import { spTree, flipTree } from '../engine/theorem.js';
 import { getType, GRID } from '../elements/index.js';
 import { CircuitDoc } from './doc.js';
-import { Renderer, WireGraph } from './render.js';
+import { Renderer, WireGraph, measureRich, fillRich } from './render.js';
 
 const C = 6 * GRID; // one ladder cell: an 80-unit part with a short lead at each end
+/** The theorems' quantities written with their subscripts: Vth → V_th, IN → I_N, Req1 → R_eq1, RL → R_L. */
+const sym = (t) => t.replace(/\b([VIRP])(th|max|eq\d*|s\d+|N|M|L)\b/g, '$1_{$2}');
 
 // ------------------------------------------------------------------ board figures
 /**
@@ -85,7 +87,8 @@ class Builder {
     const P = [s[0] * C, s[1] * C], Q = [t[0] * C, t[1] * C], mx = (P[0] + Q[0]) / 2, my = (P[1] + Q[1]) / 2;
     const el = new (getType(e.kind === 'R' ? 'resistor' : e.kind === 'V' ? 'dcv' : 'dci'))(mx, my);
     if (e.kind === 'R') { el.p.r = e.val; if (this.style) el.p.style = this.style; } else el.p.amp = e.val;
-    el.name = e.name;
+    el.name = sym(e.name);
+    el.richName = el.name !== e.name; // drawn with its subscript
     const head = first ? P : Q;
     el.rot = P[1] === Q[1] ? (head[0] < mx ? 0 : 2) : (head[1] < my ? 1 : 3);
     const [p0, p1] = el.getPosts();
@@ -245,9 +248,9 @@ function drawingBox(doc) {
 function layout(notes, k, load, ctx, doc) {
   const out = [];
   const pill = (at, dx, dy, text, o = {}) => {
-    const size = o.size || 11;
-    ctx.font = `${o.bold === false ? 600 : 700} ${size}px ${FONT}`;
-    const w = ctx.measureText(text).width + 10;
+    const size = o.size || 11, font = (px) => `${o.bold === false ? 600 : 700} ${px}px ${FONT}`;
+    text = sym(text);
+    const w = measureRich(ctx, text, size, font) + 10;
     out.push({ kind: 'pill', at, dx: dx + (o.left ? w / 2 : 0), dy, w, h: size + 7, text, ...o });
   };
   // the load's value label points this way from its centre (null when the load is not drawn)
@@ -284,8 +287,7 @@ function layout(notes, k, load, ctx, doc) {
       }
       // out beside the gap where it covers no label, part or wire: a little further out or
       // shifted along first, the inner side of the gap when the outer side is crowded
-      ctx.font = `700 12px ${FONT}`;
-      const pw = ctx.measureText(n.text).width + 10, ph = 19, cost = blockers(doc, k, out);
+      const pw = measureRich(ctx, sym(n.text), 12, (px) => `700 ${px}px ${FONT}`) + 10, ph = 19, cost = blockers(doc, k, out);
       let bd = [ox * 44, oy * 44], bc = Infinity;
       for (const dist of [44, 58, 72, 30, -44, -58]) for (const side of [0, 1, -1, 2, -2]) {
         const dx = ox * dist - oy * side * 34, dy = oy * dist + ox * side * 34;
@@ -367,7 +369,8 @@ function paint(r, items, th) {
       ctx.fillStyle = d.accent ? accent : d.muted ? th.bg : d.fill;
       roundRect(ctx, x - d.w / 2, y - d.h / 2, d.w, d.h, d.h / 2); ctx.fill();
       ctx.fillStyle = d.accent ? '#04121a' : d.muted ? th.muted || '#94a3b8' : d.color;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(d.text, x, y + 0.5);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      fillRich(ctx, d.text, x, y + 0.5, d.size || 11, (px) => `${d.bold === false ? 600 : 700} ${px}px ${FONT}`);
     } else if (d.kind === 'ring') {
       ctx.fillStyle = th.bg; ctx.strokeStyle = accent; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
