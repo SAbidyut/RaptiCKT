@@ -146,6 +146,29 @@ class Fig:
         pts = [tip, tip - d * 22 + n * 16, tip - d * 30 + n * 16, notch, tip - d * 30 - n * 16, tip - d * 22 - n * 16]
         self.d.polygon([tuple(p) for p in pts], outline=0, width=3)
 
+    def frac(self, xy, num, den, unit):
+        """a value printed as a fraction: the number over the number, a bar between, the unit after"""
+        x, y = xy
+        f = ImageFont.truetype(SERIF, 26)
+        wn = max(self.d.textlength(num, font=f), self.d.textlength(den, font=f))
+        self.d.text((x, y - 4), num, font=f, fill=0, anchor='mb')
+        self.d.line([(x - wn / 2 - 2, y), (x + wn / 2 + 2, y)], fill=0, width=2)
+        self.d.text((x, y + 4), den, font=f, fill=0, anchor='mt')
+        self.d.text((x + wn / 2 + 10, y), unit, font=self.f, fill=0, anchor='lm')
+
+    def mesh(self, c, name, sub):
+        """a mesh current: a round arrow turning clockwise in the middle of its mesh, named beside it"""
+        x, y = self.P(*c)
+        r = 50
+        self.d.arc([x - r, y - r, x + r, y + r], 200, 120, fill=0, width=LW)
+        # the head at the arc's end (120°), pointing on round the clock
+        a = math.radians(120)
+        tip = np.array([x + r * math.cos(a), y + r * math.sin(a)])
+        t = np.array([-math.sin(a), math.cos(a)])
+        n = np.array([math.cos(a), math.sin(a)])
+        self.d.polygon([tuple(tip + t * 12), tuple(tip - t * 9 + n * 10), tuple(tip - t * 9 - n * 10)], fill=0)
+        self.label((x, y), name, sub)
+
     def name(self, xy, s, sub):
         """an upright bold name with a capital subscript (I_A), as some books print it"""
         x, y = xy
@@ -157,7 +180,7 @@ class Fig:
         for s in (-8, 8):
             p = c + u * s
             self.d.line([tuple(p - n * 26), tuple(p + n * 26)], fill=0, width=LW)
-        self.text(tuple(c + n * 80 * side), label)
+        if label: self.text(tuple(c + n * 80 * side), label)
 
     def battery(self, a, b, label, plus_at_a=True, side=1, cells=1):
         c, u, n = self._ends(a, b, 16 + 32 * (cells - 1))
@@ -178,7 +201,7 @@ class Fig:
             # half circles bulging to -n
             ang = math.degrees(math.atan2(u[1], u[0]))
             self.d.arc(box, start=ang + 180, end=ang + 360, fill=0, width=LW)
-        self.text(tuple(c + n * 50 * side), label)
+        if label: self.text(tuple(c + n * 50 * side), label)
 
     def ground(self, a):
         x, y = self.P(*a)
@@ -627,6 +650,54 @@ def main():
     f.name(f.P(2.75, 2.7), 'I', 'A')
     f.wire((0, 3), (3, 3))
     f.save(out, 'practice', random.Random(61))
+
+    # 10. a bridge drawn as a diamond, its sides slanting: 10 V across it, the 5 Ω between its
+    # middle corners; the 2 Ω carries 71/46 A, the 4 Ω 29/23 A, the 5 Ω 9/23 A
+    f = Fig(4, 2)
+    f.vsource((0, 0), (0, 2), '10 V', plus_at_a=True)
+    f.wire((0, 0), (2.5, 0)); f.wire((0, 2), (2.5, 2))
+    T, L, R, B = (2.5, 0), (1.5, 1), (3.5, 1), (2.5, 2)
+    f.resistor(T, L, '6 Ω', side=1)
+    f.resistor(T, R, '3 Ω', side=-1)
+    f.resistor(L, B, '2 Ω', side=1)
+    f.resistor(R, B, '4 Ω', side=-1)
+    f.resistor(L, R, '5 Ω', side=-1)
+    f.save(out, 'bridge', random.Random(71))
+
+    # 11. conductances in siemens, as nodal problems give them: 6 A into 2 S and 4 S, 1 V across
+    f = Fig(3, 2)
+    f.isource((0, 2), (0, 0), '6 A', to_b=True)
+    f.wire((0, 0), (3, 0)); f.wire((0, 2), (3, 2))
+    f.resistor((1.5, 0), (1.5, 2), '2 S', side=-1)
+    f.resistor((3, 0), (3, 2), '4 S', side=-1)
+    f.save(out, 'siemens', random.Random(81))
+
+    # 12. two meshes, each with its mesh current drawn as a round arrow inside it (i₁, i₂): 12 V
+    # into 2 Ω, then 6 Ω beside 3 Ω + 3 Ω, 1.2 A down each branch
+    f = Fig(4, 2)
+    f.vsource((0, 0), (0, 2), '12 V', plus_at_a=True)
+    f.resistor((0, 0), (2, 0), '2 Ω', side=-1)
+    f.resistor((2, 0), (2, 2), '6 Ω', side=-1)
+    f.resistor((2, 0), (4, 0), '3 Ω', side=-1)
+    f.resistor((4, 0), (4, 2), '3 Ω', side=-1)
+    f.wire((0, 2), (4, 2))
+    f.mesh((1, 1), 'i', '1')
+    f.mesh((3, 1), 'i', '2')
+    # (cut close round it, as the crop step leaves a figure: its three upright wires, evenly
+    # spaced, run down most of the picture)
+    f.im = f.im.crop((100, 70, 830, 470))
+    f.save(out, 'meshcurrents', random.Random(91))
+
+    # 13. a coil and a capacitor whose values are printed as fractions: ½ H, ¼ F
+    f = Fig(3, 2)
+    f.vsource((0, 0), (0, 2), '6 V', plus_at_a=True)
+    f.resistor((0, 0), (1.5, 0), '2 Ω', side=-1)
+    f.inductor((1.5, 0), (3, 0), None)
+    f.frac((f.P(2.25, 0)[0] - 14, f.P(2.25, 0)[1] - 62), '1', '2', 'H')
+    f.capacitor((3, 0), (3, 2), None)
+    f.frac((f.P(3, 1)[0] + 56, f.P(3, 1)[1]), '1', '4', 'F')
+    f.wire((0, 2), (3, 2))
+    f.save(out, 'fractions', random.Random(101))
     print('ok')
 
 

@@ -2,7 +2,7 @@
 // expressions to the dependent sources, "+ vₓ −" to the voltage across a part, an arrow with its
 // "i" to the current through one, a lone "vₓ" to the node it marks, and the figure's caption.
 
-const UNIT_FOR = { resistor: ['Ω', ''], unknown: ['Ω', ''], capacitor: ['F'], inductor: ['H'], battery: ['V', ''], switch: [] };
+const UNIT_FOR = { resistor: ['Ω', 'S', ''], unknown: ['Ω', 'S', ''], capacitor: ['F'], inductor: ['H'], battery: ['V', ''], switch: [] };
 
 /** Gap between two boxes [x0, y0, x1, y1] (0 when they overlap). */
 function gap(a, b) {
@@ -14,7 +14,7 @@ const boxOf = (w) => [w.x0, w.y0, w.x1, w.y1];
 function unitsFor(p) {
   if (p.type === 'source') return p.kind === 'current' ? ['A'] : ['V', ''];
   if (p.type === 'depsource') return [];
-  return UNIT_FOR[p.type] || ['Ω', ''];
+  return UNIT_FOR[p.type] || ['Ω', 'S', ''];
 }
 
 /**
@@ -53,7 +53,8 @@ export function assignLabels(S, words, arrows, H, fig) {
   pairs.sort((a, b) => a.cost - b.cost);
   for (const { p, w } of pairs) {
     if (labels.has(p.k) || taken.has(w)) continue;
-    labels.set(p.k, { text: w.read.text, value: w.read.value });
+    // (a conductance gives the resistance 1/G)
+    labels.set(p.k, { text: w.read.text, value: w.read.unit === 'S' && w.read.value > 0 ? +(1 / w.read.value).toPrecision(12) : w.read.value });
     taken.add(w);
   }
   // ---------------------------------------------------------------- dependent sources

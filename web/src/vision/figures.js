@@ -50,11 +50,28 @@ export function findFigures(ink, w, h, sw) {
   const parent = art.map((_, k) => k);
   const find = (a) => { while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; } return a; };
   const gap = 5 * sw;
+  // (a small round piece inside the other's box, as a mesh current's round arrow drawn inside
+  // its mesh: near only if its ink comes close to the other's)
+  const close = (a, b) => {
+    if (a.area > b.area) [a, b] = [b, a];
+    const aw = a.x1 - a.x0 + 1, ah = a.y1 - a.y0 + 1;
+    const inside = a.x0 >= b.x0 && a.x1 <= b.x1 && a.y0 >= b.y0 && a.y1 <= b.y1;
+    if (!inside || Math.max(aw, ah) > 30 * sw || Math.max(aw, ah) > 1.6 * Math.min(aw, ah)) return true;
+    const g = Math.ceil(gap);
+    for (let y = a.y0; y <= a.y1; y++) {
+      for (let x = a.x0; x <= a.x1; x++) {
+        if (labels[y * w + x] !== a.id) continue;
+        for (let yy = Math.max(0, y - g); yy <= Math.min(h - 1, y + g); yy++) for (let xx = Math.max(0, x - g); xx <= Math.min(w - 1, x + g); xx++) if (labels[yy * w + xx] === b.id) return true;
+        x += 2;
+      }
+    }
+    return false;
+  };
   for (let i = 0; i < art.length; i++) {
     for (let j = i + 1; j < art.length; j++) {
       const a = art[i], b = art[j];
       const dx = Math.max(0, Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1)), dy = Math.max(0, Math.max(a.y0, b.y0) - Math.min(a.y1, b.y1));
-      if (dx <= gap && dy <= gap) parent[find(i)] = find(j);
+      if (dx <= gap && dy <= gap && (dx > 0 || dy > 0 || close(a, b))) parent[find(i)] = find(j);
     }
   }
   const groups = new Map();
@@ -70,6 +87,9 @@ export function findFigures(ink, w, h, sw) {
     // a figure has both directions of wire and some size
     const hasH = g.some((c) => c.hrun >= 9 * sw), hasV = g.some((c) => c.vrun >= 9 * sw);
     if (!hasH || !hasV) continue;
+    // (a rule across the page with a heading's box on it is no circuit: far too flat)
+    const bw = box[2] - box[0] + 1, bh = box[3] - box[1] + 1;
+    if (Math.min(bw, bh) < 0.06 * Math.max(bw, bh)) continue;
     figures.push({ box, parts: g.map((c) => c.id) });
   }
   // a source body drawn by hand, its wires stopping just short of it: a ring beside a drawing,

@@ -3,8 +3,9 @@
 // — and drawings made by hand, in pen, labels written by hand (tests/fixtures, made by
 // tools/glyphs/figures.py) are read into circuits whose parts, values, marked quantities and
 // answers are right; so are they on ruled or squared paper and photographed well turned, a
-// practice problem printed in a book's own style, and a circuit drawn here with an open switch
-// and a coil drawn in loops.
+// practice problem printed in a book's own style, a bridge drawn as a diamond, conductances in
+// siemens, mesh currents drawn as round arrows, values printed as fractions, and a circuit drawn
+// here with an open switch and a coil drawn in loops.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -237,6 +238,55 @@ for (const name of ['practice.png', 'practice-photo.jpg']) {
     };
     near(current('IA'), 2, 1e-6, 'I_A');
     near(current('IB'), -0.5, 1e-6, 'I_B');
+  });
+}
+
+// the current through each resistor, by its value (size only)
+const currents = (r) => new Map(r.doc.elements.filter((e) => e.constructor.type === 'resistor').map((e) => [e.p.r, Math.abs(r.sim.v(e.nodes[0]) - r.sim.v(e.nodes[1])) / e.p.r]));
+
+for (const name of ['bridge.png', 'bridge-photo.jpg']) {
+  test(`${name}: a bridge drawn as a diamond, its sides slanting, is laid along the grid joined as drawn — 71/46 A through the 2 Ω, 9/23 A across the middle`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.texts, ['10 V', '2 Ω', '3 Ω', '4 Ω', '5 Ω', '6 Ω']);
+    const I = currents(r);
+    near(I.get(6), 53 / 46, 1e-6, '6 Ω');
+    near(I.get(3), 38 / 23, 1e-6, '3 Ω');
+    near(I.get(2), 71 / 46, 1e-6, '2 Ω');
+    near(I.get(4), 29 / 23, 1e-6, '4 Ω');
+    near(I.get(5), 9 / 23, 1e-6, '5 Ω');
+    // every part and wire level or upright on the board
+    for (const e of [...r.c.parts, ...r.c.wires]) assert.ok(e.from.x === e.to.x || e.from.y === e.to.y, 'laid along the grid');
+  });
+}
+
+for (const name of ['siemens.png', 'siemens-photo.jpg']) {
+  test(`${name}: conductances in siemens are resistors of 1/G — 6 A into 2 S and 4 S, 1 V across`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.texts, ['2 S', '4 S', '6 A']);
+    const I = currents(r);
+    near(I.get(0.5), 2, 1e-6, '2 S');
+    near(I.get(0.25), 4, 1e-6, '4 S');
+  });
+}
+
+for (const name of ['meshcurrents.png', 'meshcurrents-photo.jpg']) {
+  test(`${name}: mesh currents drawn as round arrows inside their meshes are no parts, and the evenly spaced wires of a figure cut close round it stay — 2.4 A from the 12 V`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['resistor', 'resistor', 'resistor', 'resistor', 'voltage_source']);
+    assert.deepEqual(r.texts, ['12 V', '2 Ω', '3 Ω', '3 Ω', '6 Ω']);
+    const I = currents(r);
+    near(I.get(2), 2.4, 1e-6, '2 Ω');
+    near(I.get(6), 1.2, 1e-6, '6 Ω');
+    near(I.get(3), 1.2, 1e-6, '3 Ω');
+  });
+}
+
+for (const name of ['fractions.png', 'fractions-photo.jpg']) {
+  test(`${name}: values printed as fractions — ½ H, ¼ F — are read as their quotients`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.texts, ['1/2 H', '1/4 F', '2 Ω', '6 V']);
+    near(r.c.parts.find((p) => p.kind === 'inductor').value, 0.5, 1e-12, 'L');
+    near(r.c.parts.find((p) => p.kind === 'capacitor').value, 0.25, 1e-12, 'C');
   });
 }
 

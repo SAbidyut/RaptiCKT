@@ -212,6 +212,39 @@ export function readStructure(img, fig) {
       }
     }
   }
+  // a zigzag drawn slanting (a side of a bridge drawn as a diamond) thins into short strokes by
+  // turns level and upright, a staircase: no wire runs so
+  for (const list of byRun.values()) {
+    const step = (p) => !p.cls && p.dir && p.len < 6 * sw;
+    for (let k = 0; k < list.length;) {
+      let j = k;
+      if (step(list[k])) while (j + 1 < list.length && step(list[j + 1]) && list[j + 1].dir !== list[j].dir) j++;
+      if (j - k >= 2 && axisOf(vertices[list[k].a], vertices[list[j].b]) === 'd') for (let t = k; t <= j; t++) list[t].cls = 'other';
+      k = j + 1;
+    }
+  }
+  // a long straight stroke slanting, held at both ends, is a wire (a bridge's side): it leaves
+  // a corner where wires meet, or a level or upright wire, and turns back on nothing (a zigzag
+  // drawn big by hand has long slanting strokes, each turning back on the next); a lever's tip,
+  // an arrow's tail, is free
+  const sharp = (p, q) => p.dx * q.dx + p.dy * q.dy < -0.17 * p.len * q.len;
+  for (const p of pieces) {
+    if (p.cls || p.dir || p.a === p.b || p.len < 8 * sw) continue;
+    const a = deg(Math.atan2(Math.abs(p.dy), Math.abs(p.dx)));
+    if (a < 25 || a > 65 || [p.a, p.b].some((v) => at[v].length < 2 && vertices[v].cut == null)) continue;
+    const next = [p.a, p.b].flatMap((v) => at[v].filter((id) => id !== p.id).map((id) => pieces[id]));
+    // (the stroke on from either end, where nothing else meets, taken leaving p's end the way
+    // p arrives at it)
+    const turns = [p.a, p.b].some((v) => at[v].length === 2 && at[v].some((id) => {
+      if (id === p.id) return false;
+      const q = pieces[id], into = v === p.b ? p : { dx: -p.dx, dy: -p.dy, len: p.len };
+      const out = q.a === v ? q : { dx: -q.dx, dy: -q.dy, len: q.len };
+      return sharp(into, out);
+    }));
+    const held = [p.a, p.b].some((v) => at[v].length >= 3 || vertices[v].cut != null) || next.some((q) => q.dir && q.len >= 3 * sw);
+    if (turns || !held) continue;
+    p.dir = 'd'; p.cls = 'wire';
+  }
   for (const p of pieces) if (!p.cls) p.cls = p.a === p.b ? 'drop' : p.dir ? 'wire' : 'other'; // a loop: a tiny hole in a thick blot
   // what is left of a source body's outline just outside the shape fitted to it is no part (a
   // small ring is a joint: what runs into it are its wires)
@@ -360,7 +393,7 @@ export function readStructure(img, fig) {
     const mark = part.type === 'inductor' ? null : markOf(vertices[a], vertices[b], pts);
     if (mark) {
       const dir = Math.abs(vertices[a].x - vertices[b].x) >= Math.abs(vertices[a].y - vertices[b].y) ? 'h' : 'v';
-      for (const id of list) { pieces[id].cls = 'wire'; pieces[id].dir = dir; }
+      for (const id of list) { pieces[id].cls = 'wire'; pieces[id].dir = axisOf(vertices[a], vertices[b]) === 'd' ? 'd' : dir; }
       marks.push({ x0: box[0], y0: box[1], x1: box[2], y1: box[3], cx: (box[0] + box[2]) / 2, cy: (box[1] + box[3]) / 2, dir: dir === 'h' ? [Math.sign(mark[0]), 0] : [0, Math.sign(mark[1])] });
       continue;
     }
@@ -369,7 +402,8 @@ export function readStructure(img, fig) {
     // (unless it turns this way and that all along, a zigzag drawn small and tight)
     const chord = Math.hypot(vertices[a].x - vertices[b].x, vertices[a].y - vertices[b].y);
     if (part.type !== 'inductor' && part.flips <= 1 && part.turns < 4 && len < 1.35 * chord) {
-      const dir = Math.abs(vertices[a].x - vertices[b].x) >= Math.abs(vertices[a].y - vertices[b].y) ? 'h' : 'v';
+      // (a wire may slant, as a bridge's sides do)
+      const dir = axisOf(vertices[a], vertices[b]);
       for (const id of list) { pieces[id].cls = 'wire'; pieces[id].dir = dir; }
       continue;
     }
@@ -402,7 +436,7 @@ export function readStructure(img, fig) {
     for (let i = 0; i < parts.length && !merged; i++) {
       for (let j = i + 1; j < parts.length && !merged; j++) {
         const P = parts[i], Q = parts[j];
-        if (!pathy(P) || !pathy(Q) || P.axis !== Q.axis) continue;
+        if (!pathy(P) || !pathy(Q) || P.axis !== Q.axis || P.axis === 'd') continue;
         // P's end and Q's end are one point, or joined by a little wire that nothing else uses
         let pair = null;
         for (const p of [P.a, P.b]) {
@@ -538,7 +572,7 @@ export function readStructure(img, fig) {
     const inc = live(v.id, -1);
     if (inc.length !== 1) continue;
     const p = pieces[inc[0]];
-    if (p.cls !== 'wire' || !p.dir || p.len < 2 * sw) continue;
+    if (p.cls !== 'wire' || !p.dir || p.dir === 'd' || p.len < 2 * sw) continue;
     const o = vertices[other(p, v.id)];
     let bar = barAcross(art, W, H, v, p.dir, sw);
     if (!bar) {
@@ -662,7 +696,7 @@ export function readStructure(img, fig) {
   for (const wv of wires) {
     const A = vertices[wv.a], B = vertices[wv.b];
     const dx = B.x - A.x, dy = B.y - A.y;
-    if (Math.hypot(dx, dy) < 8 * sw) continue;
+    if (Math.hypot(dx, dy) < 8 * sw || wv.dir === 'd') continue;
     slopes.push(wv.dir === 'h' ? dy / dx : -dx / dy);
   }
   slopes.sort((a, b) => a - b);
@@ -697,20 +731,31 @@ function orderPath(a, b, list, pieces, at) {
 }
 
 /**
+ * Which way a part or wire from A to B runs: 'h' (level), 'v' (upright) or 'd' (slanting by 30°
+ * to 60°, as the sides of a bridge drawn as a diamond).
+ */
+export function axisOf(A, B) {
+  const a = deg(Math.atan2(Math.abs(B.y - A.y), Math.abs(B.x - A.x)));
+  return a > 30 && a < 60 ? 'd' : a <= 45 ? 'h' : 'v';
+}
+
+/**
  * A part drawn as a path between two terminals: a zigzag (resistor), bumps on one side
  * (inductor) or something else.
  */
 function classifyPath(A, B, pts, box, sw, list, path, lead) {
-  const axis = Math.abs(B.x - A.x) >= Math.abs(B.y - A.y) ? 'h' : 'v';
+  const axis = axisOf(A, B);
   const ux = axis === 'h' ? Math.sign(B.x - A.x) || 1 : 0, uy = axis === 'v' ? Math.sign(B.y - A.y) || 1 : 0;
-  const L = axis === 'h' ? Math.abs(B.x - A.x) : Math.abs(B.y - A.y);
+  // (a part drawn slanting, as in a bridge drawn as a diamond: along and across its own line)
+  const D = Math.hypot(B.x - A.x, B.y - A.y) || 1, dx = (B.x - A.x) / D, dy = (B.y - A.y) / D;
+  const L = axis === 'h' ? Math.abs(B.x - A.x) : axis === 'v' ? Math.abs(B.y - A.y) : D;
   // profile: offset from the line its leads run on, against the distance along it
   const bins = Math.max(4, Math.round(L / (0.5 * sw)));
   const sum = new Float64Array(bins), cnt = new Uint32Array(bins);
-  const base = lead ? (lead(A.id, axis) + lead(B.id, axis)) / 2 : axis === 'h' ? (A.y + B.y) / 2 : (A.x + B.x) / 2;
+  const base = axis === 'd' ? 0 : lead ? (lead(A.id, axis) + lead(B.id, axis)) / 2 : axis === 'h' ? (A.y + B.y) / 2 : (A.x + B.x) / 2;
   for (const [x, y] of pts) {
-    const t = axis === 'h' ? (x - A.x) * ux : (y - A.y) * uy;
-    const s = axis === 'h' ? y - base : x - base;
+    const t = axis === 'h' ? (x - A.x) * ux : axis === 'v' ? (y - A.y) * uy : (x - A.x) * dx + (y - A.y) * dy;
+    const s = axis === 'h' ? y - base : axis === 'v' ? x - base : -(x - A.x) * dy + (y - A.y) * dx;
     const k = Math.min(bins - 1, Math.max(0, Math.floor((t / (L || 1)) * bins)));
     sum[k] += s; cnt[k]++;
   }

@@ -227,6 +227,14 @@ export function fillPinholes(mask, w, h, maxArea) {
  * size exactly.
  */
 export function strokeWidth(ink, w, h) {
+  return strokeInfo(ink, w, h).sw;
+}
+
+/**
+ * The stroke width and whether it was taken from the thin lines among thick ink (mixed): only
+ * with `contrast` (the ink mask's), and not when `mixed` is false.
+ */
+function strokeInfo(ink, w, h, { mixed = true, contrast = null } = {}) {
   const { labels, comps } = components(ink, w, h);
   const big = Math.max(20, 0.04 * Math.max(w, h));
   const use = new Uint8Array(comps.length + 1);
@@ -255,18 +263,53 @@ export function strokeWidth(ink, w, h) {
       y = e;
     }
   }
+  // (a block filled solid within a piece, as a book's heading tab on its rule, is no stroke: a
+  // run across half the piece's narrow side or more is left out, where such runs are much of
+  // the piece)
+  const thin = new Float32Array(comps.length + 1);
+  for (const c of comps) thin[c.id] = 0.5 * Math.min(c.x1 - c.x0 + 1, c.y1 - c.y0 + 1);
+  const thick = new Uint32Array(comps.length + 1);
+  for (let i = 0; i < w * h; i++) if (ink[i] && use[labels[i]] && Math.min(hr[i], vr[i]) > thin[labels[i]]) thick[labels[i]]++;
+  for (const c of comps) if (thick[c.id] < 0.15 * c.area) thin[c.id] = Infinity;
   const hist = new Uint32Array(256);
   let tot = 0;
-  for (let i = 0; i < w * h; i++) {
-    if (!ink[i] || !use[labels[i]]) continue;
-    hist[Math.min(255, Math.min(hr[i], vr[i]))]++;
-    tot++;
+  for (let pass = 0; pass < 2 && !tot; pass++) {
+    for (let i = 0; i < w * h; i++) {
+      if (!ink[i] || !use[labels[i]]) continue;
+      const r = Math.min(hr[i], vr[i]);
+      if (!pass && r > thin[labels[i]]) continue;
+      hist[Math.min(255, r)]++;
+      tot++;
+    }
   }
-  if (!tot) return 1;
-  let acc = 0, k = 0;
-  while (k < 255 && acc + hist[k] < tot / 2) acc += hist[k++];
+  if (!tot) return { sw: 1, mixed: false };
   // the median, read between whole pixels
-  return Math.max(1, k - 0.5 + (tot / 2 - acc) / Math.max(1, hist[k]));
+  const median = (H, n) => {
+    let t = 0;
+    for (let r = 0; r < n; r++) t += H[r];
+    let acc = 0, k = 0;
+    while (k < n - 1 && acc + H[k] < t / 2) acc += H[k++];
+    return Math.max(1, k - 0.5 + (t / 2 - acc) / Math.max(1e-9, H[k]));
+  };
+  const all = median(hist, 256);
+  // thin lines with thick ink among them (a book's bus bars, the leads of a meter drawn by them):
+  // by the length of line, not the ink in it, the thin ones are most of the drawing — then they
+  // are its lines
+  const along = Float64Array.from(hist, (v, r) => (r ? v / r : 0));
+  const fine = median(along, 256);
+  if (mixed && contrast && all > 2.2 * fine) {
+    // (as dark as the thick ink: a page's faint printed lines or the paper's grain are thin
+    // too, and no drawing's)
+    const cut = 2.5 * fine, ct = new Uint32Array(256), ck = new Uint32Array(256);
+    for (let i = 0; i < w * h; i++) {
+      if (!ink[i] || !use[labels[i]]) continue;
+      const r = Math.min(hr[i], vr[i]);
+      if (r > thin[labels[i]]) continue;
+      (r <= cut ? ct : ck)[contrast[i]]++;
+    }
+    if (median(ct, 256) >= 0.95 * median(ck, 256)) return { sw: median(hist, Math.min(256, Math.floor(cut) + 1)), mixed: true };
+  }
+  return { sw: all, mixed: false };
 }
 
 /**
@@ -338,6 +381,24 @@ function eraseLevelRules(ink, contrast, w, h) {
   const fam = lines.filter((q, k) => (k > 0 && even(mid(q) - mid(lines[k - 1]))) || (k < lines.length - 1 && even(mid(lines[k + 1]) - mid(q))));
   // (and printed: at least two of them right across the page, not just across a drawing)
   if (fam.length < 3 || fam.filter((q) => q.cover >= 0.7).length < 2) return 0;
+  // (a few long wires of a circuit cut out close round it, evenly spaced as a textbook draws
+  // them, end at its corners short of the picture's edges; a page's lines run off them)
+  const reach = (q) => {
+    let x0 = -1, x1 = -1;
+    for (let x = 0; x < w; x++) {
+      const yp = Math.round(q.c + q.s * x);
+      for (let d = -3; d <= 3; d++) { const y = yp + d; if (y >= 0 && y < h && ink[y * w + x]) { if (x0 < 0) x0 = x; x1 = x; break; } }
+    }
+    return x0 >= 0 && x0 <= 0.03 * w && x1 >= 0.97 * w;
+  };
+  // (and a circuit's wires are as dark as the rest of its ink; a page's lines are fainter than
+  // what is written on it)
+  const near = new Uint8Array(w * h);
+  for (const q of fam) for (let x = 0; x < w; x++) for (let d = -3; d <= 3; d++) { const y = Math.round(q.c + q.s * x) + d; if (y >= 0 && y < h) near[y * w + x] = 1; }
+  const cf = new Uint32Array(256), co = new Uint32Array(256);
+  for (let i = 0; i < w * h; i++) if (ink[i]) (near[i] ? cf : co)[contrast[i]]++;
+  const med = (H) => { let t = 0; for (const v of H) t += v; let a = 0, k = 0; while (k < 255 && a + H[k] < t / 2) a += H[k++]; return t ? k : 0; };
+  if (fam.length <= 4 && !fam.some(reach) && med(cf) >= 0.85 * med(co)) return 0;
   // each line along its course (a page bends a little: follow it): per column its own thin run
   // and how dark it is (a run thicker than a line is a stroke across it, and stays)
   const prof = fam.map((q) => {
@@ -460,7 +521,8 @@ export function prepare(img, { target = 4.5, maxSide = 3200 } = {}) {
   // a page of ruled paper: its lines are not the drawing's (nor is their width its line width)
   const before = first.ink.slice();
   const ruled = eraseRules(first.ink, first.contrast, w, h);
-  const sw0 = strokeWidth(first.ink, w, h);
+  // (on ruled paper, what is left of its lines is thin: no drawing's lines)
+  const first0 = strokeInfo(first.ink, w, h, { mixed: !ruled, contrast: first.contrast }), sw0 = first0.sw;
   let k = Math.min(3, Math.max(0.15, target / Math.max(0.8, sw0)));
   if (Math.max(w, h) * k > maxSide) k = maxSide / Math.max(w, h);
   if (Math.abs(k - 1) < 0.12) k = 1;
@@ -475,7 +537,9 @@ export function prepare(img, { target = 4.5, maxSide = 3200 } = {}) {
     erased = new Uint8Array(W * H);
     for (let i = 0; i < W * H; i++) erased[i] = was[i] && !ink[i] ? 1 : 0;
   }
-  const sw = strokeWidth(ink, W, H);
+  // (measured again at the new size the same way: the bits of a page's lines left after they
+  // are erased are no thin lines of the drawing's)
+  const sw = strokeInfo(ink, W, H, { mixed: first0.mixed, contrast }).sw;
   // the sharper of the two images for reading text: the source (when the working image is a
   // reduction of it) or the working image itself
   const src = k < 1 ? { d, w, h, k } : { d: dd, w: W, h: H, k: 1 };

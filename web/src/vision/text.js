@@ -94,6 +94,19 @@ export function findText(img, fig, S) {
     }
     if (best >= 0) parent[find(i)] = find(best);
   }
+  // a fraction (¹⁄₄ F): the numbers over and under its bar go with it, and so with the unit after
+  live.forEach((b, i) => {
+    const bh = b.y1 - b.y0 + 1, bw = b.x1 - b.x0 + 1;
+    if (bh > 0.2 * H || bw < 2.5 * bh || bw > 2.5 * H) return;
+    const over = [], under = [];
+    live.forEach((g, j) => {
+      const cx = (g.x0 + g.x1) / 2, gh = g.y1 - g.y0 + 1;
+      if (j === i || cx < b.x0 || cx > b.x1 || gh < 0.4 * H || gh > 1.2 * H) return;
+      if (g.y1 < b.y0 && b.y0 - g.y1 <= 0.4 * H) over.push(j);
+      if (g.y0 > b.y1 && g.y0 - b.y1 <= 0.4 * H) under.push(j);
+    });
+    if (over.length && under.length) for (const j of [...over, ...under]) parent[find(j)] = find(i);
+  });
   const groups = new Map();
   live.forEach((g, k) => { const r = find(k); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(g); });
   const words = [];
@@ -110,6 +123,9 @@ export function findText(img, fig, S) {
         const vov = Math.min(q.y1, g.y1) - Math.max(q.y0, g.y0) + 1;
         // both real strokes (a speck under a letter is grain, not half of it)
         const big = (r) => Math.max(r.x1 - r.x0 + 1, r.y1 - r.y0 + 1) >= 0.3 * H;
+        // (a fraction's bar, clear of the numbers over and under it, is no part of them)
+        const bar = (r) => r.y1 - r.y0 + 1 <= 0.2 * H && r.x1 - r.x0 + 1 >= 2.5 * (r.y1 - r.y0 + 1);
+        if ((bar(q) || bar(g)) && vgap >= 0.06 * H) return false;
         return big(q) && big(g) && ov >= 0.6 * Math.min(q.x1 - q.x0 + 1, g.x1 - g.x0 + 1) && vgap <= 0.35 * H && vov <= 0.3 * Math.min(q.y1 - q.y0 + 1, g.y1 - g.y0 + 1) && hh <= 1.35 * H;
       });
       if (prev) {

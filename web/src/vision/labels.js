@@ -164,8 +164,9 @@ const SUBS = new Set(['x', 'o', '0', '1', '2', '3', '4', '5', 'a', 'b', 's', 'L'
 const PREFIX = { k: 1e3, M: 1e6, m: 1e-3, μ: 1e-6, n: 1e-9 };
 // how common each prefix is with each unit in circuit problems (log prior): coils in mH, rarely
 // nH; capacitors in μF, rarely mF
-const PREFIX_PRIOR = { H: { μ: -0.7, n: -2 }, F: { n: -0.7, m: -1.5 }, Ω: { M: -0.5, m: -2, μ: -3, n: -3 }, V: { k: -0.5, m: -0.7, μ: -1.5, n: -3 }, A: { μ: -0.7, k: -2, n: -3 } };
-const UNIT = { Ω: 'Ω', v: 'V', A: 'A', F: 'F', H: 'H' };
+const PREFIX_PRIOR = { H: { μ: -0.7, n: -2 }, F: { n: -0.7, m: -1.5 }, Ω: { M: -0.5, m: -2, μ: -3, n: -3 }, V: { k: -0.5, m: -0.7, μ: -1.5, n: -3 }, A: { μ: -0.7, k: -2, n: -3 }, S: { m: -0.5, μ: -1.5, k: -3, M: -3, n: -3 } };
+// (a conductance in siemens, "6 S": its S reads as the s it is shaped like)
+const UNIT = { Ω: 'Ω', v: 'V', A: 'A', F: 'F', H: 'H', s: 'S' };
 
 /**
  * Which label a string of classes (with subscript flags) can be, and its meaning, or null.
@@ -179,7 +180,7 @@ export function parseLabel(chars) {
   const cap = /^[FIilgure]{1,6}([0-9]+\.[0-9]+)\.?$/.exec(s) || /^F[a-zI.]{1,6}?([0-9]+\.[0-9]+)\.?$/.exec(s);
   if (cap) return { type: 'caption', text: `Figure ${cap[1]}` };
   // value: [-][j]number[prefix][unit]
-  let m = /^(-)?(j)?([0-9]+(?:[.][0-9]+)?)(k|M|m|μ|n)?(Ω|v|A|F|H)?$/.exec(s);
+  let m = /^(-)?(j)?([0-9]+(?:[.][0-9]+)?)(k|M|m|μ|n)?(Ω|v|A|F|H|s)?$/.exec(s);
   // (only a digit written low or small breaks a value: a prefix or unit letter may sit lower)
   if (m && !chars.some((x) => (x.sub || x.small) && /[0-9]/.test(x.c))) {
     const num = +(parseFloat(m[3]) * (m[4] ? PREFIX[m[4]] : 1) * (m[1] ? -1 : 1)).toPrecision(12);
@@ -219,15 +220,39 @@ export function parseLabel(chars) {
  * label, whatever hand-writing it may look like).
  */
 export function readWords(all, mainH, img, tilt = 0) {
-  const words = all.filter((w) => w.glyphs.some((g) => g.y1 - g.y0 + 1 >= 0.45 * mainH));
-  const print = words.map((w) => readWord(w, mainH, img, false));
+  const words = [], print = [];
+  const list = all.filter((x) => x.glyphs.some((g) => g.y1 - g.y0 + 1 >= 0.45 * mainH));
+  // a fraction's numerator left a word of its own (its bar run into the number under it): the
+  // word it stands right over, read as a fraction with it if that reads
+  const gone = new Set();
+  for (const w of list) {
+    if (w.glyphs.length > 3 || !w.glyphs.every((g) => g.y1 - g.y0 + 1 <= 0.9 * mainH)) continue;
+    for (const o of list) {
+      if (o === w || gone.has(o) || gone.has(w)) continue;
+      const g = [...o.glyphs].sort((a, b) => a.x0 - b.x0)[0];
+      const cx = (w.x0 + w.x1) / 2;
+      if (cx < g.x0 || cx > g.x1 || w.y1 >= g.y0 || g.y0 - w.y1 > 0.4 * mainH) continue;
+      const both = word([...w.glyphs, ...o.glyphs].map((q) => ({ ...q })), mainH, tilt);
+      const fr = fraction(both, mainH, img, tilt);
+      if (fr) { gone.add(w); gone.add(o); words.push(both); print.push(fr); }
+    }
+  }
+  for (const w of list) {
+    if (gone.has(w)) continue;
+    const fr = fraction(w, mainH, img, tilt);
+    if (fr) { words.push(w); print.push(fr); continue; }
+    const r = readWord(w, mainH, img, false);
+    const two = r.type ? null : splitWord(w, mainH, img, tilt);
+    if (two) { words.push(...two.words); print.push(...two.reads); } else { words.push(w); print.push(r); }
+  }
   const sc = (r) => (r.type ? r.score : -8);
   const clear = (r) => !!r?.type && r.score > -1.5;
   // (a word that reads very clearly as print cannot read better by hand: it is read so only when
   // the others already make the figure look hand-written; a long line of words is a caption or
   // the problem's text, no label, and stays print)
   const short = (k) => words[k].glyphs.length <= 6;
-  const hand = words.map((w, k) => (!short(k) || (print[k].type && print[k].score > -0.2) ? null : readWord(w, mainH, img, true)));
+  // (and a fraction is printed)
+  const hand = words.map((w, k) => (!short(k) || print[k].frac || (print[k].type && print[k].score > -0.2) ? null : readWord(w, mainH, img, true)));
   // hand-written: most of the words that tell read better so
   const vote = () => {
     let win = 0, lose = 0, n = 0;
@@ -250,11 +275,82 @@ export function readWords(all, mainH, img, tilt = 0) {
   };
   let handWritten = vote();
   if (handWritten && hand.some((h, k) => !h && short(k))) {
-    words.forEach((w, k) => { if (short(k)) hand[k] ??= readWord(w, mainH, img, true); });
+    words.forEach((w, k) => { if (short(k) && !print[k].frac) hand[k] ??= readWord(w, mainH, img, true); });
     handWritten = vote();
   }
   const reads = handWritten ? hand.map((h, k) => (h && sc(h) >= sc(print[k]) - 0.5 ? h : print[k])) : print;
   return { ...joinUnits(words, reads, mainH, img, handWritten, tilt), hand: handWritten };
+}
+
+/**
+ * A value printed as a fraction (¹⁄₆ F, as some books give a capacitor or a coil): a number over
+ * a number, one above the other, the unit after them. Returns the reading or null.
+ */
+function fraction(w, mainH, img, tilt) {
+  const gs = w.glyphs;
+  if (gs.length < 3) return null;
+  const ht = (g) => g.y1 - g.y0 + 1, wd = (g) => g.x1 - g.x0 + 1;
+  // the pair one above the other: overlapping across, apart down
+  let pair = null;
+  for (const a of gs) for (const b of gs) {
+    if (a === b || b.y0 <= a.y1 || Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) + 1 < 0.5 * Math.min(wd(a), wd(b))) continue;
+    if (!pair || a.x0 < pair[0].x0) pair = [a, b];
+  }
+  if (!pair) return null;
+  const [A, B] = pair, cx0 = Math.min(A.x0, B.x0), cx1 = Math.max(A.x1, B.x1), mid = (A.y1 + B.y0) / 2;
+  const col = gs.filter((g) => g.x0 >= cx0 - 0.3 * mainH && g.x1 <= cx1 + 0.3 * mainH);
+  const rest = gs.filter((g) => !col.includes(g));
+  // (the bar between them is no digit)
+  const digits = col.filter((g) => !(ht(g) < 0.25 * Math.max(ht(A), ht(B)) && wd(g) > 1.5 * ht(g)));
+  const num = digits.filter((g) => (g.y0 + g.y1) / 2 < mid);
+  // (the bar run into the number under it, a blur of a photo: that number cut from below it)
+  const den = digits.filter((g) => (g.y0 + g.y1) / 2 > mid).map((g) => {
+    if (!img?.ink) return g;
+    const gw = g.x1 - g.x0 + 1, row = (y) => { let n = 0; for (let x = g.x0; x <= g.x1; x++) n += img.ink[y * img.w + x]; return n; };
+    let y = g.y0;
+    while (y <= g.y1 && row(y) >= 0.6 * gw) y++;
+    if (y === g.y0 || y - g.y0 > 0.3 * ht(g)) return g;
+    const cut = { ...g, y0: y + 1 }, bm = cutGlyph(img, cut);
+    // (its cut follows the ink a little way out, back into the bar: its rows right across go)
+    let top = 0;
+    const across = (r) => { let n = 0; for (let x = 0; x < bm.w; x++) n += bm.data[r * bm.w + x] ? 1 : 0; return n; };
+    while (top < bm.h - 2 && across(top) >= 0.6 * bm.w) top++;
+    while (top && top < bm.h - 2 && !across(top)) top++;
+    return { ...cut, bitmap: top ? { ...bm, h: bm.h - top, data: bm.data.slice(top * bm.w), oy: (bm.oy || 0) + top } : bm };
+  });
+  // the unit after the fraction, as tall as it is
+  if (!num.length || !den.length || !rest.length || rest.some((g) => g.x0 < cx1)) return null;
+  const read = (list) => { const x = word(list.map((g) => ({ ...g })), Math.max(...list.map(ht)), tilt); return readWord(x, Math.max(...list.map(ht)), img, false); };
+  const n = read(num), d = read(den), u = read(rest);
+  if (n.type !== 'value' || n.unit || d.type !== 'value' || d.unit || !(d.value > 0)) return null;
+  const m = /^(k|M|m|μ|n)?(Ω|v|A|F|H|s)$/.exec(u.raw || '');
+  if (!m) return null;
+  const unit = UNIT[m[2]], prefix = m[1] || '';
+  const value = +((n.value / d.value) * (prefix ? PREFIX[prefix] : 1)).toPrecision(12);
+  return { type: 'value', value, unit, prefix, imag: false, text: `${n.text}/${d.text} ${prefix}${unit}`, score: n.score + d.score + (u.score ?? 0), raw: `${n.text}/${d.text}${u.raw}`, frac: true };
+}
+
+/**
+ * Two labels printed side by side, a space apart, that came out as one word ("8 A R₁": a source's
+ * value and the next resistor's name): the split at a space where both halves read as labels,
+ * the surest such. Returns { words, reads } or null.
+ */
+function splitWord(w, mainH, img, tilt) {
+  const gs = [...w.glyphs].sort((a, b) => a.x0 - b.x0);
+  if (gs.length < 4) return null;
+  let best = null;
+  for (let k = 2; k <= gs.length - 2; k++) {
+    const gap = gs[k].x0 - Math.max(...gs.slice(0, k).map((g) => g.x1)) - 1;
+    if (gap < 0.2 * mainH) continue;
+    const ws = [word(gs.slice(0, k).map((g) => ({ ...g })), mainH, tilt), word(gs.slice(k).map((g) => ({ ...g })), mainH, tilt)];
+    const rs = ws.map((x) => readWord(x, mainH, img, false));
+    // (each half a whole label: a value with its unit, a name or an expression — a number
+    // without its unit, or a lone letter, is a label cut in two)
+    if (!rs.every((r) => r.type && r.type !== 'caption' && r.type !== 'sign' && r.score > -2 && !(r.type === 'value' && !r.unit))) continue;
+    const sc = rs[0].score + rs[1].score;
+    if (!best || sc > best.sc) best = { sc, words: ws, reads: rs };
+  }
+  return best;
 }
 
 /**
@@ -376,12 +472,16 @@ export function readWord(word, mainH, img, hand = false) {
     // values are written full size: a lone little blot reading as a digit is grain; in print, an
     // Ω written low is a subscript (the o of i₀; the F of μF sits as low as the μ, rightly)
     if (p.type === 'value' && (tall < 0.6 * mainH || (!hand && p.unit === 'Ω' && b.chars[b.chars.length - 1].sub))) continue;
+    // (an s written low is a subscript, no siemens)
+    if (p.type === 'value' && p.unit === 'S' && b.chars[b.chars.length - 1].sub) continue;
     let sc = b.score;
     for (const ch of p.sub || '') sc += SUB_PRIOR[ch] ?? -2.5;
     // a prefix with no unit after it ("4 k") is rarer than a unit or an expression; by hand, a
     // value with a minus before it rarer than a fleck before a value
     if (p.type === 'value' && !p.unit && /[kM]$/.test(p.text)) sc -= 1;
     if (hand && p.type === 'value' && p.value < 0) sc += Math.log(0.15);
+    // (by hand, an s after a number is more often a 5 than siemens)
+    if (hand && p.type === 'value' && p.unit === 'S') sc += Math.log(0.2);
     if (p.type === 'value' && p.prefix && p.unit) sc += PREFIX_PRIOR[p.unit]?.[p.prefix] ?? 0;
     if (!best || sc > best.score) best = { ...p, score: sc, chars: b.chars.map((x) => x.c).join('') };
   }
