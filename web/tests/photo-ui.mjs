@@ -75,7 +75,9 @@ async function runAndRead(page, name) {
   const parts = await partsShown(page);
   check(JSON.stringify(parts) === JSON.stringify(['D1 0.1vx', 'I1 4 A', 'R1 4 Ω', 'R2 20 Ω', 'V1 20 V'].sort()) || (parts.length === 5 && parts.includes('D1 0.1vx') && parts.includes('V1 20 V')), `read: ${parts.join(', ')}`);
   check(await page.isVisible('.ph-by') && !(await page.$('[data-x=claude]')) && (await page.$$('.th-warn')).length === 0, 'says it was read on the phone, nothing else offered, no warnings');
+  check((await page.textContent('.ph-title b')) === 'Photo circuit 1', 'named "Photo circuit 1" (the drawing has no figure number)');
   await page.click('[data-x=open]'); await page.waitForTimeout(900);
+  check(await page.evaluate(() => app.editor.doc.name === 'Photo circuit 1'), '…and saved under that name');
   const vx = await runAndRead(page, 'vx');
   check(Math.abs(vx - 25) < 1e-6, `Run: vx = ${vx.toFixed(4)} V (book: 25 V)`);
   await page.evaluate(() => app.editor.setRunning(false));
@@ -102,6 +104,8 @@ async function runAndRead(page, name) {
   check(/find i\b/.test(await page.textContent('.ph-asked')), 'it says what is asked (i)');
   await page.click('[data-x=open]'); await page.waitForTimeout(900);
   check(await page.evaluate(() => app.current === 'editor' && app.editor.doc.elements.length > 7), 'Open on the board: a new circuit with its parts');
+  const names = await page.evaluate(() => JSON.parse(localStorage.getItem('raptickt.circuits.v1') || '[]').map((c) => c.name).sort());
+  check(JSON.stringify(names) === JSON.stringify(['Photo circuit 1', 'Photo circuit 2']), `each photo circuit gets its own name (${names.join(', ')})`);
   await page.evaluate(() => app.editor.setRunning(true)); await page.waitForTimeout(900);
   const i3 = await page.evaluate(() => Math.abs(app.editor.doc.elements.find((e) => e.constructor.type === 'resistor' && e.p.r === 3).i));
   check(Math.abs(i3 - 2) < 1e-6, `Run: i through the 3 Ω = ${i3.toFixed(4)} A (book: 2 A)`);

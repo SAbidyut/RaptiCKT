@@ -199,7 +199,7 @@ export class PhotoScreen {
     body.innerHTML = `
       ${list.length > 1 ? `<p class="th-q">This picture has ${list.length} circuits. <span>Pick one.</span></p>
         <div class="th-chips">${list.map((x, i) => `<button class="chip2 ${i === this.pick ? 'on' : ''}" data-c="${i}">${esc(x.title || 'Circuit ' + (i + 1))}</button>`).join('')}</div>` : ''}
-      <div class="ph-title"><b>${esc(c.title || 'Circuit from photo')}</b><span>${parts.length} part${parts.length === 1 ? '' : 's'} · check it against the picture</span></div>
+      <div class="ph-title"><b>${esc(this.app.photoName(c.title))}</b><span>${parts.length} part${parts.length === 1 ? '' : 's'} · check it against the picture</span></div>
       <canvas class="th-fig ph-fig"></canvas>
       <details class="ph-orig"><summary>${icon('camera', 16)} The photo</summary><img alt="" src="data:${esc(this.image.mediaType)};base64,${this.image.data}"></details>
       <div class="ph-parts">${parts.map((e) => `<span>${esc(partLabel(e))}</span>`).join('')}</div>

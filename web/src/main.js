@@ -188,8 +188,25 @@ class App {
     this.photoFrom = 'home';
     doc.id = this.uid();
     doc.folder = null;
+    doc.name = this.photoName(doc.name);
     this.saveToLibrary(doc, true);
     this.openEditor(doc, { autoRun: this.settings.autoStart });
+  }
+  /**
+   * The name a circuit read from a photo is saved under: its figure's caption ("Figure 4.12"), else
+   * "Photo circuit N", numbered on from the last one; never a name a saved circuit already has.
+   */
+  photoName(title) {
+    const names = store.circuits().map((c) => c.name);
+    const taken = new Set(names);
+    if (/^fig(ure|\.)/i.test(title || '')) {
+      let name = title;
+      for (let k = 2; taken.has(name); k++) name = `${title} (${k})`;
+      return name;
+    }
+    let n = 1 + Math.max(0, ...names.map((s) => +(/^Photo circuit (\d+)$/.exec(s || '')?.[1] || 0)));
+    while (taken.has(`Photo circuit ${n}`)) n++;
+    return `Photo circuit ${n}`;
   }
   /** "Open this example" inside the manual: keep the circuit being edited, then open the example. */
   openExampleFromManual(id) {
