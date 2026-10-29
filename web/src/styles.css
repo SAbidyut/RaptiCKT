@@ -1135,6 +1135,13 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .th-res b { font-family: var(--mono); color: var(--accent); }
 .th-end { margin-top: 4px; }
 .th-tw { overflow-x: auto; margin: 8px 0; }
+.th-group { margin: 16px 2px 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted); }
+.th-group:first-of-type { margin-top: 6px; }
+/* Nodal ⇄ Mesh switch inside a step */
+.th-alt { margin: 8px 0; }
+.th-mseg { display: flex; width: 100%; margin: 2px 0 4px; }
+.th-mseg button { flex: 1; height: 32px; padding: 0 8px; font-size: 13px; }
+.th-alt-b[hidden] { display: none; }
 .th-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .th-tbl th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .th-tbl td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-family: var(--mono); white-space: nowrap; color: var(--text); }

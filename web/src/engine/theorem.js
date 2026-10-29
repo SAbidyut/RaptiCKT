@@ -370,6 +370,222 @@ function nodalLines(elems, sol, ref, nm, max = 5) {
   return lines;
 }
 
+// ------------------------------------------------------------------ mesh analysis, written out
+/**
+ * The meshes of a network: its smallest independent loops (on a planar drawing, its windows),
+ * clockwise on the drawing when `geo` places every node and part. Returns { meshes, co }:
+ * meshes [{ edges: [{ e, o }], at }] (o = +1 when the loop runs from e.n[0] to e.n[1]), and
+ * co(e): Map mesh → ±1, the mesh currents that make up e's current.
+ */
+function findMeshes(elems, geo) {
+  const E = elems.filter((e) => e.n[0] !== e.n[1]);
+  const adj = new Map();
+  const link = (n, k) => { if (!adj.has(n)) adj.set(n, []); adj.get(n).push(k); };
+  E.forEach((e, k) => { link(e.n[0], k); link(e.n[1], k); });
+  const nodes = [...adj.keys()];
+  const uf = new UF();
+  for (const e of E) uf.union(e.n[0], e.n[1]);
+  const want = E.length - nodes.length + new Set(nodes.map((n) => uf.find(n))).size;
+  const co = new Map();
+  if (want <= 0) return { meshes: [], co: (e) => co.get(e) || new Map() };
+  const other = (k, n) => (E[k].n[0] === n ? E[k].n[1] : E[k].n[0]);
+  // candidate loops (Horton): in each node's shortest-path tree every other edge closes a loop
+  const cands = new Map();
+  for (const v of nodes) {
+    const par = new Map([[v, -1]]), q = [v];
+    for (let i = 0; i < q.length; i++) for (const k of adj.get(q[i])) { const w = other(k, q[i]); if (!par.has(w)) { par.set(w, k); q.push(w); } }
+    const path = (x) => { const es = [], ns = []; while (x !== v) { const k = par.get(x); es.push(k); ns.push(x); x = other(k, x); } return { es, ns }; };
+    E.forEach((e, k) => {
+      const [x, y] = e.n;
+      if (!par.has(x) || !par.has(y) || par.get(x) === k || par.get(y) === k) return;
+      const px = path(x), py = path(y), seen = new Set(px.ns);
+      if (py.ns.some((n) => seen.has(n))) return; // the two paths must meet only at v
+      const es = [...px.es, ...py.es, k].sort((s, t) => s - t), id = es.join(',');
+      if (!cands.has(id)) cands.set(id, es);
+    });
+  }
+  // walk round a loop: its edges in order, each with the direction it is run in
+  const walk = (es) => {
+    const left = new Set(es), first = es[0], edges = [{ e: E[first], o: 1 }];
+    left.delete(first);
+    let at = E[first].n[1];
+    while (left.size) {
+      const k = [...left].find((t) => E[t].n.includes(at));
+      if (k == null) break;
+      edges.push({ e: E[k], o: E[k].n[0] === at ? 1 : -1 });
+      at = other(k, at); left.delete(k);
+    }
+    return edges;
+  };
+  // the loop traced through the parts' terminals on the drawing (null without a drawing)
+  const outline = (edges) => {
+    const pts = [];
+    for (const { e, o } of edges) { const ps = geo && geo.el(e); if (!ps) return null; pts.push(...(o > 0 ? ps : [ps[1], ps[0]])); }
+    return pts.length > 2 ? pts : null;
+  };
+  // how long a loop is: round the drawing when there is one (so the meshes are its windows),
+  // else the number of parts in it
+  const size = (es) => {
+    const pts = outline(walk(es));
+    if (!pts) return es.length;
+    let len = 0;
+    pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; len += Math.hypot(q[0] - p[0], q[1] - p[1]); });
+    return 1e6 + len; // drawn loops all sort after any count, but among themselves by length
+  };
+  // the shortest independent ones (elimination over GF(2), one bit per edge)
+  const basis = new Map(), chosen = [];
+  const ranked = [...cands.values()].map((es) => ({ es, sz: size(es) })).sort((x, y) => x.sz - y.sz || x.es.join(',').localeCompare(y.es.join(',')));
+  for (const { es } of ranked) {
+    let vec = 0n;
+    for (const k of es) vec ^= 1n << BigInt(k);
+    while (vec) { const p = vec.toString(2).length - 1; if (!basis.has(p)) break; vec ^= basis.get(p); }
+    if (!vec) continue;
+    basis.set(vec.toString(2).length - 1, vec);
+    chosen.push(es);
+    if (chosen.length === want) break;
+  }
+  const meshes = chosen.map((es) => {
+    const edges = walk(es);
+    // clockwise on the drawing (screen y points down): positive shoelace area of the loop
+    const pts = outline(edges);
+    let pos = null, box = null;
+    if (pts) {
+      let area = 0;
+      pts.forEach((p, i) => { const q = pts[(i + 1) % pts.length]; area += p[0] * q[1] - q[0] * p[1]; });
+      if (area < 0) { edges.reverse(); edges.forEach((x) => { x.o = -x.o; }); }
+      // the label in the middle of the window
+      const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+      pos = [(box[0] + box[2]) / 2, (box[1] + box[3]) / 2];
+    }
+    return { edges, at: pos, box };
+  });
+  // numbered as a book does: left to right, then top to bottom
+  if (meshes.every((m) => m.at)) meshes.sort((m1, m2) => Math.round(m1.at[0] / 40) - Math.round(m2.at[0] / 40) || m1.at[1] - m2.at[1]);
+  meshes.forEach((m, k) => m.edges.forEach(({ e, o }) => { if (!co.has(e)) co.set(e, new Map()); co.get(e).set(k, (co.get(e).get(k) || 0) + o); }));
+  return { meshes, co: (e) => co.get(e) || new Map() };
+}
+
+const mi = (k) => `i_{${k + 1}}`;
+/** a sum of mesh currents, "i_1 − i_2" (coefficients ±1, ±2 …) */
+function meshExpr(cm) {
+  let s = '';
+  // positive terms first, as a book writes it: i_2 − i_1 rather than −i_1 + i_2
+  for (const [k, c] of [...cm].filter(([, c]) => c).sort((x, y) => (y[1] > 0) - (x[1] > 0) || x[0] - y[0])) {
+    const mag = Math.abs(c) === 1 ? '' : `${Math.abs(c)}`;
+    s += s ? ` ${c < 0 ? '−' : '+'} ${mag}${mi(k)}` : `${c < 0 ? '−' : ''}${mag}${mi(k)}`;
+  }
+  return s || '0';
+}
+const sumText = (xs, f) => xs.reduce((s, x, j) => (j ? `${s} ${tidy(x) < 0 ? '−' : '+'} ${f(Math.abs(x))}` : f(x)), '') || '0';
+
+/**
+ * The mesh-current method as a student writes it: the meshes (clockwise), mesh currents a
+ * current source fixes, KVL round each other mesh (a supermesh round a current source two
+ * meshes share), the solution, then the node voltages in `need` (from `ref`, through the
+ * resistors' currents). `sol` is the circuit solved by solveNet with `ref` at 0 V.
+ * Returns { lines, marks: [{ at, text }] for the drawing }.
+ */
+function meshLines(elems, sol, nm, geo, { need = [], ref = 0, max = 5 } = {}) {
+  const { meshes, co } = findMeshes(elems, geo);
+  const M = meshes.length;
+  const lines = [], marks = meshes.map((m, k) => ({ at: m.at, box: m.box, text: `i${k + 1}` })).filter((m) => m.at);
+  if (!M) return { lines: [tx('There is no closed loop, so no current flows.')], marks, meshes, co, val: [] };
+  lines.push(`${tx('Meshes, clockwise:')} ${meshes.map((m, k) => `${mi(k)} ${tx(`(${m.edges.map(({ e }) => e.name).join(', ')})`)}`).join(',  ')}`);
+  // the mesh currents, from the branch currents of the solved circuit
+  const A = Array.from({ length: M }, () => new Float64Array(M)), rhs = new Float64Array(M);
+  for (const e of elems) {
+    const cm = co(e);
+    if (!cm.size) continue;
+    const I = sol.cur(e);
+    for (const [k, o] of cm) { rhs[k] += o * I; for (const [j, p] of cm) A[k][j] += o * p; }
+  }
+  const val = gauss(A, rhs) || new Float64Array(M);
+  // current sources: one mesh → that mesh current is known; two → a supermesh
+  const known = new Map(), pairs = [], g = new UF();
+  let general = M > max;
+  for (const e of elems) {
+    if (e.kind !== 'I') continue;
+    const ks = [...co(e)].filter(([, o]) => o);
+    if (ks.length === 1) { if (known.has(ks[0][0])) general = true; known.set(ks[0][0], e); }
+    else if (ks.length === 2) { pairs.push({ e, ks }); g.union(ks[0][0], ks[1][0]); }
+    else if (ks.length) general = true;
+  }
+  const groups = new Map();
+  for (let k = 0; k < M; k++) { const r = g.find(k); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(k); }
+  const eqs = [];
+  let kvl = 0;
+  const tie = (G) => { for (const { e, ks } of pairs) if (G.includes(ks[0][0])) eqs.push(`${tx('and')} ${meshExpr(new Map(ks))} = ${fI(e.val)}  ${tx(`(${ms(e.name)})`)}`); };
+  for (const G of groups.values()) {
+    // a mesh with a current source of its own: no KVL round it (the source's voltage is unknown)
+    if (G.some((k) => known.has(k))) { tie(G); continue; }
+    // signs that make the shared current sources' (unknown) voltages cancel
+    const s = new Map([[G[0], 1]]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const { ks: [[j, oj], [k, ok]] } of pairs) {
+        if (!G.includes(j)) continue;
+        if (s.has(j) && !s.has(k)) { s.set(k, -s.get(j) * oj / ok); grew = true; }
+        else if (s.has(k) && !s.has(j)) { s.set(j, -s.get(k) * ok / oj); grew = true; }
+        else if (s.has(j) && s.has(k) && s.get(j) * oj + s.get(k) * ok !== 0) general = true;
+      }
+    }
+    const terms = [], rise = [];
+    for (const e of elems) {
+      const cm = co(e);
+      let w = 0;
+      for (const k of G) w += (s.get(k) || 0) * (cm.get(k) || 0);
+      if (!w) continue;
+      if (e.kind === 'R') {
+        const ex = meshExpr(new Map([...cm].map(([k, o]) => [k, o * Math.sign(w)])));
+        terms.push(`${Math.abs(w) > 1 ? Math.abs(w) + ' × ' : ''}${fR(e.val)} × ${/^[−]?i_\{\d+\}$/.test(ex) ? ex : `(${ex})`}`);
+      } else if (e.kind === 'V') rise.push(-w * e.val);
+      else general = true;
+    }
+    eqs.push(`${tx(G.length === 1 ? `KVL round mesh ${G[0] + 1}:` : `Supermesh (meshes ${G.map((k) => k + 1).join(', ')}):`)} ${terms.join(' + ') || '0'} = ${sumText(rise, fV)}`);
+    kvl++;
+    tie(G);
+  }
+  if (known.size + pairs.length + kvl !== M) general = true;
+  const unknown = [...Array(M).keys()].filter((k) => !known.has(k));
+  if (general) lines.push(tx(`(${M} mesh equations, solved together)`), ...[...Array(M).keys()].map((k) => `${mi(k)} = ${fI(val[k])}`));
+  else {
+    for (const [k, e] of known) lines.push(`${mi(k)} = ${fI(val[k])}  ${tx(`(set by ${ms(e.name)}${tidy(val[k]) < 0 ? ', which drives it the other way' : ''})`)}`);
+    lines.push(...eqs);
+    if (unknown.length) lines.push(`${tx('Solving:')} ` + unknown.map((k) => `${mi(k)} = ${fI(val[k])}`).join(',  '));
+  }
+  // node voltages: walk from the reference through resistors and voltage sources
+  const rest = need.filter((n, j) => n !== ref && need.indexOf(n) === j);
+  if (rest.length) {
+    const par = new Map([[ref, null]]), q = [ref];
+    for (let j = 0; j < q.length; j++) for (const e of elems) {
+      if (e.kind === 'I' || e.n[0] === e.n[1] || !e.n.includes(q[j])) continue;
+      const w = e.n[0] === q[j] ? e.n[1] : e.n[0];
+      if (!par.has(w)) { par.set(w, { e, from: q[j] }); q.push(w); }
+    }
+    const said = new Set(), curLines = [], vLines = [];
+    for (const x of rest) {
+      if (!par.has(x)) { vLines.push(`V_{${nm(x)}} = ${fV(sol.v[x])}`); continue; }
+      const sym = [], num = [];
+      for (let y = x; par.get(y); y = par.get(y).from) {
+        const { e, from } = par.get(y);
+        if (e.kind === 'V') { const r = y === e.n[0] ? e.val : -e.val; sym.unshift(`${r < 0 ? '−' : '+'} ${fV(Math.abs(r))}`); num.unshift(`${r < 0 ? '−' : '+'} ${fV(Math.abs(r))}`); continue; }
+        // the resistor's current from y towards the reference side makes y higher by I R
+        const d = e.n[0] === y ? 1 : -1, I = d * sol.cur(e), nmI = `I_{${e.name}}`;
+        if (!said.has(e.name + y)) {
+          said.add(e.name + y);
+          curLines.push(`${nmI} = ${meshExpr(new Map([...co(e)].map(([k, o]) => [k, o * d])))} = ${fI(I)}  ${tx(`(${nm(y)} → ${nm(from)})`)}`);
+        }
+        sym.unshift(`+ ${nmI} ${ms(e.name)}`); num.unshift(`+ ${fS(I, fI)} × ${fR(e.val)}`);
+      }
+      const clean = (t) => t.join(' ').replace(/^\+ /, '').replace(/^− /, '−');
+      vLines.push(`V_{${nm(x)}} = ${clean(sym)} = ${clean(num)} = ${fV(sol.v[x] - sol.v[ref])}`);
+    }
+    lines.push(...curLines, ...vLines);
+  }
+  return { lines, marks, meshes, co, val };
+}
+
 // ------------------------------------------------------------------ setup
 /** What the theorems can work on in this document: the network, the possible loads and the sources. */
 export function prepareTheorem(doc) {
@@ -588,7 +804,7 @@ function thevenin(c) {
     P('Replace everything left of a–b by V_th in series with R_th, and connect R_L back between a and b. Now it is one simple loop:'),
     F(`I_L = ${fr('V_{th}', 'R_{th} + R_L')}`, `   = ${fr(fV(Vth), `${fR(Rth)} + ${fR(RL)}`)} = ${fI(I)}`, `V_L = I_L R_L = ${fI(I)} × ${fR(RL)} = ${fV(V)}`),
     ...answerBlocks(c, I, V),
-    ...(Rth > 0 ? [TIP(`Maximum power transfer: R_L would take the most power, P_max = Vth² / (4·Rth) = ${fP((Vth * Vth) / (4 * Rth))}, when R_L = R_th = ${fR(Rth)}.`)] : []),
+    ...(Rth > 0 ? [TIP(`Maximum power transfer: R_L would take the most power, P_max = V_th² / (4·R_th) = ${fP((Vth * Vth) / (4 * Rth))}, when R_L = R_th = ${fR(Rth)}.`)] : []),
   ], ladderFig(c, Rth > 0 ? [
     { id: 'Vth', kind: 'V', n: [-1, b], val: Vth, name: 'Vth' },
     { id: 'Rth', kind: 'R', n: [-1, a], val: Rth, name: 'Rth' },
@@ -602,13 +818,44 @@ function vthStep(c, title) {
   const others = c.elems.filter((e) => e !== T);
   const sol = solveNet(others, c.nodeCount, c.ref);
   const Vth = sol.v[a] - sol.v[b];
+  const an = analysis(c, others, sol, c.ref, c.nm, [a, b]);
   return { Vth, step: step(title, [
-    P('Turn the sources back on and leave a–b **open** (R_L still out). V_th is the voltage between a and b now. Solve the node voltages' + refText(c, c.ref)),
-    F(nodalLines(others, sol, c.ref, c.nm)),
+    P('Turn the sources back on and leave a–b **open** (R_L still out). V_th is the voltage between a and b now.'),
+    an.block,
     F(`V_{th} = V_a − V_b = ${fS(sol.v[a], fV)} − ${fS(sol.v[b], fV)} = ${fV(Vth)}`),
-  ], boardFig(c, { hide: [T.src], ab: true, show: 'Vth', tags: tagNodes(c, others) }), [['V_th', fV(Vth)]]) };
+  ], boardFig(c, { hide: [T.src], ab: true, show: 'Vth', tags: tagNodes(c, others), meshes: an.marks }), [['V_th', fV(Vth)]]) };
 }
-const refText = (c, ref, nm = c.nm) => (nm(ref) === 'gnd' ? ' (ground = 0 V):' : ` (taking ${nm(ref)} as 0 V):`);
+const refText = (c, ref, nm = c.nm) => (nm(ref) === 'gnd' ? ' (ground = 0\u00a0V):' : ` (taking ${nm(ref)} as 0\u00a0V):`);
+
+/** Where the drawing puts each part's terminals (n[0]'s first): makes the meshes clockwise and places their labels. */
+const geoOf = (c) => ({
+  el: (e) => {
+    const o = e.orig || e, ps = c.net.posts[o.src];
+    if (e.noGeo || !ps || ps.length < 2) return null;
+    // a source with internal resistance: the ideal source is its + half, the resistance its − half
+    const mid = [(ps[0][0] + ps[1][0]) / 2, (ps[0][1] + ps[1][1]) / 2];
+    if (o.internal) return [mid, ps[1]];
+    if (o.kind === 'V' && c.net.elems.some((x) => x.internal && x.src === o.src)) return [ps[0], mid];
+    return [ps[0], ps[1]];
+  },
+});
+
+/**
+ * A network solved by nodal or by mesh analysis, both written out: the reader switches between
+ * them. need: the nodes whose voltages the step uses next (the mesh version works them out).
+ * lead: { nodal, mesh } replaces the sentence before the equations.
+ */
+function analysis(c, elems, sol, ref, nm, need = [], lead = {}) {
+  const mesh = meshLines(elems, sol, nm, geoOf(c), { need, ref });
+  const more = need.some((n) => n !== ref);
+  return {
+    block: { t: 'alt', opts: [
+      { id: 'nodal', label: 'Nodal analysis', blocks: [P(lead.nodal || `Solve the node voltages${refText(c, ref, nm)}`), F(nodalLines(elems, sol, ref, nm))] },
+      { id: 'mesh', label: 'Mesh analysis', blocks: [P(lead.mesh || `Solve by mesh currents — one current round each mesh, clockwise${more ? `; then the node voltages${refText(c, ref, nm)}` : ':'}`), F(mesh.lines)] },
+    ] },
+    marks: mesh.marks,
+  };
+}
 
 /** The final equivalents and the source-transformation stages, drawn as a ladder with the load on the right. */
 function ladderFig(c, elems, hi = [], load = {}) {
@@ -650,13 +897,16 @@ function norton(c) {
     into.push([o, x]);
   }
   const In = into.reduce((s, [, x]) => s + x, 0);
+  const an = analysis(c, shorted, sol, ref, nm2, [], {
+    nodal: 'With a and b joined they are one node. Solve the node voltages' + (nm2(ref) === 'gnd' ? ' (ground = 0 V):' : ` (taking ${nm2(ref)} = b as 0 V):`),
+    mesh: 'The short is a wire in the meshes it closes. Solve by mesh currents — one current round each mesh, clockwise:',
+  });
   steps.push(step('Step 2 — Find I_N', [
     P('Turn the sources back on and join a and b with a **short circuit** (a wire in place of R_L). I_N is the current flowing through that wire from a to b.'),
-    P('With a and b joined they are one node. Solve the node voltages' + (nm2(ref) === 'gnd' ? ' (ground = 0 V):' : ` (taking ${nm2(ref)} = b as 0 V):`)),
-    F(nodalLines(shorted, sol, ref, nm2)),
+    an.block,
     P('By KCL at a, the current leaving through the short equals the current arriving at a from the rest of the circuit:'),
     F(into.map(([o, x]) => `${tx('current from')} ${ms(o.name)} = ${fI(x)}`), `I_N = ${into.map(([, x]) => fS(x, fI)).join(' + ') || '0'} = ${fI(In)}`),
-  ], boardFig(c, { hide: [T.src], ab: true, shortAB: true, show: 'IN', tags: tagNodes(c, others, nm2) }), [['I_N', fI(In)]]));
+  ], boardFig(c, { hide: [T.src], ab: true, shortAB: true, show: 'IN', tags: tagNodes(c, others, nm2), meshes: an.marks }), [['I_N', fI(In)]]));
   const I = Number.isFinite(Rn) ? (In * Rn) / (Rn + RL) : In, V = I * RL;
   steps.push(step('Step 3 — Norton equivalent circuit', [
     P('Replace everything left of a–b by I_N in parallel with R_N, and connect R_L back. I_N splits between R_N and R_L (current divider):'),
@@ -665,7 +915,7 @@ function norton(c) {
       : [`${tx('R_N is infinite, so all of I_N flows in R_L:')} I_L = I_N = ${fI(I)}`],
     `V_L = I_L R_L = ${fI(I)} × ${fR(RL)} = ${fV(V)}`),
     ...answerBlocks(c, I, V),
-    ...(Number.isFinite(Rn) ? [TIP(`Thevenin and Norton are the same circuit seen two ways: Vth = IN × RN = ${fV(In * Rn)}, and Rth = RN.`)] : []),
+    ...(Number.isFinite(Rn) ? [TIP(`Thevenin and Norton are the same circuit seen two ways: V_th = I_N × R_N = ${fV(In * Rn)}, and R_th = R_N.`)] : []),
   ], ladderFig(c, [
     { id: 'IN', kind: 'I', n: [b, a], val: In, name: 'IN' },
     ...(Number.isFinite(Rn) ? [{ id: 'RN', kind: 'R', n: [a, b], val: Rn, name: 'RN' }] : []),
@@ -683,6 +933,7 @@ function contribution(c, s) {
   if (!sol) return { error: `With only ${s.name} on the circuit cannot be solved (${s.kind === 'V' ? 'it is shorted by another voltage source' : 'its current has no path'}).` };
   const I = A === B ? 0 : (sol.v[A] - sol.v[B]) / c.RL;
   const blocks = [P(`Keep only **${s.name}** on and turn the other sources off.`), ...offLine(k)];
+  let marks = [];
   const start = S.kind === 'V' ? S.n[0] : S.n[1], end = S.kind === 'V' ? S.n[1] : S.n[0];
   const rest = k.elems.filter((e) => e !== S);
   const sp = start === end ? null : spTree(rest, start, end);
@@ -713,10 +964,12 @@ function contribution(c, s) {
       blocks.push(P('Follow the current from the source to R_L: in series the current is the same and the voltage divides; in parallel the voltage is the same and the current divides.'), F(out));
     } else blocks.push(F(out), P('No current from this source reaches R_L.'));
   } else {
-    blocks.push(P('Solve this circuit by node voltages:'), F(nodalLines(k.elems, sol, k.m(c.ref), (n) => (n === A ? 'a' : n === B ? 'b' : c.nm(n)))));
+    const an = analysis(c, k.elems, sol, k.m(c.ref), (n) => (n === A ? 'a' : n === B ? 'b' : c.nm(n)), [A, B], { nodal: 'This is not a simple series–parallel circuit: solve it by node voltages:', mesh: 'This is not a simple series–parallel circuit: solve it by mesh currents (clockwise), then the voltages at a and b:' });
+    blocks.push(an.block);
+    marks = an.marks;
   }
   blocks.push(F(`I_L(${ms(s.name)}) = ${fI(I)}  ${tx(`(a → b)${signNote(I, 'current')}`)}`, `V_L(${ms(s.name)}) = ${fV(I * c.RL)}`));
-  return { I, V: I * c.RL, blocks, kill: killSpec(k) };
+  return { I, V: I * c.RL, blocks, kill: killSpec(k), marks };
 }
 
 function superposition(c) {
@@ -730,7 +983,7 @@ function superposition(c) {
     const r = contribution(c, s);
     if (r.error) return { ok: false, error: r.error };
     parts.push([s, r]);
-    steps.push(step(`Step ${parts.length} — Only ${s.name} on`, r.blocks, boardFig(c, { highlight: [T.src], ab: true, ...r.kill, keep: s.src }), [[`I_L(${s.name})`, fI(r.I)]]));
+    steps.push(step(`Step ${parts.length} — Only ${s.name} on`, r.blocks, boardFig(c, { highlight: [T.src], ab: true, ...r.kill, keep: s.src, meshes: r.marks }), [[`I_L(${s.name})`, fI(r.I)]]));
   }
   const I = parts.reduce((x, [, r]) => x + r.I, 0), V = I * c.RL;
   const sumP = parts.reduce((x, [, r]) => x + r.I * r.I * c.RL, 0);
@@ -883,7 +1136,7 @@ function reciprocity(c) {
     // S's place becomes a short; S goes in series with R_L, driving current through it from a to b
     const rep = Math.min(p, q), mp = (n) => (n === p || n === q ? rep : n);
     const els = c.elems.filter((e) => e !== S && e !== T).map((e) => ({ ...e, n: e.n.map(mp), orig: e }));
-    const T2 = { ...T, n: [mp(a), m] }, S2 = { ...S, n: [mp(b), m] };
+    const T2 = { ...T, n: [mp(a), m] }, S2 = { ...S, n: [mp(b), m], noGeo: true };
     const all = [...els, T2, S2], sol = solveNet(all, c.nodeCount + 2, mp(c.ref));
     // the current through the short from q to p is the current leaving p's side into everything else
     let Ix = 0;
@@ -900,8 +1153,8 @@ function reciprocity(c) {
     const joined = [a, b, c.ref, p].find((n) => mp(n) === rep);
     const nmM = (n) => (n === rep ? c.nm(joined) : nm2(n));
     steps.push(step(`Step 2 — Move ${S.name} into the load’s branch`, [
-      P(`Short ${S.name}’s old place (an ammeter there reads the current) and put ${S.name} in series with R_L so that it drives current through R_L from a to b (o is the new point between R_L and ${S.name}). Solve${refText(c, mp(c.ref), nmM)}`),
-      F(nodalLines(all, sol, mp(c.ref), nmM)),
+      P(`Short ${S.name}’s old place (an ammeter there reads the current) and put ${S.name} in series with R_L so that it drives current through R_L from a to b (o is the new point between R_L and ${S.name}).`),
+      analysis(c, all, sol, mp(c.ref), nmM).block,
       P(`The current in the short (in the direction ${S.name} pushed it) is what leaves point ${c.nm(p)} into the rest of the circuit:`),
       F(parts.length === 1 ? [`I = ${tx('current into')} ${ms(parts[0][0])} = ${fI(Ix)}`] : [...parts.map(([n, x]) => `${tx('current into')} ${ms(n)} = ${fI(x)}`), `I = ${parts.map(([, x]) => fS(x, fI)).join(' + ') || '0'} = ${fI(Ix)}`]),
     ], boardFig(c, { highlight: [T.src], ab: true, arrow: `${S.name} here`, meter: { src: S.src, type: 'ammeter', text: 'I = ?' } }), [['I', fI(Ix)]]));
@@ -916,12 +1169,12 @@ function reciprocity(c) {
   }
   // a current source: compare voltages
   steps.push(step(`Step 1 — ${S.name} where it is: voltage across R_L`, one.blocks.slice(1), boardFig(c, { highlight: [T.src, S.src], ab: true }), [['V_L', fV(one.V)]]));
-  const S2 = { ...S, n: [b, a] }; // now pushes its current into a, across the load
+  const S2 = { ...S, n: [b, a], noGeo: true }; // now pushes its current into a, across the load
   const all = [...c.elems.filter((e) => e !== S), S2], sol = solveNet(all, c.nodeCount, c.ref);
   const Vx = sol.v[q] - sol.v[p];
   steps.push(step(`Step 2 — Move ${S.name} across the load`, [
-    P(`Take ${S.name} out (open its old place; a voltmeter there reads the voltage) and connect it across R_L so that it pushes its current into a. Solve the node voltages${refText(c, c.ref)}`),
-    F(nodalLines(all, sol, c.ref, c.nm)),
+    P(`Take ${S.name} out (open its old place; a voltmeter there reads the voltage) and connect it across R_L so that it pushes its current into a.`),
+    analysis(c, all, sol, c.ref, c.nm, [q, p]).block,
     F(`V = V_{${c.nm(q)}} − V_{${c.nm(p)}} = ${fV(Vx)}  ${tx(`(where ${ms(S.name)} was; + on the side it pushed current into)`)}`),
   ], boardFig(c, { highlight: [T.src], ab: true, arrow: `${S.name} here`, meter: { src: S.src, type: 'voltmeter', text: 'V = ?' } }), [['V', fV(Vx)]]));
   steps.push(step('Step 3 — Compare', [
@@ -937,8 +1190,9 @@ function tellegen(c) {
   const { T } = c;
   const sol = solveNet(c.elems, c.nodeCount, c.ref);
   const steps = [givenStep(c, [P('Tellegen’s theorem: in any circuit, the powers of all the branches add up to **zero**, Σ v·i = 0, when every branch voltage and current follow the same sign convention (current entering the + end). In other words: the power the sources deliver is exactly the power the other parts take.')])];
-  steps.push(step('Step 1 — Solve the circuit', [P('Find every node voltage' + refText(c, c.ref)), F(nodalLines(c.elems, sol, c.ref, c.nm))],
-    boardFig(c, { highlight: [T.src], ab: true, tags: tagNodes(c, c.elems) })));
+  const an = analysis(c, c.elems, sol, c.ref, c.nm, [], { nodal: 'Find every node voltage' + refText(c, c.ref), mesh: 'Find every branch current by mesh currents — one current round each mesh, clockwise (a part shared by two meshes carries their difference):' });
+  steps.push(step('Step 1 — Solve the circuit', [an.block],
+    boardFig(c, { highlight: [T.src], ab: true, tags: tagNodes(c, c.elems), meshes: an.marks })));
   const rows = c.elems.map((e) => { const v = sol.v[e.n[0]] - sol.v[e.n[1]], i = sol.cur(e); return { e, v, i, p: v * i }; });
   steps.push(step('Step 2 — Voltage, current and power of every branch', [
     P('For each part take v across it and i through it the same way round — the current entering the end that v is measured from (the + end of a voltage source, the tail of a current source’s arrow). Then p = v × i: positive means the part **takes** power, negative means it **gives** (delivers) power.'),
@@ -1207,16 +1461,56 @@ function sourceTransformation(c) {
   return done(c, 'source', steps, I, V);
 }
 
+// ------------------------------------------------------------------ nodal and mesh analysis
+function nodalMethod(c) {
+  const { T, a, b, RL } = c;
+  const sol = solveNet(c.elems, c.nodeCount, c.ref);
+  const steps = [givenStep(c, [P('Nodal analysis: take one node as the **reference** (0 V) and call the voltage of every other node V. At each node the currents leaving add up to zero (KCL), each written as (V here − V there) / R. A voltage source fixes the voltage of its node, or joins its two nodes into a **supernode**. Solve, then V_L = V_a − V_b and I_L = V_L / R_L.')])];
+  steps.push(step('Step 1 — Node equations', [P(`Name the nodes and write KCL at each one${refText(c, c.ref)}`), F(nodalLines(c.elems, sol, c.ref, c.nm))],
+    boardFig(c, { highlight: [T.src], ab: true, tags: tagNodes(c, c.elems), mode: 'nodal' })));
+  const V = sol.v[a] - sol.v[b], I = V / RL;
+  steps.push(step('Step 2 — The load', [
+    F(`V_L = V_a − V_b = ${fS(sol.v[a], fV)} − ${fS(sol.v[b], fV)} = ${fV(V)}`, `I_L = ${fr('V_L', 'R_L')} = ${fr(fV(V), fR(RL))} = ${fI(I)}`),
+    ...answerBlocks(c, I, V),
+  ], boardFig(c, { highlight: [T.src], ab: true, arrow: true }), [['I_L', fI(I)], ['V_L', fV(V)]]));
+  return done(c, 'nodal', steps, I, V);
+}
+
+function meshMethod(c) {
+  const { T, a, RL } = c;
+  const sol = solveNet(c.elems, c.nodeCount, c.ref);
+  const m = meshLines(c.elems, sol, c.nm, geoOf(c));
+  const steps = [givenStep(c, [P('Mesh analysis: every window of the circuit is a **mesh**. Give each one a current i₁, i₂, … flowing clockwise round it; a part shared by two meshes carries the difference of their currents. Round each mesh the voltage drops across the resistors add up to the source voltages (KVL). A current source fixes the current of its mesh, or joins two meshes into a **supermesh**. Solve, then the load current follows from the mesh currents through it.')])];
+  steps.push(step('Step 1 — The meshes', [
+    P(m.meshes.length ? `This circuit has ${m.meshes.length} mesh${m.meshes.length > 1 ? 'es' : ''} (independent loops):` : 'This circuit has no closed loop.'),
+    F(m.meshes.map((x, k) => `${mi(k)}${tx(':')} ${x.edges.map(({ e }) => ms(e.name)).join(' → ')}`)),
+  ], boardFig(c, { highlight: [T.src], ab: true, meshes: m.marks, mode: 'mesh' })));
+  steps.push(step('Step 2 — Mesh equations', [P('Write KVL round each mesh (drops across the resistors = rises of the sources, going clockwise) and solve:'), F(m.lines.slice(1))],
+    boardFig(c, { highlight: [T.src], ab: true, meshes: m.marks, mode: 'mesh' })));
+  // the load current from a to b, from the mesh currents through it
+  const d = T.n[0] === a ? 1 : -1, cm = [...m.co(T)].filter(([, o]) => o).map(([k, o]) => [k, o * d]).sort((x, y) => x[0] - y[0]);
+  const I = d * sol.cur(T), V = I * RL;
+  const nums = cm.map(([k, o], j) => `${o < 0 ? (j ? '− ' : '−') : j ? '+ ' : ''}${fS(m.val[k], fI)}`).join(' ');
+  steps.push(step('Step 3 — The load', [
+    P(cm.length > 1 ? `R_L is shared by ${cm.length} meshes: its current (a → b) is the difference of their currents.` : cm.length ? 'R_L is in one mesh only: its current is that mesh current.' : 'No mesh runs through R_L, so no current flows in it.'),
+    F(cm.length ? `I_L = ${meshExpr(new Map(cm))}${cm.length > 1 || cm[0][1] < 0 ? ` = ${nums}` : ''} = ${fI(I)}` : `I_L = 0 A`, `V_L = I_L R_L = ${fI(I)} × ${fR(RL)} = ${fV(V)}`),
+    ...answerBlocks(c, I, V),
+  ], boardFig(c, { highlight: [T.src], ab: true, arrow: true }), [['I_L', fI(I)], ['V_L', fV(V)]]));
+  return done(c, 'mesh', steps, I, V);
+}
+
 // ------------------------------------------------------------------ entry
 export const THEOREMS = [
   { id: 'thevenin', title: 'Thevenin’s theorem', short: 'Thevenin', desc: 'Replace the circuit seen by the load with one voltage source V_th in series with R_th.' },
   { id: 'norton', title: 'Norton’s theorem', short: 'Norton', desc: 'Replace it with one current source I_N in parallel with R_N.' },
   { id: 'superposition', title: 'Superposition theorem', short: 'Superposition', desc: 'Take one source at a time (the others off), then add up the effects.' },
   { id: 'source', title: 'Source transformation', short: 'Source transformation', desc: 'Swap V + series R ⇄ I ∥ R and combine, step by step, until one source and one resistor are left.' },
-  { id: 'maxpower', title: 'Maximum power transfer theorem', short: 'Maximum power transfer', desc: 'The load takes the most power when R_L = R_th: find R_th, V_th and P_max = V_th² / 4R_th.' },
+  { id: 'maxpower', title: 'Maximum power transfer theorem', short: 'Maximum power transfer', desc: 'The load takes the most power when R_L = R_th: find R_th, V_th and P_max = V_th² / (4·R_th).' },
   { id: 'millman', title: 'Millman’s theorem', short: 'Millman', desc: 'Parallel branches (sources with series resistors) between two points → one source V_M with R_M.' },
   { id: 'reciprocity', title: 'Reciprocity theorem', short: 'Reciprocity', desc: 'Move the single source into the load’s branch: the current where it was is the same.' },
   { id: 'tellegen', title: 'Tellegen’s theorem', short: 'Tellegen (power balance)', desc: 'The powers of all the branches add up to zero: sources deliver what the resistors take.' },
+  { id: 'nodal', method: true, title: 'Nodal analysis', short: 'Nodal analysis', desc: 'Node voltages from KCL at every node (a supernode round a voltage source), then the load.' },
+  { id: 'mesh', method: true, title: 'Mesh analysis', short: 'Mesh analysis', desc: 'Mesh currents from KVL round every window of the circuit (a supermesh round a current source), then the load.' },
 ];
 
 /**
@@ -1227,6 +1521,6 @@ export function runTheorem(prep, theorem, src, want = 'I') {
   const c = context(prep.net, src, want);
   if (c.error) return { ok: false, error: c.error };
   c.style = prep.style;
-  const fn = { thevenin, norton, superposition, source: sourceTransformation, maxpower: maxPower, millman, reciprocity, tellegen }[theorem];
+  const fn = { thevenin, norton, superposition, source: sourceTransformation, maxpower: maxPower, millman, reciprocity, tellegen, nodal: nodalMethod, mesh: meshMethod }[theorem];
   return fn ? fn(c) : { ok: false, error: 'Unknown theorem' };
 }

@@ -11,7 +11,8 @@ import { icon } from './icons.js';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 /** **bold** and X_sub → X<sub>sub</sub> */
 const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\b([A-Za-z])_([A-Za-z0-9]+)/g, '$1<sub>$2</sub>');
-const BADGE = { thevenin: 'Vth', norton: 'IN', superposition: 'Σ', source: 'V⇄I', maxpower: 'Pmax', millman: 'VM', reciprocity: 'x⇄y', tellegen: 'Σp=0' };
+const BADGE = { thevenin: 'V_th', norton: 'I_N', superposition: 'Σ', source: 'V⇄I', maxpower: 'P_max', millman: 'V_M', reciprocity: 'x⇄y', tellegen: 'Σp=0', nodal: 'KCL', mesh: 'KVL' };
+const METHOD_KEY = 'raptickt.theorem.method';
 
 export class TheoremView {
   constructor(editor, host) {
@@ -19,6 +20,8 @@ export class TheoremView {
     this.host = host;
     this.stage = 'pick';
     this.want = 'I';
+    // how node voltages are found inside a theorem's steps: 'nodal' or 'mesh' (remembered)
+    try { this.method = localStorage.getItem(METHOD_KEY) === 'mesh' ? 'mesh' : 'nodal'; } catch { this.method = 'nodal'; }
   }
 
   get isOpen() { return this.host.classList.contains('open'); }
@@ -78,13 +81,15 @@ export class TheoremView {
     body.innerHTML = `
       <p class="an-help">Solve this circuit by hand, the way it is done in class: pick a network theorem, pick the resistor you want, and follow every step — each one with its circuit drawn — to the final equivalent circuit and the answer.</p>
       ${issues.map((t) => `<div class="th-warn">${icon('info', 16)}<span>${t}</span></div>`).join('')}
-      <div class="th-cards">${THEOREMS.map((t) => `
+      ${[['Network theorems', THEOREMS.filter((t) => !t.method)], ['Analysis methods', THEOREMS.filter((t) => t.method)]].map(([head, list]) => `
+      <h4 class="th-group">${head}</h4>
+      <div class="th-cards">${list.map((t) => `
         <button class="th-card" data-th="${t.id}" ${blocked ? 'disabled' : ''}>
-          <i class="th-badge">${esc(BADGE[t.id])}</i>
+          <i class="th-badge"><span>${inline(BADGE[t.id])}</span></i>
           <span><b>${esc(t.title)}</b><small>${inline(t.desc)}</small></span>
           ${icon('chevLeft', 18)}
         </button>`).join('')}
-      </div>`;
+      </div>`).join('')}`;
     body.querySelectorAll('[data-th]').forEach((b) => b.addEventListener('click', () => { this.theorem = b.dataset.th; this.go('target'); }));
   }
 
@@ -172,12 +177,23 @@ export class TheoremView {
     body.querySelector('[data-x=target]').addEventListener('click', () => this.go('target'));
     body.querySelector('[data-x=run]').addEventListener('click', () => this.runCircuit());
     const cvs = body.querySelectorAll('.th-step');
-    requestAnimationFrame(() => res.steps.forEach((s, i) => {
-      const cv = cvs[i].querySelector('canvas');
+    const draw = (i) => {
+      const s = res.steps[i], cv = cvs[i].querySelector('canvas');
       if (!cv) return;
-      const built = s.fig.kind === 'board' ? boardFigure(this.ed.doc, s.fig, prep.net) : ladderFigure(s.fig);
+      const built = s.fig.kind === 'board' ? boardFigure(this.ed.doc, s.fig, prep.net, this.method) : ladderFigure(s.fig);
       if (built) drawFigure(cv, built, this.theme(), this.ed.settings);
       else cv.remove();
+    };
+    requestAnimationFrame(() => res.steps.forEach((s, i) => draw(i)));
+    // Nodal ⇄ Mesh: every switch on the page follows, and the drawings show node names or mesh currents
+    body.querySelectorAll('.th-alt [data-m]').forEach((b) => b.addEventListener('click', () => {
+      const m = b.dataset.m;
+      if (m === this.method) return;
+      this.method = m;
+      try { localStorage.setItem(METHOD_KEY, m); } catch { /* not kept */ }
+      body.querySelectorAll('.th-alt [data-m]').forEach((x) => x.classList.toggle('on', x.dataset.m === m));
+      body.querySelectorAll('.th-alt-b').forEach((x) => { x.hidden = x.dataset.b !== m; });
+      res.steps.forEach((s, i) => { if (s.fig && s.fig.meshes) draw(i); });
     }));
   }
 
@@ -190,6 +206,10 @@ export class TheoremView {
         <tbody>${b.rows.map((r, i) => `<tr class="${i === b.mark ? 'mark' : ''}">${r.map((x) => `<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
     }
     if (b.t === 'curve') return curveSVG(b);
+    if (b.t === 'alt') {
+      return `<div class="th-alt"><div class="th-seg th-mseg">${b.opts.map((o) => `<button data-m="${o.id}" class="${o.id === this.method ? 'on' : ''}">${esc(o.label)}</button>`).join('')}</div>
+        ${b.opts.map((o) => `<div class="th-alt-b" data-b="${o.id}" ${o.id === this.method ? '' : 'hidden'}>${o.blocks.map((x) => this.block(x)).join('')}</div>`).join('')}</div>`;
+    }
     return '';
   }
 
@@ -235,6 +255,8 @@ function curveSVG({ pts, now, best, xl, yl }) {
  * x_{s} with the letter in italics and s below, x^{2} above, \t{words} as plain words.
  */
 function mathHTML(src) {
+  // a number keeps its unit and a product its factors on one line; minus signs are true minus signs
+  src = src.replace(/(^|[\s(=])-(?=\d)/g, '$1−').replace(/(\d) (?=[A-Za-zΩµμ°%])/g, '$1\u00a0').replace(/ × /g, '\u00a0×\u00a0');
   let i = 0;
   const parse = (inGroup) => {
     let out = '';

@@ -2,7 +2,7 @@
 // with the textbook values of Rth, Vth, IN on circuits worked by hand.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runTheorem, prepareTheorem, extractNetwork, spTree, solveNet } from '../src/engine/theorem.js';
+import { runTheorem, prepareTheorem, extractNetwork, spTree, solveNet, plainMath } from '../src/engine/theorem.js';
 import { getType } from '../src/elements/index.js';
 import { CircuitDoc } from '../src/ui/doc.js';
 
@@ -13,7 +13,9 @@ function net(list, nodeCount = 10) {
 }
 const src = (prep, name) => prep.net.elems.find((e) => e.name === name).src;
 const close = (x, y, what) => assert.ok(Math.abs(x - y) <= 1e-9 * Math.max(1, Math.abs(y)), `${what}: ${x} ≠ ${y}`);
-const ALL = ['thevenin', 'norton', 'superposition', 'source', 'maxpower', 'millman', 'reciprocity', 'tellegen'];
+const ALL = ['thevenin', 'norton', 'superposition', 'source', 'maxpower', 'millman', 'reciprocity', 'tellegen', 'nodal', 'mesh'];
+/** every line of text in a step's blocks, both versions of a Nodal ⇄ Mesh switch included */
+const texts = (b) => (b.t === 'alt' ? b.opts.flatMap((o) => o.blocks.flatMap(texts)) : b.lines || b.rows?.flat() || (b.text ? [b.text] : []));
 
 // 12 V, R1 4 Ω to node 2, R2 6 Ω to ground, R3 3 Ω to the load RL 5 Ω
 const ladder = () => net([['V1', 'V', 1, 0, 12], ['R1', 'R', 1, 2, 4], ['R2', 'R', 2, 0, 6], ['R3', 'R', 2, 3, 3], ['RL', 'R', 3, 0, 5]]);
@@ -74,7 +76,7 @@ test('every theorem agrees with the direct solution on assorted circuits', () =>
     close(r.answer.I, r.full.I, `${th} IL`);
     close(r.answer.V, r.full.V, `${th} VL`);
     assert.ok(r.answer.I >= -1e-12, `${th}: a is the higher end, so IL ≥ 0`);
-    for (const s of r.steps) for (const b of s.blocks) for (const l of b.lines || b.rows?.flat() || (b.text ? [b.text] : [])) assert.doesNotMatch(String(l), /NaN|undefined/, `${th}: ${l}`);
+    for (const s of r.steps) for (const l of s.blocks.flatMap(texts)) assert.doesNotMatch(String(l), /NaN|undefined/, `${th}: ${l}`);
   }
 });
 
@@ -210,4 +212,69 @@ test('a bridge: Rth by a star–delta swap equals the test-current value', () =>
   const s = solveNet([...dead, { kind: 'I', n: [3, 2], val: 1 }], 10, 3);
   close(r.Rth, s.v[2] - s.v[3], 'Rth');
   close(r.answer.I, r.full.I, 'IL');
+});
+
+// ------------------------------------------------------------------ nodal and mesh analysis
+const plain = (r) => r.steps.flatMap((s) => s.blocks.flatMap(texts)).map((l) => plainMath(String(l))).join('\n');
+
+test('mesh analysis: a ladder has two meshes, KVL round each', () => {
+  const p = ladder();
+  const r = runTheorem(p, 'mesh', src(p, 'RL'));
+  assert.ok(r.ok, r.error);
+  close(r.answer.I, 7.2 / 10.4, 'IL');
+  const t = plain(r);
+  assert.match(t, /KVL round mesh 1/);
+  assert.match(t, /KVL round mesh 2/);
+  assert.doesNotMatch(t, /solved together/);
+});
+
+test('mesh analysis: a current source in one mesh sets it, one shared by two makes a supermesh', () => {
+  // I1 on the outside of the right mesh
+  let p = net([['V1', 'V', 1, 0, 12], ['R1', 'R', 1, 2, 4], ['R2', 'R', 2, 0, 6], ['RL', 'R', 2, 3, 3], ['I1', 'I', 0, 3, 2]]);
+  let r = runTheorem(p, 'mesh', src(p, 'RL'));
+  assert.ok(r.ok, r.error);
+  close(r.answer.I, r.full.I, 'IL');
+  assert.match(plain(r), /set by I1/);
+  // I1 between the two meshes
+  p = net([['V1', 'V', 1, 0, 12], ['R1', 'R', 1, 2, 2], ['I1', 'I', 2, 0, 1], ['R2', 'R', 2, 3, 4], ['RL', 'R', 3, 0, 6]]);
+  r = runTheorem(p, 'mesh', src(p, 'RL'));
+  assert.ok(r.ok, r.error);
+  close(r.answer.I, r.full.I, 'IL');
+  const t = plain(r);
+  assert.match(t, /Supermesh/);
+  assert.match(t, /and .* = 1 A/);
+});
+
+test('Thevenin’s V_th can be read by nodal or by mesh analysis', () => {
+  const p = ladder();
+  const r = runTheorem(p, 'thevenin', src(p, 'RL'));
+  const alt = r.steps.flatMap((s) => s.blocks).find((b) => b.t === 'alt');
+  assert.ok(alt, 'a Nodal ⇄ Mesh switch');
+  assert.deepEqual(alt.opts.map((o) => o.id), ['nodal', 'mesh']);
+  const mesh = alt.opts[1].blocks.flatMap(texts).join('\n');
+  assert.match(mesh, /KVL round mesh 1/);
+  assert.match(mesh, /V_\{a\} = /, 'works out the voltage at a');
+});
+
+test('nodal analysis writes KCL at the nodes and agrees', () => {
+  const p = net([['V1', 'V', 1, 0, 10], ['R1', 'R', 1, 2, 2], ['R2', 'R', 2, 0, 4], ['R3', 'R', 2, 3, 6], ['V2', 'V', 4, 0, 5], ['R4', 'R', 4, 3, 3], ['RL', 'R', 3, 0, 8]]);
+  const r = runTheorem(p, 'nodal', src(p, 'RL'));
+  assert.ok(r.ok, r.error);
+  close(r.answer.I, r.full.I, 'IL');
+  assert.match(plain(r), /KCL at/);
+});
+
+test('mesh analysis on a drawing takes its windows as the meshes', async () => {
+  const { EXAMPLES, buildExample } = await import('../src/ui/examples.js');
+  const doc = buildExample(EXAMPLES.find((e) => e.id === 'millman'));
+  const p = prepareTheorem(doc);
+  const load = doc.elements.findIndex((e) => e.name === 'R4');
+  const r = runTheorem(p, 'mesh', load);
+  assert.ok(r.ok, r.error);
+  close(r.answer.I, r.full.I, 'IL');
+  // three branches side by side and the load: three windows, the load in the last one only
+  const list = r.steps[1].blocks[1].lines.map(plainMath);
+  assert.equal(list.length, 3, list.join(' | '));
+  assert.equal(list.filter((l) => /R4/.test(l)).length, 1, list.join(' | '));
+  assert.ok(r.steps[1].fig.meshes.every((m) => m.box), 'each mesh has its window on the drawing');
 });

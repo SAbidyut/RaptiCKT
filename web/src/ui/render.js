@@ -299,12 +299,55 @@ export function makeGraphics(ctx, theme, opts) {
       ctx.fillStyle = o.color || theme.text1;
       ctx.textAlign = align;
       ctx.textBaseline = o.baseline || 'middle';
-      if (o.maxW) ctx.fillText(str, 0, 0, o.maxW); else ctx.fillText(str, 0, 0);
+      if (o.rich && str.includes('_')) fillRich(ctx, str, 0, 0, o.size || 10, (px) => `${o.bold ? '600 ' : ''}${px}px Inter, system-ui, sans-serif`, align);
+      else if (o.maxW) ctx.fillText(str, 0, 0, o.maxW); else ctx.fillText(str, 0, 0);
       ctx.restore();
     },
   };
   Object.assign(g, opts);
   return g;
+}
+
+// ---------------------------------------------------------- subscripts
+/** "V_th = ?", "I_{N}" → [[text, isSub], …]: a subscript is a run of letters and digits after _ (or {…}). */
+function richParts(str) {
+  const out = [];
+  let buf = '';
+  for (let i = 0; i < str.length;) {
+    if (str[i] === '_' && i + 1 < str.length) {
+      if (buf) { out.push([buf, false]); buf = ''; }
+      let j = i + 1, sub;
+      if (str[j] === '{') { const e = str.indexOf('}', j); sub = str.slice(j + 1, e < 0 ? str.length : e); i = e < 0 ? str.length : e + 1; } else {
+        while (j < str.length && /[A-Za-z0-9]/.test(str[j])) j++;
+        sub = str.slice(i + 1, j); i = j;
+      }
+      out.push([sub, true]);
+      continue;
+    }
+    buf += str[i++];
+  }
+  if (buf) out.push([buf, false]);
+  return out;
+}
+/** Width of rich text; font(px) gives the canvas font for a size. */
+export function measureRich(ctx, str, size, font) {
+  let w = 0;
+  for (const [t, sub] of richParts(str)) { ctx.font = font(sub ? size * 0.74 : size); w += ctx.measureText(t).width; }
+  ctx.font = font(size);
+  return w;
+}
+/** Draw text with subscripts (I_L, V_th) at x, y, aligned left / center / right. */
+export function fillRich(ctx, str, x, y, size, font, align = 'center') {
+  const w = measureRich(ctx, str, size, font);
+  let cx = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+  const keep = ctx.textAlign;
+  ctx.textAlign = 'left';
+  for (const [t, sub] of richParts(str)) {
+    ctx.font = font(sub ? size * 0.74 : size);
+    ctx.fillText(t, cx, sub ? y + size * 0.3 : y);
+    cx += ctx.measureText(t).width;
+  }
+  ctx.textAlign = keep; ctx.font = font(size);
 }
 
 // ---------------------------------------------------------------- renderer
@@ -687,7 +730,7 @@ export class Renderer {
       const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
       if (!txt) continue;
       const o = e.labelAnchor();
-      g.text(txt, o[0], o[1], { size: 10.5, color: th.text2, align: o[2], baseline: o[3], bold: true, follow: false });
+      g.text(txt, o[0], o[1], { size: 10.5, color: th.text2, align: o[2], baseline: o[3], bold: true, follow: false, rich: e.richName });
     }
   }
 
