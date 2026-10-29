@@ -86,6 +86,8 @@ export function assignLabels(S, words, arrows, H, fig) {
   const signs = live.filter((w) => w.read.type === 'sign' && !taken.has(w));
   const names = live.filter((w) => w.read.type === 'name' && !taken.has(w));
   const usedArrows = new Set();
+  // (arrowheads drawn on the wires mark currents too)
+  arrows = [...arrows, ...(S.marks || [])];
   for (const w of names) {
     const r = w.read;
     // a current: the arrow beside the name, and the part in the arrow's branch
@@ -139,6 +141,28 @@ export function assignLabels(S, words, arrows, H, fig) {
       taken.add(w);
       quantities.push({ name: r.name, kind: 'node_voltage', vertex: vtx, read: r });
     }
+  }
+  // a current's name beside its arrow that read as something else: a capital I is a 1 in shape
+  // (I_A read as "1 A", I_B as "18": a capital B, which the reader has no class for, reads as an
+  // 8 or an H)
+  // (what it reads as at first sight, the likeliest characters, before they are made a label)
+  const asName = (w) => [w.read.raw, w.read.chars].find((c) => /^[1I][A-Za-z0-9]{1,2}$/.test(c || ''));
+  for (const a of arrows) {
+    if (usedArrows.has(a)) continue;
+    let best = null, bd = Infinity;
+    for (const w of words) {
+      if (taken.has(w) || w.read.type === 'caption' || !asName(w)) continue;
+      const d = gap(boxOf(w), [a.x0, a.y0, a.x1, a.y1]) / H;
+      if (d < bd && d < 2.5) { bd = d; best = w; }
+    }
+    const part = best && branchPart(S, parts, a, H);
+    if (!part) continue;
+    const name = 'I' + asName(best).slice(1).replace(/[8H]/g, 'B');
+    usedArrows.add(a);
+    taken.add(best);
+    const A = S.vertices[part.a], B = S.vertices[part.b];
+    const toB = (B.x - A.x) * a.dir[0] + (B.y - A.y) * a.dir[1] > 0;
+    quantities.push({ name, kind: 'current_through', part: part.k, positive: toB ? 'to' : 'from', read: { type: 'name', name, var: 'i', sub: name.slice(1), text: name, score: best.read.score ?? -1 } });
   }
   // ---------------------------------------------------------------- what controls each dependent source
   for (const { p, read } of deps) {

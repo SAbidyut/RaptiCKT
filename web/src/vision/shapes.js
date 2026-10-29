@@ -211,13 +211,29 @@ export function findShapes(mask, w, h, box, sw) {
     if (ho.area > 0.88 * hw * hh) continue;
     cands.push(ho);
   }
+  // a ring split in two by a wire or an arrow run through it: its halves side by side, a line's
+  // width apart, of a size, and together about as wide as tall
+  for (let i = 0; i < hs.length; i++) {
+    for (let j = i + 1; j < hs.length; j++) {
+      const a = hs[i], b = hs[j];
+      if (Math.min(a.area, b.area) < 0.5 * Math.max(a.area, b.area)) continue;
+      const gx = Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1), gy = Math.max(a.y0, b.y0) - Math.min(a.y1, b.y1);
+      if (!((gx > 0 && gx <= 2.5 * sw && gy < 0) || (gy > 0 && gy <= 2.5 * sw && gx < 0))) continue;
+      const u = { area: a.area + b.area, x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) };
+      const uw = u.x1 - u.x0 + 1, uh = u.y1 - u.y0 + 1;
+      if (Math.max(uw, uh) > 1.5 * Math.min(uw, uh) || Math.sqrt(u.area / Math.PI) > maxR) continue;
+      cands.push({ ...u, cx: (u.x0 + u.x1) / 2, cy: (u.y0 + u.y1) / 2, split: true });
+    }
+  }
   const found = [];
   const hw = (ho) => ho.x1 - ho.x0 + 1, hh = (ho) => ho.y1 - ho.y0 + 1;
   const score = (f) => f.score - 0.5 * Math.max(0, f.outer - 0.2) - 0.3 * Math.max(0, f.inner - 0.35);
   for (const ho of cands) {
     const req = Math.sqrt(ho.area / Math.PI);
     // the hole may be half of the shape (an arrow across a source splits it in two)
-    const rMin = Math.max(minR, req * 0.85), rMax = Math.min(maxR, req * 2.3 + sw);
+    // (a split ring's two halves: the ring is round them both, centred between them)
+    const big = Math.max(ho.x1 - ho.x0, ho.y1 - ho.y0) + 1;
+    const rMin = ho.split ? Math.max(minR, 0.45 * big) : Math.max(minR, req * 0.85), rMax = Math.min(maxR, ho.split ? 0.5 * big + 1.5 * sw : req * 2.3 + sw);
     const span = Math.max(ho.x1 - ho.x0, ho.y1 - ho.y0) * 0.75 + sw;
     const coarse = Math.max(1, sw * 0.75);
     let pick = null;
@@ -237,8 +253,8 @@ export function findShapes(mask, w, h, box, sw) {
         }
       };
       // a whole hole is centred on the shape; only a half (split by an arrow) needs the wide search
-      search(Math.min(span, 2 * coarse));
-      if (best.v < 0.85) search(span);
+      search(Math.min(span, ho.split ? coarse : 2 * coarse));
+      if (best && best.v < 0.85 && !ho.split) search(span);
       if (!best || best.v < 0.72) continue;
       let ref = null;
       for (let dy = -coarse; dy <= coarse; dy += 0.5) {
@@ -285,9 +301,12 @@ export function findShapes(mask, w, h, box, sw) {
   for (const s of found) {
     if (out.some((o) => Math.hypot(o.cx - s.cx, o.cy - s.cy) < Math.max(o.r, s.r) * 0.8)) continue;
     // a body is hollow: the holes inside it fill most of it (a coil's loops fit a circle or a
-    // diamond drawn round one of them, its other strokes on the outline)
+    // diamond drawn round one of them, its other strokes on the outline) — or, a wire or an
+    // arrow drawn through it, two halves on either side of its middle fill a good part of it
     const area = s.kind === 'diamond' ? 2 * s.r * s.r : Math.PI * (s.rx || s.r) * (s.ry || s.r);
-    if (hs.filter((ho) => inside(s, ho)).reduce((t, ho) => t + ho.area, 0) < 0.5 * area) continue;
+    const own = hs.filter((ho) => inside(s, ho)), filled = own.reduce((t, ho) => t + ho.area, 0);
+    const halves = own.some((a) => own.some((b) => (a.cx - s.cx) * (b.cx - s.cx) + (a.cy - s.cy) * (b.cy - s.cy) < 0 && Math.min(a.area, b.area) >= 0.5 * Math.max(a.area, b.area)));
+    if (filled < 0.5 * area && !(halves && filled >= 0.3 * area)) continue;
     // and stands alone: a little ring in a row of them is a turn of a coil drawn in loops
     if (s.r < 3 * sw && hs.filter((ho) => ho.area >= 0.3 * area && ho.area <= 3 * area && Math.hypot(ho.cx - s.cx, ho.cy - s.cy) > s.r && Math.hypot(ho.cx - s.cx, ho.cy - s.cy) < 5 * s.r).length >= 2) continue;
     out.push(s);

@@ -22,6 +22,7 @@ import hand  # noqa: E402
 
 SERIF = '/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf'
 ITALIC = '/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf'
+BOLD = '/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf'
 U = 150      # grid unit, px
 LW = 4       # line width
 M = 140      # margin
@@ -35,6 +36,8 @@ class Fig:
         self.f = ImageFont.truetype(SERIF, 34)
         self.fi = ImageFont.truetype(ITALIC, 36)
         self.fs = ImageFont.truetype(ITALIC, 24)
+        self.fb = ImageFont.truetype(BOLD, 36)
+        self.fbs = ImageFont.truetype(BOLD, 26)
 
     def P(self, x, y):
         return (M + x * U, M + y * U)
@@ -117,6 +120,38 @@ class Fig:
         self.text(xy, coef, anchor='rm')
         self.label((xy[0] + 2, xy[1]), var, sub, anchor='lm')
 
+    def isource_through(self, a, b, label, to_b=True, side=-1):
+        """a current source drawn with its wire running on through the ring, a solid head on it"""
+        A, B = np.array(self.P(*a), float), np.array(self.P(*b), float)
+        c = (A + B) / 2
+        u = (B - A) / np.linalg.norm(B - A)
+        n = np.array([-u[1], u[0]])
+        d = u if to_b else -u
+        self.d.line([tuple(A), tuple(B)], fill=0, width=LW)
+        self.d.ellipse([c[0] - 30, c[1] - 30, c[0] + 30, c[1] + 30], outline=0, width=LW)
+        h = c + d * 14
+        self.d.polygon([tuple(h), tuple(h - d * 26 + n * 13), tuple(h - d * 26 - n * 13)], fill=0)
+        self.text(tuple(c + n * 66 * side), label)
+
+    def mark(self, a, b, at=0.5, to_b=True):
+        """a current's direction drawn on the wire from a to b: an outlined arrowhead"""
+        A, B = np.array(self.P(*a), float), np.array(self.P(*b), float)
+        u = (B - A) / np.linalg.norm(B - A)
+        n = np.array([-u[1], u[0]])
+        d = u if to_b else -u
+        c = A + (B - A) * at
+        tip, notch = c + d * 12, c - d * 2
+        self.d.line([tuple(A), tuple(notch if to_b else tip)], fill=0, width=LW)
+        self.d.line([tuple(tip if to_b else notch), tuple(B)], fill=0, width=LW)
+        pts = [tip, tip - d * 22 + n * 16, tip - d * 30 + n * 16, notch, tip - d * 30 - n * 16, tip - d * 22 - n * 16]
+        self.d.polygon([tuple(p) for p in pts], outline=0, width=3)
+
+    def name(self, xy, s, sub):
+        """an upright bold name with a capital subscript (I_A), as some books print it"""
+        x, y = xy
+        self.d.text((x, y), s, font=self.fb, fill=0, anchor='rm')
+        self.d.text((x + 1, y + 8), sub, font=self.fbs, fill=0, anchor='lm')
+
     def capacitor(self, a, b, label, side=1):
         c, u, n = self._ends(a, b, 16)
         for s in (-8, 8):
@@ -124,12 +159,14 @@ class Fig:
             self.d.line([tuple(p - n * 26), tuple(p + n * 26)], fill=0, width=LW)
         self.text(tuple(c + n * 80 * side), label)
 
-    def battery(self, a, b, label, plus_at_a=True, side=1):
-        c, u, n = self._ends(a, b, 16)
-        lp = c - u * 8 if plus_at_a else c + u * 8
-        sp = c + u * 8 if plus_at_a else c - u * 8
-        self.d.line([tuple(lp - n * 28), tuple(lp + n * 28)], fill=0, width=LW)
-        self.d.line([tuple(sp - n * 14), tuple(sp + n * 14)], fill=0, width=LW + 3)
+    def battery(self, a, b, label, plus_at_a=True, side=1, cells=1):
+        c, u, n = self._ends(a, b, 16 + 32 * (cells - 1))
+        for k in range(cells):
+            o = (k - (cells - 1) / 2) * 32
+            lp = c + u * (o - 8) if plus_at_a else c - u * (o - 8)
+            sp = c + u * (o + 8) if plus_at_a else c - u * (o + 8)
+            self.d.line([tuple(lp - n * 28), tuple(lp + n * 28)], fill=0, width=LW)
+            self.d.line([tuple(sp - n * 14), tuple(sp + n * 14)], fill=0, width=LW + 3)
         self.text(tuple(c + n * 56 * side), label)
 
     def inductor(self, a, b, label, side=1):
@@ -571,6 +608,25 @@ def main():
     f.wire((0, 2), (3, 2))
     f.ground((1.5, 2))
     f.save(out, 'sketch-rlc', BLACK)
+
+    # 9. a practice problem printed in a book's own style: a two-cell battery, a current source
+    # with its wire run on through it, the currents asked for marked by arrowheads on the wires
+    # and named in bold with capital subscripts (I_A, I_B): I_A = 2 A, I_B = −0.5 A
+    f = Fig(3, 3)
+    f.wire((0, 0), (3, 0))
+    f.battery((0, 0), (0, 3), '7 V', plus_at_a=True, side=1, cells=2)
+    f.resistor((1.2, 0), (1.2, 1.5), '1 Ω', side=1)
+    f.isource_through((1.2, 1.5), (1.2, 2.25), '7 A', to_b=True, side=1)
+    f.resistor((1.2, 2.25), (1.2, 3), '2 Ω', side=1)
+    f.mark((1.2, 1.5), (1.7, 1.5), at=0.5, to_b=True)
+    f.resistor((1.7, 1.5), (3, 1.5), '3 Ω', side=-1)
+    f.name(f.P(1.45, 1.22), 'I', 'B')
+    f.resistor((3, 0), (3, 1.5), '2 Ω', side=1)
+    f.resistor((3, 1.5), (3, 2.4), '1 Ω', side=1)
+    f.mark((3, 2.4), (3, 3), at=0.5, to_b=True)
+    f.name(f.P(2.75, 2.7), 'I', 'A')
+    f.wire((0, 3), (3, 3))
+    f.save(out, 'practice', random.Random(61))
     print('ok')
 
 

@@ -680,10 +680,10 @@ The picture is read **on this phone**: no internet, no account or key, and the p
 
 #### What the phone reads
 
-- Straight wires and the joints between them; resistors (zigzags), coils (bumps, or loops like a spring seen from the side), capacitors and batteries (plates: the long plate is +), grounds, and open switches (a lever slanting from one wire end towards the next).
-- Circles (or ovals) as independent sources — **+ −** marks make a voltage source, **~** an AC source, an arrow a current source — and diamonds as **dependent sources**, with the expression written beside them (0.1vₓ, 4iₓ).
+- Straight wires and the joints between them; resistors (zigzags), coils (bumps, or loops like a spring seen from the side), capacitors and batteries of one cell or more (plates: the long plate is +), grounds, and open switches (a lever slanting from one wire end towards the next).
+- Circles (or ovals) as independent sources — **+ −** marks make a voltage source, **~** an AC source, an arrow a current source (also one drawn on the wire running on through the circle) — and diamonds as **dependent sources**, with the expression written beside them (0.1vₓ, 4iₓ).
 - Values with their units and prefixes: 20 Ω, 4.7 kΩ, 2 mH, 10 μF, 9 V, 3 A.
-- Marked quantities: **+ vₓ −** across a part, an arrow with **i** beside a branch, a name like **vₓ** at a node. A dependent source is tied to the quantity its expression names.
+- Marked quantities: **+ vₓ −** across a part, an arrow with **i** beside a branch (or an arrowhead drawn on the wire itself, named like **I_A**), a name like **vₓ** at a node. A dependent source is tied to the quantity its expression names.
 - The figure number (**Figure 4.12**) names the circuit; a page with several figures gives each its own.
 - Sketches drawn by hand in pen, with their values written by hand: wavy lines, corners that overshoot, rings that do not quite close, rounded zigzags, capacitor plates drawn far apart, a unit written a little apart from its value (2  Ω), a current arrow drawn with two strokes.
 - Drawings on ruled or squared paper (the printed lines are left out, a wire drawn along one is kept) and photos taken a little turned (they are straightened first).

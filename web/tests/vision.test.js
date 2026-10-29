@@ -2,8 +2,9 @@
 // grainy, slightly turned photos, and as rough ones (turned further, dusty, small, squeezed hard)
 // — and drawings made by hand, in pen, labels written by hand (tests/fixtures, made by
 // tools/glyphs/figures.py) are read into circuits whose parts, values, marked quantities and
-// answers are right; so are they on ruled or squared paper and photographed well turned, and a
-// circuit drawn here with an open switch and a coil drawn in loops.
+// answers are right; so are they on ruled or squared paper and photographed well turned, a
+// practice problem printed in a book's own style, and a circuit drawn here with an open switch
+// and a coil drawn in loops.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -220,6 +221,24 @@ test('drawn in code: a switch left open and a coil drawn in loops (a spring seen
   const sw = doc.elements.find((e) => e.constructor.type === 'switch');
   assert.equal(sw.p.closed, false, 'the switch is drawn open');
 });
+
+for (const name of ['practice.png', 'practice-photo.jpg']) {
+  test(`${name}: a book's practice problem — a two-cell battery, a current source drawn on its wire, the asked currents marked by arrowheads on the wires and named I_A, I_B — I_A = 2 A, I_B = −0.5 A`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.texts, ['1 Ω', '1 Ω', '2 Ω', '2 Ω', '3 Ω', '7 A', '7 V']);
+    assert.deepEqual(r.c.quantities.map((q) => `${q.name}:${q.kind}`).sort(), ['IA:current_through', 'IB:current_through']);
+    // the current through a marked resistor, the way its arrowhead points
+    const resistors = r.doc.elements.filter((e) => e.constructor.type === 'resistor'), drawn = r.c.parts.filter((p) => p.kind === 'resistor');
+    const current = (name2) => {
+      const q = r.c.quantities.find((x) => x.name === name2);
+      const el = resistors[drawn.indexOf(r.c.parts[q.part])];
+      const [v0, v1] = el.nodes.map((n) => r.sim.v(n));
+      return (q.positive === 'to' ? v0 - v1 : v1 - v0) / el.p.r;
+    };
+    near(current('IA'), 2, 1e-6, 'I_A');
+    near(current('IB'), -0.5, 1e-6, 'I_B');
+  });
+}
 
 test('laid out as compactly as drawn by hand, turned or not: parts come out at their own size', async () => {
   const size = async (name) => {

@@ -303,6 +303,34 @@ export function readStructure(img, fig) {
     if (near.length < 2 || !(side.every((d) => d > 0.5 * sw) || side.every((d) => d < -0.5 * sw))) return part;
     return { ...part, type: 'inductor', flips: near.length, rings: near.length };
   };
+  // an arrowhead drawn on a wire (a current's direction, its name beside it): a short mark,
+  // widest at its back and narrowing to a point on the wire's line, alike on both sides of it.
+  // Returns the way it points ([dx, dy]) or null.
+  const markOf = (A, B, pts) => {
+    const L0 = Math.hypot(B.x - A.x, B.y - A.y) || 1, ux = (B.x - A.x) / L0, uy = (B.y - A.y) / L0;
+    let t0 = Infinity, t1 = -Infinity;
+    for (const [x, y] of pts) { const t = (x - A.x) * ux + (y - A.y) * uy; t0 = Math.min(t0, t); t1 = Math.max(t1, t); }
+    const L = t1 - t0, n = Math.max(4, Math.round(L / Math.max(1, sw / 2)) + 1), step = L / (n - 1) || 1;
+    const lo = new Float32Array(n).fill(Infinity), hi = new Float32Array(n).fill(-Infinity);
+    for (const [x, y] of pts) {
+      const k = Math.round(((x - A.x) * ux + (y - A.y) * uy - t0) / step), q = -(x - A.x) * uy + (y - A.y) * ux;
+      lo[k] = Math.min(lo[k], q); hi[k] = Math.max(hi[k], q);
+    }
+    const sp = Array.from(lo, (v, k) => (hi[k] >= v ? hi[k] - v : 0)), W = Math.max(...sp);
+    if (W < 2 * sw || L > 2 * W || L > 8 * sw) return null;
+    const mids = [];
+    lo.forEach((v, k) => { if (hi[k] >= v) mids.push((v + hi[k]) / 2); });
+    if (Math.abs(mids.reduce((t, v) => t + v, 0) / mids.length) > 0.2 * W) return null;
+    // the tip's end is narrow all along its last quarter (a speck past it does not count); the
+    // other end, its back, is the widest (an outlined head's back is notched where the wire meets
+    // it: widest a little before its end)
+    const q4 = Math.max(1, Math.round(n / 4)), e0 = sp.slice(0, q4).sort((x, y) => x - y), e1 = sp.slice(-q4).sort((x, y) => x - y);
+    const tip = e0[e0.length - 1] < e1[e1.length - 1] ? e0 : e1, back = tip === e0 ? e1 : e0;
+    if (tip[(tip.length - 1) >> 1] > 0.45 * W || tip[tip.length - 1] > 0.65 * W || back[back.length - 1] < 0.75 * W) return null;
+    // it points to its narrow end
+    return tip === e0 ? [-ux, -uy] : [ux, uy];
+  };
+  const marks = [];
   const parts = [];
   for (const list of groups) {
     if (!list.length) continue;
@@ -328,6 +356,14 @@ export function readStructure(img, fig) {
     }
     let part = classifyPath(vertices[a], vertices[b], pts, box, sw, list, orderPath(a, b, list, pieces, at), lead);
     part = coilRings(part, vertices[a], vertices[b], box);
+    // an arrowhead drawn on the wire: the wire goes on, and the current's direction is marked
+    const mark = part.type === 'inductor' ? null : markOf(vertices[a], vertices[b], pts);
+    if (mark) {
+      const dir = Math.abs(vertices[a].x - vertices[b].x) >= Math.abs(vertices[a].y - vertices[b].y) ? 'h' : 'v';
+      for (const id of list) { pieces[id].cls = 'wire'; pieces[id].dir = dir; }
+      marks.push({ x0: box[0], y0: box[1], x1: box[2], y1: box[3], cx: (box[0] + box[2]) / 2, cy: (box[1] + box[3]) / 2, dir: dir === 'h' ? [Math.sign(mark[0]), 0] : [0, Math.sign(mark[1])] });
+      continue;
+    }
     // a wire drawn by hand wobbles, and a mark on it (a hook, an arrowhead) bulges out; a part
     // zigzags or coils: what never turns back and is hardly longer than its ends are apart is wire
     // (unless it turns this way and that all along, a zigzag drawn small and tight)
@@ -447,6 +483,49 @@ export function readStructure(img, fig) {
     parts.push(part);
   });
 
+  // an arrowhead drawn big on a wire thins into bits on either side of it (round the little ring
+  // inside an outlined one, made a joint above), or into a bit whose ends are not the wire's:
+  // small parts close together, taken as one by their ink, between the ends of two wires in
+  // line, are one mark
+  const small = (q) => q.box && ['resistor', 'inductor', 'unknown'].includes(q.type) && Math.max(q.box[2] - q.box[0], q.box[3] - q.box[1]) <= 8 * sw;
+  const near = (p, q) => Math.max(p[0] - q[2], q[0] - p[2], p[1] - q[3], q[1] - p[3]) <= 4 * sw;
+  for (let i = 0; i < parts.length; i++) {
+    if (!small(parts[i])) continue;
+    const bunch = parts.filter((q) => small(q) && near(q.box, parts[i].box));
+    // the wires that run into it (by way of the little bits in its middle): their ends there are
+    // the mark's two ends
+    const own = new Set(bunch.flatMap((q) => q.pieces)), seen = new Set(), ends = [];
+    let ring = [...new Set(bunch.flatMap((q) => q.pieces.flatMap((id) => [pieces[id].a, pieces[id].b])))];
+    ring.forEach((v) => seen.add(v));
+    for (let step = 0; step < 3 && ring.length; step++) {
+      const next = [];
+      for (const v of ring) for (const id of at[v]) {
+        const q = pieces[id], o = other(q, v);
+        if (own.has(id) || q.cls === 'drop') continue;
+        if (q.cls === 'wire' && q.len >= 3 * sw) { if (!ends.includes(v)) ends.push(v); continue; }
+        if (q.len < 3 * sw && !seen.has(o)) { seen.add(o); next.push(o); }
+      }
+      ring = next;
+    }
+    if (ends.length !== 2) continue;
+    const [E0, E1] = ends.map((v) => vertices[v]);
+    const box = [Math.min(E0.x, E1.x, ...bunch.map((q) => q.box[0])), Math.min(E0.y, E1.y, ...bunch.map((q) => q.box[1])), Math.max(E0.x, E1.x, ...bunch.map((q) => q.box[2])), Math.max(E0.y, E1.y, ...bunch.map((q) => q.box[3]))];
+    // (its ink off the wire's own line, a little round: the arms the thinning cut off count too)
+    const L0 = Math.hypot(E1.x - E0.x, E1.y - E0.y) || 1, ux = (E1.x - E0.x) / L0, uy = (E1.y - E0.y) / L0, ink = [];
+    for (let y = Math.max(0, Math.floor(box[1] - 2 * sw)); y <= Math.min(H - 1, Math.ceil(box[3] + 2 * sw)); y++) {
+      for (let x = Math.max(0, Math.floor(box[0] - 2 * sw)); x <= Math.min(W - 1, Math.ceil(box[2] + 2 * sw)); x++) {
+        if (art[y * W + x] && Math.abs(-(x - E0.x) * uy + (y - E0.y) * ux) > 0.8 * sw) ink.push([x, y]);
+      }
+    }
+    const mark = ink.length && markOf(E0, E1, ink);
+    if (!mark) continue;
+    const dir = Math.abs(E0.x - E1.x) >= Math.abs(E0.y - E1.y) ? 'h' : 'v';
+    for (const q of bunch) for (const id of q.pieces) { pieces[id].cls = 'wire'; pieces[id].dir = dir; }
+    marks.push({ x0: box[0], y0: box[1], x1: box[2], y1: box[3], cx: (box[0] + box[2]) / 2, cy: (box[1] + box[3]) / 2, dir: dir === 'h' ? [Math.sign(mark[0]), 0] : [0, Math.sign(mark[1])] });
+    for (const q of bunch) parts.splice(parts.indexOf(q), 1);
+    i = -1;
+  }
+
   // loose straight bars nearby (the lower bars of a ground, the inner cells of a battery, a plate
   // drawn apart from its wire)
   const bars = looseBars(img, fig, X0, Y0, sw);
@@ -480,6 +559,21 @@ export function readStructure(img, fig) {
   }
 
   // ---------------------------------------------------------------- capacitors, batteries, grounds
+  // a battery of several cells: its end plates further apart, loose plates in between, each
+  // a cell's gap from the next
+  const cellsGap = (P, Q) => {
+    if (Q.dir !== P.dir || P.wireFrom[0] + Q.wireFrom[0] !== 0 || P.wireFrom[1] + Q.wireFrom[1] !== 0) return -1;
+    if ((Q.cx - P.cx) * P.wireFrom[0] + (Q.cy - P.cy) * P.wireFrom[1] > 0) return -1;
+    const v = P.dir === 'v', along = v ? Math.abs(Q.cx - P.cx) : Math.abs(Q.cy - P.cy), across = v ? Math.abs(Q.cy - P.cy) : Math.abs(Q.cx - P.cx);
+    const short = Math.min(P.len, Q.len), lim = Math.max(8 * sw, 0.9 * short);
+    if (across > Math.max(2 * sw, 0.3 * short) || along > 40 * sw) return -1;
+    const pos = (r) => (v ? r.cx : r.cy), lo = Math.min(pos(P), pos(Q)), hi = Math.max(pos(P), pos(Q)), mid = v ? (P.cy + Q.cy) / 2 : (P.cx + Q.cx) / 2;
+    const cells = bars.filter((r) => r.dir === P.dir && pos(r) > lo && pos(r) < hi && Math.abs((v ? r.cy : r.cx) - mid) < Math.max(2 * sw, 0.3 * r.len)).map(pos).sort((a, b) => a - b);
+    if (!cells.length) return -1;
+    const at = [lo, ...cells, hi];
+    for (let k = 1; k < at.length; k++) if (at[k] - at[k - 1] > lim || at[k] - at[k - 1] < 0.5 * sw) return -1;
+    return along;
+  };
   const used = new Set();
   for (let i = 0; i < plates.length; i++) {
     if (used.has(i)) continue;
@@ -487,7 +581,8 @@ export function readStructure(img, fig) {
     let mate = -1, md = Infinity;
     for (let j = 0; j < plates.length; j++) {
       if (j === i || used.has(j)) continue;
-      const along = plateGap(P, plates[j], sw);
+      let along = plateGap(P, plates[j], sw);
+      if (along < 0) along = cellsGap(P, plates[j]);
       if (along >= 0 && along < md) { md = along; mate = j; }
     }
     if (mate >= 0) {
@@ -579,7 +674,8 @@ export function readStructure(img, fig) {
     if (p.box) p.box = [p.box[0] + X0, p.box[1] + Y0, p.box[2] + X0, p.box[3] + Y0];
   }
   for (const P of plates) { P.cx += X0; P.cy += Y0; }
-  return { vertices, wires, parts, grounds, shapes: shapes.map((s) => ({ ...s, cx: s.cx + X0, cy: s.cy + Y0 })), plates, origin: [X0, Y0], pieces, usedBars: [...usedBars], tilt };
+  for (const m of marks) { m.x0 += X0; m.x1 += X0; m.cx += X0; m.y0 += Y0; m.y1 += Y0; m.cy += Y0; }
+  return { vertices, wires, parts, grounds, shapes: shapes.map((s) => ({ ...s, cx: s.cx + X0, cy: s.cy + Y0 })), plates, marks, origin: [X0, Y0], pieces, usedBars: [...usedBars], tilt };
 }
 
 /** The group's pieces in order from vertex a to vertex b, when they form one simple path. */
@@ -701,6 +797,32 @@ function innerSymbol(all, W, H, s, A, B, sw) {
     const cyl = Math.round((c.y0 + c.y1) / 2), cxl = Math.round((c.x0 + c.x1) / 2);
     let hr = 0, vr = 0;
     for (let d = -1; d <= 1; d++) { hr = Math.max(hr, rowRun(Math.min(c.y1, Math.max(c.y0, cyl + d)))); vr = Math.max(vr, colRun(Math.min(c.x1, Math.max(c.x0, cxl + d)))); }
+    // a solid arrowhead on the line through the body (the wire drawn on through it): its width
+    // along the line from one terminal to the other swells to a wide base and narrows to the tip
+    // (a plus's bar is a line's width thick)
+    {
+      let t0 = Infinity, t1 = -Infinity;
+      for (const [x, y] of pts) { const t = (x - s.cx) * ux + (y - s.cy) * uy; t0 = Math.min(t0, t); t1 = Math.max(t1, t); }
+      const n = Math.max(2, Math.round(t1 - t0) + 1), wd = new Float32Array(n), qlo = new Float32Array(n).fill(Infinity), qhi = new Float32Array(n).fill(-Infinity);
+      for (const [x, y] of pts) {
+        const k = Math.min(n - 1, Math.round((x - s.cx) * ux + (y - s.cy) * uy - t0)), q = -(x - s.cx) * uy + (y - s.cy) * ux;
+        wd[k]++; qlo[k] = Math.min(qlo[k], q); qhi[k] = Math.max(qhi[k], q);
+      }
+      // (solid: no gap across it, as an open head drawn in two strokes has; and on a line right
+      // through the body, from one side to the other)
+      const head = [];
+      for (let k = 0; k < n; k++) if (wd[k] >= 2.2 * sw && wd[k] >= 0.8 * (qhi[k] - qlo[k] + 1)) head.push(k);
+      if (t1 - t0 >= 1.4 * (Math.min(s.rx || s.r, s.ry || s.r) - sw) && head.length >= 1.5 * sw && head[head.length - 1] - head[0] + 1 <= head.length + 1 && Math.max(...wd) >= 3 * sw) {
+        // the base is a step from the line's width to the widest; the tip a slow taper back
+        const rest = Array.from(wd).filter((v, k) => v > 0 && !head.includes(k)).sort((a, b) => a - b);
+        const km = wd.indexOf(Math.max(...wd)), line = 1.5 * (rest.length ? rest[rest.length >> 1] : sw);
+        let lo = km, hi = km;
+        while (lo > 0 && wd[lo - 1] > line) lo--;
+        while (hi < n - 1 && wd[hi + 1] > line) hi++;
+        const back = km - lo, fore = hi - km;
+        if (Math.max(back, fore) >= 2 * Math.max(1, Math.min(back, fore)) && Math.max(back, fore) >= 1.5 * sw) { arrow = { to: fore > back ? 'b' : 'a', along: 1 }; continue; }
+      }
+    }
     const isPlus = elong < 1.8 && hr >= 0.7 * cw && vr >= 0.7 * ch && cw >= 1.6 * sw && ch >= 1.6 * sw;
     const isMinus = elong >= 2.2 && Math.min(cw, ch) <= 2.2 * sw && long <= 1.1 * s.r && long >= 1.2 * sw;
     if (isPlus) { signs.push({ kind: '+', along }); continue; }
