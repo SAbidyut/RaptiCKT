@@ -1,6 +1,5 @@
-// "Circuit from photo": take a picture of a circuit diagram (or choose one), have it read — on
-// the phone itself, or by Claude online — check the redrawn circuit, and open it on the board
-// ready to run.
+// "Circuit from photo": take a picture of a circuit diagram (or choose one), have it read on the
+// phone itself (no network), check the redrawn circuit, and open it on the board ready to run.
 
 import { icon } from './icons.js';
 import { bridge, decodeImage } from './store.js';
@@ -8,23 +7,19 @@ import { THEMES } from './theme.js';
 import { fmtSI } from '../engine/units.js';
 import { drawFigure } from './theorem-figs.js';
 import { buildFromDrawing } from './photo-circuit.js';
-import { readCircuitPhoto, PhotoError } from './photo-ai.js';
 import { readPicture } from '../vision/index.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const KEY_URL = 'https://console.anthropic.com/settings/keys';
-// the picture size each reader works on (long side, px)
-const SIZE = { offline: 2600, claude: 1568 };
+// the picture's long side (px): detail enough for small labels
+const SIZE = 2600;
 
+/** A failure the reader can act on: `code` picks the advice shown. */
+class PhotoError extends Error {
+  constructor(code, message) { super(message); this.code = code; }
+}
 const ADVICE = {
-  key: 'Enter a valid Anthropic API key below.',
-  net: 'Reading a photo needs the internet. Connect and try again.',
-  busy: 'Wait a minute and try again.',
-  big: 'Crop the picture to the one circuit you want and try again.',
-  refused: 'Try a clearer picture of the circuit diagram alone.',
   bad: 'Try another picture (JPEG or PNG).',
-  api: 'Try again in a moment.',
-  offline: 'Try a sharper, straighter photo — or let Claude AI read it.',
+  offline: 'Try a sharper, straighter photo, with the whole circuit in the frame.',
 };
 
 /** what a part shows in the summary chips: "R1 20 Ω", "V1 20 V", "D1 0.1vx" */
@@ -54,9 +49,6 @@ export class PhotoScreen {
   }
 
   get settings() { return this.app.settings; }
-  /** 'offline' (read on this phone) or 'claude' */
-  get mode() { return this.settings.photoReader === 'claude' ? 'claude' : 'offline'; }
-  setMode(m) { this.settings.photoReader = m; this.app.saveSettings(); }
   theme() { return THEMES[this.settings.theme] || THEMES.dark; }
 
   open() {
@@ -87,39 +79,17 @@ export class PhotoScreen {
   }
 
   // ---------------------------------------------------------------- start
-  keyCard() {
-    const k = this.settings.claudeKey;
-    if (k) {
-      return `<div class="ph-key ok">${icon('check', 18)}<div><b>Claude API key saved</b><span>…${esc(k.slice(-4))} · kept on this device only</span></div>
-        <button class="btn" data-x="key-change">Change</button></div>`;
-    }
-    return `<div class="ph-key">
-        <b>Your Anthropic API key</b>
-        <p>Photos are read by Claude, Anthropic's AI. Paste your own API key once — it is stored only on this device and sent only to Anthropic with the photo. <button class="link" data-x="key-get">Get a key</button></p>
-        <div class="ph-key-row"><input type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" data-x="key-in"><button class="btn primary" data-x="key-save">Save</button></div>
-      </div>`;
-  }
-
   renderStart(body) {
-    const off = this.mode === 'offline';
     body.innerHTML = `
       <div class="ph-hero">
         <span class="ph-ico">${icon('camera', 30)}</span>
         <p>Photograph a circuit diagram — a textbook figure, an exam question, a neat drawing — and it is redrawn on the board with its values, ready to run.</p>
       </div>
-      <p class="th-q">Read it</p>
-      <div class="th-seg ph-mode">
-        <button data-mode="offline" class="${off ? 'on' : ''}">On this phone</button>
-        <button data-mode="claude" class="${off ? '' : 'on'}">With Claude AI</button>
-      </div>
-      <p class="ph-mode-note">${off
-        ? '<b>Offline</b> — no internet, no key. Reads printed diagrams (textbooks, exam papers, screenshots) and neat sketches drawn by hand: wires, resistors, sources, dependent sources, capacitors, coils, grounds and their values. For untidy sketches use Claude.'
-        : '<b>Claude AI</b> — reads any diagram, printed or hand-drawn, and the problem around it. Needs the internet and your own Anthropic API key.'}</p>
+      <p class="ph-intro">Read on this phone — no internet needed. Printed diagrams (textbooks, exam papers, screenshots) and neat sketches drawn by hand: wires, resistors, sources, dependent sources, capacitors, coils, grounds and their values.</p>
       <div class="ph-btns">
         <button class="btn primary big" data-x="camera">${icon('camera', 20)} Take a photo</button>
         <button class="btn big" data-x="gallery">${icon('upload', 20)} Choose an image</button>
       </div>
-      ${off ? '' : this.keyCard()}
       <h4>For the best result</h4>
       <ul class="ph-tips">
         <li>Hold the phone flat over the page, with the whole circuit in the frame and in focus.</li>
@@ -129,40 +99,11 @@ export class PhotoScreen {
       </ul>`;
     body.querySelector('[data-x=camera]').addEventListener('click', () => this.take(true));
     body.querySelector('[data-x=gallery]').addEventListener('click', () => this.take(false));
-    body.querySelectorAll('[data-mode]').forEach((b) => b.addEventListener('click', () => { this.setMode(b.dataset.mode); this.render(); }));
-    this.bindKey(body);
-  }
-
-  /** after(): what to do once a key is saved (default: show the screen again) */
-  bindKey(body, after = () => this.render()) {
-    body.querySelector('[data-x=key-get]')?.addEventListener('click', () => bridge.openUrl(KEY_URL));
-    body.querySelector('[data-x=key-change]')?.addEventListener('click', () => {
-      this.settings.claudeKey = '';
-      this.app.saveSettings();
-      this.render();
-      this.root.querySelector('[data-x=key-in]')?.focus();
-    });
-    const inp = body.querySelector('[data-x=key-in]');
-    const save = () => {
-      const v = (inp.value || '').trim();
-      if (!v) { inp.focus(); return; }
-      this.settings.claudeKey = v;
-      this.app.saveSettings();
-      after();
-    };
-    body.querySelector('[data-x=key-save]')?.addEventListener('click', save);
-    inp?.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') save(); });
   }
 
   async take(camera) {
-    if (this.mode === 'claude' && !this.settings.claudeKey) {
-      const inp = this.root.querySelector('[data-x=key-in]');
-      inp?.focus();
-      inp?.closest('.ph-key')?.classList.add('need');
-      return;
-    }
     let img;
-    try { img = await bridge.pickImage(camera, SIZE[this.mode]); } catch (e) {
+    try { img = await bridge.pickImage(camera, SIZE); } catch (e) {
       if (e && e.message && e.message !== 'cancelled') { this.fail(new PhotoError('bad', 'Could not open the picture: ' + e.message)); }
       return;
     }
@@ -172,23 +113,16 @@ export class PhotoScreen {
   }
 
   // ---------------------------------------------------------------- reading
-  async read(mode = this.mode) {
+  async read() {
     this.stage = 'reading';
-    this.reading = mode;
     this.answer = null;
     this.pick = 0;
-    this.got = 0;
     this.step = null;
-    this.t0 = Date.now();
     const ctl = new AbortController();
     this.abort = ctl;
     this.render();
     try {
-      const out = mode === 'offline' ? await this.readOffline(ctl.signal) : await readCircuitPhoto({
-        apiKey: this.settings.claudeKey, data: this.image.data, mediaType: this.image.mediaType, signal: ctl.signal,
-        onProgress: (n) => { this.got = n; this.tick(); },
-      });
-      out.by = mode;
+      const out = await this.readOffline(ctl.signal);
       if (this.abort !== ctl) return;
       this.abort = null;
       this.answer = out;
@@ -198,7 +132,7 @@ export class PhotoScreen {
       if (this.abort !== ctl) return;
       this.abort = null;
       if (e instanceof PhotoError && e.code === 'cancelled') { this.stage = 'start'; this.render(); return; }
-      this.fail(e instanceof PhotoError ? e : new PhotoError('api', String(e?.message || e)));
+      this.fail(e instanceof PhotoError ? e : new PhotoError('offline', String(e?.message || e)));
     } finally {
       clearInterval(this.timer);
     }
@@ -228,7 +162,7 @@ export class PhotoScreen {
   renderReading(body) {
     body.innerHTML = `
       <div class="ph-shot reading"><img alt="" src="data:${esc(this.image.mediaType)};base64,${this.image.data}"><i class="ph-scan"></i></div>
-      <p class="ph-status"><b>${this.reading === 'offline' ? 'Reading the circuit on this phone…' : 'Claude is reading the circuit…'}</b><span class="ph-sub"></span></p>
+      <p class="ph-status"><b>Reading the circuit on this phone…</b><span class="ph-sub"></span></p>
       <div class="splash-bar ph-bar"><i></i></div>
       <div class="btn-row"><button class="btn" data-x="cancel">${icon('x', 18)} Cancel</button></div>`;
     body.querySelector('[data-x=cancel]').addEventListener('click', () => this.cancel());
@@ -239,10 +173,7 @@ export class PhotoScreen {
 
   tick() {
     const s = this.root.querySelector('.ph-sub');
-    if (!s) return;
-    const sec = Math.round((Date.now() - this.t0) / 1000);
-    if (this.reading === 'offline') { s.textContent = this.step ? `${this.step.what}… ${Math.round(this.step.f * 100)} %` : 'Opening the picture…'; return; }
-    s.textContent = this.got ? `Writing down the parts and wires… ${sec} s` : `Looking at the picture… ${sec} s (this can take a minute)`;
+    if (s) s.textContent = this.step ? `${this.step.what}… ${Math.round(this.step.f * 100)} %` : 'Opening the picture…';
   }
 
   // ---------------------------------------------------------------- result
@@ -254,15 +185,11 @@ export class PhotoScreen {
   renderResult(body) {
     const list = this.answer.circuits || [];
     const problem = (this.answer.problem || '').trim();
-    const offline = this.answer.by === 'offline';
-    // a reading on the phone can always be tried again by Claude, with the same picture
-    const alsoClaude = offline ? `<button class="btn" data-x="claude">${icon('chip', 18)} Read with Claude AI</button>` : '';
     if (!list.length) {
       body.innerHTML = `
         <div class="ph-empty">${icon('info', 22)}<div><b>No circuit could be read from this picture</b><span>${esc(problem || 'Try a sharper photo of the circuit diagram.')}</span></div></div>
-        <div class="btn-row"><button class="btn primary big" data-x="again">${icon('camera', 18)} Another photo</button>${alsoClaude}</div>`;
+        <div class="btn-row"><button class="btn primary big" data-x="again">${icon('camera', 18)} Another photo</button></div>`;
       body.querySelector('[data-x=again]').addEventListener('click', () => { this.stage = 'start'; this.render(); });
-      this.bindClaude(body);
       return;
     }
     if (this.pick >= list.length) this.pick = 0;
@@ -282,31 +209,13 @@ export class PhotoScreen {
       <div class="btn-row ph-go">
         <button class="btn primary big" data-x="open">${icon('play', 18)} Open on the board</button>
         <button class="btn" data-x="again">${icon('camera', 18)} Another photo</button>
-        ${alsoClaude}
       </div>
-      ${offline ? '<p class="ph-by">Read on this phone. A part or a value read wrong? Fix it on the board, or let Claude AI read the same picture.</p>' : ''}`;
-    this.bindClaude(body);
+      <p class="ph-by">Read on this phone. A part or a value read wrong? Fix it on the board.</p>`;
     const cv = body.querySelector('.ph-fig');
     requestAnimationFrame(() => drawFigure(cv, { doc: b.doc, hi: new Set(), notes: [], load: null }, this.theme(), this.settings, 340));
     body.querySelectorAll('[data-c]').forEach((x) => x.addEventListener('click', () => { this.pick = +x.dataset.c; this.render(); }));
     body.querySelector('[data-x=open]').addEventListener('click', () => this.app.openFromPhoto(this.built().doc));
     body.querySelector('[data-x=again]').addEventListener('click', () => { this.stage = 'start'; this.render(); });
-  }
-
-  /** "Read with Claude AI": the same picture, online (the key is asked for first when missing). */
-  bindClaude(body) {
-    body.querySelector('[data-x=claude]')?.addEventListener('click', () => {
-      this.setMode('claude');
-      if (!this.settings.claudeKey) {
-        this.stage = 'start';
-        this.render();
-        const inp = this.root.querySelector('[data-x=key-in]');
-        inp?.focus();
-        inp?.closest('.ph-key')?.classList.add('need');
-        return;
-      }
-      this.read('claude');
-    });
   }
 
   // ---------------------------------------------------------------- error
@@ -317,20 +226,10 @@ export class PhotoScreen {
   }
 
   renderError(body) {
-    const e = this.error || new PhotoError('api', 'Something went wrong.');
-    const retry = this.image && e.code !== 'key' && e.code !== 'big' && e.code !== 'bad' && e.code !== 'refused' && e.code !== 'offline';
+    const e = this.error || new PhotoError('offline', 'Something went wrong.');
     body.innerHTML = `
-      <div class="ph-empty bad">${icon('info', 22)}<div><b>${esc(e.message)}</b><span>${esc(ADVICE[e.code] || ADVICE.api)}</span></div></div>
-      ${e.code === 'key' ? this.keyCard() : ''}
-      <div class="btn-row">
-        ${retry ? `<button class="btn primary big" data-x="retry">${icon('reset', 18)} Try again</button>` : ''}
-        <button class="btn ${retry ? '' : 'primary big'}" data-x="again">${icon('camera', 18)} Another photo</button>
-        ${e.code === 'offline' && this.image ? `<button class="btn" data-x="claude">${icon('chip', 18)} Read with Claude AI</button>` : ''}
-      </div>`;
-    body.querySelector('[data-x=retry]')?.addEventListener('click', () => this.read(this.reading || this.mode));
-    this.bindClaude(body);
+      <div class="ph-empty bad">${icon('info', 22)}<div><b>${esc(e.message)}</b><span>${esc(ADVICE[e.code] || ADVICE.offline)}</span></div></div>
+      <div class="btn-row"><button class="btn primary big" data-x="again">${icon('camera', 18)} Another photo</button></div>`;
     body.querySelector('[data-x=again]').addEventListener('click', () => { this.stage = 'start'; this.render(); });
-    // a corrected key goes straight back to reading the same picture
-    if (e.code === 'key') this.bindKey(body, () => (this.image ? this.read() : this.render()));
   }
 }

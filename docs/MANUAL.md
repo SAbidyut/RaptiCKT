@@ -45,7 +45,7 @@ Everything in the app, explained step by step.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
 - Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**).
-- Take a **photo of a circuit diagram** — a textbook figure, an exam question, a neat sketch — and it is redrawn on the board with its values, dependent sources included, ready to run (**Circuit from photo**). Printed diagrams and neat hand sketches are read on the phone, offline; Claude AI can read the harder ones.
+- Take a **photo of a circuit diagram** — a textbook figure, an exam question, a neat sketch — and it is redrawn on the board with its values, dependent sources included, ready to run (**Circuit from photo**). Printed diagrams and neat hand sketches are read on the phone itself, offline.
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
 - Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
@@ -57,7 +57,7 @@ Electrical and electronic engineering students, teachers, technicians, hobbyists
 #### Requirements
 
 - Android 8.0 or newer.
-- No internet needed. **Circuit from photo** reads printed diagrams on the phone; only reading a photo **with Claude AI** needs the internet (and your own Anthropic API key). Everything else, including your saved circuits, stays on your phone.
+- No internet needed. **Circuit from photo** reads pictures on the phone itself; everything, including your saved circuits and photos, stays on your phone.
 
 #### How to read this manual
 
@@ -667,26 +667,16 @@ Take a photo of a circuit diagram — a figure in your textbook, an exam questio
 
 Open it from the **Circuit from photo** card on Home, from **⋮ → Circuit from photo** in the editor, or from **Or start from a photo** on an empty board.
 
-#### Two ways to read
-
-| Reading | On this phone | With Claude AI |
-| --- | --- | --- |
-| Internet | Not needed — the picture never leaves the phone | Needed |
-| Key | None | Your own Anthropic API key |
-| Reads | Printed diagrams (textbooks, exam papers, screenshots) and neat hand-drawn sketches | Any diagram, printed or hand-drawn, and the problem text around it |
-| Time | A few seconds | Usually well under a minute |
-
-**On this phone** is chosen at first. Pick the other at the top of the page; the choice is remembered.
+The picture is read **on this phone**: no internet, no account or key, and the picture never leaves the phone. Printed diagrams (textbooks, exam papers, screenshots) and neat hand-drawn sketches are read, usually in a few seconds.
 
 #### Reading a circuit
 
-1. Choose **On this phone** or **With Claude AI**. With Claude, the first time, paste your **Anthropic API key** and tap **Save** (see below).
-2. Tap **Take a photo** (the camera opens) or **Choose an image** (a picture or screenshot from the gallery).
-3. Wait while the circuit is read. **Cancel** stops it.
-4. Check the redrawn circuit against the picture (tap **The photo** to see it again). A page with several figures lists them all: tap the one you want.
-5. Tap **Open on the board**. The circuit opens as a new circuit (also saved in My Circuits), named after the figure. Press **Run**: the live labels show every node voltage and branch current, so the asked quantity (vₓ, i, I₀ …) can be read straight off the board.
+1. Tap **Take a photo** (the camera opens) or **Choose an image** (a picture or screenshot from the gallery).
+2. Wait while the circuit is read. **Cancel** stops it.
+3. Check the redrawn circuit against the picture (tap **The photo** to see it again). A page with several figures lists them all: tap the one you want.
+4. Tap **Open on the board**. The circuit opens as a new circuit (also saved in My Circuits), named after the figure. Press **Run**: the live labels show every node voltage and branch current, so the asked quantity (vₓ, i, I₀ …) can be read straight off the board.
 
-> **Tip:** Read on the phone and something is off — a value, a missed part? Fix it on the board, or tap **Read with Claude AI** under the drawing to read the same picture with Claude.
+> **Tip:** Something is off — a value, a missed part? Fix it on the board, or take a sharper photo and read it again.
 
 #### What the phone reads
 
@@ -696,13 +686,7 @@ Open it from the **Circuit from photo** card on Home, from **⋮ → Circuit fro
 - Marked quantities: **+ vₓ −** across a part, an arrow with **i** beside a branch, a name like **vₓ** at a node. A dependent source is tied to the quantity its expression names.
 - The figure number (**Figure 4.12**) names the circuit; a page with several figures gives each its own.
 - Sketches drawn by hand in pen, with their values written by hand: wavy lines, corners that overshoot, rings that do not quite close, rounded zigzags, a unit written a little apart from its value (2  Ω), a current arrow drawn with two strokes.
-- Switches, transistors and other symbols, and untidy or crowded sketches, are not read on the phone: use Claude AI for those.
-
-#### Your API key (Claude AI)
-
-- With Claude AI, photos are read by **Claude**, Anthropic’s AI model. You need your own API key: create one at **console.anthropic.com → API keys** (the **Get a key** link opens it). Reading a photo uses a small amount of your API credit.
-- The key is kept **only on this phone**, in the app’s settings. It is not put in circuit files, backups or shares, and it is sent only to Anthropic, together with the photo.
-- **Change** removes the saved key so you can paste another one.
+- Switches, transistors and other symbols, and untidy or crowded sketches, are not read: draw those parts on the board yourself.
 
 #### Getting a good result
 
@@ -1835,7 +1819,7 @@ Circuits live inside the app on your phone. Clearing the app's data or uninstall
 
 #### Can I use it without internet?
 
-Yes. **Circuit from photo** reads printed diagrams on the phone too. Only reading a photo **with Claude AI** and the buttons that open the RAPTI website, WhatsApp, email or map need internet.
+Yes. **Circuit from photo** reads pictures on the phone too. Only the buttons that open the RAPTI website, WhatsApp, email or map need internet.
 
 #### Is the result exactly like a real circuit?
 

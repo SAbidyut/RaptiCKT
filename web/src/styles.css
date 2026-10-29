@@ -1181,23 +1181,10 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(236, 72, 153, 0.12) 70%, var(--surface)); }
 .ph-hero p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--text2); }
 .ph-ico { flex: none; width: 52px; height: 52px; border-radius: 15px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #f59e0b, #ec4899); }
-.ph-mode { margin: 0 0 6px; }
-.ph-mode-note { margin: 0 0 4px; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
-.ph-mode-note b { color: var(--text2); }
+.ph-intro { margin: 12px 2px 0; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
 .ph-by { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
 .ph-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
 .ph-btns .btn { padding: 0 10px; }
-.ph-key { padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; }
-.ph-key.need { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25); }
-.ph-key > b { display: block; font-size: 14px; margin-bottom: 4px; }
-.ph-key p { margin: 0 0 10px; color: var(--muted); line-height: 1.45; }
-.ph-key-row { display: flex; gap: 8px; }
-.ph-key-row input { flex: 1; min-width: 0; height: 42px; padding: 0 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border2); color: var(--text); font: 14px var(--mono); }
-.ph-key.ok { display: flex; align-items: center; gap: 10px; }
-.ph-key.ok > .ic { color: #22c55e; flex: none; }
-.ph-key.ok div { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.ph-key.ok span { color: var(--muted); font-size: 12px; }
-.ph-key.ok .btn { height: 34px; padding: 0 12px; }
 .ph-tips { margin: 0; padding-left: 18px; color: var(--text2); font-size: 13px; line-height: 1.5; }
 .ph-tips li { margin-bottom: 4px; }
 .ph-shot { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: #fff; }
@@ -1228,4 +1215,3 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .ph-empty.bad .ic { color: #f59e0b; }
 .ph-empty div { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .ph-empty b { color: var(--text); font-size: 14.5px; }
-.ph-empty + .ph-key { margin-bottom: 10px; }

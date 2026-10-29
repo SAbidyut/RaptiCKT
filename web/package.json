@@ -18,8 +18,5 @@
     "pngjs": "^7.0.0"
   },
   "type": "module",
-  "private": true,
-  "dependencies": {
-    "@anthropic-ai/sdk": "^1.3.0"
-  }
+  "private": true
 }

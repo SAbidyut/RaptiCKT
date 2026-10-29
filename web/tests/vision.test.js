@@ -147,8 +147,8 @@ test('laid out as compactly as drawn by hand, turned or not: parts come out at t
     const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
     return [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
   };
-  // four branches side by side: three units wide, one tall (each part one unit long, as Claude
-  // draws the same figure), the leads and the ground's stub folded away
+  // four branches side by side: three units wide, one tall (each part one unit long, as the
+  // figure is drawn by hand), the leads and the ground's stub folded away
   assert.deepEqual(await size('depsource.png'), [3, 1]);
   assert.deepEqual(await size('depsource-rough.jpg'), [3, 1]);
   // three meshes; a capacitor and a battery with long leads; open terminals keep their stubs

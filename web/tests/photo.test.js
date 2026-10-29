@@ -1,10 +1,8 @@
-// Circuit from photo: drawings as Claude describes them become board circuits that solve to the
-// textbook answers, dependent sources follow the marked polarity, and the request to the Claude
-// API carries the picture and asks for the structured drawing.
+// Circuit from photo: grid drawings, as the photo reader describes circuits, become board
+// circuits that solve to the textbook answers, and dependent sources follow the marked polarity.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFromDrawing, PHOTO_SCHEMA, KINDS } from '../src/ui/photo-circuit.js';
-import { readCircuitPhoto, PhotoError, PHOTO_MODEL } from '../src/ui/photo-ai.js';
+import { buildFromDrawing } from '../src/ui/photo-circuit.js';
 import { Simulator } from '../src/engine/sim.js';
 
 const P = (x, y) => ({ x, y });
@@ -171,83 +169,4 @@ test('what cannot be rebuilt is said, not hidden', () => {
   // a part with both ends on one point is left out
   const z = buildFromDrawing(circuit({ parts: [part('resistor', '1 Ω', 1, P(0, 0), P(0, 0))] }));
   assert.ok(z.warnings.some((w) => /left out/.test(w)));
-});
-
-test('the drawing schema suits structured outputs: every object closed, every property required', () => {
-  const walk = (s, path) => {
-    if (s.type === 'object') {
-      assert.equal(s.additionalProperties, false, `${path} is not closed`);
-      assert.deepEqual([...s.required].sort(), Object.keys(s.properties).sort(), `${path} leaves a property optional`);
-      for (const [k, v] of Object.entries(s.properties)) walk(v, `${path}.${k}`);
-    }
-    if (s.type === 'array') walk(s.items, `${path}[]`);
-  };
-  walk(PHOTO_SCHEMA, 'answer');
-  assert.ok(KINDS.includes('dependent_current_source') && KINDS.includes('dependent_voltage_source'));
-});
-
-// ------------------------------------------------------------------ the API call (fetch faked)
-const sse = (events) => events.map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
-function answer(text, stop = 'end_turn') {
-  const half = Math.floor(text.length / 2);
-  return sse([
-    { type: 'message_start', message: { id: 'msg_1', type: 'message', role: 'assistant', model: PHOTO_MODEL, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 1200, output_tokens: 1 } } },
-    { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
-    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: text.slice(0, half) } },
-    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: text.slice(half) } },
-    { type: 'content_block_stop', index: 0 },
-    { type: 'message_delta', delta: { stop_reason: stop, stop_sequence: null }, usage: { output_tokens: 300 } },
-    { type: 'message_stop' },
-  ]);
-}
-async function withFetch(reply, fn) {
-  const real = globalThis.fetch;
-  const seen = [];
-  globalThis.fetch = async (url, init) => { seen.push({ url: String(url), init }); return reply(url, init); };
-  try { return await fn(seen); } finally { globalThis.fetch = real; }
-}
-
-test('the picture goes to Claude with the drawing schema, and the answer is parsed', async () => {
-  const out = { circuits: [FIG1], problem: '' };
-  await withFetch(() => new Response(answer(JSON.stringify(out)), { status: 200, headers: { 'content-type': 'text/event-stream' } }), async (seen) => {
-    const progress = [];
-    const got = await readCircuitPhoto({ apiKey: 'test-key', data: 'AAAA', mediaType: 'image/jpeg', onProgress: (n) => progress.push(n) });
-    assert.deepEqual(got, out);
-    assert.ok(progress.length >= 2 && progress.at(-1) === JSON.stringify(out).length, 'progress as the text arrives');
-    assert.equal(seen.length, 1);
-    const { url, init } = seen[0];
-    assert.match(url, /^https:\/\/api\.anthropic\.com\/v1\/messages/);
-    const h = new Headers(init.headers);
-    assert.ok(h.get('x-api-key') === 'test-key' || h.get('authorization') === 'Bearer test-key', 'the key goes with the request');
-    assert.equal(h.get('anthropic-dangerous-direct-browser-access'), 'true');
-    assert.match(h.get('anthropic-beta') || '', /server-side-fallback-2026-07-01/);
-    const body = JSON.parse(init.body);
-    assert.equal(body.model, 'claude-opus-5-5');
-    assert.equal(body.stream, true);
-    assert.equal(body.fallbacks, 'default');
-    assert.equal(body.output_config.format.type, 'json_schema');
-    assert.deepEqual(body.output_config.format.schema, PHOTO_SCHEMA);
-    const [img, txt] = body.messages[0].content;
-    assert.deepEqual(img, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'AAAA' } });
-    assert.equal(txt.type, 'text');
-  });
-});
-
-test('API failures become advice the reader can act on', async () => {
-  const err = (status, type) => () => new Response(JSON.stringify({ type: 'error', error: { type, message: 'nope' } }), { status, headers: { 'content-type': 'application/json' } });
-  const code = async (reply) => withFetch(reply, async () => {
-    try { await readCircuitPhoto({ apiKey: 'k', data: 'AAAA' }); return 'ok'; } catch (e) { assert.ok(e instanceof PhotoError, String(e)); return e.code; }
-  });
-  assert.equal(await code(err(401, 'authentication_error')), 'key');
-  assert.equal(await code(err(403, 'permission_error')), 'key');
-  assert.equal(await code(err(400, 'invalid_request_error')), 'bad');
-  assert.equal(await code(() => new Response(answer('', 'refusal'), { status: 200, headers: { 'content-type': 'text/event-stream' } })), 'refused');
-  assert.equal(await code(() => new Response(answer('{"circuits": [', 'max_tokens'), { status: 200, headers: { 'content-type': 'text/event-stream' } })), 'big');
-  await assert.rejects(readCircuitPhoto({ apiKey: '', data: 'AAAA' }), (e) => e.code === 'key');
-  // cancelled by the reader
-  const ctl = new AbortController();
-  ctl.abort();
-  assert.equal(await withFetch(err(500, 'api_error'), async () => {
-    try { await readCircuitPhoto({ apiKey: 'k', data: 'AAAA', signal: ctl.signal }); return 'ok'; } catch (e) { return e.code; }
-  }), 'cancelled');
 });

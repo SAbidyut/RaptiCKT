@@ -1,94 +1,29 @@
-// Circuit from a photo: the drawing that Claude reads off a picture of a circuit diagram (a
-// textbook figure, a sketch), described on a grid, turned into a board circuit. The format is
-// what the JSON schema below asks for; buildFromDrawing() is pure (no network) so it can be
-// tested on hand-written drawings.
+// Circuit from a photo: the drawing the phone reads off a picture of a circuit diagram (a
+// textbook figure, a sketch; src/vision/), described on a grid, turned into a board circuit.
+// buildFromDrawing() is pure (no network, no picture) so it can be tested on hand-written
+// drawings.
 //
 // Grid: x to the right, y down, one unit between neighbouring junctions or parts. Every part
 // runs from one grid point to another along a horizontal or vertical line; wires join grid
 // points; a point where a part ends, a wire bends or wires meet is one node.
+//
+// A drawing: { title, parts, wires, ground, quantities, asked, notes? }
+//   parts: [{ kind, text, value, from, to, polarity, control }] — kind: resistor, voltage_source,
+//     current_source, dependent_voltage_source, dependent_current_source, capacitor, inductor,
+//     ac_voltage_source, ac_current_source, open_switch, closed_switch; value in SI units (the
+//     gain for a dependent source); from / to: grid points { x, y }; polarity: the end ('from' |
+//     'to') of a source's + or arrow, else 'none'; control: what a dependent source's gain
+//     multiplies ('vx', 'ix'), as named in quantities.
+//   wires: [{ from, to }]; ground: [{ x, y }]
+//   quantities: [{ name, kind: node_voltage | voltage_across | current_through, at, part (index
+//     in parts, -1 for a node voltage), positive ('from' | 'to' | 'none') }]
+//   asked: names of the quantities the problem asks for.
 
 import { getType, GRID } from '../elements/index.js';
 import { CircuitDoc } from './doc.js';
 
 const G = GRID;
 const U = 6 * G; // one grid unit on the board: an 80-unit part with a 20-unit lead at each end
-
-// ------------------------------------------------------------------ what Claude returns
-const PT = { type: 'object', properties: { x: { type: 'integer' }, y: { type: 'integer' } }, required: ['x', 'y'], additionalProperties: false };
-export const KINDS = ['resistor', 'voltage_source', 'current_source', 'dependent_voltage_source', 'dependent_current_source', 'capacitor', 'inductor', 'ac_voltage_source', 'ac_current_source', 'open_switch', 'closed_switch'];
-const CIRCUIT = {
-  type: 'object',
-  properties: {
-    title: { type: 'string' },
-    parts: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          kind: { type: 'string', enum: KINDS },
-          text: { type: 'string' },
-          value: { type: 'number' },
-          from: PT,
-          to: PT,
-          polarity: { type: 'string', enum: ['from', 'to', 'none'] },
-          control: { type: 'string' },
-        },
-        required: ['kind', 'text', 'value', 'from', 'to', 'polarity', 'control'],
-        additionalProperties: false,
-      },
-    },
-    wires: { type: 'array', items: { type: 'object', properties: { from: PT, to: PT }, required: ['from', 'to'], additionalProperties: false } },
-    ground: { type: 'array', items: PT },
-    quantities: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          kind: { type: 'string', enum: ['node_voltage', 'voltage_across', 'current_through'] },
-          at: PT,
-          part: { type: 'integer' },
-          positive: { type: 'string', enum: ['from', 'to', 'none'] },
-        },
-        required: ['name', 'kind', 'at', 'part', 'positive'],
-        additionalProperties: false,
-      },
-    },
-    asked: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['title', 'parts', 'wires', 'ground', 'quantities', 'asked'],
-  additionalProperties: false,
-};
-export const PHOTO_SCHEMA = {
-  type: 'object',
-  properties: {
-    circuits: { type: 'array', items: CIRCUIT },
-    problem: { type: 'string' },
-  },
-  required: ['circuits', 'problem'],
-  additionalProperties: false,
-};
-
-export const PHOTO_PROMPT = `You read circuit diagrams from photos and screenshots (textbook figures, exam papers, hand sketches) and describe each circuit exactly, so that it can be rebuilt and simulated.
-
-Describe every circuit diagram in the image in "circuits" (a page with several figures gives several circuits, in reading order; give each the figure caption or number as its title, else a short description). If the image shows no circuit diagram, or it is too blurred to read, return no circuits and say why in "problem". Use "problem" also to mention anything you were unsure of; otherwise leave it empty.
-
-Coordinates: put the circuit on a grid of integer points, x to the right and y downwards, (0, 0) at the top-left corner. Give every corner, junction dot, T-junction and end of a part its own grid point, keeping the layout of the drawing: parts side by side in the drawing get neighbouring columns or rows, and the grid follows the drawing's rows and columns (the top wire is one y, the bottom wire another; each vertical branch is its own x). Every part runs between two grid points on one horizontal or vertical line ("from" and "to"), usually one unit apart; two parts in series on one line need three points. Wires are straight horizontal or vertical segments between grid points ("wires"); add one for every stretch of plain wire, including short ones joining a part to a corner. Do not leave a part end unconnected unless the drawing really leaves it open (an output terminal).
-
-Parts:
-- resistor: value in ohms (2 kΩ → 2000).
-- voltage_source: an independent source drawn with + and − (a circle with ±, or a battery: the long plate is +). value in volts; polarity = the end ("from" or "to") where its + is.
-- current_source: a circle with an arrow. value in amperes; polarity = the end its arrow points to.
-- dependent_current_source / dependent_voltage_source: a diamond. value = the number in front of the controlling quantity (0.1 in "0.1vx", 4 in "4ix"; 1 if there is none); control = the name of that quantity exactly as written ("vx", "ix", "Vo"); polarity as for the independent sources. Every control name must also be described in "quantities".
-- capacitor (farads), inductor (henries), ac_voltage_source / ac_current_source (amplitude), open_switch / closed_switch (value 0).
-- text = the part's label as printed ("20 Ω", "0.1vx", "12 V").
-
-Quantities ("quantities"): every named voltage or current marked on the drawing (vx, Vo, i, ix, io …), and every control name of a dependent source.
-- node_voltage: a voltage written at a node with no + / − marks (it is that node's voltage to ground); "at" = a grid point on that node; part = -1; positive = "none".
-- voltage_across: a voltage shown with + and − across a part; part = the index of that part in "parts" (from 0); positive = the end of that part ("from" or "to") marked +; "at" = the part's "from" point.
-- current_through: a current shown by an arrow beside or on a part; part = its index; positive = the end of the part the arrow points towards; "at" = the part's "from" point. If the arrow is on a plain wire, name the part in series with that wire.
-
-ground: the grid points of ground symbols (empty if the drawing has none). asked: the names of the quantities the problem text asks to find, if any is visible.`;
 
 // ------------------------------------------------------------------ drawing → board
 const key = (p) => p.x + ',' + p.y;

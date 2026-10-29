@@ -42,7 +42,6 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
@@ -51,13 +50,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * RaptiCKT host activity. The simulator itself is a self-contained web
@@ -71,10 +63,8 @@ public class MainActivity extends Activity {
     private static final int REQ_CAMERA = 43;
     private static final int REQ_IMAGE = 44;
     /** long side of a picture handed to the page, unless the page asks for another size */
-    private static final int IMAGE_MAX = 1568;
+    private static final int IMAGE_MAX = 2600;
     private volatile int imageMax = IMAGE_MAX;
-    /** the only host the page may reach through the native HTTP bridge */
-    private static final String API_HOST = "https://api.anthropic.com/";
     private static final int BG = Color.parseColor("#0B1120");
 
     private WebView web;
@@ -86,7 +76,6 @@ public class MainActivity extends Activity {
     private boolean pageReady;
     private boolean immersive;
     private final Handler ui = new Handler(Looper.getMainLooper());
-    private final Map<String, HttpURLConnection> requests = new ConcurrentHashMap<>();
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -433,62 +422,6 @@ public class MainActivity extends Activity {
         return bytes.toByteArray();
     }
 
-    // ------------------------------------------------------------ HTTP for the page
-    /**
-     * One request to the Claude API, streamed back to the page in pieces: head (status and
-     * headers), data (base64 chunks), then end or error. The page's own fetch is not used
-     * because it runs from file://, which the API's CORS rules need not accept.
-     */
-    private void httpRun(String id, String method, String url, String headersJson, String body) {
-        HttpURLConnection con = null;
-        try {
-            if (url == null || !url.startsWith(API_HOST)) throw new Exception("blocked: " + url);
-            con = (HttpURLConnection) new URL(url).openConnection();
-            requests.put(id, con);
-            con.setConnectTimeout(30000);
-            con.setReadTimeout(600000);
-            con.setRequestMethod(method == null || method.isEmpty() ? "GET" : method);
-            JSONObject h = new JSONObject(headersJson == null ? "{}" : headersJson);
-            for (Iterator<String> it = h.keys(); it.hasNext(); ) {
-                String k = it.next(), lk = k.toLowerCase();
-                if (lk.equals("content-length") || lk.equals("host") || lk.equals("connection") || lk.equals("accept-encoding")) continue;
-                con.setRequestProperty(k, h.getString(k));
-            }
-            if (body != null && !"GET".equals(con.getRequestMethod())) {
-                byte[] b = body.getBytes(StandardCharsets.UTF_8);
-                con.setDoOutput(true);
-                con.setFixedLengthStreamingMode(b.length);
-                try (OutputStream os = con.getOutputStream()) { os.write(b); }
-            }
-            int status = con.getResponseCode();
-            JSONArray head = new JSONArray();
-            for (Map.Entry<String, List<String>> e : con.getHeaderFields().entrySet()) {
-                if (e.getKey() == null) continue; // the status line
-                head.put(new JSONArray().put(e.getKey()).put(String.join(", ", e.getValue())));
-            }
-            String js = "window.__raptiHttpHead && window.__raptiHttpHead(" + JSONObject.quote(id) + "," + status + "," + JSONObject.quote(head.toString()) + ")";
-            ui.post(() -> web.evaluateJavascript(js, null));
-            InputStream in = status >= 400 ? con.getErrorStream() : con.getInputStream();
-            if (in != null) {
-                try (InputStream s = in) {
-                    byte[] buf = new byte[16384];
-                    int n;
-                    while ((n = s.read(buf)) > 0) {
-                        String chunk = Base64.encodeToString(buf, 0, n, Base64.NO_WRAP);
-                        ui.post(() -> web.evaluateJavascript("window.__raptiHttpData && window.__raptiHttpData(" + JSONObject.quote(id) + ",'" + chunk + "')", null));
-                    }
-                }
-            }
-            ui.post(() -> web.evaluateJavascript("window.__raptiHttpEnd && window.__raptiHttpEnd(" + JSONObject.quote(id) + ")", null));
-        } catch (Exception e) {
-            String msg = String.valueOf(e.getMessage());
-            ui.post(() -> web.evaluateJavascript("window.__raptiHttpError && window.__raptiHttpError(" + JSONObject.quote(id) + "," + JSONObject.quote(msg) + ")", null));
-        } finally {
-            requests.remove(id);
-            if (con != null) con.disconnect();
-        }
-    }
-
     // ------------------------------------------------------------- bridge
     private final class Bridge {
         /** Hardware facts the web app uses to pick smooth or simple animations. */
@@ -603,18 +536,6 @@ public class MainActivity extends Activity {
                     imageError(String.valueOf(e.getMessage()));
                 }
             });
-        }
-
-        /** Start one HTTP request to the Claude API (see httpRun); the answer comes back in pieces. */
-        @JavascriptInterface
-        public void httpRequest(String id, String method, String url, String headersJson, String body) {
-            new Thread(() -> httpRun(id, method, url, headersJson, body), "rapti-http").start();
-        }
-
-        @JavascriptInterface
-        public void httpAbort(String id) {
-            HttpURLConnection con = requests.remove(id);
-            if (con != null) new Thread(con::disconnect).start();
         }
 
         @JavascriptInterface

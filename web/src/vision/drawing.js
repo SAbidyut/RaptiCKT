@@ -1,5 +1,5 @@
 // A read structure (vertices, wires, parts in picture pixels) as the grid drawing that
-// buildFromDrawing() turns into a board circuit — the same format Claude answers in.
+// buildFromDrawing() turns into a board circuit.
 
 const KIND = {
   resistor: () => 'resistor',
@@ -13,7 +13,7 @@ const KIND = {
 
 /**
  * Grid positions for the structure's vertices. Rows join vertices tied by horizontal wires and
- * parts, columns by vertical ones. The grid is drawn the way Claude draws it: in the picture's
+ * parts, columns by vertical ones. The grid is drawn as a person would draw it: in the picture's
  * order (its tilt taken out), neighbouring rows and columns one unit apart, so that a part spans
  * about one unit and comes out at its own size on the board; a part's leads and the little
  * offsets of a photo vanish, as rows or columns a few parts' lengths apart at most share a line

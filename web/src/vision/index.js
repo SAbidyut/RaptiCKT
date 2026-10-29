@@ -1,6 +1,6 @@
-// Reading circuit diagrams from a picture on the phone itself — no network, no key. The answer
-// has the same shape as the Claude reader's ({ circuits, problem }), so the photo screen and
-// buildFromDrawing() treat both alike.
+// Reading circuit diagrams from a picture on the phone itself — no network, no key. Each circuit
+// comes out as a grid drawing ({ circuits, problem }) that buildFromDrawing() (ui/photo-circuit.js)
+// turns into a board circuit.
 
 import { prepare } from './image.js';
 import { findFigures } from './figures.js';
