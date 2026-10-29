@@ -5,7 +5,7 @@
 
 import { thin, skeletonGraph, pruneSpurs, edgePoints, simplify } from './skeleton.js';
 import { findShapes } from './shapes.js';
-import { components } from './image.js';
+import { components, fillPinholes } from './image.js';
 import { arrowTip } from './arrow.js';
 
 const deg = (a) => (a * 180) / Math.PI;
@@ -42,6 +42,7 @@ export function readStructure(img, fig) {
       if (ink[i]) { all[y * W + x] = 1; if (isPart.has(labels[i])) art[y * W + x] = 1; }
     }
   }
+  fillPinholes(art, W, H, Math.round(0.6 * sw * sw));
   const shapes = findShapes(art, W, H, [0, 0, W - 1, H - 1], sw);
   let g = skeletonGraph(thin(art, W, H), W, H);
   g = pruneSpurs(g, Math.max(3, Math.round(1.6 * sw)));
@@ -94,24 +95,33 @@ export function readStructure(img, fig) {
 
   // ---------------------------------------------------------------- plates
   // a plate: a short straight bar whose middle a wire meets at right angles, both bar ends free
+  // (drawn by hand, a bar may be longer, lean a little and meet its wire a little askew)
   const plates = [];
+  const away = (p, v) => {
+    const o = vertices[other(p, v)], V = vertices[v], dx = o.x - V.x, dy = o.y - V.y, l = Math.hypot(dx, dy) || 1;
+    return [dx / l, dy / l];
+  };
   for (const v of vertices) {
     const inc = at[v.id];
     if (inc.length !== 3) continue;
     const ps = inc.map((id) => pieces[id]);
     for (let i = 0; i < 3; i++) {
       const [p1, p2] = ps.filter((_, k) => k !== i), p3 = ps[i];
-      if (!p1.dir || p1.dir !== p2.dir || !p3.dir || p3.dir === p1.dir) continue;
       if (at[other(p1, v.id)].length !== 1 || at[other(p2, v.id)].length !== 1) continue;
-      if (p1.len > 7 * sw || p2.len > 7 * sw) continue;
+      if (p1.len > 12 * sw || p2.len > 12 * sw) continue;
+      // the two halves point opposite ways, in one line; the bar lies within 25° of level (or
+      // of upright), and the wire meets it within 25° of square
+      const u1 = away(p1, v.id), u2 = away(p2, v.id), u3 = away(p3, v.id);
+      if (u1[0] * u2[0] + u1[1] * u2[1] > -0.9) continue;
+      const bx = u1[0] - u2[0], by = u1[1] - u2[1], bl = Math.hypot(bx, by);
+      if (Math.min(Math.abs(bx), Math.abs(by)) / bl > 0.42 || Math.abs(bx * u3[0] + by * u3[1]) / bl > 0.42) continue;
+      const dir = Math.abs(bx) >= Math.abs(by) ? 'h' : 'v';
       const e1 = vertices[other(p1, v.id)], e2 = vertices[other(p2, v.id)];
-      // the two halves point opposite ways
-      if ((e1.x - v.x) * (e2.x - v.x) + (e1.y - v.y) * (e2.y - v.y) >= 0) continue;
       p1.cls = 'plate'; p2.cls = 'plate';
       const ov = other(p3, v.id), o = vertices[ov];
       // which side the wire comes from, along the wire only (a tilt of a pixel is no side)
-      const from = p1.dir === 'h' ? [0, Math.sign(o.y - v.y)] : [Math.sign(o.x - v.x), 0];
-      plates.push({ v: v.id, dir: p1.dir, len: p1.len + p2.len, cx: (e1.x + e2.x) / 2, cy: (e1.y + e2.y) / 2, wireFrom: from, wire: p3.id });
+      const from = dir === 'h' ? [0, Math.sign(o.y - v.y)] : [Math.sign(o.x - v.x), 0];
+      plates.push({ v: v.id, dir, len: p1.len + p2.len, cx: (e1.x + e2.x) / 2, cy: (e1.y + e2.y) / 2, wireFrom: from, wire: p3.id });
       break;
     }
   }
@@ -121,20 +131,33 @@ export function readStructure(img, fig) {
   // are a zigzag, however upright they are
   const byRun = new Map();
   for (const p of pieces) { if (!byRun.has(p.run)) byRun.set(p.run, []); byRun.get(p.run).push(p); }
+  // (the next stroke, or one a short bend further on: a tip drawn by hand is rounded; long
+  // strokes only when the two are of a length, as a wide zigzag's are, not a hook at a wire's end)
+  const back = (p, q) => {
+    const long = Math.max(p.len, q.len);
+    return p.dx * q.dx + p.dy * q.dy < -0.5 * p.len * q.len && (long <= 8 * sw || (long <= 14 * sw && Math.min(p.len, q.len) >= 0.5 * long));
+  };
   for (const list of byRun.values()) {
     list.sort((a, b) => a.k - b.k);
     for (let k = 0; k + 1 < list.length; k++) {
-      const p = list[k], q = list[k + 1];
-      if (p.cls === 'plate' || q.cls === 'plate') continue;
-      if (p.len > 8 * sw || q.len > 8 * sw) continue;
-      const back = p.dx * q.dx + p.dy * q.dy < -0.5 * p.len * q.len;
-      if (back) { p.cls = 'other'; q.cls = 'other'; }
+      const p = list[k];
+      if (p.cls === 'plate' || p.len > 14 * sw) continue;
+      for (let j = k + 1, bend = 0; j < list.length && bend <= 3 * sw; j++) {
+        const q = list[j];
+        if (q.cls === 'plate' || q.len > 14 * sw) break;
+        if (back(p, q)) {
+          for (let t = k; t <= j; t++) list[t].cls = 'other';
+          break;
+        }
+        bend += q.len;
+      }
     }
   }
   for (const p of pieces) if (!p.cls) p.cls = p.a === p.b ? 'drop' : p.dir ? 'wire' : 'other'; // a loop: a tiny hole in a thick blot
-  // what is left of a body's outline just outside the shape fitted to it is no part
+  // what is left of a source body's outline just outside the shape fitted to it is no part (a
+  // small ring is a joint: what runs into it are its wires)
   for (const p of pieces) {
-    if (p.cls === 'other' && shapes.some((s) => p.pts.every(([x, y]) => inShape(s, x, y, 1.6 * sw)))) p.cls = 'drop';
+    if (p.cls === 'other' && shapes.some((s) => s.r >= 3 * sw && p.pts.every(([x, y]) => inShape(s, x, y, 1.6 * sw)))) p.cls = 'drop';
   }
   // pieces at a vertex, leaving out dropped specks
   const live = (v, but) => at[v].filter((id) => id !== but && pieces[id].cls !== 'drop');
@@ -188,6 +211,29 @@ export function readStructure(img, fig) {
       list.length = 0;
     }
   }
+  // where a part's lead runs, across the part's axis: its wire a little way out from terminal v,
+  // where it runs straight (a zigzag may start at a tip, its lead bent over to it)
+  const lead = (v, axis) => {
+    const V = vertices[v], here = axis === 'h' ? V.y : V.x, vals = [];
+    const seen = new Set([v]);
+    let ring = [v];
+    for (let step = 0; step < 4 && ring.length; step++) {
+      const next = [];
+      for (const u of ring) for (const id of at[u]) {
+        // (along the lead only: wire running the part's way, or a little bend into it)
+        const q = pieces[id], o = other(q, u);
+        if (q.cls !== 'wire' || seen.has(o) || (q.dir !== axis && q.len > 2 * sw)) continue;
+        seen.add(o); next.push(o);
+        if (q.dir !== axis) continue;
+        for (const [x, y] of q.pts) {
+          const out = axis === 'h' ? Math.abs(x - V.x) : Math.abs(y - V.y), across = axis === 'h' ? y : x;
+          if (out >= 2 * sw && out <= 8 * sw && Math.abs(across - here) <= 3 * sw) vals.push(across);
+        }
+      }
+      ring = next;
+    }
+    return vals.length ? vals.sort((a, b) => a - b)[vals.length >> 1] : here;
+  };
   const parts = [];
   for (const list of groups) {
     if (!list.length) continue;
@@ -211,7 +257,17 @@ export function readStructure(img, fig) {
       const d = Math.max(Math.abs(vertices[u].x - vertices[v].x), Math.abs(vertices[u].y - vertices[v].y));
       if (d > best) { best = d; a = u; b = v; }
     }
-    parts.push(classifyPath(vertices[a], vertices[b], pts, box, sw, list, orderPath(a, b, list, pieces, at)));
+    const part = classifyPath(vertices[a], vertices[b], pts, box, sw, list, orderPath(a, b, list, pieces, at), lead);
+    // a wire drawn by hand wobbles, and a mark on it (a hook, an arrowhead) bulges out; a part
+    // zigzags or coils: what never turns back and is hardly longer than its ends are apart is wire
+    // (unless it turns this way and that all along, a zigzag drawn small and tight)
+    const chord = Math.hypot(vertices[a].x - vertices[b].x, vertices[a].y - vertices[b].y);
+    if (part.type !== 'inductor' && part.flips <= 1 && part.turns < 4 && len < 1.35 * chord) {
+      const dir = Math.abs(vertices[a].x - vertices[b].x) >= Math.abs(vertices[a].y - vertices[b].y) ? 'h' : 'v';
+      for (const id of list) { pieces[id].cls = 'wire'; pieces[id].dir = dir; }
+      continue;
+    }
+    parts.push(part);
   }
 
   // two path parts meeting end to end in line, with nothing else at the meeting point, are one
@@ -259,7 +315,7 @@ export function readStructure(img, fig) {
         const list = [...P.pieces, ...Q.pieces];
         const pts = list.flatMap((id) => pieces[id].pts);
         const box = [Math.min(P.box[0], Q.box[0]), Math.min(P.box[1], Q.box[1]), Math.max(P.box[2], Q.box[2]), Math.max(P.box[3], Q.box[3])];
-        const np = classifyPath(A, B, pts, box, sw, list, orderPath(ends[0], ends[1], list, pieces, at));
+        const np = classifyPath(A, B, pts, box, sw, list, orderPath(ends[0], ends[1], list, pieces, at), lead);
         if (np.type !== 'resistor' && np.type !== 'inductor') np.type = 'resistor';
         parts.splice(j, 1);
         parts[i] = np;
@@ -306,26 +362,40 @@ export function readStructure(img, fig) {
     parts.push(part);
   });
 
+  // loose straight bars nearby (the lower bars of a ground, the inner cells of a battery, a plate
+  // drawn apart from its wire)
+  const bars = looseBars(img, fig, X0, Y0, sw);
+  const usedBars = new Set();
   // ---------------------------------------------------------------- plates the thinning lost
-  // a short plate's halves can thin away (one or both): its wire then just ends at the bar
+  // a short plate's halves can thin away (one or both): its wire then just ends at the bar; drawn
+  // by hand, the bar may stop short of the wire, a stroke of its own just past the wire's end
   for (const v of vertices) {
     if (v.cut != null) continue;
     const inc = live(v.id, -1);
     if (inc.length !== 1) continue;
     const p = pieces[inc[0]];
     if (p.cls !== 'wire' || !p.dir || p.len < 2 * sw) continue;
-    const bar = barAcross(art, W, H, v, p.dir, sw);
-    if (!bar) continue;
     const o = vertices[other(p, v.id)];
+    let bar = barAcross(art, W, H, v, p.dir, sw);
+    if (!bar) {
+      const L = Math.hypot(v.x - o.x, v.y - o.y) || 1, ux = (v.x - o.x) / L, uy = (v.y - o.y) / L;
+      let best = null, bd = Infinity;
+      for (const r of bars) {
+        if (usedBars.has(r.id) || r.dir === p.dir) continue;
+        // ahead of the end, and the wire's line through the bar
+        const along = (r.cx - v.x) * ux + (r.cy - v.y) * uy, across = Math.abs(-(r.cx - v.x) * uy + (r.cy - v.y) * ux);
+        if (along < -0.5 * sw || along > 4 * sw || across > r.len / 2) continue;
+        if (along < bd) { bd = along; best = r; }
+      }
+      if (best) { usedBars.add(best.id); bar = best; }
+    }
+    if (!bar) continue;
     const from = p.dir === 'v' ? [0, Math.sign(o.y - v.y)] : [Math.sign(o.x - v.x), 0];
     plates.push({ v: v.id, dir: p.dir === 'v' ? 'h' : 'v', len: bar.len, cx: bar.cx, cy: bar.cy, wireFrom: from, wire: p.id });
   }
 
   // ---------------------------------------------------------------- capacitors, batteries, grounds
   const used = new Set();
-  // loose straight bars nearby (the lower bars of a ground, the inner cells of a battery)
-  const bars = looseBars(img, fig, X0, Y0, sw);
-  const usedBars = new Set();
   for (let i = 0; i < plates.length; i++) {
     if (used.has(i)) continue;
     const P = plates[i];
@@ -412,14 +482,14 @@ function orderPath(a, b, list, pieces, at) {
  * A part drawn as a path between two terminals: a zigzag (resistor), bumps on one side
  * (inductor) or something else.
  */
-function classifyPath(A, B, pts, box, sw, list, path) {
+function classifyPath(A, B, pts, box, sw, list, path, lead) {
   const axis = Math.abs(B.x - A.x) >= Math.abs(B.y - A.y) ? 'h' : 'v';
   const ux = axis === 'h' ? Math.sign(B.x - A.x) || 1 : 0, uy = axis === 'v' ? Math.sign(B.y - A.y) || 1 : 0;
   const L = axis === 'h' ? Math.abs(B.x - A.x) : Math.abs(B.y - A.y);
-  // profile: offset from the axis line through the terminals, against the distance along it
+  // profile: offset from the line its leads run on, against the distance along it
   const bins = Math.max(4, Math.round(L / (0.5 * sw)));
   const sum = new Float64Array(bins), cnt = new Uint32Array(bins);
-  const base = axis === 'h' ? (A.y + B.y) / 2 : (A.x + B.x) / 2;
+  const base = lead ? (lead(A.id, axis) + lead(B.id, axis)) / 2 : axis === 'h' ? (A.y + B.y) / 2 : (A.x + B.x) / 2;
   for (const [x, y] of pts) {
     const t = axis === 'h' ? (x - A.x) * ux : (y - A.y) * uy;
     const s = axis === 'h' ? y - base : x - base;
@@ -438,7 +508,14 @@ function classifyPath(A, B, pts, box, sw, list, path) {
     if (sg) last = sg;
   }
   const oneSide = Math.max(pos, neg) / Math.max(1, pos + neg);
+  // how far it crosses its line, for how far it swings out: a coil's bumps rise from the line on
+  // one side (its cusps touch it), a zigzag swings across it, however lopsided (its very ends,
+  // where the leads come in, left out)
+  const inner = prof.slice(Math.floor(0.12 * prof.length), Math.ceil(0.88 * prof.length));
+  const hi = Math.max(0, ...inner), lo = Math.min(0, ...inner);
+  const cross = Math.min(hi, -lo) / Math.max(hi, -lo, 1e-6);
   // along one simple path: a zigzag turns sharply at every tip, a coil bends gently
+  let turns = 0;
   if (path && path.length >= 3) {
     let sharp = 0, gentle = 0, bend = 0;
     for (let k = 1; k < path.length; k++) {
@@ -448,14 +525,17 @@ function classifyPath(A, B, pts, box, sw, list, path) {
       const turn = deg(Math.acos(Math.max(-1, Math.min(1, c))));
       if (turn > 95) sharp++; else if (turn > 15) { gentle++; bend += Math.sign(p.dx * q.dy - p.dy * q.dx); }
     }
-    if (sharp >= 2 && sharp >= gentle - 1) return { type: 'resistor', a: A.id, b: B.id, axis, cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, box, flips: sharp, amp, pieces: list };
+    turns = sharp + gentle;
+    if (sharp >= 2 && sharp >= gentle - 1) return { type: 'resistor', a: A.id, b: B.id, axis, cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, box, flips: sharp, turns, amp, pieces: list };
     // a coil: gentle bumps all on one side (it takes a clean drawing to tell; resistors are the
     // usual part, so anything less certain stays one)
-    if (gentle >= 3 && sharp <= 1 && oneSide > 0.8) return { type: 'inductor', a: A.id, b: B.id, axis, cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, box, flips: gentle, amp, pieces: list };
+    if (gentle >= 3 && sharp <= 1 && oneSide > 0.8 && cross < 0.3) return { type: 'inductor', a: A.id, b: B.id, axis, cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, box, flips: gentle, turns, amp, pieces: list };
   }
   let type = 'unknown';
   if ((flips >= 2 || amp >= 0.7 * sw) && amp < 6 * sw) type = 'resistor';
-  return { type, a: A.id, b: B.id, axis, cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, box, flips, amp, pieces: list };
+  // (a zigzag drawn wide by hand, its tips rounded: back and forth across its line)
+  if (flips >= 3 && cross >= 0.3 && amp < 10 * sw) type = 'resistor';
+  return { type, a: A.id, b: B.id, axis, cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, box, flips, turns, amp, pieces: list };
 }
 
 /**
@@ -583,16 +663,32 @@ function barAcross(art, W, H, v, wireDir, sw) {
   return flip ? { len, cx: best.s, cy: mid } : { len, cx: mid, cy: best.s };
 }
 
-/** Straight thin pieces of other ink near the figure: loose plates and bars. */
+/**
+ * Straight thin pieces of other ink near the figure: loose plates and bars, level or upright
+ * within 25° (a bar drawn by hand leans). Measured along their own axis: { dir, cx, cy, len, id }.
+ */
 function looseBars(img, fig, X0, Y0, sw) {
+  const { labels, w } = img;
   const out = [];
   for (const id of fig.near) {
     const c = img.comps[id - 1];
     const cw = c.x1 - c.x0 + 1, ch = c.y1 - c.y0 + 1;
-    const long = Math.max(cw, ch), short = Math.min(cw, ch);
-    if (short > 2.2 * sw || long < 2.5 * sw || long < 2.5 * short) continue;
-    if (c.area < 0.6 * long * short) continue; // a solid bar, not a letter
-    out.push({ dir: cw >= ch ? 'h' : 'v', cx: (c.x0 + c.x1) / 2 - X0, cy: (c.y0 + c.y1) / 2 - Y0, len: long, id });
+    if (Math.max(cw, ch) < 2.5 * sw || Math.min(cw, ch) > 12 * sw) continue;
+    let n = 0, mx = 0, my = 0, sxx = 0, syy = 0, sxy = 0;
+    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) if (labels[y * w + x] === id) { n++; mx += x; my += y; }
+    if (!n) continue;
+    mx /= n; my /= n;
+    for (let y = c.y0; y <= c.y1; y++) for (let x = c.x0; x <= c.x1; x++) if (labels[y * w + x] === id) { sxx += (x - mx) ** 2; syy += (y - my) ** 2; sxy += (x - mx) * (y - my); }
+    sxx /= n; syy /= n; sxy /= n;
+    const tr = sxx + syy, d = Math.sqrt(Math.max(0, tr * tr / 4 - (sxx * syy - sxy * sxy)));
+    // a uniform bar of length L spreads L / √12 along itself
+    const len = Math.sqrt(12 * (tr / 2 + d)), thick = Math.sqrt(12 * Math.max(0, tr / 2 - d));
+    if (thick > 2.2 * sw || len < 2.5 * sw || len < 2.5 * Math.max(1, thick)) continue;
+    // a solid stroke, not a bent one (a letter)
+    if (n < 0.6 * len * Math.max(1, thick)) continue;
+    const ang = Math.atan2(2 * sxy, sxx - syy) / 2, lean = Math.abs(Math.sin(ang)), dir = lean < 0.42 ? 'h' : lean > 0.906 ? 'v' : null;
+    if (!dir) continue;
+    out.push({ dir, cx: mx - X0, cy: my - Y0, len, id });
   }
   return out;
 }

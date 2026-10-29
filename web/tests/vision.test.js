@@ -1,7 +1,8 @@
 // Circuit from photo, read on the phone (no network): textbook-style drawings — clean, as grey,
-// grainy, slightly turned photos, and as rough ones (turned further, dusty, small, squeezed hard;
-// tests/fixtures, made by tools/glyphs/figures.py) — are read into circuits whose parts, values,
-// marked quantities and answers are right.
+// grainy, slightly turned photos, and as rough ones (turned further, dusty, small, squeezed hard)
+// — and drawings made by hand, in pen, labels written by hand (tests/fixtures, made by
+// tools/glyphs/figures.py) are read into circuits whose parts, values, marked quantities and
+// answers are right.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -97,6 +98,45 @@ for (const name of ['thevenin.png', 'thevenin-photo.jpg']) {
     // nothing across a and b: the 6 Ω takes 12 V × 6 / 10
     const R6 = r.el((e) => e.constructor.type === 'resistor' && e.p.r === 6);
     near(Math.abs(r.sim.v(R6.nodes[0]) - r.sim.v(R6.nodes[1])), 7.2, 1e-6, 'v across the 6 Ω');
+  });
+}
+
+for (const name of ['sketch-divider.png', 'sketch-divider-photo.jpg']) {
+  test(`${name}: a divider drawn by hand, + Vₒ − written across the 3 Ω — Vₒ = 9 V`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['resistor', 'resistor', 'resistor', 'voltage_source']);
+    assert.deepEqual(r.texts, ['18 V', '2 Ω', '3 Ω', '6 Ω']);
+    const q = r.c.quantities.find((x) => x.kind === 'voltage_across');
+    assert.ok(q && /^v[o0]$/.test(q.name), 'the + Vₒ − marking is read');
+    assert.equal(r.c.parts[q.part].text, '3 Ω');
+    const R3 = r.el((e) => e.constructor.type === 'resistor' && e.p.r === 3);
+    near(Math.abs(r.sim.v(R3.nodes[0]) - r.sim.v(R3.nodes[1])), 9, 1e-6, 'Vo');
+  });
+}
+
+for (const name of ['sketch-mesh.png', 'sketch-mesh-photo.jpg']) {
+  test(`${name}: a battery and a current source drawn by hand, i marked down the 4 Ω — i = 7/3 A`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['current_source', 'resistor', 'resistor', 'voltage_source']);
+    assert.deepEqual(r.texts, ['10 V', '2 A', '2 Ω', '4 Ω']);
+    const q = r.c.quantities.find((x) => x.name === 'i');
+    assert.ok(q && q.kind === 'current_through', 'the hand-drawn arrow and its i are read');
+    assert.equal(r.c.parts[q.part].text, '4 Ω');
+    const R4 = r.el((e) => e.constructor.type === 'resistor' && e.p.r === 4);
+    near(Math.abs(R4.i), 7 / 3, 1e-6, 'i');
+  });
+}
+
+for (const name of ['sketch-rlc.png', 'sketch-rlc-photo.jpg']) {
+  test(`${name}: a coil and a capacitor drawn by hand, with their units written by hand`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['capacitor', 'inductor', 'resistor', 'voltage_source']);
+    const by = (k) => r.c.parts.find((p) => p.kind === k);
+    assert.equal(by('capacitor').value, 1e-5);
+    assert.equal(by('inductor').value, 2e-3);
+    assert.equal(by('resistor').value, 1000);
+    assert.equal(by('voltage_source').value, 5);
+    assert.ok(r.c.ground.length >= 1, 'the ground is read');
   });
 }
 

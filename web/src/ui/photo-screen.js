@@ -113,7 +113,7 @@ export class PhotoScreen {
         <button data-mode="claude" class="${off ? '' : 'on'}">With Claude AI</button>
       </div>
       <p class="ph-mode-note">${off
-        ? '<b>Offline</b> — no internet, no key. Reads printed diagrams (textbooks, exam papers, screenshots): wires, resistors, sources, dependent sources, capacitors, coils, grounds and their values. For hand sketches use Claude.'
+        ? '<b>Offline</b> — no internet, no key. Reads printed diagrams (textbooks, exam papers, screenshots) and neat sketches drawn by hand: wires, resistors, sources, dependent sources, capacitors, coils, grounds and their values. For untidy sketches use Claude.'
         : '<b>Claude AI</b> — reads any diagram, printed or hand-drawn, and the problem around it. Needs the internet and your own Anthropic API key.'}</p>
       <div class="ph-btns">
         <button class="btn primary big" data-x="camera">${icon('camera', 20)} Take a photo</button>

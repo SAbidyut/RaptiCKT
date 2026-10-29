@@ -2,14 +2,14 @@
 // joined into words ("20 Ω", "0.1vₓ", "4iₓ"), with each character cut out sharply for reading;
 // and the loose arrows that mark currents.
 
-import { arrowTip } from './arrow.js';
+import { arrowOf } from './arrow.js';
 
 const median = (a) => { const b = [...a].sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
 
 /**
  * Characters and words near a figure. img: { w, h, labels, comps, sw, src }, fig: from
  * findFigures, S: from readStructure (source bodies and used bars are left out).
- * Returns { words: [{ glyphs, x0, y0, x1, y1 }], arrows: [{ x0, y0, x1, y1, dir: [dx, dy], cx, cy }], height }.
+ * Returns { words: [{ glyphs, x0, y0, x1, y1 }], arrows: [{ x0, y0, x1, y1, dir: [dx, dy], cx, cy }], height, tilt }.
  */
 export function findText(img, fig, S) {
   const { sw, comps } = img;
@@ -35,7 +35,7 @@ export function findText(img, fig, S) {
   for (const g of cands) {
     const gw = g.x1 - g.x0 + 1, gh = g.y1 - g.y0 + 1;
     const long = Math.max(gw, gh), short = Math.min(gw, gh);
-    if (long >= 1.6 * H && long >= 2.6 * short) {
+    if (long >= 1.3 * H && long >= 2 * short) {
       const a = arrowOf(img, g);
       if (a) { arrows.push(a); continue; }
     }
@@ -118,34 +118,50 @@ export function findText(img, fig, S) {
         prev.area += g.area;
       } else list.push(g);
     }
-    list.sort((a, b) => a.x0 - b.x0);
-    const x0 = Math.min(...list.map((g) => g.x0)), y0 = Math.min(...list.map((g) => g.y0));
-    const x1 = Math.max(...list.map((g) => g.x1)), y1 = Math.max(...list.map((g) => g.y1));
-    // the line's main height: the lower middle of its bigger characters (one blot with grain
-    // stuck on it must not make the others look small)
-    const tall = Math.max(...list.map((g) => g.y1 - g.y0 + 1));
-    const hs2 = list.map((g) => g.y1 - g.y0 + 1).filter((v) => v >= 0.5 * tall).sort((a, b) => a - b);
-    const top = hs2[(hs2.length - 1) >> 1];
-    list.forEach((g, k) => {
-      const gh = g.y1 - g.y0 + 1;
-      // (a word of small letters alone, like vₓ, has no tall ones to compare with)
-      g.small = gh < 0.72 * top || gh < 0.55 * H;
-      // a subscript sits lower than the character before it (a lowercase letter on the line,
-      // like the m of "2 mH", does not); the next character at its level is one too
-      const prev = list[k - 1];
-      if (!prev) { g.low = false; } else {
-        const ph = prev.y1 - prev.y0 + 1;
-        // heights as if the photo were straight (a tilted line climbs or falls along the word)
-        const dy = tilt * ((g.x0 + g.x1) / 2 - (prev.x0 + prev.x1) / 2);
-        const gy0 = g.y0 - dy, gy1 = g.y1 - dy;
-        if (prev.low) g.low = Math.abs(gy1 - prev.y1) < 0.35 * Math.max(gh, ph) && gy0 > prev.y0 - 0.3 * ph;
-        else g.low = (gy1 > prev.y1 + 0.2 * ph && gy0 > prev.y0 + 0.1 * ph) || (gh < 0.8 * ph && gy1 > prev.y1 + 0.12 * ph && gy0 > prev.y0 + 0.3 * ph);
-      }
-      g.bitmap = cutGlyph(img, g);
-    });
-    words.push({ glyphs: list, x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 });
+    for (const g of list) g.bitmap = cutGlyph(img, g);
+    words.push(word(list, H, tilt));
   }
-  return { words, arrows, height: H };
+  return { words, arrows, height: H, tilt };
+}
+
+/**
+ * A word of characters (with their bitmaps): its box, and each character marked small or low
+ * (a subscript) against the others, in print (low) and by hand (lowHand). H: the figure's text
+ * height; tilt: the photo's.
+ */
+export function word(list, H, tilt = 0) {
+  list.sort((a, b) => a.x0 - b.x0);
+  const x0 = Math.min(...list.map((g) => g.x0)), y0 = Math.min(...list.map((g) => g.y0));
+  const x1 = Math.max(...list.map((g) => g.x1)), y1 = Math.max(...list.map((g) => g.y1));
+  // the line's main height: the lower middle of its bigger characters (one blot with grain
+  // stuck on it must not make the others look small)
+  const tall = Math.max(...list.map((g) => g.y1 - g.y0 + 1));
+  const hs2 = list.map((g) => g.y1 - g.y0 + 1).filter((v) => v >= 0.5 * tall).sort((a, b) => a - b);
+  const top = hs2[(hs2.length - 1) >> 1];
+  list.forEach((g, k) => {
+    const gh = g.y1 - g.y0 + 1;
+    // (a word of small letters alone, like vₓ, has no tall ones to compare with)
+    g.small = gh < 0.72 * top || gh < 0.55 * H;
+    // a subscript sits lower than the character before it (a lowercase letter on the line,
+    // like the m of "2 mH", does not); the next character at its level is one too. A speck
+    // before it is no character to measure by
+    let j = k - 1;
+    while (j >= 0 && list[j].y1 - list[j].y0 + 1 < 0.3 * top && list[j].x1 - list[j].x0 + 1 < 0.3 * top) j--;
+    const prev = list[j];
+    if (!prev) { g.low = g.lowHand = false; } else {
+      const ph = prev.y1 - prev.y0 + 1;
+      // heights as if the photo were straight (a tilted line climbs or falls along the word)
+      const dy = tilt * ((g.x0 + g.x1) / 2 - (prev.x0 + prev.x1) / 2);
+      const gy0 = g.y0 - dy, gy1 = g.y1 - dy;
+      const level = Math.abs(gy1 - prev.y1) < 0.35 * Math.max(gh, ph) && gy0 > prev.y0 - 0.3 * ph;
+      const smaller = gh < 0.8 * ph && gy1 > prev.y1 + 0.12 * ph && gy0 > prev.y0 + 0.3 * ph;
+      g.low = prev.low ? level : (gy1 > prev.y1 + 0.2 * ph && gy0 > prev.y0 + 0.1 * ph) || smaller;
+      // (written by hand, a line wanders: a character a little lower is a subscript only if it
+      // is smaller too)
+      g.lowHand = prev.lowHand ? level : smaller;
+    }
+  });
+  return { glyphs: list, x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2 };
 }
 
 /** Is a glyph one upright stroke (the stem of an i or j), not a round letter or digit like an 8? */
@@ -273,32 +289,3 @@ export function despeck(data, w, h) {
   }
 }
 
-/** A current arrow (shaft with a head at one end), or null. */
-export function arrowOf(img, g) {
-  const { labels, w, sw } = img;
-  const own = new Set(g.ids);
-  const horiz = g.x1 - g.x0 >= g.y1 - g.y0;
-  const L = horiz ? g.x1 - g.x0 + 1 : g.y1 - g.y0 + 1;
-  // width of the ink across the arrow, all along it
-  const width = new Float32Array(L);
-  for (let t = 0; t < L; t++) {
-    let a = Infinity, b = -Infinity;
-    const n = horiz ? g.y1 - g.y0 + 1 : g.x1 - g.x0 + 1;
-    for (let q = 0; q < n; q++) {
-      const x = horiz ? g.x0 + t : g.x0 + q, y = horiz ? g.y0 + q : g.y0 + t;
-      if (own.has(labels[y * w + x])) { a = Math.min(a, q); b = Math.max(b, q); }
-    }
-    width[t] = b >= a ? b - a + 1 : 0;
-  }
-  const sorted = [...width].sort((x, y) => x - y);
-  const shaft = Math.max(1, sorted[sorted.length >> 1]);
-  const thin = width.filter((v) => v > 0 && v <= 1.5 * shaft).length;
-  if (thin < 0.35 * L) return null; // no shaft
-  const tip = arrowTip(width, sw);
-  if (!tip) return null; // no head: a plain bar
-  const toEnd = tip > 0;
-  return {
-    x0: g.x0, y0: g.y0, x1: g.x1, y1: g.y1, cx: (g.x0 + g.x1) / 2, cy: (g.y0 + g.y1) / 2,
-    dir: horiz ? [toEnd ? 1 : -1, 0] : [0, toEnd ? 1 : -1], ids: g.ids,
-  };
-}

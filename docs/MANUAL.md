@@ -45,7 +45,7 @@ Everything in the app, explained step by step.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
 - Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**).
-- Take a **photo of a circuit diagram** — a textbook figure, an exam question, a neat sketch — and it is redrawn on the board with its values, dependent sources included, ready to run (**Circuit from photo**). Printed diagrams are read on the phone, offline; Claude AI can read the harder ones.
+- Take a **photo of a circuit diagram** — a textbook figure, an exam question, a neat sketch — and it is redrawn on the board with its values, dependent sources included, ready to run (**Circuit from photo**). Printed diagrams and neat hand sketches are read on the phone, offline; Claude AI can read the harder ones.
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
 - Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
@@ -673,7 +673,7 @@ Open it from the **Circuit from photo** card on Home, from **⋮ → Circuit fro
 | --- | --- | --- |
 | Internet | Not needed — the picture never leaves the phone | Needed |
 | Key | None | Your own Anthropic API key |
-| Reads | Printed diagrams: textbooks, exam papers, screenshots | Any diagram, printed or hand-drawn, and the problem text around it |
+| Reads | Printed diagrams (textbooks, exam papers, screenshots) and neat hand-drawn sketches | Any diagram, printed or hand-drawn, and the problem text around it |
 | Time | A few seconds | Usually well under a minute |
 
 **On this phone** is chosen at first. Pick the other at the top of the page; the choice is remembered.
@@ -695,7 +695,8 @@ Open it from the **Circuit from photo** card on Home, from **⋮ → Circuit fro
 - Values with their units and prefixes: 20 Ω, 4.7 kΩ, 2 mH, 10 μF, 9 V, 3 A.
 - Marked quantities: **+ vₓ −** across a part, an arrow with **i** beside a branch, a name like **vₓ** at a node. A dependent source is tied to the quantity its expression names.
 - The figure number (**Figure 4.12**) names the circuit; a page with several figures gives each its own.
-- Hand-drawn sketches, switches, transistors and other symbols are not read on the phone: use Claude AI for those.
+- Sketches drawn by hand in pen, with their values written by hand: wavy lines, corners that overshoot, rings that do not quite close, rounded zigzags, a unit written a little apart from its value (2  Ω), a current arrow drawn with two strokes.
+- Switches, transistors and other symbols, and untidy or crowded sketches, are not read on the phone: use Claude AI for those.
 
 #### Your API key (Claude AI)
 
@@ -707,6 +708,7 @@ Open it from the **Circuit from photo** card on Home, from **⋮ → Circuit fro
 
 - Hold the phone flat over the page, with the whole circuit in the frame, in focus and in good light. Crop away other figures if you can: one circuit per photo reads best.
 - Every value should be readable in the photo. Notes under the drawing say what was unsure — a part whose value could not be read gets a default value to set on the board.
+- Drawing it yourself? Use a dark pen, let wires meet at their corners, draw each part clearly bigger than the pen is thick, and write each value next to its part, clear of the wires.
 - Warnings under the drawing say what could not be rebuilt as read — a part end joined to nothing, a dependent source whose controlling quantity is not marked — so you can fix it on the board.
 - Nodes with a voltage written next to them (vₓ, v₁ …) get a **net label** with that name. Dependent sources are the **Dependent Source (diamond)** part: its **Controlled by** setting says what drives it (`node:vx`, `v:R2` or `i:R4`) and its gain carries the sign the drawing marks.
 - If the drawing has no ground symbol, the bottom wire is taken as 0 V.

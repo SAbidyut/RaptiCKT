@@ -3,6 +3,7 @@
 // (labels, signs, arrows, the loose plates of grounds and batteries).
 
 import { components } from './image.js';
+import { arrowOf } from './arrow.js';
 
 /** Longest horizontal and vertical ink run inside each component (per component id). */
 function longestRuns(ink, labels, w, h, count) {
@@ -41,6 +42,8 @@ export function findFigures(ink, w, h, sw) {
     c.hrun = hr[c.id]; c.vrun = vr[c.id];
     // a wire drawing: long straight runs, thin lines, not a solid block of ink
     c.lineArt = Math.max(c.hrun, c.vrun) >= 9 * sw && Math.max(bw, bh) >= 12 * sw && c.fill < 0.3 && c.area >= 40 * sw;
+    // (but a current arrow drawn long, by hand, marks a current: it goes with the labels)
+    if (c.lineArt && Math.max(bw, bh) <= 25 * sw && Math.max(bw, bh) >= 2 * Math.min(bw, bh) && arrowOf({ labels, w, sw }, { ids: [c.id], ...c })) c.lineArt = false;
   }
   // figures: line-art pieces close to each other (a capacitor's two halves, a broken wire)
   const art = comps.filter((c) => c.lineArt);
@@ -57,7 +60,12 @@ export function findFigures(ink, w, h, sw) {
   const groups = new Map();
   art.forEach((c, k) => { const r = find(k); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(c); });
   const figures = [];
-  for (const g of groups.values()) {
+  for (const g0 of groups.values()) {
+    // a small piece with a long stroke standing apart from the rest of the drawing is writing (a
+    // hand-written Ω on long feet), not a broken bit of wire, which ends close to where it goes on
+    const sep = (a, b) => Math.max(Math.max(a.x0, b.x0) - Math.min(a.x1, b.x1), Math.max(a.y0, b.y0) - Math.min(a.y1, b.y1));
+    const g = g0.filter((c) => g0.length < 2 || Math.max(c.x1 - c.x0, c.y1 - c.y0) + 1 > 20 * sw || g0.some((o) => o !== c && sep(c, o) <= 3 * sw));
+    for (const c of g0) if (!g.includes(c)) c.lineArt = false;
     const box = [Math.min(...g.map((c) => c.x0)), Math.min(...g.map((c) => c.y0)), Math.max(...g.map((c) => c.x1)), Math.max(...g.map((c) => c.y1))];
     // a figure has both directions of wire and some size
     const hasH = g.some((c) => c.hrun >= 9 * sw), hasV = g.some((c) => c.vrun >= 9 * sw);
@@ -67,6 +75,7 @@ export function findFigures(ink, w, h, sw) {
   // the other ink near each figure: within a margin of its box, and nearer to it than to any other
   const margin = (f) => Math.max(26 * sw, 0.3 * Math.min(f.box[2] - f.box[0], f.box[3] - f.box[1]));
   for (const f of figures) f.near = [];
+  const taken = new Uint8Array(comps.length + 1);
   for (const c of comps) {
     if (c.lineArt) continue;
     const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2;
@@ -78,7 +87,27 @@ export function findFigures(ink, w, h, sw) {
       const d = Math.hypot(dx, dy);
       if (d < bd) { bd = d; best = f; }
     }
-    if (best) best.near.push(c.id);
+    if (best) { best.near.push(c.id); taken[c.id] = 1; }
+  }
+  // and the rest of a word written past that margin (a label written large, by hand): characters
+  // on the line of one already in, right beside it (a few at most: not a line of the page's text)
+  const loose = comps.filter((c) => !c.lineArt && !taken[c.id] && c.area >= 2 * sw * sw);
+  for (let round = 0; round < 3; round++) {
+    for (const f of figures) {
+      const add = [];
+      for (const c of loose) {
+        if (taken[c.id]) continue;
+        const ch = c.y1 - c.y0 + 1;
+        const by = f.near.some((id) => {
+          const d = comps[id - 1], dh = d.y1 - d.y0 + 1;
+          if (ch > 3 * dh || dh > 3 * ch || Math.max(ch, dh) < 2 * sw) return false;
+          const gap = Math.max(c.x0, d.x0) - Math.min(c.x1, d.x1), ov = Math.min(c.y1, d.y1) - Math.max(c.y0, d.y0) + 1;
+          return gap <= 0.8 * Math.max(ch, dh) && ov >= 0.5 * Math.min(ch, dh);
+        });
+        if (by) add.push(c);
+      }
+      for (const c of add) { f.near.push(c.id); taken[c.id] = 1; }
+    }
   }
   return { labels, comps, figures };
 }

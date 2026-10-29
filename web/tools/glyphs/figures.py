@@ -6,11 +6,19 @@ terminals) and labels in a Times-like font, then also saved as a 'photo': grey u
 grain, a slight turn and blur, JPEG; some also as a rough photo (turned further, dusty, small,
 squeezed hard).
 
+The sketch-* figures are the same symbols drawn by hand (SketchFig): lines that wobble and bow
+and stop short of or run past their corners, rings that do not quite close, zigzags of any
+number of turns, two-stroke arrowheads, labels written with the strokes of hand.py in one
+writer's hand; their photos are coloured pen on grey paper.
+
     python3 figures.py OUT_DIR
 """
 import math, os, random, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+sys.path.insert(0, os.path.dirname(__file__))
+import hand  # noqa: E402
 
 SERIF = '/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf'
 ITALIC = '/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf'
@@ -168,6 +176,272 @@ class Fig:
             p.save(os.path.join(out, name + '-rough.jpg'), quality=60)
 
 
+# what to write for a character: its class in hand.HAND and the ways of writing it that fit
+# (a capital V is a v drawn full height)
+WRITE = {'V': ('v', [0, 3]), 'v': ('v', [1, 2]), 'X': ('x', [1]), 'x': ('x', [0, 2]), 'O': ('o', [1]), 'o': ('o', [0]),
+         'C': ('c', [1]), 'c': ('c', [0]), 'S': ('s', [1]), 's': ('s', [0]), 'K': ('k', [0]), 'k': ('k', [1, 2]),
+         'l': ('I', [0, 2]), '−': ('-', None)}
+# letters of a caption that the reader has no class for
+EXTRA = {'d': [[hand.arc(.22, .71, .22, .29, 330, -30) + [(.44, .5)], [(.44, 0), (.44, 1)]]]}
+
+
+class SketchDraw:
+    """ImageDraw's calls that Fig makes, drawn by hand with a pen of one width: lines wobble and
+    bow a little and start or stop a little off their marks (`gap`: how far short at most), rings
+    are a little out of round and do not quite close, corners are a little off, and text is
+    written with the strokes of hand.py in one writer's hand."""
+
+    def __init__(self, im, rnd, pen, gap):
+        self.im, self.rnd, self.pen, self.gap = im, rnd, pen, gap
+        self.d = ImageDraw.Draw(im)
+        self.hand = {'slant': rnd.uniform(-0.05, 0.3), 'sx': rnd.uniform(0.85, 1.2), 'size': rnd.uniform(1.0, 1.3)}
+        self.last = None
+
+    def _stroke(self, pts, fill):
+        pts = [(float(x), float(y)) for x, y in pts]
+        self.d.line(pts, fill=fill, width=self.pen, joint='curve')
+        r = self.pen / 2
+        for x, y in (pts[0], pts[-1]):
+            self.d.ellipse([x - r, y - r, x + r, y + r], fill=fill)
+
+    def _seg(self, A, B):
+        """the points of a line drawn by hand from A to B"""
+        rnd = self.rnd
+        A, B = np.array(A, float), np.array(B, float)
+        L = float(np.linalg.norm(B - A))
+        if L < 2: return [tuple(A), tuple(B)]
+        u = (B - A) / L
+        n = np.array([-u[1], u[0]])
+        reach = min(3.0, 0.12 * L)
+        A = A - u * rnd.uniform(-self.gap, reach) + n * rnd.uniform(-1, 1)
+        B = B + u * rnd.uniform(-self.gap, reach) + n * rnd.uniform(-1, 1)
+        L = float(np.linalg.norm(B - A))
+        u = (B - A) / L
+        n = np.array([-u[1], u[0]])
+        bow = rnd.uniform(-1, 1) * min(4.0, 0.015 * L)
+        amp, f, ph = rnd.uniform(0.2, 0.9), rnd.uniform(0.5, 2) * L / 150, rnd.uniform(0, 6.3)
+        k = max(2, int(L / 5))
+        return [tuple(A + u * L * t + n * (bow * math.sin(math.pi * t) + amp * math.sin(2 * math.pi * f * t + ph) * math.sin(math.pi * t)))
+                for t in (j / k for j in range(k + 1))]
+
+    def line(self, xy, fill=0, width=0, joint=None):
+        pts = [(float(x), float(y)) for x, y in xy]
+        if len(pts) == 2:
+            self._stroke(self._seg(*pts), fill)
+            return
+        # a zigzag in one go: each turn a little off, sometimes rounded
+        rnd = self.rnd
+        pts = [pts[0]] + [(x + rnd.uniform(-1.2, 1.2), y + rnd.uniform(-1.2, 1.2)) for x, y in pts[1:-1]] + [pts[-1]]
+        if rnd.random() < 0.5:
+            r = [pts[0]]
+            for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+                r += [(0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1), (0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1)]
+            pts = r + [pts[-1]]
+        self._stroke(pts, fill)
+
+    def ellipse(self, xy, fill=None, outline=None, width=0):
+        x0, y0, x1, y1 = xy
+        cx, cy, rx, ry = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2
+        rnd = self.rnd
+        if outline is None:
+            # a dot: a blob
+            ph = rnd.uniform(0, 6.3)
+            pts = []
+            for j in range(12):
+                a = 2 * math.pi * j / 12
+                s = 1 + 0.15 * math.sin(3 * a + ph)
+                pts.append((cx + rx * s * math.cos(a), cy + ry * s * math.sin(a)))
+            self.d.polygon(pts, fill=fill)
+            return
+        if fill is not None: self.d.ellipse(xy, fill=fill)
+        # a ring: a little out of round, its end past or short of its start
+        a0 = rnd.uniform(0, 2 * math.pi)
+        sweep = 2 * math.pi + math.radians(rnd.uniform(-4, 30))
+        e, ph, drift = rnd.uniform(0, 0.06), rnd.uniform(0, 6.3), rnd.uniform(-0.06, 0.06)
+        k = max(16, int(sweep * max(rx, ry) / 4))
+        pts = []
+        for j in range(k + 1):
+            t = j / k
+            a = a0 + sweep * t
+            s = 1 + e * math.sin(2 * a + ph) + drift * t
+            pts.append((cx + rx * s * math.cos(a), cy + ry * s * math.sin(a)))
+        self._stroke(pts, outline)
+
+    def polygon(self, xy, fill=None, outline=None, width=0):
+        rnd = self.rnd
+        pts = [(x + rnd.uniform(-1.5, 1.5), y + rnd.uniform(-1.5, 1.5)) for x, y in xy]
+        if fill is not None: self.d.polygon(pts, fill=fill)
+        if outline is not None:
+            for a, b in zip(pts, pts[1:] + pts[:1]): self._stroke(self._seg(a, b), outline)
+
+    def arc(self, xy, start, end, fill=0, width=0):
+        x0, y0, x1, y1 = xy
+        cx, cy, rx, ry = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2, (y1 - y0) / 2
+        rnd = self.rnd
+        s0, s1 = math.radians(start) + rnd.uniform(-0.1, 0.1), math.radians(end) + rnd.uniform(-0.1, 0.1)
+        sc = rnd.uniform(0.9, 1.12)
+        k = max(6, int(abs(s1 - s0) * max(rx, ry) / 3))
+        self._stroke([(cx + rx * sc * math.cos(s0 + (s1 - s0) * j / k), cy + ry * sc * math.sin(s0 + (s1 - s0) * j / k)) for j in range(k + 1)], fill)
+
+    def _word(self, s, size):
+        """s written by hand, its digits about size × 0.72 px tall: (mask, top row, line row)"""
+        rnd = self.rnd
+        h = size * 0.72
+        k = h / 80
+        style = {'slant': self.hand['slant'], 'sx': self.hand['sx'], 'pen': max(2, int(round(self.pen / k)))}
+        items, x = [], 0.0
+        for ch in s:
+            if ch == ' ':
+                x += h * rnd.uniform(0.2, 0.6)
+                continue
+            cls, ways = WRITE.get(ch, (ch, None))
+            opts = hand.HAND.get(cls) or EXTRA[ch]
+            info = {}
+            g = hand.write(opts[rnd.choice(ways) if ways else rnd.randrange(len(opts))], rnd, cls in hand.TAILS, hand=style, info=info)
+            g = g.resize((max(1, round(g.width * k)), max(1, round(g.height * k))), Image.LANCZOS)
+            a = np.asarray(g)
+            cols = np.nonzero(a.max(axis=0) > 60)[0]
+            if not len(cols): continue
+            a = a[:, cols[0]:cols[-1] + 1]
+            items.append((x, a, info['line'] * k + rnd.uniform(-0.06, 0.06) * h))
+            x += a.shape[1] + h * rnd.uniform(0.08, 0.25)
+        if not items: return Image.new('L', (1, 1), 0), 0, 0
+        line = max(l for _, _, l in items)
+        H = int(math.ceil(max(line - l + a.shape[0] for _, a, l in items))) + 1
+        out = np.zeros((H, int(x) + 2), np.uint8)
+        for X, a, l in items:
+            Y, X = int(round(line - l)), int(round(X))
+            out[Y:Y + a.shape[0], X:X + a.shape[1]] = np.maximum(out[Y:Y + a.shape[0], X:X + a.shape[1]], a)
+        cols = np.nonzero(out.max(axis=0))[0]
+        out = out[:, :cols[-1] + 1]
+        return Image.fromarray(out), line - h, line
+
+    def text(self, xy, s, font=None, fill=0, anchor='mm'):
+        size = (font.size if font else 34) * self.hand['size']
+        mask, top, line = self._word(s, size)
+        x, y = xy
+        w, h = mask.size
+        X = int(round(x - (0 if anchor[0] == 'l' else w / 2 if anchor[0] == 'm' else w)))
+        Y = int(round(y - (top + line) / 2))
+        # (written on the page: a long label squeezes in rather than runs off it)
+        X = max(8, min(X, self.im.width - w - 8))
+        self.im.paste(fill, (X, Y, X + w, Y + h), mask)
+        self.last = (tuple(xy), s, (X, Y + top, X + w, Y + line))
+
+    def textbbox(self, xy, s, font=None, anchor='mm'):
+        if self.last and self.last[0] == tuple(xy) and self.last[1] == s: return self.last[2]
+        size = (font.size if font else 34) * self.hand['size']
+        w, h = 0.6 * size * len(s), 0.72 * size
+        x, y = xy
+        X = x - (0 if anchor[0] == 'l' else w / 2 if anchor[0] == 'm' else w)
+        return (X, y - h / 2, X + w, y + h / 2)
+
+
+class SketchFig(Fig):
+    """A figure drawn by hand with a pen `pen` px wide (lines `gap` px short of their marks at
+    most), with room round it for labels written large, photographed in colour."""
+
+    def __init__(self, cols, rows, rnd, pen=4, gap=0.5, margin=190):
+        super().__init__(cols, rows)
+        self.m = margin
+        self.w, self.h = 2 * margin + U * cols, 2 * margin + U * rows
+        self.im = Image.new('L', (self.w, self.h), 255)
+        self.rnd = rnd
+        self.d = SketchDraw(self.im, rnd, pen, gap)
+
+    def P(self, x, y):
+        return (self.m + x * U, self.m + y * U)
+
+    def resistor(self, a, b, label=None, side=1):
+        # any number of turns, any height
+        rnd = self.rnd
+        body, k, amp = rnd.uniform(46, 74), rnd.randint(4, 7), rnd.uniform(6, 12)
+        c, u, n = self._ends(a, b, body)
+        s = rnd.choice([-1, 1])
+        pts = [c - u * body / 2] + [c - u * body / 2 + u * body * (j + 0.5) / k + n * amp * s * (1 if j % 2 == 0 else -1) for j in range(k)] + [c + u * body / 2]
+        self.d.line([tuple(p) for p in pts], fill=0, width=LW, joint='curve')
+        if label: self._label(a, b, label, side, amp + rnd.uniform(8, 18))
+
+    def _label(self, a, b, label, side, clear):
+        """a part's label on its side, `clear` px from its middle line, however long the label"""
+        A, B = np.array(self.P(*a), float), np.array(self.P(*b), float)
+        u = (B - A) / np.linalg.norm(B - A)
+        c, d = (A + B) / 2, np.array([-u[1], u[0]]) * side
+        if abs(d[0]) > abs(d[1]): self.text(tuple(c + d * clear), label, anchor='lm' if d[0] > 0 else 'rm')
+        else: self.text(tuple(c + d * (clear + 22)), label)
+
+    # the parts with their labels clear of them (written labels are wider than printed ones)
+    def vsource(self, a, b, label, plus_at_a=True, side=-1):
+        super().vsource(a, b, '', plus_at_a, side)
+        self._label(a, b, label, side, 32 + self.rnd.uniform(8, 20))
+
+    def isource(self, a, b, label, to_b=True, side=-1):
+        super().isource(a, b, '', to_b, side)
+        self._label(a, b, label, side, 32 + self.rnd.uniform(8, 20))
+
+    def capacitor(self, a, b, label, side=1):
+        super().capacitor(a, b, '', side)
+        self._label(a, b, label, side, 26 + self.rnd.uniform(8, 18))
+
+    def battery(self, a, b, label, plus_at_a=True, side=1):
+        super().battery(a, b, '', plus_at_a, side)
+        self._label(a, b, label, side, 28 + self.rnd.uniform(8, 18))
+
+    def inductor(self, a, b, label, side=1):
+        # bumps in one stroke, a little bigger than print's
+        rnd = self.rnd
+        k, r = rnd.randint(3, 5), rnd.uniform(10, 14)
+        c, u, n = self._ends(a, b, 2 * r * k)
+        pts = []
+        for j in range(k):
+            cc, rr = c + u * r * (2 * j + 1 - k), r * rnd.uniform(0.9, 1.1)
+            pts += [tuple(cc + u * rr * math.cos(math.radians(t)) - n * rr * math.sin(math.radians(t))) for t in range(180, -1, -15)]
+        self.d.line(pts, fill=0)
+        self._label(a, b, label, side, (r if side < 0 else 0) + rnd.uniform(12, 20))
+
+    def _arrow(self, c, u, L=24, head=11):
+        # a head of two strokes
+        t, h = c - u * L, c + u * L
+        n = np.array([-u[1], u[0]])
+        self.d.line([tuple(t), tuple(h)], fill=0)
+        for s in (1, -1): self.d.line([tuple(h), tuple(h - u * head * 1.4 + n * head * 0.9 * s)], fill=0)
+
+    def save(self, out, name, ink, turn=None):
+        self.im.save(os.path.join(out, name + '.png'), optimize=True)
+        # (a phone takes the page at twice the drawing's detail)
+        big = self.im.resize((2 * self.w, 2 * self.h), Image.LANCZOS)
+        sketch_photo(big, self.rnd, ink, turn).save(os.path.join(out, name + '-photo.jpg'), quality=80)
+
+
+def sketch_photo(im, rnd, ink, turn=None):
+    """A drawing in coloured pen as a phone photo: grey paper with blotches and grain, light
+    falling off across it and sometimes a soft shadow over an edge, ink laid down unevenly, a
+    turn and a little blur."""
+    a = np.asarray(im).astype(np.float32) / 255
+    h, w = a.shape
+    rng = np.random.default_rng(rnd.randrange(1 << 30))
+    yy, xx = np.mgrid[0:h, 0:w]
+    light = 0.8 + rnd.uniform(-0.1, 0.1) * (xx / w - 0.5) + rnd.uniform(-0.08, 0.08) * (yy / h - 0.5)
+    shadow = rnd.choice(['bottom', 'left', None])
+    if shadow == 'bottom': light *= 1 - 0.3 * np.clip((yy / h - 0.8) / 0.2, 0, 1) ** 1.5
+    if shadow == 'left': light *= 1 - 0.25 * np.clip((0.15 - xx / w) / 0.15, 0, 1) ** 1.5
+
+    def smooth(cell):
+        z = (rng.random((h // cell + 2, w // cell + 2)) * 255).astype(np.uint8)
+        return np.asarray(Image.fromarray(z).resize((w + 2 * cell, h + 2 * cell), Image.BICUBIC))[cell:cell + h, cell:cell + w].astype(np.float32) / 255
+    cov = (1 - a) * (0.8 + 0.2 * smooth(6))
+    paper, inkc = np.array([0.97, 0.965, 0.95]), np.array(ink)
+    rgb = (paper * (1 - cov[..., None]) + inkc * cov[..., None]) * light[..., None]
+    rgb += (smooth(24)[..., None] - 0.5) * 0.05 + rng.normal(0, 0.03, (h, w, 1)) + rng.normal(0, 0.01, rgb.shape)
+    for _ in range(int(w * h / 5000)):
+        x, y, r = rnd.randrange(w), rnd.randrange(h), rnd.choice([1, 1, 2])
+        rgb[max(0, y - r):y + r, max(0, x - r):x + r] *= rnd.uniform(0.6, 0.9)
+    out = Image.fromarray(np.clip(rgb * 255, 0, 255).astype(np.uint8), 'RGB')
+    angle = rnd.uniform(-2.5, 2.5) if turn is None else turn
+    out = out.rotate(angle, resample=Image.BICUBIC, fillcolor=tuple(int(204 * c) for c in paper))
+    return out.filter(ImageFilter.GaussianBlur(rnd.uniform(0.9, 1.3)))
+
+
 def photo(im, rnd, turn=None, dust=1):
     """The drawing as a phone photo of a printed page: grey uneven paper, grain, turn, blur."""
     a = np.asarray(im).astype(np.float32) / 255
@@ -256,6 +530,47 @@ def main():
     f.terminal((3.2, 0), 'a')
     f.terminal((3.2, 2), 'b')
     f.save(out, 'thevenin', rnd)
+
+    # drawn by hand (a hand of its own, so the figures above stay as they were)
+    sk = random.Random(41)
+    RED, BLUE, BLACK = (0.78, 0.2, 0.22), (0.16, 0.24, 0.62), (0.16, 0.16, 0.2)
+
+    # 6. a divider like a homework sketch, the asked voltage marked + Vo − across the 3 Ω: 9 V
+    f = SketchFig(3, 2, sk)
+    f.vsource((0, 0), (0, 2), '18 V', plus_at_a=True, side=1)
+    f.resistor((0, 0), (1.5, 0), '2 Ω', side=-1)
+    f.wire((1.5, 0), (3, 0))
+    f.resistor((1.5, 0), (1.5, 2), '3 Ω', side=-1)
+    f.resistor((3, 0), (3, 2), '6 Ω', side=-1)
+    f.wire((0, 2), (3, 2))
+    f.ground((1.5, 2))
+    x = f.P(1.5, 0)[0] - 44
+    f.text((x, f.P(0, 0.62)[1]), '+')
+    f.label((x - 8, f.P(0, 1)[1]), 'V', 'o')
+    f.text((x, f.P(0, 1.38)[1]), '−')
+    f.text(f.P(1.3, 2.7), 'Find Vo')
+    f.save(out, 'sketch-divider', RED)
+
+    # 7. a battery and a current source, i marked down the 4 Ω: i = 7/3 A
+    f = SketchFig(4, 2, sk, gap=1.5)
+    f.battery((0, 2), (0, 0), '10 V', plus_at_a=False, side=-1)
+    f.resistor((0, 0), (2, 0), '2 Ω', side=-1)
+    f.resistor((2, 0), (2, 2), '4 Ω', side=-1)
+    f.wire((2, 0), (4, 0))
+    f.isource((4, 2), (4, 0), '2 A', to_b=True, side=1)
+    f.wire((0, 2), (4, 2))
+    f.iarrow((f.P(2, 0.3)[0] + 22, f.P(2, 0.3)[1]), down=True)
+    f.save(out, 'sketch-mesh', BLUE)
+
+    # 8. a coil and a capacitor with their units, written small and squeezed
+    f = SketchFig(3, 2, sk)
+    f.vsource((0, 0), (0, 2), '5 V', plus_at_a=True)
+    f.resistor((0, 0), (1.5, 0), '1 kΩ', side=-1)
+    f.inductor((1.5, 0), (3, 0), '2 mH', side=1)
+    f.capacitor((3, 0), (3, 2), '10 μF', side=1)
+    f.wire((0, 2), (3, 2))
+    f.ground((1.5, 2))
+    f.save(out, 'sketch-rlc', BLACK)
     print('ok')
 
 

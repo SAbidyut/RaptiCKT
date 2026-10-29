@@ -194,6 +194,33 @@ export function components(mask, w, h) {
 }
 
 /**
+ * Fill the pinholes of a 0/1 mask in place: bits of paper of at most maxArea pixels shut in by
+ * ink (where two pen strokes cross or overlap, a fleck of glare on a thick line). Thinned, each
+ * would be a little loop in the line.
+ */
+export function fillPinholes(mask, w, h, maxArea) {
+  const seen = new Uint8Array(w * h);
+  const stack = [], piece = [];
+  for (let i = 0; i < w * h; i++) {
+    if (mask[i] || seen[i]) continue;
+    piece.length = 0;
+    let open = false;
+    seen[i] = 1;
+    stack.push(i);
+    while (stack.length) {
+      const j = stack.pop();
+      piece.push(j);
+      const x = j % w, y = (j - x) / w;
+      if (x === 0 || y === 0 || x === w - 1 || y === h - 1) open = true;
+      for (const k of [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, y > 0 ? j - w : -1, y < h - 1 ? j + w : -1]) {
+        if (k >= 0 && !mask[k] && !seen[k]) { seen[k] = 1; stack.push(k); }
+      }
+    }
+    if (!open && piece.length <= maxArea) for (const j of piece) mask[j] = 1;
+  }
+}
+
+/**
  * Typical line thickness of the big line-drawing pieces (paper grain and small print left out):
  * every ink pixel's shorter run (across or down) is the width of the stroke it is in; the median
  * of those is the line width. Ragged JPEG edges do not move it, and it follows the picture's
