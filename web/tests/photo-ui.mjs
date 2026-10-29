@@ -1,6 +1,6 @@
-// Circuit from photo, end to end, read on the phone itself: a textbook-style photo → the redrawn
-// circuit → open on the board → Run gives the answer; a page of two figures (pick one); a picture
-// with no circuit; Cancel and Back. Once in the browser (a chosen file) and once as in the Android
+// Circuit from photo, end to end, read on the phone itself: a textbook-style photo → crop → the
+// redrawn circuit → open on the board → Run gives the answer; a page of two figures (pick one, or
+// crop to one with a finger); a picture with no circuit; Cancel and Back. Once in the browser (a chosen file) and once as in the Android
 // app (a camera picture handed over by the app). Nothing is sent anywhere, and an API key an older
 // version saved is wiped.
 // Usage: npm run build && node tests/photo-ui.mjs
@@ -44,9 +44,12 @@ async function runAndRead(page, name) {
 // ================================================================== in a browser
 {
   const { ctx, page, errs, away } = await open();
-  const choose = async (buffer, name = 'photo.jpg', mimeType = 'image/jpeg') => {
+  // choose a picture; it opens to be cropped, all of it chosen: read it as it is (or not yet)
+  const choose = async (buffer, name = 'photo.jpg', mimeType = 'image/jpeg', read = true) => {
     const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.click('[data-x=gallery]')]);
     await fc.setFiles({ name, mimeType, buffer });
+    await page.waitForFunction(() => app.photo.stage === 'crop', null, { timeout: 10000 });
+    if (read) await page.click('[data-x=readcrop]');
   };
   // pictures made in the page: two figures side by side, and a page with no circuit
   const canvasPng = (fn, arg) => page.evaluate(fn, arg).then((b64) => Buffer.from(b64, 'base64'));
@@ -70,7 +73,9 @@ async function runAndRead(page, name) {
   check(await page.isVisible('.ph-intro') && !(await page.$('.screen.photo .ph-mode, .screen.photo .ph-key, .screen.photo [data-mode]')), 'read on this phone: no reader to choose, no key to enter');
 
   // ---- one photo, read and solved
-  await choose(fixture('depsource-photo.jpg'));
+  await choose(fixture('depsource-photo.jpg'), 'photo.jpg', 'image/jpeg', false);
+  check(await page.isVisible('.ph-crop img') && await page.isVisible('.ph-cropbox [data-h=se]') && await page.isVisible('[data-x=readcrop]'), 'the picture opens to be cropped, all of it chosen at first');
+  await page.click('[data-x=readcrop]');
   await page.waitForFunction(() => app.photo.stage === 'result', null, { timeout: 30000 });
   const parts = await partsShown(page);
   check(JSON.stringify(parts) === JSON.stringify(['D1 0.1vx', 'I1 4 A', 'R1 4 Ω', 'R2 20 Ω', 'V1 20 V'].sort()) || (parts.length === 5 && parts.includes('D1 0.1vx') && parts.includes('V1 20 V')), `read: ${parts.join(', ')}`);
@@ -110,6 +115,29 @@ async function runAndRead(page, name) {
   const i3 = await page.evaluate(() => Math.abs(app.editor.doc.elements.find((e) => e.constructor.type === 'resistor' && e.p.r === 3).i));
   check(Math.abs(i3 - 2) < 1e-6, `Run: i through the 3 Ω = ${i3.toFixed(4)} A (book: 2 A)`);
   await page.evaluate(() => app.editor.setRunning(false));
+
+  await page.evaluate(() => app.openPhoto()); await page.waitForTimeout(300);
+  await page.click('[data-x=again]'); await page.waitForTimeout(200);
+
+  // ---- the same page cropped with a finger to its right-hand figure: only that one is read
+  await choose(two, 'page.png', 'image/png', false);
+  const frame = await page.locator('.ph-crop').boundingBox();
+  const cdp = await ctx.newCDPSession(page);
+  const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+  await touch('touchStart', frame.x + 8, frame.y + 8);
+  for (let k = 1; k <= 8; k++) await touch('touchMove', frame.x + 8 + (frame.width * 0.55 - 8) * k / 8, frame.y + 8);
+  await touch('touchEnd');
+  const crop = await page.evaluate(() => app.photo.crop);
+  check(Math.abs(crop[0] - 0.55) < 0.03 && crop[2] === 1 && crop[3] === 1, `the top-left corner dragged to the middle (${crop.map((v) => v.toFixed(2)).join(', ')})`);
+  await page.click('[data-x=readcrop]');
+  await page.waitForFunction(() => app.photo.stage === 'result', null, { timeout: 30000 });
+  const one = await partsShown(page);
+  check(!(await page.$('.th-chips')) && one.length === 7 && one.includes('I1 3 A'), `cropped to the right-hand figure, only it is read: ${one.join(', ')}`);
+  await page.click('[data-x=again]'); await page.waitForTimeout(200);
+  await choose(two, 'page.png', 'image/png', false);
+  await page.evaluate(() => app.back()); await page.waitForTimeout(200);
+  check((await stage(page)) === 'start', 'Back from cropping: the start again');
+  await page.evaluate(() => app.back()); await page.waitForTimeout(300);
 
   // ---- no circuit, Cancel, Back
   await page.click('[data-a=more]'); await page.waitForTimeout(250);
@@ -163,6 +191,8 @@ async function runAndRead(page, name) {
   check(await page.isVisible('.hint .hint-photo'), 'an empty board offers "Or start from a photo"');
   await page.click('.hint .hint-photo'); await page.waitForTimeout(400);
   await page.click('[data-x=camera]');
+  await page.waitForFunction(() => app.photo.stage === 'crop', null, { timeout: 10000 });
+  await page.click('[data-x=readcrop]');
   await page.waitForFunction(() => app.photo.stage === 'result', null, { timeout: 30000 });
   const calls = await page.evaluate(() => window.__nativeCalls);
   check(calls[0][0] === 'pickImage' && calls[0][1] === true && calls[0][2] === 2600, 'Take a photo asks the app for the camera, in detail enough for small labels');

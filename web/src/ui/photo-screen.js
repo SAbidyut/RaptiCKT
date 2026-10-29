@@ -1,5 +1,6 @@
-// "Circuit from photo": take a picture of a circuit diagram (or choose one), have it read on the
-// phone itself (no network), check the redrawn circuit, and open it on the board ready to run.
+// "Circuit from photo": take a picture of a circuit diagram (or choose one), crop it to the
+// circuit, have it read on the phone itself (no network), check the redrawn circuit, and open it
+// on the board ready to run.
 
 import { icon } from './icons.js';
 import { bridge, decodeImage } from './store.js';
@@ -22,6 +23,14 @@ const ADVICE = {
   offline: 'Try a sharper, straighter photo, with the whole circuit in the frame.',
 };
 
+/** Pixels ({ width, height, data }) as a JPEG picture to show: { data (base64), mediaType }. */
+function picture({ width, height, data }) {
+  const cv = document.createElement('canvas');
+  cv.width = width; cv.height = height;
+  cv.getContext('2d').putImageData(new ImageData(data, width, height), 0, 0);
+  return { data: cv.toDataURL('image/jpeg', 0.9).split(',')[1], mediaType: 'image/jpeg' };
+}
+
 /** what a part shows in the summary chips: "R1 20 Ω", "V1 20 V", "D1 0.1vx" */
 function partLabel(e) {
   const t = e.constructor.type, p = e.p;
@@ -40,8 +49,10 @@ export class PhotoScreen {
   constructor(app, root) {
     this.app = app;
     this.root = root;
-    this.stage = 'start'; // start | reading | result | error
+    this.stage = 'start'; // start | crop | reading | result | error
     this.image = null;    // { data, mediaType }
+    this.crop = null;     // the part of it to read: [x0, y0, x1, y1] as fractions of its size
+    this.shown = null;    // that part as a picture to show (null: the whole picture)
     this.answer = null;   // { circuits, problem }
     this.pick = 0;        // which circuit of a page with several
     this.error = null;
@@ -52,14 +63,14 @@ export class PhotoScreen {
   theme() { return THEMES[this.settings.theme] || THEMES.dark; }
 
   open() {
-    if (this.stage !== 'reading') this.stage = this.answer ? 'result' : 'start';
+    if (this.stage !== 'reading' && this.stage !== 'crop') this.stage = this.answer ? 'result' : 'start';
     this.render();
   }
 
-  /** Back button: a result or an error goes back to the start first. Returns false to close. */
+  /** Back button: cropping, a result or an error goes back to the start first. Returns false to close. */
   back() {
     if (this.stage === 'reading') { this.cancel(); return true; }
-    if (this.stage === 'result' || this.stage === 'error') { this.stage = 'start'; this.render(); return true; }
+    if (this.stage === 'crop' || this.stage === 'result' || this.stage === 'error') { this.stage = 'start'; this.render(); return true; }
     return false;
   }
 
@@ -73,6 +84,7 @@ export class PhotoScreen {
     this.root.querySelector('[data-x=back]').addEventListener('click', () => { if (!this.back()) this.app.closePhoto(); });
     const body = this.root.querySelector('.ph-body');
     if (this.stage === 'reading') this.renderReading(body);
+    else if (this.stage === 'crop') this.renderCrop(body);
     else if (this.stage === 'result') this.renderResult(body);
     else if (this.stage === 'error') this.renderError(body);
     else this.renderStart(body);
@@ -94,7 +106,7 @@ export class PhotoScreen {
       <ul class="ph-tips">
         <li>Hold the phone flat over the page, with the whole circuit in the frame and in focus.</li>
         <li>Good light and no shadow across the drawing; every value should be readable.</li>
-        <li>One circuit per photo reads best. A page with several figures works too — you pick one.</li>
+        <li>One circuit per photo reads best: crop the photo to it. A page with several figures works too — you pick one.</li>
         <li>Always check the redrawn circuit against the picture before trusting the answer.</li>
       </ul>`;
     body.querySelector('[data-x=camera]').addEventListener('click', () => this.take(true));
@@ -109,7 +121,79 @@ export class PhotoScreen {
     }
     if (!img || !img.data) return;
     this.image = img;
-    this.read();
+    this.crop = [0, 0, 1, 1];
+    this.stage = 'crop';
+    this.render();
+  }
+
+  // ---------------------------------------------------------------- crop
+  renderCrop(body) {
+    body.innerHTML = `
+      <p class="ph-status"><b>Crop to the circuit</b><span>Drag the corners round the circuit to read: leave out other figures and text. Drag the box to move it, or draw a new one.</span></p>
+      <div class="ph-cropwrap"><div class="ph-crop">
+        <img alt="" src="data:${esc(this.image.mediaType)};base64,${this.image.data}" draggable="false">
+        <div class="ph-cropbox">${['nw', 'ne', 'sw', 'se'].map((h) => `<i data-h="${h}"></i>`).join('')}</div>
+      </div></div>
+      <div class="btn-row ph-cropbtns">
+        <button class="btn" data-x="whole">${icon('fit', 18)} Whole picture</button>
+        <button class="btn primary big" data-x="readcrop">${icon('check', 18)} Read the circuit</button>
+      </div>
+      <div class="btn-row"><button class="btn" data-x="again">${icon('camera', 18)} Another photo</button></div>`;
+    const frame = body.querySelector('.ph-crop'), box = body.querySelector('.ph-cropbox');
+    const show = () => {
+      const [x0, y0, x1, y1] = this.crop;
+      Object.assign(box.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
+    };
+    show();
+    // drag a corner to size it, the inside to move it, anywhere else to draw a new one
+    let drag = null;
+    const at = (e) => { const r = frame.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; };
+    frame.addEventListener('pointerdown', (e) => {
+      const [x, y] = at(e), [x0, y0, x1, y1] = this.crop;
+      const h = e.target.dataset?.h;
+      if (h) drag = { fx: h[1] === 'w' ? x1 : x0, fy: h[0] === 'n' ? y1 : y0 };
+      else if (x > x0 && x < x1 && y > y0 && y < y1) drag = { move: [x - x0, y - y0] };
+      else drag = { fx: x, fy: y };
+      frame.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    frame.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const [x, y] = at(e), r = frame.getBoundingClientRect();
+      if (drag.move) {
+        const [x0, y0, x1, y1] = this.crop, w = x1 - x0, hh = y1 - y0;
+        const nx = Math.min(1 - w, Math.max(0, x - drag.move[0])), ny = Math.min(1 - hh, Math.max(0, y - drag.move[1]));
+        this.crop = [nx, ny, nx + w, ny + hh];
+      } else {
+        // (never smaller than a finger can still take hold of)
+        const mw = 48 / r.width, mh = 48 / r.height;
+        const xa = Math.min(drag.fx, x), xb = Math.max(drag.fx, x), ya = Math.min(drag.fy, y), yb = Math.max(drag.fy, y);
+        this.crop = [Math.min(xa, 1 - mw), Math.min(ya, 1 - mh), Math.max(xb, Math.min(1, xa + mw)), Math.max(yb, Math.min(1, ya + mh))];
+      }
+      show();
+    });
+    const end = () => { drag = null; };
+    frame.addEventListener('pointerup', end);
+    frame.addEventListener('pointercancel', end);
+    body.querySelector('[data-x=whole]').addEventListener('click', () => { this.crop = [0, 0, 1, 1]; show(); });
+    body.querySelector('[data-x=readcrop]').addEventListener('click', () => this.read());
+    body.querySelector('[data-x=again]').addEventListener('click', () => { this.stage = 'start'; this.render(); });
+  }
+
+  /** Whether a part of the picture is chosen, not (about) all of it. */
+  cropped() {
+    const c = this.crop;
+    return !!c && (c[0] > 0.01 || c[1] > 0.01 || c[2] < 0.99 || c[3] < 0.99);
+  }
+
+  /** The chosen part of the picture's pixels (a picture's own pixels: nothing is lost to cropping). */
+  cut(pixels) {
+    const { width: w, height: h, data } = pixels;
+    const x0 = Math.floor(this.crop[0] * w), y0 = Math.floor(this.crop[1] * h);
+    const W = Math.max(1, Math.ceil(this.crop[2] * w) - x0), H = Math.max(1, Math.ceil(this.crop[3] * h) - y0);
+    const out = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) out.set(data.subarray(((y0 + y) * w + x0) * 4, ((y0 + y) * w + x0 + W) * 4), y * W * 4);
+    return { width: W, height: H, data: out };
   }
 
   // ---------------------------------------------------------------- reading
@@ -118,6 +202,7 @@ export class PhotoScreen {
     this.answer = null;
     this.pick = 0;
     this.step = null;
+    this.shown = null;
     const ctl = new AbortController();
     this.abort = ctl;
     this.render();
@@ -142,6 +227,12 @@ export class PhotoScreen {
   async readOffline(signal) {
     let pixels;
     try { pixels = await decodeImage(this.image); } catch (e) { throw new PhotoError('bad', 'This picture could not be opened.'); }
+    if (this.cropped()) {
+      pixels = this.cut(pixels);
+      this.shown = picture(pixels);
+      const img = this.root.querySelector('.ph-shot img');
+      if (img) img.src = `data:${this.shown.mediaType};base64,${this.shown.data}`;
+    }
     try {
       return await readPicture(pixels, { signal, onProgress: (f, what) => { this.step = { f, what }; this.tick(); } });
     } catch (e) {
@@ -161,7 +252,7 @@ export class PhotoScreen {
 
   renderReading(body) {
     body.innerHTML = `
-      <div class="ph-shot reading"><img alt="" src="data:${esc(this.image.mediaType)};base64,${this.image.data}"><i class="ph-scan"></i></div>
+      <div class="ph-shot reading"><img alt="" src="data:${esc(this.picture().mediaType)};base64,${this.picture().data}"><i class="ph-scan"></i></div>
       <p class="ph-status"><b>Reading the circuit on this phone…</b><span class="ph-sub"></span></p>
       <div class="splash-bar ph-bar"><i></i></div>
       <div class="btn-row"><button class="btn" data-x="cancel">${icon('x', 18)} Cancel</button></div>`;
@@ -175,6 +266,9 @@ export class PhotoScreen {
     const s = this.root.querySelector('.ph-sub');
     if (s) s.textContent = this.step ? `${this.step.what}… ${Math.round(this.step.f * 100)} %` : 'Opening the picture…';
   }
+
+  /** The picture read: the part cropped to, else the whole photo. */
+  picture() { return this.shown || this.image; }
 
   // ---------------------------------------------------------------- result
   built() {
@@ -201,7 +295,7 @@ export class PhotoScreen {
         <div class="th-chips">${list.map((x, i) => `<button class="chip2 ${i === this.pick ? 'on' : ''}" data-c="${i}">${esc(x.title || 'Circuit ' + (i + 1))}</button>`).join('')}</div>` : ''}
       <div class="ph-title"><b>${esc(this.app.photoName(c.title))}</b><span>${parts.length} part${parts.length === 1 ? '' : 's'} · check it against the picture</span></div>
       <canvas class="th-fig ph-fig"></canvas>
-      <details class="ph-orig"><summary>${icon('camera', 16)} The photo</summary><img alt="" src="data:${esc(this.image.mediaType)};base64,${this.image.data}"></details>
+      <details class="ph-orig"><summary>${icon('camera', 16)} The photo</summary><img alt="" src="data:${esc(this.picture().mediaType)};base64,${this.picture().data}"></details>
       <div class="ph-parts">${parts.map((e) => `<span>${esc(partLabel(e))}</span>`).join('')}</div>
       ${[...(c.notes || []), ...b.warnings].map((w) => `<div class="th-warn">${icon('info', 16)}<span>${esc(w)}</span></div>`).join('')}
       ${problem ? `<div class="ph-note">${icon('info', 16)}<span>${esc(problem)}</span></div>` : ''}

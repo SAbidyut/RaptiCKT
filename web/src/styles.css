@@ -1187,6 +1187,18 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .ph-btns .btn { padding: 0 10px; }
 .ph-tips { margin: 0; padding-left: 18px; color: var(--text2); font-size: 13px; line-height: 1.5; }
 .ph-tips li { margin-bottom: 4px; }
+.ph-cropwrap { text-align: center; margin: 4px 0 12px; }
+.ph-crop { position: relative; display: inline-block; vertical-align: top; overflow: hidden; border-radius: 12px; border: 1px solid var(--border); background: #fff; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+.ph-crop img { display: block; max-width: 100%; max-height: 58vh; pointer-events: none; }
+.ph-cropbox { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); cursor: move; }
+/* a corner's handle: a 36 px grip, its mark just inside the corner (seen whole at the picture's edge) */
+.ph-cropbox i { position: absolute; width: 36px; height: 36px; }
+.ph-cropbox i::after { content: ''; position: absolute; left: 9px; top: 9px; width: 14px; height: 14px; border-radius: 4px; background: var(--accent); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+.ph-cropbox [data-h=nw] { left: -9px; top: -9px; cursor: nwse-resize; }
+.ph-cropbox [data-h=ne] { right: -9px; top: -9px; cursor: nesw-resize; }
+.ph-cropbox [data-h=sw] { left: -9px; bottom: -9px; cursor: nesw-resize; }
+.ph-cropbox [data-h=se] { right: -9px; bottom: -9px; cursor: nwse-resize; }
+.ph-cropbtns { margin-bottom: 6px; }
 .ph-shot { position: relative; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: #fff; }
 .ph-shot img { display: block; width: 100%; max-height: 52vh; object-fit: contain; }
 .ph-scan { position: absolute; left: 0; right: 0; top: 0; height: 30%; background: linear-gradient(180deg, transparent, rgba(34, 211, 238, 0.28), transparent); animation: phScan 1.8s ease-in-out infinite alternate; pointer-events: none; }

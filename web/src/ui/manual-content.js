@@ -616,6 +616,7 @@ export const CHAPTERS = [
       H('Reading a circuit'),
       S([
         'Tap **Take a photo** (the camera opens) or **Choose an image** (a picture or screenshot from the gallery).',
+        'Crop it to the circuit: drag the corners of the box round the circuit you want read, leaving out other figures and the problem\'s text (drag the box to move it, or draw a new one; **Whole picture** takes all of it). Tap **Read the circuit**.',
         'Wait while the circuit is read. **Cancel** stops it.',
         'Check the redrawn circuit against the picture (tap **The photo** to see it again). A page with several figures lists them all: tap the one you want.',
         'Tap **Open on the board**. The circuit opens as a new circuit (also saved in My Circuits), named after the figure. Press **Run**: the live labels show every node voltage and branch current, so the asked quantity (vₓ, i, I₀ …) can be read straight off the board.',
@@ -634,7 +635,7 @@ export const CHAPTERS = [
       ]),
       H('Getting a good result'),
       L([
-        'Hold the phone flat over the page, with the whole circuit in the frame, in focus and in good light. Crop away other figures if you can: one circuit per photo reads best.',
+        'Hold the phone flat over the page, with the whole circuit in the frame, in focus and in good light. Crop the photo to the circuit: one circuit at a time reads best.',
         'Every value should be readable in the photo. Notes under the drawing say what was unsure — a part whose value could not be read gets a default value to set on the board.',
         'Drawing it yourself? Use a dark pen, let wires meet at their corners, draw each part clearly bigger than the pen is thick, and write each value next to its part, clear of the wires.',
         'Warnings under the drawing say what could not be rebuilt as read — a part end joined to nothing, a dependent source whose controlling quantity is not marked — so you can fix it on the board.',
