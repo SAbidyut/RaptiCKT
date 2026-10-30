@@ -5,8 +5,8 @@
 // answers are right; so are they on ruled or squared paper and photographed well turned, a
 // practice problem printed in a book's own style, a bridge drawn as a diamond, conductances in
 // siemens, mesh currents drawn as round arrows, values printed as fractions, a delta whose values
-// are printed along its slanting sides, and a circuit drawn here with an open switch and a coil
-// drawn in loops.
+// are printed along its slanting sides, an op amp, and a circuit drawn here with an open switch
+// and a coil drawn in loops.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -300,6 +300,20 @@ for (const name of ['delta.png', 'delta-photo.jpg']) {
     near(I.get(4), 3, 1e-6, '4 Ω');
     near(I.get(2.5), 2, 1e-6, '2.5 Ω');
     near(I.get(3.5), 2, 1e-6, '3.5 Ω');
+  });
+}
+
+for (const name of ['opamp.png', 'opamp-photo.jpg']) {
+  test(`${name}: an op amp is read as one — its + input drawn on top, told by the signs inside — a non-inverting amplifier: 2 V in, 8 V out`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['opamp', 'resistor', 'resistor', 'resistor', 'voltage_source']);
+    assert.deepEqual(r.texts, ['', '10 kΩ', '2 V', '30 kΩ', '5 kΩ']);
+    const u = r.el((e) => e.constructor.type === 'opamp');
+    near(r.sim.v(u.nodes[1]), 2, 1e-4, 'v+');
+    near(r.sim.v(u.nodes[2]), 8, 1e-3, 'vo');
+    const I = currents(r);
+    near(I.get(5000), 1.6e-3, 1e-7, '5 kΩ');
+    near(I.get(30000), 0.2e-3, 1e-7, '30 kΩ');
   });
 }
 

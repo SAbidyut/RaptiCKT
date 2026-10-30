@@ -78,6 +78,21 @@ class Fig:
         self.d.line([tuple(p) for p in pts], fill=0, width=LW, joint='curve')
         if label: self.text(tuple(c + n * 46 * side), label)
 
+    def opamp(self, top, bot, out, plus_top=True):
+        """an op amp pointing right: its inputs from the grid points top and bot (one above the
+        other) into the base of a triangle, + and − drawn inside beside them, its output from the
+        apex to the grid point out (level with the middle of the inputs)"""
+        T, B, O = (np.array(self.P(*q), float) for q in (top, bot, out))
+        x0, y0, y1, ym = T[0] + 40, T[1] - 40, B[1] + 40, (T[1] + B[1]) / 2
+        ax = x0 + (y1 - y0)
+        self.d.line([tuple(T), (x0, T[1])], fill=0, width=LW)
+        self.d.line([tuple(B), (x0, B[1])], fill=0, width=LW)
+        self.d.polygon([(x0, y0), (ax, ym), (x0, y1)], outline=0, width=LW)
+        self.d.line([(ax, ym), (O[0], ym)], fill=0, width=LW)
+        for y, plus in ((T[1], plus_top), (B[1], not plus_top)):
+            self.d.line([(x0 + 14, y), (x0 + 30, y)], fill=0, width=3)
+            if plus: self.d.line([(x0 + 22, y - 8), (x0 + 22, y + 8)], fill=0, width=3)
+
     def tight(self, a, b, label=None, side=1):
         """a resistor printed small, its zigzag's teeth as close as the line is thick: they run
         together into a band"""
@@ -741,6 +756,22 @@ def main():
     f.along(T, R, [('2.5Ω', 'f', False)], side=-1)
     f.tight(L, R, '3.5 Ω', side=1)
     f.save(out, 'delta', random.Random(111))
+
+    # 15. a non-inverting amplifier, its + input drawn on top: 2 V into the +, 10 kΩ from the −
+    # to the bottom wire and 30 kΩ from it to the output, 5 kΩ across the output: vo = 8 V
+    f = Fig(5, 3)
+    f.vsource((0, 1), (0, 3), '2 V', plus_at_a=True)
+    f.wire((0, 1), (2, 1))
+    f.opamp((2, 1), (2, 1.6), (4, 1.3), plus_top=True)
+    f.wire((2, 1.6), (2, 2.2))
+    f.resistor((2, 2.2), (2, 3), None)
+    f.text((f.P(2, 2.6)[0] - 80, f.P(2, 2.6)[1]), '10 kΩ')
+    f.resistor((2, 2.2), (4, 2.2), '30 kΩ', side=1)
+    f.wire((4, 2.2), (4, 1.3), (4.6, 1.3))
+    f.resistor((4.6, 1.3), (4.6, 3), None)
+    f.text((f.P(4.6, 2.15)[0] + 78, f.P(4.6, 2.15)[1]), '5 kΩ')
+    f.wire((0, 3), (4.6, 3))
+    f.save(out, 'opamp', random.Random(121))
     print('ok')
 
 

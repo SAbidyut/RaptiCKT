@@ -10,6 +10,7 @@ const KIND = {
   depsource: (p) => (p.kind === 'current' ? 'dependent_current_source' : 'dependent_voltage_source'),
   unknown: () => 'resistor',
   switch: () => 'open_switch',
+  opamp: () => 'opamp',
 };
 
 /**
@@ -29,11 +30,11 @@ export function gridOf(S, sw) {
   // of a blurred symbol or stray lines)
   const net = mk();
   for (const wv of S.wires) net.u(wv.a, wv.b);
-  for (const p of parts) net.u(p.a, p.b);
+  for (const p of parts) { net.u(p.a, p.b); if (p.out != null) net.u(p.a, p.out); }
   const live = new Set(parts.map((p) => net.f(p.a)));
   const used = new Uint8Array(n);
   for (const wv of S.wires) if (live.has(net.f(wv.a))) { used[wv.a] = 1; used[wv.b] = 1; }
-  for (const p of parts) { used[p.a] = 1; used[p.b] = 1; }
+  for (const p of parts) { used[p.a] = 1; used[p.b] = 1; if (p.out != null) used[p.out] = 1; }
   for (const g of S.grounds) if (live.has(net.f(g.v))) used[g.v] = 1;
   const row = mk(), col = mk();
   for (const wv of S.wires) {
@@ -71,7 +72,7 @@ export function gridOf(S, sw) {
   // crumb of wire at a part's end is no stub
   const ends = new Uint8Array(n), stub = new Float64Array(n);
   for (const wv of S.wires) { ends[wv.a]++; ends[wv.b]++; stub[wv.a] = stub[wv.b] = Math.hypot(S.vertices[wv.a].x - S.vertices[wv.b].x, S.vertices[wv.a].y - S.vertices[wv.b].y); }
-  for (const p of parts) { ends[p.a] += 2; ends[p.b] += 2; }
+  for (const p of parts) { ends[p.a] += 2; ends[p.b] += 2; if (p.out != null) ends[p.out] += 2; }
   for (const g of S.grounds) ends[g.v] += 2;
   const free = (v) => ends[v] === 1 && stub[v] >= 0.5 * span;
   // what runs along a row (or a column): its wires and parts
@@ -124,12 +125,20 @@ export function gridOf(S, sw) {
   };
   for (const c of rows) c.rep = row.f(c.members[0]);
   for (const c of cols) c.rep = col.f(c.members[0]);
+  // an op amp's inputs and its output never share a column (pointing left or right) or a row
+  // (pointing up or down)
+  const apart = (uf, axis) => {
+    const m = new Set();
+    for (const p of parts) if (p.out != null && p.axis === axis) { const a = uf.f(p.a), o = uf.f(p.out); m.add(`${a},${o}`); m.add(`${o},${a}`); }
+    return (A, B) => !m.has(`${A.rep},${B.rep}`);
+  };
+  const colsApart = apart(col, 'v'), rowsApart = apart(row, 'h');
   // columns first, points told apart by their rows (the rows keep their order, and the rows
   // below check what lands on one point once the columns are set)
-  place(cols, (A, B) => !clash(A, B, colRuns, (v) => Y(S.vertices[v]), (u, v) => row.f(u) === row.f(v)));
+  place(cols, (A, B) => colsApart(A, B) && !clash(A, B, colRuns, (v) => Y(S.vertices[v]), (u, v) => row.f(u) === row.f(v)));
   const cx = new Map();
   for (const c of cols) for (const v of c.members) cx.set(v, c.g);
-  place(rows, (A, B) => !clash(A, B, rowRuns, (v) => cx.get(v), (u, v) => cx.get(u) === cx.get(v)));
+  place(rows, (A, B) => rowsApart(A, B) && !clash(A, B, rowRuns, (v) => cx.get(v), (u, v) => cx.get(u) === cx.get(v)));
   const at = new Array(n);
   const ry = new Map();
   for (const c of rows) for (const v of c.members) ry.set(v, c.g);
@@ -151,6 +160,15 @@ export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Ma
     const kind = KIND[p.type](p);
     const A = at[p.a], B = at[p.b];
     if (!A || !B || (A.x === B.x && A.y === B.y)) { notes.push('A part with both ends on one point was left out.'); return; }
+    // an op amp: from its − input, to its + input, and its output
+    if (kind === 'opamp') {
+      const O = at[p.out];
+      if (!O || (O.x === A.x && O.y === A.y) || (O.x === B.x && O.y === B.y)) { notes.push('An op amp whose output could not be placed was left out.'); return; }
+      if (p.unsure) notes.push(`The − and + inputs of the op amp at ${describe(p, S)} could not be told apart; − was put at the ${p.axis === 'v' ? 'upper' : 'left'} one.`);
+      index.set(k, parts.length);
+      parts.push({ kind, text: '', value: 0, from: { ...A }, to: { ...B }, out: { ...O }, polarity: 'none', control: '', a: p.a, b: p.b, o: p.out, d: false });
+      return;
+    }
     const L = labels.get(k) || {};
     let polarity = 'none';
     if (/voltage_source/.test(kind)) polarity = p.plus === 'b' ? 'to' : 'from';
@@ -167,7 +185,7 @@ export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Ma
     wires.push({ from: { ...A }, to: { ...B }, a: wv.a, b: wv.b, d: wv.dir === 'd' });
   }
   wires = [...wires, ...squareUp(S, at, parts, wires)];
-  for (const x of [...parts, ...wires]) { delete x.a; delete x.b; delete x.d; }
+  for (const x of [...parts, ...wires]) { delete x.a; delete x.b; delete x.o; delete x.d; }
   const ground = S.grounds.map((g) => at[g.v]).filter(Boolean).map((p) => ({ ...p }));
   const qs = quantities.map((q) => {
     if (q.kind === 'node_voltage') {
@@ -224,7 +242,7 @@ function squareUp(S, at, parts, wires) {
   // (points on one place of the grid are joined there)
   const first = new Map();
   for (const e of [...parts, ...wires]) {
-    for (const [P, v] of [[e.from, e.a], [e.to, e.b]]) {
+    for (const [P, v] of [[e.from, e.a], [e.to, e.b], ...(e.out ? [[e.out, e.o]] : [])]) {
       const k = `${P.x},${P.y}`;
       if (first.has(k)) pa[f(v)] = f(first.get(k)); else first.set(k, v);
     }
@@ -232,7 +250,7 @@ function squareUp(S, at, parts, wires) {
   // all on the half-step grid
   const all = () => [...parts, ...wires, ...added];
   const added = [];
-  for (const e of [...parts, ...wires]) for (const P of [e.from, e.to]) { P.x *= 2; P.y *= 2; }
+  for (const e of [...parts, ...wires]) for (const P of [e.from, e.to, ...(e.out ? [e.out] : [])]) { P.x *= 2; P.y *= 2; }
   const key = (x, y) => `${x},${y}`;
   // segments in place: { A, B, node } (node -1: a part)
   const segs = [];
@@ -241,11 +259,12 @@ function squareUp(S, at, parts, wires) {
   const pts = new Map(); // point → node
   const nodeOfEnd = (e, P) => f(P === e.from ? e.a : e.b);
   for (const e of [...parts, ...wires]) for (const P of [e.from, e.to]) pts.set(key(P.x, P.y), nodeOfEnd(e, P));
+  for (const p of parts) if (p.out) pts.set(key(p.out.x, p.out.y), f(p.o));
   const inside = (x, y, A, B) => (A.x === B.x ? x === A.x && y > Math.min(A.y, B.y) && y < Math.max(A.y, B.y) : y === A.y && x > Math.min(A.x, B.x) && x < Math.max(A.x, B.x));
   const on = (x, y) => segs.filter((t) => inside(x, y, t.A, t.B));
   // a unit step along an existing segment
   const along = (x0, y0, x1, y1) => segs.some((t) => (t.A.x === t.B.x ? x0 === x1 && x0 === t.A.x && Math.min(y0, y1) >= Math.min(t.A.y, t.B.y) && Math.max(y0, y1) <= Math.max(t.A.y, t.B.y) : y0 === y1 && y0 === t.A.y && Math.min(x0, x1) >= Math.min(t.A.x, t.B.x) && Math.max(x0, x1) <= Math.max(t.A.x, t.B.x)));
-  const xs = () => all().flatMap((e) => [e.from.x, e.to.x]), ys = () => all().flatMap((e) => [e.from.y, e.to.y]);
+  const xs = () => all().flatMap((e) => [e.from.x, e.to.x, ...(e.out ? [e.out.x] : [])]), ys = () => all().flatMap((e) => [e.from.y, e.to.y, ...(e.out ? [e.out.y] : [])]);
   const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
   // the points of a node to start or end at: its ends, and the points along its wires
   const reach = (node) => {
@@ -332,7 +351,7 @@ function squareUp(S, at, parts, wires) {
   const X = [...new Set([...xs(), ...at.filter(Boolean).map((p) => 2 * p.x)])].sort((a, b) => a - b);
   const Y = [...new Set([...ys(), ...at.filter(Boolean).map((p) => 2 * p.y)])].sort((a, b) => a - b);
   const mx = new Map(X.map((x, i) => [x, i])), my = new Map(Y.map((y, i) => [y, i]));
-  for (const e of all()) for (const P of [e.from, e.to]) { P.x = mx.get(P.x); P.y = my.get(P.y); }
+  for (const e of all()) for (const P of [e.from, e.to, ...(e.out ? [e.out] : [])]) { P.x = mx.get(P.x); P.y = my.get(P.y); }
   for (const P of at) if (P) { P.x = mx.get(2 * P.x); P.y = my.get(2 * P.y); }
   return added;
 }

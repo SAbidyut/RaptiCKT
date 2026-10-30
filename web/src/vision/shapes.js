@@ -1,6 +1,7 @@
 // Source bodies in a circuit drawing: circles (independent sources) and diamonds (dependent
-// sources). Candidates come from the enclosed holes of the line drawing; each is confirmed by
-// fitting a circle or a diamond outline to the ink around it.
+// sources), and the triangles of op amps. Candidates come from the enclosed holes of the line
+// drawing; each is confirmed by fitting a circle, a diamond or a triangle outline to the ink
+// around it.
 
 /** Holes of a 0/1 mask inside the box [x0, y0, x1, y1]: background enclosed by ink. */
 export function holes(mask, w, x0, y0, x1, y1) {
@@ -185,10 +186,84 @@ export function outlineKind(mask, w, h, cx, cy, r, sw) {
 }
 
 /**
- * Circles and diamonds of the line drawing (mask) inside a box, with their centre and radius
- * (half the diagonal for a diamond): [{ kind, cx, cy, r, score }].
+ * Inside a triangle (an op amp's body) grown by pad (shrunk when pad < 0)? s.pts: its corners,
+ * the apex first.
  */
-export function findShapes(mask, w, h, box, sw) {
+export function inTriangle(s, x, y, pad) {
+  const [A, B, C] = s.pts;
+  const gx = (A[0] + B[0] + C[0]) / 3, gy = (A[1] + B[1] + C[1]) / 3;
+  for (const [P, Q] of [[A, B], [B, C], [C, A]]) {
+    const L = Math.hypot(Q[0] - P[0], Q[1] - P[1]) || 1;
+    let nx = (Q[1] - P[1]) / L, ny = -(Q[0] - P[0]) / L;
+    // (the normal pointing away from the middle)
+    if ((gx - P[0]) * nx + (gy - P[1]) * ny > 0) { nx = -nx; ny = -ny; }
+    if ((x - P[0]) * nx + (y - P[1]) * ny > pad) return false;
+  }
+  return true;
+}
+
+/**
+ * An op amp's triangle round a hole: a base and an apex across from it, the base level or
+ * upright (the amplifier pointing right, left, down or up). The three sides are fitted to the
+ * ink by their share with ink on them. Returns { kind: 'triangle', pts (apex, then the base's
+ * ends), cx, cy (its middle), r (from the middle to the farthest corner), dir ([dx, dy], base to
+ * apex), score }, or null.
+ */
+function triangleFit(mask, w, h, ho, sw) {
+  const ink = (x, y) => {
+    const X = Math.round(x), Y = Math.round(y);
+    return X >= 0 && Y >= 0 && X < w && Y < h && mask[Y * w + X] === 1;
+  };
+  const tol = Math.max(1.5, 0.7 * sw);
+  // the share of three sides with ink on them (each side's very ends left out: wires leave there)
+  const score = (pts) => {
+    let hit = 0, n = 0;
+    for (let k = 0; k < 3; k++) {
+      const P = pts[k], Q = pts[(k + 1) % 3], L = Math.hypot(Q[0] - P[0], Q[1] - P[1]) || 1;
+      const nx = (Q[1] - P[1]) / L, ny = -(Q[0] - P[0]) / L;
+      for (let i = 0; i < 16; i++) {
+        const t = 0.06 + (0.88 * (i + 0.5)) / 16, x = P[0] + (Q[0] - P[0]) * t, y = P[1] + (Q[1] - P[1]) * t;
+        let on = false;
+        for (let d = -tol; d <= tol + 1e-9 && !on; d += Math.max(0.5, tol / 2)) on = ink(x + nx * d, y + ny * d);
+        if (on) hit++;
+        n++;
+      }
+    }
+    return hit / n;
+  };
+  let best = null;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    // along: from the base to the apex; across: along the base
+    const nx = -dy, ny = dx;
+    const along = [[ho.x0, ho.y0], [ho.x1, ho.y0], [ho.x0, ho.y1], [ho.x1, ho.y1]].map(([x, y]) => x * dx + y * dy);
+    const across = [[ho.x0, ho.y0], [ho.x1, ho.y0], [ho.x0, ho.y1], [ho.x1, ho.y1]].map(([x, y]) => x * nx + y * ny);
+    const s0 = Math.min(...along), s1 = Math.max(...along), t0 = Math.min(...across), t1 = Math.max(...across);
+    const at = (s, t) => [s * dx + t * nx, s * dy + t * ny];
+    const st = Math.max(0.5, 0.5 * sw);
+    for (let b = s0 - 1.5 * sw; b <= s0 + 0.5 * sw; b += st) {
+      for (let a = s1; a <= s1 + 3 * sw; a += st) {
+        for (let c = (t0 + t1) / 2 - sw; c <= (t0 + t1) / 2 + sw; c += st) {
+          for (let hb = (t1 - t0) / 2; hb <= (t1 - t0) / 2 + 2 * sw; hb += st) {
+            const pts = [at(a, c), at(b, c - hb), at(b, c + hb)];
+            const v = score(pts);
+            if (!best || v > best.score) best = { pts, score: v, dir: [dx, dy], hb, len: a - b };
+          }
+        }
+      }
+    }
+  }
+  if (!best) return null;
+  const [A, B, C] = best.pts;
+  const cx = (A[0] + B[0] + C[0]) / 3, cy = (A[1] + B[1] + C[1]) / 3;
+  return { kind: 'triangle', pts: best.pts, cx, cy, r: Math.max(...best.pts.map(([x, y]) => Math.hypot(x - cx, y - cy))), dir: best.dir, score: best.score, hb: best.hb, len: best.len };
+}
+
+/**
+ * Circles and diamonds of the line drawing (mask) inside a box, with their centre and radius
+ * (half the diagonal for a diamond): [{ kind, cx, cy, r, score }]; and the triangles of op amps
+ * (see triangleFit) that opAmp(triangle) takes for one.
+ */
+export function findShapes(mask, w, h, box, sw, { opAmp = () => false } = {}) {
   const [bx0, by0, bx1, by1] = box;
   // (a body drawn by hand may not quite close where the pen started: look for big holes with
   // gaps of a line's width or two shut too — small ones so made are only the narrow corners of
@@ -286,6 +361,13 @@ export function findShapes(mask, w, h, box, sw) {
       }
       if (best && best.v >= 0.75) { found.push({ kind: 'circle', cx: best.cx, cy: best.cy, r: (best.rx + best.ry) / 2, rx: best.rx, ry: best.ry, score: best.v }); continue; }
     }
+    // an op amp: a hole half its box, a triangle with straight sides round it (bigger than a
+    // ring, smaller than a mesh of the circuit drawn as a triangle)
+    const fill = ho.area / (hw(ho) * hh(ho));
+    if (!ho.split && fill >= 0.38 && fill <= 0.62 && Math.min(hw(ho), hh(ho)) >= 4 * sw) {
+      const t = triangleFit(mask, w, h, ho, sw);
+      if (t && t.score >= 0.85 && t.score > (pick ? pick.v : 0) + 0.05 && t.hb >= 2.5 * sw && t.hb <= 24 * sw && t.len >= 1.0 * t.hb && t.len <= 2.6 * t.hb && opAmp(t)) { found.push(t); continue; }
+    }
     if (!pick || pick.v < 0.7) continue;
     // a small ring (an open terminal) is too small to tell its outline's shape
     if (pick.r < 3 * sw) { found.push({ kind: 'circle', cx: pick.cx, cy: pick.cy, r: pick.r, score: pick.v }); continue; }
@@ -297,13 +379,13 @@ export function findShapes(mask, w, h, box, sw) {
   // one shape per place: keep the best of overlapping fits
   found.sort((a, b) => b.score - a.score);
   const out = [];
-  const inside = (s, ho) => (s.kind === 'diamond' ? Math.abs(ho.cx - s.cx) + Math.abs(ho.cy - s.cy) : Math.hypot((ho.cx - s.cx) / (s.rx || s.r), (ho.cy - s.cy) / (s.ry || s.r)) * s.r) < s.r;
+  const inside = (s, ho) => (s.kind === 'triangle' ? inTriangle(s, ho.cx, ho.cy, 0) : (s.kind === 'diamond' ? Math.abs(ho.cx - s.cx) + Math.abs(ho.cy - s.cy) : Math.hypot((ho.cx - s.cx) / (s.rx || s.r), (ho.cy - s.cy) / (s.ry || s.r)) * s.r) < s.r);
   for (const s of found) {
     if (out.some((o) => Math.hypot(o.cx - s.cx, o.cy - s.cy) < Math.max(o.r, s.r) * 0.8)) continue;
     // a body is hollow: the holes inside it fill most of it (a coil's loops fit a circle or a
     // diamond drawn round one of them, its other strokes on the outline) — or, a wire or an
     // arrow drawn through it, two halves on either side of its middle fill a good part of it
-    const area = s.kind === 'diamond' ? 2 * s.r * s.r : Math.PI * (s.rx || s.r) * (s.ry || s.r);
+    const area = s.kind === 'triangle' ? s.hb * s.len : s.kind === 'diamond' ? 2 * s.r * s.r : Math.PI * (s.rx || s.r) * (s.ry || s.r);
     const own = hs.filter((ho) => inside(s, ho)), filled = own.reduce((t, ho) => t + ho.area, 0);
     const halves = own.some((a) => own.some((b) => (a.cx - s.cx) * (b.cx - s.cx) + (a.cy - s.cy) * (b.cy - s.cy) < 0 && Math.min(a.area, b.area) >= 0.5 * Math.max(a.area, b.area)));
     if (filled < 0.5 * area && !(halves && filled >= 0.3 * area)) continue;

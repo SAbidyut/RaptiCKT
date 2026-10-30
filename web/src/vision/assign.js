@@ -2,7 +2,7 @@
 // expressions to the dependent sources, "+ vₓ −" to the voltage across a part, an arrow with its
 // "i" to the current through one, a lone "vₓ" to the node it marks, and the figure's caption.
 
-const UNIT_FOR = { resistor: ['Ω', 'S', ''], unknown: ['Ω', 'S', ''], capacitor: ['F'], inductor: ['H'], battery: ['V', ''], switch: [] };
+const UNIT_FOR = { resistor: ['Ω', 'S', ''], unknown: ['Ω', 'S', ''], capacitor: ['F'], inductor: ['H'], battery: ['V', ''], switch: [], opamp: [] };
 
 /** Gap between two boxes [x0, y0, x1, y1] (0 when they overlap). */
 function gap(a, b) {
@@ -51,11 +51,29 @@ export function assignLabels(S, words, arrows, H, fig) {
     }
   }
   pairs.sort((a, b) => a.cost - b.cost);
+  // (a conductance gives the resistance 1/G)
+  const valueOf = (w) => ({ text: w.read.text, value: w.read.unit === 'S' && w.read.value > 0 ? +(1 / w.read.value).toPrecision(12) : w.read.value });
+  const owner = new Map(); // word → the part it went to
   for (const { p, w } of pairs) {
     if (labels.has(p.k) || taken.has(w)) continue;
-    // (a conductance gives the resistance 1/G)
-    labels.set(p.k, { text: w.read.text, value: w.read.unit === 'S' && w.read.value > 0 ? +(1 / w.read.value).toPrecision(12) : w.read.value });
+    labels.set(p.k, valueOf(w));
     taken.add(w);
+    owner.set(w, p);
+  }
+  // a part left without a value whose near value went to a neighbour with another value as near
+  // it (a value printed between two sources, taken by the one whose own value is a little
+  // further off): the neighbour takes that one
+  for (const p of parts) {
+    if (labels.has(p.k)) continue;
+    for (const x of pairs) {
+      if (x.p !== p || x.cost > 1.5 || !owner.has(x.w)) continue;
+      const q = owner.get(x.w);
+      const y = pairs.find((z) => z.p === q && z.cost <= 1.5 && !taken.has(z.w));
+      if (!y) continue;
+      labels.set(q.k, valueOf(y.w)); taken.add(y.w); owner.set(y.w, q);
+      labels.set(p.k, valueOf(x.w)); owner.set(x.w, p);
+      break;
+    }
   }
   // ---------------------------------------------------------------- dependent sources
   const deps = [];
@@ -110,9 +128,11 @@ export function assignLabels(S, words, arrows, H, fig) {
       continue;
     }
     if (r.var !== 'v') continue;
-    // a voltage across a part: + and − marks round the name, at the part's two ends
+    // a voltage across a part: + and − marks round the name, at the part's two ends (an op
+    // amp's are its inputs)
     let best = null, bd = Infinity;
     for (const p of parts) {
+      if (p.type === 'opamp') continue;
       const d = gap(p.box, boxOf(w)) / H;
       if (d < bd) { bd = d; best = p; }
     }
@@ -181,7 +201,7 @@ export function assignLabels(S, words, arrows, H, fig) {
     } else notes.push(`What controls the dependent source "${read.text}" is not marked on the drawing: set its control on the board.`);
   }
   // parts left without a value
-  const bare = parts.filter((p) => !labels.has(p.k) && p.type !== 'depsource');
+  const bare = parts.filter((p) => !labels.has(p.k) && p.type !== 'depsource' && p.type !== 'opamp');
   if (bare.length) notes.push(`${bare.length} part${bare.length > 1 ? 's have' : ' has'} no readable value; a default was used — tap ${bare.length > 1 ? 'them' : 'it'} on the board to set ${bare.length > 1 ? 'their values' : 'its value'}.`);
   return { labels, quantities, title, notes };
 }
@@ -197,7 +217,7 @@ function branchPart(S, parts, arrow, H) {
   const vert = arrow.dir[0] === 0;
   let best = null, bd = Infinity;
   for (const p of parts) {
-    if ((p.axis === 'v') !== vert) continue;
+    if ((p.axis === 'v') !== vert || p.type === 'opamp') continue;
     const A = S.vertices[p.a], B = S.vertices[p.b];
     // across the branch: how far the arrow is from the part's line; along it: how far from its span
     const across = vert ? Math.abs(arrow.cx - (A.x + B.x) / 2) : Math.abs(arrow.cy - (A.y + B.y) / 2);

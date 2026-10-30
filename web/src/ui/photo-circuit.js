@@ -10,10 +10,11 @@
 // A drawing: { title, parts, wires, ground, quantities, asked, notes? }
 //   parts: [{ kind, text, value, from, to, polarity, control }] — kind: resistor, voltage_source,
 //     current_source, dependent_voltage_source, dependent_current_source, capacitor, inductor,
-//     ac_voltage_source, ac_current_source, open_switch, closed_switch; value in SI units (the
-//     gain for a dependent source); from / to: grid points { x, y }; polarity: the end ('from' |
-//     'to') of a source's + or arrow, else 'none'; control: what a dependent source's gain
-//     multiplies ('vx', 'ix'), as named in quantities.
+//     ac_voltage_source, ac_current_source, open_switch, closed_switch, opamp; value in SI units
+//     (the gain for a dependent source); from / to: grid points { x, y } (an op amp's − and +
+//     inputs, with its output at `out`); polarity: the end ('from' | 'to') of a source's + or
+//     arrow, else 'none'; control: what a dependent source's gain multiplies ('vx', 'ix'), as
+//     named in quantities.
 //   wires: [{ from, to }]; ground: [{ x, y }]
 //   quantities: [{ name, kind: node_voltage | voltage_across | current_through, at, part (index
 //     in parts, -1 for a node voltage), positive ('from' | 'to' | 'none') }]
@@ -29,8 +30,8 @@ const U = 6 * G; // one grid unit on the board: an 80-unit part with a 20-unit l
 const key = (p) => p.x + ',' + p.y;
 const W = (p) => [p.x * U, p.y * U];
 
-const TYPE = { resistor: 'resistor', voltage_source: 'dcv', current_source: 'dci', capacitor: 'capacitor', inductor: 'inductor', ac_voltage_source: 'acv', ac_current_source: 'aci', open_switch: 'switch', closed_switch: 'switch', dependent_current_source: 'depsrc', dependent_voltage_source: 'depsrc' };
-const PREFIX = { resistor: 'R', dcv: 'V', dci: 'I', capacitor: 'C', inductor: 'L', acv: 'V', aci: 'I', switch: 'S', depsrc: 'D' };
+const TYPE = { resistor: 'resistor', voltage_source: 'dcv', current_source: 'dci', capacitor: 'capacitor', inductor: 'inductor', ac_voltage_source: 'acv', ac_current_source: 'aci', open_switch: 'switch', closed_switch: 'switch', dependent_current_source: 'depsrc', dependent_voltage_source: 'depsrc', opamp: 'opamp' };
+const PREFIX = { resistor: 'R', dcv: 'V', dci: 'I', capacitor: 'C', inductor: 'L', acv: 'V', aci: 'I', switch: 'S', depsrc: 'D', opamp: 'U' };
 
 /**
  * Build a board circuit from one described circuit. Returns { doc, warnings }: warnings say what
@@ -40,7 +41,7 @@ export function buildFromDrawing(c) {
   const doc = new CircuitDoc(c.title || 'Circuit from photo');
   doc.description = 'Read from a photo.';
   const warnings = [];
-  const parts = (c.parts || []).filter((p) => p && TYPE[p.kind] && p.from && p.to && key(p.from) !== key(p.to));
+  const parts = (c.parts || []).filter((p) => p && TYPE[p.kind] && p.from && p.to && key(p.from) !== key(p.to) && (p.kind !== 'opamp' || (p.out && key(p.out) !== key(p.from) && key(p.out) !== key(p.to))));
   if (parts.length < (c.parts || []).length) warnings.push('Some parts could not be placed (both ends on one point, or an unknown kind) and were left out.');
   const count = {};
   const made = [];
@@ -48,7 +49,7 @@ export function buildFromDrawing(c) {
   // every point that must be a connection: part ends, ground, node-voltage labels
   const points = new Map();
   const mark = (p) => points.set(key(p), p);
-  for (const p of parts) { mark(p.from); mark(p.to); }
+  for (const p of parts) { mark(p.from); mark(p.to); if (p.out) mark(p.out); }
   for (const g of c.ground || []) mark(g);
   for (const q of quantities) if (q.kind === 'node_voltage' && q.at) mark(q.at);
   for (const w of c.wires || []) { mark(w.from); mark(w.to); }
@@ -56,6 +57,7 @@ export function buildFromDrawing(c) {
   parts.forEach((p) => {
     const type = TYPE[p.kind];
     const C = getType(type);
+    if (type === 'opamp') { made.push(placeOpAmp(doc, p, C, count)); return; }
     const P = W(p.from), Q = W(p.to), mx = (P[0] + Q[0]) / 2, my = (P[1] + Q[1]) / 2;
     const el = new C(mx, my);
     count[type] = (count[type] || 0) + 1;
@@ -152,13 +154,53 @@ export function buildFromDrawing(c) {
   // a part end that nothing joins
   const used = new Map();
   const bump = (p) => used.set(key(p), (used.get(key(p)) || 0) + 1);
-  for (const p of parts) { bump(p.from); bump(p.to); }
+  for (const p of parts) { bump(p.from); bump(p.to); if (p.out) bump(p.out); }
   for (const w of c.wires || []) { bump(w.from); bump(w.to); }
   for (const g of grounds) bump(g);
   const loose = [];
-  for (const { part, el } of made) for (const p of [part.from, part.to]) if ((used.get(key(p)) || 0) < 2 && !wireThrough(c.wires || [], p)) loose.push(el.name);
+  for (const { part, el } of made) for (const p of [part.from, part.to, ...(part.out ? [part.out] : [])]) if ((used.get(key(p)) || 0) < 2 && !wireThrough(c.wires || [], p)) loose.push(el.name);
   if (loose.length) warnings.push(`Not joined to anything at one end: ${[...new Set(loose)].join(', ')}. Check the photo and add the missing wire.`);
   return { doc, warnings, asked: c.asked || [] };
+}
+
+/**
+ * An op amp (ideal) between its − input (p.from), its + input (p.to) and its output (p.out):
+ * turned to point the way it was drawn, mirrored to keep its − input where it was drawn, set
+ * between its inputs' line and its output, its pins led to the three points. Returns
+ * { part, el, head, tail } as for the other parts.
+ */
+function placeOpAmp(doc, p, C, count) {
+  const el = new C(0, 0);
+  count.opamp = (count.opamp || 0) + 1;
+  el.name = `${PREFIX.opamp}${count.opamp}`;
+  const M = W(p.from), P = W(p.to), O = W(p.out);
+  // the inputs' line, level or upright, and the side the output is on
+  const upright = M[0] === P[0] || Math.abs(M[0] - P[0]) < Math.abs(M[1] - P[1]);
+  const mx = (M[0] + P[0]) / 2, my = (M[1] + P[1]) / 2;
+  el.rot = upright ? (O[0] >= mx ? 0 : 2) : (O[1] >= my ? 1 : 3);
+  // (between the inputs and the output, or two grid steps out from the inputs when they are
+  // level with it)
+  if (upright) { el.x = O[0] === mx ? mx + 3 * G : (mx + O[0]) / 2; el.y = my; } else { el.y = O[1] === my ? my + 3 * G : (my + O[1]) / 2; el.x = mx; }
+  // the − pin on the − input's side
+  const across = upright ? 1 : 0;
+  for (const flip of [false, true]) {
+    el.flip = flip;
+    const [pm, pp] = el.getPosts();
+    if (Math.sign(pm[across] - pp[across]) === Math.sign(M[across] - P[across])) break;
+  }
+  el.onParamChange?.();
+  doc.elements.push(el);
+  const [pm, pp, po] = el.getPosts();
+  // each lead along the inputs' line first, then across to the pin (so the two inputs' leads
+  // do not run over each other)
+  const lead = (from, post) => {
+    if (from[0] === post[0] || from[1] === post[1]) { doc.addWire([from, post]); return; }
+    doc.addWire(upright ? [from, [post[0], from[1]], post] : [from, [from[0], post[1]], post]);
+  };
+  lead(M, pm); lead(P, pp);
+  if (O[0] === po[0] || O[1] === po[1]) doc.addWire([O, po]);
+  else doc.addWire(upright ? [O, [O[0], po[1]], po] : [O, [po[0], O[1]], po]);
+  return { part: p, el, head: p.from, tail: p.to };
 }
 
 /**

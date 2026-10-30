@@ -1,10 +1,10 @@
 // From a figure's line drawing to a circuit: wires (straight horizontal and vertical runs),
 // the vertices they meet at, and the two-terminal parts between wire ends — resistors
 // (zigzags), sources (circles and diamonds), capacitors and batteries (plates), inductors
-// (coils) — plus grounds hanging off a wire end.
+// (coils) — op amps (triangles: their inputs and output), plus grounds hanging off a wire end.
 
 import { thin, skeletonGraph, pruneSpurs, edgePoints, simplify } from './skeleton.js';
-import { findShapes } from './shapes.js';
+import { findShapes, inTriangle } from './shapes.js';
 import { components, fillPinholes } from './image.js';
 import { arrowTip } from './arrow.js';
 
@@ -12,10 +12,12 @@ const deg = (a) => (a * 180) / Math.PI;
 
 /** Inside a source body (outline included)? */
 function inShape(s, x, y, pad) {
+  if (s.kind === 'triangle') return inTriangle(s, x, y, pad);
   if (s.kind === 'circle') return Math.hypot((x - s.cx) / ((s.rx || s.r) + pad), (y - s.cy) / ((s.ry || s.r) + pad)) <= 1;
   return Math.abs(x - s.cx) + Math.abs(y - s.cy) <= s.r + pad * 1.42;
 }
 function inInterior(s, x, y, pad) {
+  if (s.kind === 'triangle') return inTriangle(s, x, y, -pad);
   if (s.kind === 'circle') return Math.hypot((x - s.cx) / Math.max(1, (s.rx || s.r) - pad), (y - s.cy) / Math.max(1, (s.ry || s.r) - pad)) <= 1;
   return Math.abs(x - s.cx) + Math.abs(y - s.cy) <= s.r - pad * 1.42;
 }
@@ -83,7 +85,10 @@ export function readStructure(img, fig) {
     }
   }
   fillPinholes(art, W, H, Math.round(0.6 * sw * sw));
-  const shapes = findShapes(art, W, H, [0, 0, W - 1, H - 1], sw);
+  // (a triangle is an op amp with a + or a − drawn inside it: a roof, an arrowhead or a ground
+  // drawn as a triangle has none)
+  const opAmp = (t) => innerSymbol(all, W, H, t, { x: t.pts[1][0], y: t.pts[1][1] }, { x: t.pts[2][0], y: t.pts[2][1] }, sw).signs > 0;
+  const shapes = findShapes(art, W, H, [0, 0, W - 1, H - 1], sw, { opAmp });
   const holes = smallHoles(art, W, H, sw);
   let g = skeletonGraph(thin(art, W, H), W, H);
   g = pruneSpurs(g, Math.max(3, Math.round(1.6 * sw)));
@@ -93,7 +98,9 @@ export function readStructure(img, fig) {
   const vNode = new Map(); // graph node → vertex
   const addV = (x, y, extra = {}) => { const v = { id: vertices.length, x, y, ...extra }; vertices.push(v); return v.id; };
   const nodeV = (nid) => { if (!vNode.has(nid)) { const nd = g.nodes[nid]; vNode.set(nid, addV(nd.x, nd.y, { node: nid })); } return vNode.get(nid); };
-  const shapeOf = (x, y) => shapes.findIndex((s) => inShape(s, x, y, 0.9 * sw));
+  // (a triangle's outline is fitted by its straight sides: its corners and a thick side bulge
+  // out further)
+  const shapeOf = (x, y) => shapes.findIndex((s) => inShape(s, x, y, (s.kind === 'triangle' ? 1.4 : 0.9) * sw));
   const pieces = [];
   const shapeTerm = shapes.map(() => []); // vertices where a wire run leaves each shape
   const eps = Math.max(1.5, 0.6 * sw);
@@ -482,6 +489,7 @@ export function readStructure(img, fig) {
   shapes.forEach((s, k) => {
     // where a wire (or a part) leaves the body: not a speck pruned away
     const terms = [...new Set(shapeTerm[k])].filter((v) => at[v].some((id) => pieces[id].cls !== 'drop'));
+    if (s.kind === 'triangle') { parts.push(opAmpOf(s, k, terms)); return; }
     // a small ring is no source: at a wire's end it is an open terminal (a, b), where the wire
     // just ends; between wires, a joint
     if (s.r < 3 * sw) {
@@ -530,6 +538,29 @@ export function readStructure(img, fig) {
     Object.assign(part, innerSymbol(all, W, H, s, A, B, sw));
     parts.push(part);
   });
+
+  // an op amp: its two inputs where wires meet its base, the − and the + told by the signs drawn
+  // inside beside them (unseen, the − is the upper or left one, as it usually is); its output
+  // where a wire leaves the apex
+  function opAmpOf(s, k, terms) {
+    const [dx, dy] = s.dir, base = s.pts[1];
+    const xs = s.pts.map((q) => q[0]), ys = s.pts.map((q) => q[1]);
+    const box = [Math.min(...xs) - sw, Math.min(...ys) - sw, Math.max(...xs) + sw, Math.max(...ys) + sw];
+    // how far from the base towards the apex
+    const along = (v) => (vertices[v].x - base[0]) * dx + (vertices[v].y - base[1]) * dy;
+    // (a wire leaving it, not a sliver of its outline running back into it)
+    const leaves = (v) => at[v].some((id) => pieces[id].cls !== 'drop' && (pieces[id].len >= 1.5 * sw || vertices[other(pieces[id], v)].cut !== k));
+    const outs = terms.filter((v) => leaves(v) && along(v) > 0.6 * s.len).sort((u, v) => along(v) - along(u));
+    const ins = terms.filter((v) => leaves(v) && along(v) < 3 * sw);
+    if (!outs.length || ins.length < 2) return { type: 'loose', terms, box, shape: k };
+    let a = ins[0], b = ins[1], far = -1;
+    for (const u of ins) for (const v of ins) { const d = Math.hypot(vertices[u].x - vertices[v].x, vertices[u].y - vertices[v].y); if (d > far) { far = d; a = u; b = v; } }
+    if (vertices[a].x * dy * dy + vertices[a].y * dx * dx > vertices[b].x * dy * dy + vertices[b].y * dx * dx) [a, b] = [b, a];
+    const sym = innerSymbol(all, W, H, s, vertices[a], vertices[b], sw);
+    const seen = sym.signs > 0 && !sym.unsure;
+    if (seen && sym.plus === 'a') [a, b] = [b, a];
+    return { type: 'opamp', shape: k, a, b, out: outs[0], axis: dx ? 'v' : 'h', dir: s.dir, cx: s.cx, cy: s.cy, r: s.r, box, unsure: !seen };
+  }
 
   // an arrowhead drawn big on a wire thins into bits on either side of it (round the little ring
   // inside an outlined one, made a joint above), or into a bit whose ends are not the wire's:
@@ -723,7 +754,7 @@ export function readStructure(img, fig) {
   }
   for (const P of plates) { P.cx += X0; P.cy += Y0; }
   for (const m of marks) { m.x0 += X0; m.x1 += X0; m.cx += X0; m.y0 += Y0; m.y1 += Y0; m.cy += Y0; }
-  return { vertices, wires, parts, grounds, shapes: shapes.map((s) => ({ ...s, cx: s.cx + X0, cy: s.cy + Y0 })), plates, marks, origin: [X0, Y0], pieces, usedBars: [...usedBars], tilt };
+  return { vertices, wires, parts, grounds, shapes: shapes.map((s) => ({ ...s, cx: s.cx + X0, cy: s.cy + Y0, ...(s.pts ? { pts: s.pts.map(([x, y]) => [x + X0, y + Y0]) } : {}) })), plates, marks, origin: [X0, Y0], pieces, usedBars: [...usedBars], tilt };
 }
 
 /** The group's pieces in order from vertex a to vertex b, when they form one simple path. */

@@ -41,9 +41,10 @@ function partLabel(e) {
   if (t === 'inductor') return `${e.name} ${fmtSI(p.l, 'H', 4)}`;
   if (t === 'switch') return `${e.name} ${p.closed ? 'closed' : 'open'}`;
   if (t === 'depsrc') return `${e.name} ${e.valueLabel()}`;
+  if (t === 'opamp') return `${e.name} op amp`;
   return e.name;
 }
-const PARTS = new Set(['resistor', 'dcv', 'acv', 'dci', 'aci', 'capacitor', 'inductor', 'switch', 'depsrc']);
+const PARTS = new Set(['resistor', 'dcv', 'acv', 'dci', 'aci', 'capacitor', 'inductor', 'switch', 'depsrc', 'opamp']);
 
 export class PhotoScreen {
   constructor(app, root) {

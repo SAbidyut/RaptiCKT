@@ -170,3 +170,36 @@ test('what cannot be rebuilt is said, not hidden', () => {
   const z = buildFromDrawing(circuit({ parts: [part('resistor', '1 Ω', 1, P(0, 0), P(0, 0))] }));
   assert.ok(z.warnings.some((w) => /left out/.test(w)));
 });
+
+test('an op amp is set on the board pointing as drawn, its − input where drawn: an inverting amplifier gives −3 V, turned and mirrored every way', () => {
+  // 1 V into 1 kΩ to the − input, 3 kΩ from it to the output, + input on the bottom wire, 2 kΩ
+  // across the output; drawn pointing right, − on top, then turned and mirrored
+  const base = {
+    parts: [
+      part('voltage_source', '1 V', 1, P(0, 1), P(0, 3), 'from'),
+      part('resistor', '1 kΩ', 1000, P(0, 1), P(1, 1)),
+      part('resistor', '3 kΩ', 3000, P(2, 0), P(3, 0)),
+      { kind: 'opamp', text: '', value: 0, from: P(2, 1), to: P(2, 2), out: P(3, 1), polarity: 'none', control: '' },
+      part('resistor', '2 kΩ', 2000, P(4, 1), P(4, 3)),
+    ],
+    wires: [wire(P(1, 1), P(2, 1)), wire(P(2, 1), P(2, 0)), wire(P(3, 0), P(3, 1)), wire(P(3, 1), P(4, 1)), wire(P(2, 2), P(2, 3)), wire(P(0, 3), P(4, 3))],
+    ground: [P(0, 3)],
+  };
+  const turns = [(p) => P(p.x, p.y), (p) => P(-p.y, p.x), (p) => P(-p.x, -p.y), (p) => P(p.y, -p.x)];
+  for (const mirror of [false, true]) {
+    turns.forEach((turn, k) => {
+      const T = (p) => { const q = turn(mirror ? P(-p.x, p.y) : p); return P(q.x + 10, q.y + 10); };
+      const c = circuit({
+        parts: base.parts.map((p) => ({ ...p, from: T(p.from), to: T(p.to), ...(p.out ? { out: T(p.out) } : {}) })),
+        wires: base.wires.map((w) => wire(T(w.from), T(w.to))),
+        ground: base.ground.map(T),
+      });
+      const r = solve(c);
+      assert.deepEqual(r.warnings, [], `turn ${k}, mirror ${mirror}`);
+      // (the board's ideal op amp has an open-loop gain of a million)
+      const u = r.el('U1'), close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-4, `${msg}: ${a} ≠ ${b}`);
+      close(r.sim.v(u.nodes[2]), -3, `vo (turn ${k}, mirror ${mirror})`);
+      close(r.sim.v(u.nodes[0]), 0, `v− (turn ${k}, mirror ${mirror})`);
+    });
+  }
+});
