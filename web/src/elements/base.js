@@ -3,6 +3,7 @@
 import { fmtQty } from '../engine/units.js';
 
 export const GRID = 20;
+const S = Math.SQRT1_2;
 
 const REGISTRY = new Map();
 export function register(cls) {
@@ -29,6 +30,7 @@ export class Element {
     this.id = uid++;
     this.x = x; this.y = y;
     this.rot = 0; this.flip = false;
+    this.diag = false; // slanted: turned a further 45°
     this.p = {};
     for (const pr of this.constructor.props) this.p[pr.key] = pr.def;
     this.nodes = []; this.inodes = []; this.branches = [];
@@ -47,8 +49,14 @@ export class Element {
   /** local bounding box [x1,y1,x2,y2] for hit testing */
   localBox() { return [-2 * GRID, -GRID * 0.75, 2 * GRID, GRID * 0.75]; }
 
+  /**
+   * Local → world. A slanted part (diag) is turned a further 45°, its length stretched by √2
+   * (its width kept), so that terminals on its axis, a whole number of grid steps out, land on
+   * grid points along the diagonal.
+   */
   toWorld(lx, ly) {
     if (this.flip) ly = -ly;
+    if (this.diag) [lx, ly] = [lx - ly * S, lx + ly * S];
     let x, y;
     switch (this.rot & 3) {
       case 0: x = lx; y = ly; break;
@@ -68,16 +76,20 @@ export class Element {
       case 2: x = -dx; y = -dy; break;
       default: x = -dy; y = dx; break;
     }
+    if (this.diag) [x, y] = [(x + y) / 2, (y - x) * S];
     if (this.flip) y = -y;
     return [x, y];
   }
+
+  /** Can it be slanted with its terminals on grid points: all of them on its axis? */
+  canSlant() { return this.localPosts().every(([x, y]) => y === 0 && x % GRID === 0); }
 
   getPosts() { return this.localPosts().map(([x, y]) => this.toWorld(x, y)); }
 
   worldBox() {
     const [a, b, c, d] = this.localBox();
-    const p1 = this.toWorld(a, b), p2 = this.toWorld(c, d);
-    return [Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1]), Math.max(p1[0], p2[0]), Math.max(p1[1], p2[1])];
+    const q = [this.toWorld(a, b), this.toWorld(c, d), this.toWorld(a, d), this.toWorld(c, b)];
+    return [Math.min(...q.map((p) => p[0])), Math.min(...q.map((p) => p[1])), Math.max(...q.map((p) => p[0])), Math.max(...q.map((p) => p[1]))];
   }
 
   hitTest(wx, wy, pad = 4) {
@@ -107,6 +119,7 @@ export class Element {
     const out = { t: this.constructor.type, x: this.x, y: this.y };
     if (this.rot) out.r = this.rot;
     if (this.flip) out.f = 1;
+    if (this.diag) out.s = 1;
     const p = {};
     for (const pr of this.constructor.props) if (this.p[pr.key] !== pr.def) p[pr.key] = this.p[pr.key];
     if (Object.keys(p).length) out.p = p;
@@ -122,6 +135,7 @@ export class Element {
     const e = new C(o.x, o.y);
     e.rot = o.r || 0;
     e.flip = !!o.f;
+    e.diag = !!o.s;
     if (o.p) Object.assign(e.p, o.p);
     if (o.l) e.label = o.l;
     if (o.fl) e.fault = { ...o.fl };

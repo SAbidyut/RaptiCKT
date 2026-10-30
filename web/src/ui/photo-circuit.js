@@ -75,27 +75,37 @@ export function buildFromDrawing(c) {
     if (isV && p.polarity === 'to') head = p.to;
     if (isI) head = p.polarity === 'from' ? p.to : p.from;
     const tail = head === p.from ? p.to : p.from;
-    const H = W(head), horiz = P[1] === Q[1], vert = P[0] === Q[0];
-    if (!horiz && !vert) warnings.push(`${el.name} (${p.text || p.kind}) is drawn at a slant; it was laid straight.`);
-    el.rot = horiz || !vert ? (H[0] < mx ? 0 : 2) : H[1] < my ? 1 : 3;
+    const H = W(head), T = W(tail), horiz = P[1] === Q[1], vert = P[0] === Q[0];
+    // drawn slanting: slanted 45° on the board (or level or upright when it is nearly so), its
+    // leads straight to its two points
+    const slant = !horiz && !vert, a = Math.atan2(Math.abs(T[1] - H[1]), Math.abs(T[0] - H[0]));
+    if (slant && a > Math.PI / 8 && a < (3 * Math.PI) / 8 && el.canSlant()) {
+      el.diag = true;
+      el.rot = T[0] > H[0] ? (T[1] > H[1] ? 0 : 3) : T[1] > H[1] ? 1 : 2;
+    } else el.rot = (slant ? a <= Math.PI / 4 : horiz) ? (H[0] < T[0] ? 0 : 2) : H[1] < T[1] ? 1 : 3;
     el.onParamChange?.();
     doc.elements.push(el);
     const [p0, p1] = el.getPosts();
-    const lead = (from, post) => { if (from[0] !== post[0] || from[1] !== post[1]) doc.addWire(from[0] === post[0] || from[1] === post[1] ? [from, post] : [from, [post[0], from[1]], post]); };
-    lead(W(head), p0); lead(W(tail), p1);
+    const lead = (from, post) => {
+      if (from[0] === post[0] && from[1] === post[1]) return;
+      doc.addWire(slant || from[0] === post[0] || from[1] === post[1] ? [from, post] : [from, [post[0], from[1]], post]);
+    };
+    lead(H, p0); lead(T, p1);
     made.push({ part: p, el, head, tail });
   });
 
   // plain wires, split at every connection point on them so each junction is explicit
   for (const w of c.wires || []) {
     if (!w.from || !w.to || key(w.from) === key(w.to)) continue;
-    const segs = w.from.x === w.to.x || w.from.y === w.to.y ? [[w.from, w.to]] : [[w.from, { x: w.to.x, y: w.from.y }], [{ x: w.to.x, y: w.from.y }, w.to]];
+    // (a wire drawn slanting runs straight)
+    const segs = [[w.from, w.to]];
     for (const [a, b] of segs) {
       if (key(a) === key(b)) continue;
       const inside = [...points.values()].filter((p) => {
         if (key(p) === key(a) || key(p) === key(b)) return false;
         if (a.x === b.x) return p.x === a.x && p.y > Math.min(a.y, b.y) && p.y < Math.max(a.y, b.y);
-        return p.y === a.y && p.x > Math.min(a.x, b.x) && p.x < Math.max(a.x, b.x);
+        if (a.y === b.y) return p.y === a.y && p.x > Math.min(a.x, b.x) && p.x < Math.max(a.x, b.x);
+        return (b.x - a.x) * (p.y - a.y) === (b.y - a.y) * (p.x - a.x) && (p.x - a.x) * (b.x - a.x) > 0 && (p.x - b.x) * (a.x - b.x) > 0;
       }).sort((p, q) => (Math.abs(p.x - a.x) + Math.abs(p.y - a.y)) - (Math.abs(q.x - a.x) + Math.abs(q.y - a.y)));
       let at = a;
       for (const p of [...inside, b]) { doc.addWire([W(at), W(p)]); at = p; }
@@ -229,6 +239,6 @@ function wireThrough(wires, p) {
     const [a, b] = [w.from, w.to];
     if (a.x === b.x) return p.x === a.x && p.y > Math.min(a.y, b.y) && p.y < Math.max(a.y, b.y);
     if (a.y === b.y) return p.y === a.y && p.x > Math.min(a.x, b.x) && p.x < Math.max(a.x, b.x);
-    return false;
+    return (b.x - a.x) * (p.y - a.y) === (b.y - a.y) * (p.x - a.x) && (p.x - a.x) * (b.x - a.x) > 0 && (p.x - b.x) * (a.x - b.x) > 0;
   });
 }

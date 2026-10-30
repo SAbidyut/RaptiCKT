@@ -111,6 +111,7 @@ export class Editor {
         <div class="mode-seg" role="radiogroup" aria-label="Board mode">
           <button class="mseg" data-a="mode-operate" data-mode="operate" role="radio" title="Operate: tap switches and buttons">${icon('hand', 16)}<span>Operate</span></button>
           <button class="mseg" data-a="mode-wire" data-mode="wire" role="radio" title="Wire: draw wires, move and edit parts">${icon('wire', 16)}<span>Wire</span></button>
+          <button class="mseg mslant" data-a="straight" aria-pressed="false" title="Straight wires: a new wire runs straight between the two terminals, slanting if need be">${icon('slant', 16)}</button>
         </div>
         <div class="hud-error"></div>
         <div class="hint"></div>
@@ -160,6 +161,7 @@ export class Editor {
       case 'speed': this.openSpeed(); break;
       case 'mode-operate': this.setMode('operate', true); break;
       case 'mode-wire': this.setMode('wire', true); break;
+      case 'straight': this.setStraightWires(!this.settings.straightWires, true); break;
       default:
     }
   }
@@ -175,6 +177,7 @@ export class Editor {
     this.meterProbes = null;
     this.wireFrom = null;
     this.setMode('wire');
+    this.setStraightWires(this.settings.straightWires);
     this.renderer.maxDpr = undefined;
     this.q('.doc-name').textContent = doc.name;
     this.q('.doc-sub').textContent = doc.description ? doc.description.slice(0, 60) : `${doc.elements.length} components`;
@@ -803,7 +806,7 @@ export class Editor {
       ${burnt ? `<button data-s="repair" class="hot">${icon('reset', 17)}Repair</button>` : ''}
       ${wiresOnly ? `<button data-s="cable">${icon('wire', 17)}Cable</button>` : ''}
       ${onlyWire && !burnt ? `<button data-s="probe">${icon('scope', 17)}Scope</button>` : ''}
-      ${nEl ? `<button data-s="rotate">${icon('rotate', 17)}Rotate</button><button data-s="dup">${icon('copy', 17)}Copy</button>` : ''}
+      ${nEl ? `<button data-s="rotate">${icon('rotate', 17)}Rotate</button>${[...this.selection].some((e) => e.canSlant()) ? `<button data-s="slant">${icon('slant', 17)}Slant</button>` : ''}<button data-s="dup">${icon('copy', 17)}Copy</button>` : ''}
       <button data-s="del" class="danger">${icon('trash', 17)}Delete</button>
       <button data-s="x">${icon('x', 17)}</button>`;
     bar.classList.add('show');
@@ -813,6 +816,7 @@ export class Editor {
       if (s === 'repair') this.repairWires([...this.selWires]);
       if (s === 'cable') this.inspector.openWires([...this.selWires]);
       if (s === 'rotate') this.rotateSelection();
+      if (s === 'slant') this.slantSelection();
       if (s === 'dup') this.duplicateSelection();
       if (s === 'del') this.deleteSelection();
       if (s === 'x') this.select(null);
@@ -850,6 +854,15 @@ export class Editor {
       this.haptic(8);
       this.toast(m === 'operate' ? '✋ Operate: tap switches and buttons · drag parts to move them' : '🔌 Wire: tap two terminals to wire · drag parts to move them', 1800);
     }
+  }
+
+  /** Straight wires on or off: new wires run straight between their terminals (slanting), or along the grid. */
+  setStraightWires(on, byUser) {
+    this.settings.straightWires = !!on;
+    if (byUser) this.app.saveSettings();
+    const b = this.q('[data-a=straight]');
+    if (b) { b.classList.toggle('active', !!on); b.setAttribute('aria-pressed', !!on); }
+    if (byUser) { this.haptic(8); this.toast(on ? '⟋ Straight wires: tap two terminals and the wire runs straight between them, slanting if need be' : 'Wires run along the grid again', 2200); }
   }
 
   /** Has this part something to work with a finger (a switch, button, breaker reset…)? */
@@ -1103,6 +1116,12 @@ export class Editor {
 
   rotateSelection() { this.transformSelection((e) => { e.rot = (e.rot + 1) & 3; }); }
 
+  /** Slant the selected parts by 45° (or set them straight again): parts with their two terminals in line. */
+  slantSelection() {
+    if (![...this.selection].some((e) => e.canSlant())) { this.toast('Only parts with their two terminals in line can be slanted'); return; }
+    this.transformSelection((e) => { if (e.canSlant()) e.diag = !e.diag; });
+  }
+
   /** Parts whose two terminals are not interchangeable (+/−, anode/cathode…). */
   static isPolar(e) {
     if (!e || e.localPosts().length !== 2) return false;
@@ -1189,6 +1208,8 @@ export class Editor {
         w.pts = w.pts.map(([x, y]) => [x + dx, y + dy]);
         continue;
       }
+      // a slanting straight wire stays one, from end to end
+      if (w.pts.length === 2 && a[0] !== b[0] && a[1] !== b[1]) { w.pts = [na, nb]; continue; }
       // a straight wire has no shape to keep: use the cleanest simple shape (cheap, no search while dragging)
       const simple = () => pickRoute(this.doc, simpleRoutes(na, nb, exitAt(this.doc, na), exitAt(this.doc, nb), a[1] === b[1]), { skipWires: new Set([w]), noSearch: true });
       let kept = stretchWire(w.pts, na, nb);
@@ -1605,6 +1626,7 @@ export class Editor {
       if (!this.active || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
       if (e.key === 'Delete' || e.key === 'Backspace') this.deleteSelection();
       else if (e.key === 'r') this.rotateSelection();
+      else if (e.key === 't') this.slantSelection();
       else if (e.key === 'o') this.setMode('operate', true);
       else if (e.key === 'w') this.setMode('wire', true);
       else if (e.key === ' ') { e.preventDefault(); this.togglePlay(); }
@@ -2019,7 +2041,8 @@ export class Editor {
     else if (h.kind === 'element') b = this.magnet(w[0], w[1], a);
     if (!b || same(a, b)) { this.cancelTapWire(); return; }
     const hFirst = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
-    const smart = pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
+    // (straight wires: from one to the other as the crow flies, as a delta's sides are drawn)
+    const smart = this.settings.straightWires ? [a, b] : pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
     let pts = simplify(smart || route(a, b, hFirst));
     if (pts.length < 2) pts = [a, b];
     this.checkpoint();

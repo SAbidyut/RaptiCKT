@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS = {
   damage: true,        // parts burn out and cables catch fire when over-stressed
   heatClock: 'real',   // 'real' | 'fast' | 'sim': clock for trips, heating and burning
   newWire: 'hw1.5',    // cable given to newly drawn wires (elements/cables.js WIRE_PRESETS)
+  straightWires: false, // new wires run straight between the two terminals tapped, slanting if need be
   animations: 'auto',
 };
 

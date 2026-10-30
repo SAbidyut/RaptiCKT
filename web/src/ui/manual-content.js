@@ -199,7 +199,7 @@ export const CHAPTERS = [
         ['Tap a wire', 'Selects the wire (then you can scope or delete it).'],
         ['Tap empty space', 'Clears the selection.'],
       ]),
-      P('On a computer browser you can also use: **Delete** (remove), **R** (rotate), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), and the mouse wheel to zoom.'),
+      P('On a computer browser you can also use: **Delete** (remove), **R** (rotate), **T** (slant 45°), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), and the mouse wheel to zoom.'),
     ],
   },
 
@@ -232,6 +232,7 @@ export const CHAPTERS = [
         'Its **name** (R1, C2, D1…), type and a live reading (for example `3.84 V · 816 µA`). Tap this area to open all properties.',
         '**Reverse polarity** (only for polarised parts such as batteries, diodes, LEDs, electrolytic capacitors): swaps the two terminals while the wires stay connected.',
         '**Rotate**: turns the part 90° each tap.',
+        '**Slant** (only for parts with their two terminals in line, such as resistors, capacitors, coils, sources): tilts the part 45°, as the sides of a delta, a star or a bridge are drawn; tap again to set it straight. Its terminals stay on grid points, so wires join it as usual.',
         '**Scope**: adds the part to the oscilloscope.',
         '**Edit** (sliders icon): opens the properties sheet.',
         '**Delete**.',
@@ -240,7 +241,7 @@ export const CHAPTERS = [
       P('Hold a part for half a second, or tap its name in the quick bar. A sheet slides up with:'),
       L([
         '**Live readings** while the simulation runs (voltage, current, power, state…).',
-        'Action buttons: **Rotate**, **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.',
+        'Action buttons: **Rotate**, **Slant** (45°), **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.',
         'Every adjustable property: a text box and a slider for numbers, a drop-down for choices (for example the **model** of a transistor or op-amp), a switch for yes/no.',
         'A short description of the part.',
         'Tap the **✓** to close.',
@@ -260,6 +261,7 @@ export const CHAPTERS = [
       L([
         '**Move**: drag the part. It snaps to the grid. Connected wires follow and re-route neatly. A part cannot be dropped on top of another part, and its terminals never join another terminal or wire just by touching: it stops at the last free spot (drag on into free space to hop over), and you connect parts by drawing a wire. Duplicates are placed on a free spot too. The undo button reverses the move.',
         '**Rotate**: quick bar button (or **R** on a keyboard).',
+        '**Slant**: quick bar button (or **T** on a keyboard): 45°, and Rotate then turns it onto the other diagonals.',
         '**Flip**: properties sheet (mirrors the part).',
         '**Copy**: properties sheet or selection bar. The copy appears slightly down and right.',
         '**Delete**: quick bar or selection bar.',
@@ -270,7 +272,7 @@ export const CHAPTERS = [
         'Drag a box **from left to right** = **window**: only parts and wires **completely inside** are selected.',
         'Drag a box **from right to left** = **crossing**: everything the box **touches** is selected.',
         'While Select is on, tap parts or wires one by one to add or remove them.',
-        'A **selection bar** shows how many parts and wires are selected, with **Rotate**, **Copy**, **Delete** and **✕** (clear). Dragging any selected part moves them all together.',
+        'A **selection bar** shows how many parts and wires are selected, with **Rotate**, **Slant**, **Copy**, **Delete** and **✕** (clear). Dragging any selected part moves them all together.',
         'Tap **Select** again to leave the mode.',
       ]),
       H('Undo and redo'),
@@ -291,6 +293,8 @@ export const CHAPTERS = [
         'You can also tap **a point on an existing wire** (to branch from it) or **the body of a part** (the wire goes to its nearest terminal).',
         'Changed your mind? Tap **empty space** or the same terminal again, or press **Back**, to cancel.',
       ]),
+      H('Straight (slanting) wires'),
+      P('To draw a circuit as a textbook does, with slanting sides (a delta, a star, a bridge drawn as a diamond): in **Wire** mode tap the **⟋** button beside **Wire** (it lights up). Tapping two terminals then draws one **straight** wire between them, slanting if need be, instead of a right-angled one. Tap ⟋ again to go back to right-angled wires. A straight slanting wire stays straight when you move the parts at its ends. Use **Slant** on the parts themselves (above) to tilt them along such a side.'),
       H('Branches and junctions'),
       L([
         'To branch from an existing wire, tap **a point on that wire** as the first or the second end of a new wire. The two are then electrically joined.',
@@ -626,7 +630,7 @@ export const CHAPTERS = [
       H('What the phone reads'),
       L([
         'Straight wires and the joints between them; resistors (zigzags), coils (bumps, or loops like a spring seen from the side), capacitors and batteries of one cell or more (plates: the long plate is +), grounds, and open switches (a lever slanting from one wire end towards the next).',
-        'Wires and parts drawn slanting, as in a bridge drawn as a diamond or a delta and a star drawn as triangles: on the board they are laid level and upright, joined exactly as drawn. Values printed along a slanting side are read too, also with a name before them (**x₁ = 2.5Ω**).',
+        'Wires and parts drawn slanting, as in a bridge drawn as a diamond or a delta and a star drawn as triangles: on the board they are drawn slanting too (the parts slanted 45°, the wires straight), joined exactly as drawn; where a slanting line would cross another part or run along another wire, the circuit is laid level and upright instead. Values printed along a slanting side are read too, also with a name before them (**x₁ = 2.5Ω**, and **Z₁ = 5Ω** written level).',
         'Resistors printed small, whose zigzag runs together into a thick bit of the line in a photo, and decimal points that run into the next digit (3.33Ω).',
         '**Op amps** (a triangle with **−** and **+** inside, the output at its point): placed as the board\'s ideal op amp, pointing the way it was drawn, the − and + inputs where they were drawn (told by the signs; unseen, the − is taken as the upper or left input). Its supply rails are ±15 V: change them in its settings if the problem gives others.',
         'Circles (or ovals) as independent sources — **+ −** marks make a voltage source, **~** an AC source, an arrow a current source (also one drawn on the wire running on through the circle) — and diamonds as **dependent sources**, with the expression written beside them (0.1vₓ, 4iₓ).',

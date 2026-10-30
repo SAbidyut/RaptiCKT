@@ -203,3 +203,29 @@ test('an op amp is set on the board pointing as drawn, its − input where drawn
     });
   }
 });
+
+test('drawn slanting, a part is slanted on the board and a wire runs straight: a delta solves as drawn', () => {
+  // 12 V across 4 Ω (a slanting side), 2.5 Ω (the other slanting side) and 3.5 Ω (the base) in
+  // series across it too
+  const c = circuit({
+    parts: [
+      part('voltage_source', '12 V', 12, P(0, 0), P(0, 2), 'from'),
+      part('resistor', '4 Ω', 4, P(2, 0), P(1, 1)),
+      part('resistor', '2.5 Ω', 2.5, P(2, 0), P(3, 1)),
+      part('resistor', '3.5 Ω', 3.5, P(1, 2), P(3, 2)),
+    ],
+    wires: [wire(P(0, 0), P(2, 0)), wire(P(1, 1), P(1, 2)), wire(P(3, 1), P(3, 2)), wire(P(0, 2), P(1, 2))],
+    ground: [P(0, 2)],
+  });
+  const r = solve(c);
+  assert.deepEqual(r.warnings, []);
+  const R = (n) => r.doc.elements.find((e) => e.constructor.type === 'resistor' && e.p.r === n);
+  assert.ok(R(4).diag && R(2.5).diag && !R(3.5).diag, 'the slanting sides slanted');
+  for (const e of [R(4), R(2.5)]) for (const [x, y] of e.getPosts()) assert.ok(x % 20 === 0 && y % 20 === 0, 'terminals on grid points');
+  near(Math.abs(R(4).i), 3, '4 Ω');
+  near(Math.abs(R(2.5).i), 2, '2.5 Ω');
+  near(Math.abs(R(3.5).i), 2, '3.5 Ω');
+  // a wire drawn slanting is one straight segment
+  const s = buildFromDrawing(circuit({ parts: [part('resistor', '1 Ω', 1, P(0, 0), P(1, 0)), part('resistor', '1 Ω', 1, P(2, 1), P(3, 1))], wires: [wire(P(1, 0), P(2, 1))] }));
+  assert.ok(s.doc.wires.some((w) => w.pts.length === 2 && w.pts[0][0] !== w.pts[1][0] && w.pts[0][1] !== w.pts[1][1]), 'a straight slanting wire');
+});

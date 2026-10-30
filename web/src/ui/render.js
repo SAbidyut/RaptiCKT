@@ -197,6 +197,13 @@ export class WireGraph {
   }
 }
 
+/**
+ * A slanted part's frame (Element.toWorld): turned 45° with its length stretched by √2, and
+ * back again (for text kept upright).
+ */
+export function slant(ctx) { ctx.transform(1, 1, -Math.SQRT1_2, Math.SQRT1_2, 0, 0); }
+function unslant(ctx) { ctx.transform(0.5, -Math.SQRT1_2, 0.5, Math.SQRT1_2, 0, 0); }
+
 // ---------------------------------------------------------- graphics helper
 export function makeGraphics(ctx, theme, opts) {
   const vcCache = new Map();
@@ -205,7 +212,7 @@ export function makeGraphics(ctx, theme, opts) {
     body: theme.body, fill: theme.fill, accent: theme.accent, muted: theme.muted, text1: theme.text1, text2: theme.text2,
     pos: theme.pos, neg: theme.neg, bg: theme.bg, hi: theme.hi, lo: theme.lo, hiFill: theme.hiFill, loFill: theme.loFill, hiRGB: theme.hiRGB,
     lw: 2.2, running: false, t: 0, vScale: 5, iScale: 0.01, showCharge: true, voltColors: true,
-    rot: 0, flip: false,
+    rot: 0, flip: false, diag: false,
     pv: () => 0,
     vc(v) {
       if (!g.voltColors || !g.running) return theme.body;
@@ -256,19 +263,21 @@ export function makeGraphics(ctx, theme, opts) {
       if (o.fill) { ctx.fillStyle = o.fill; ctx.fill(); }
       if (o.stroke) { ctx.strokeStyle = o.stroke; ctx.lineWidth = o.width || g.lw; ctx.stroke(); }
     },
-    /** run fn in an upright (unrotated, unmirrored) frame centred on the part */
+    /** run fn in an upright (unrotated, unmirrored, unslanted) frame centred on the part */
     upright(fn, cx = 0, cy = 0) {
-      const r = g.rot, f = g.flip;
+      const r = g.rot, f = g.flip, d = g.diag;
       ctx.save();
       ctx.translate(cx, cy);
       if (f) ctx.scale(1, -1);
+      if (d) unslant(ctx);
       if (r) ctx.rotate((-r * Math.PI) / 2);
-      g.rot = 0; g.flip = false;
-      try { fn(); } finally { ctx.restore(); g.rot = r; g.flip = f; }
+      g.rot = 0; g.flip = false; g.diag = false;
+      try { fn(); } finally { ctx.restore(); g.rot = r; g.flip = f; g.diag = d; }
     },
     /** upright text at local (lx, ly), anchored so it extends away from the part in that direction */
     textSide(str, lx, ly, o = {}) {
       let x = lx, y = g.flip ? -ly : ly;
+      if (g.diag) [x, y] = [x - y * Math.SQRT1_2, x + y * Math.SQRT1_2];
       [x, y] = [[x, y], [-y, x], [-x, -y], [y, -x]][g.rot & 3];
       let align = 'center', baseline = 'middle';
       if (Math.abs(x) > Math.abs(y)) align = x > 0 ? 'left' : 'right';
@@ -289,6 +298,7 @@ export function makeGraphics(ctx, theme, opts) {
       let align = o.align || 'center';
       const follow = o.follow ?? (align !== 'center');
       if (!follow) {
+        if (g.diag) unslant(ctx);
         if (g.rot) ctx.rotate((-g.rot * Math.PI) / 2);
       } else if (g.rot === 1 || g.rot === 2) {
         // keep pin labels readable: rotate a half turn instead of reading upside down
@@ -440,8 +450,9 @@ export class Renderer {
       ctx.save();
       ctx.translate(e.x, e.y);
       ctx.rotate(((e.rot & 3) * Math.PI) / 2);
+      if (e.diag) slant(ctx);
       if (e.flip) ctx.scale(1, -1);
-      g.rot = e.rot & 3; g.flip = e.flip;
+      g.rot = e.rot & 3; g.flip = e.flip; g.diag = !!e.diag;
       if (sel || err) {
         const [a, b, c, d] = e.localBox();
         g.box(a - 5, b - 5, c + 5, d + 5, { fill: err ? 'rgba(248,113,113,0.12)' : 'rgba(34,211,238,0.08)', stroke: err ? '#f87171' : th.select, width: 1.2, r: 6 });
@@ -449,7 +460,7 @@ export class Renderer {
       for (const [pi, x1, y1, x2, y2] of e.leads()) g.line(x1, y1, x2, y2, g.vc(g.pv(pi)), g.lw);
       e.draw(g);
       ctx.restore();
-      g.rot = 0; g.flip = false;
+      g.rot = 0; g.flip = false; g.diag = false;
       if (e.fault && e.fault.m && e.fault.m !== 'none') { // fault badge at the top-right corner
         const [, y1, x2] = e.worldBox();
         g.circle(x2 + 2, y1 - 2, 7, { fill: '#ef4444', stroke: th.bg, width: 1.5 });

@@ -20,9 +20,10 @@ const KIND = {
  * about one unit and comes out at its own size on the board; a part's leads and the little
  * offsets of a photo vanish, as rows or columns a few parts' lengths apart at most share a line
  * unless that would join what the drawing does not join (or drop an open terminal's stub).
- * Returns { at: vertex id → { x, y } | undefined, rows, cols }.
+ * slants: what was drawn slanting keeps its ends on different rows and columns (to be drawn
+ * slanting on the board). Returns { at: vertex id → { x, y } | undefined, rows, cols }.
  */
-export function gridOf(S, sw) {
+export function gridOf(S, sw, { slants = false } = {}) {
   const n = S.vertices.length;
   const mk = () => { const pa = Array.from({ length: n }, (_, k) => k); const f = (a) => { while (pa[a] !== a) { pa[a] = pa[pa[a]]; a = pa[a]; } return a; }; return { f, u: (a, b) => { a = f(a); b = f(b); if (a !== b) pa[a] = b; } }; };
   const parts = S.parts.filter((p) => p.a != null && p.b != null && KIND[p.type]);
@@ -126,10 +127,15 @@ export function gridOf(S, sw) {
   for (const c of rows) c.rep = row.f(c.members[0]);
   for (const c of cols) c.rep = col.f(c.members[0]);
   // an op amp's inputs and its output never share a column (pointing left or right) or a row
-  // (pointing up or down)
+  // (pointing up or down); nor, to be drawn slanting, the two ends of what was drawn so
   const apart = (uf, axis) => {
     const m = new Set();
-    for (const p of parts) if (p.out != null && p.axis === axis) { const a = uf.f(p.a), o = uf.f(p.out); m.add(`${a},${o}`); m.add(`${o},${a}`); }
+    const add = (u, v) => { const a = uf.f(u), b = uf.f(v); m.add(`${a},${b}`); m.add(`${b},${a}`); };
+    for (const p of parts) if (p.out != null && p.axis === axis) add(p.a, p.out);
+    if (slants) {
+      for (const p of parts) if (p.axis === 'd') add(p.a, p.b);
+      for (const wv of S.wires) if (wv.dir === 'd' && used[wv.a] && used[wv.b] && wv.len >= 3 * sw) add(wv.a, wv.b);
+    }
     return (A, B) => !m.has(`${A.rep},${B.rep}`);
   };
   const colsApart = apart(col, 'v'), rowsApart = apart(row, 'h');
@@ -146,12 +152,9 @@ export function gridOf(S, sw) {
   return { at, rows, cols };
 }
 
-/**
- * The drawing for buildFromDrawing: { title, parts, wires, ground, quantities, asked }, plus
- * notes on what was unsure. `labels` (optional) gives each part's text, value and control.
- */
-export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Map(), quantities = [], asked = [] } = {}) {
-  const { at } = gridOf(S, sw);
+/** The grid drawing's parts and wires (with their vertices still on them: a, b, o, d). */
+function lay(S, sw, labels, slants) {
+  const { at } = gridOf(S, sw, { slants });
   const notes = [];
   const parts = [];
   const index = new Map(); // structure part → drawing part index
@@ -184,7 +187,23 @@ export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Ma
     if (!A || !B || (A.x === B.x && A.y === B.y)) continue;
     wires.push({ from: { ...A }, to: { ...B }, a: wv.a, b: wv.b, d: wv.dir === 'd' });
   }
-  wires = [...wires, ...squareUp(S, at, parts, wires)];
+  return { at, parts, wires, notes, index };
+}
+
+/**
+ * The drawing for buildFromDrawing: { title, parts, wires, ground, quantities, asked }, plus
+ * notes on what was unsure. `labels` (optional) gives each part's text, value and control.
+ */
+export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Map(), quantities = [], asked = [] } = {}) {
+  // what was drawn slanting stays so (the board has slanted parts and wires) when, its ends kept
+  // on different rows and columns, every such line can run straight; else all is laid along
+  // the grid, the slanting lines led round
+  let L = lay(S, sw, labels, true);
+  if (!straightSlants(L.parts, L.wires)) {
+    L = lay(S, sw, labels, false);
+    L.wires = [...L.wires, ...squareUp(S, L.at, L.parts, L.wires)];
+  }
+  const { at, parts, wires, notes, index } = L;
   for (const x of [...parts, ...wires]) { delete x.a; delete x.b; delete x.o; delete x.d; }
   const ground = S.grounds.map((g) => at[g.v]).filter(Boolean).map((p) => ({ ...p }));
   const qs = quantities.map((q) => {
@@ -354,6 +373,41 @@ function squareUp(S, at, parts, wires) {
   for (const e of all()) for (const P of [e.from, e.to, ...(e.out ? [e.out] : [])]) { P.x = mx.get(P.x); P.y = my.get(P.y); }
   for (const P of at) if (P) { P.x = mx.get(2 * P.x); P.y = my.get(2 * P.y); }
   return added;
+}
+
+/**
+ * Can every part and wire drawn slanting run straight from end to end? Not when its line passes
+ * through another point of the drawing (that a board joins there, or a part would short), runs
+ * along another line, or crosses a part.
+ */
+function straightSlants(parts, wires) {
+  const all = [...parts, ...wires];
+  const slanting = (e) => e.from.x !== e.to.x && e.from.y !== e.to.y;
+  if (!all.some(slanting)) return true;
+  // every point: element ends, and an op amp's output, with the node it is (by its vertex)
+  const pts = [];
+  for (const e of all) { pts.push([e.from, e.a]); pts.push([e.to, e.b]); if (e.out) pts.push([e.out, e.o]); }
+  const cross = (A, B, P) => (B.x - A.x) * (P.y - A.y) - (B.y - A.y) * (P.x - A.x);
+  const inside = (A, B, P) => cross(A, B, P) === 0 && (P.x - A.x) * (B.x - A.x) + (P.y - A.y) * (B.y - A.y) > 0 && (P.x - B.x) * (A.x - B.x) + (P.y - B.y) * (A.y - B.y) > 0;
+  // do segments A-B and C-D cross away from their ends (or run along each other)?
+  const meet = (A, B, C, D) => {
+    const d1 = cross(A, B, C), d2 = cross(A, B, D), d3 = cross(C, D, A), d4 = cross(C, D, B);
+    if (d1 === 0 && d2 === 0) return inside(A, B, C) || inside(A, B, D) || inside(C, D, A) || inside(C, D, B) || ((A.x === C.x && A.y === C.y && B.x === D.x && B.y === D.y) || (A.x === D.x && A.y === D.y && B.x === C.x && B.y === C.y));
+    return Math.sign(d1) * Math.sign(d2) < 0 && Math.sign(d3) * Math.sign(d4) < 0;
+  };
+  for (const e of all.filter(slanting)) {
+    const isPart = parts.includes(e);
+    // (a wire may pass a point of its own node, as a side of a delta its corner)
+    for (const [P, v] of pts) if (inside(e.from, e.to, P) && (isPart || (v !== e.a && v !== e.b))) return false;
+    for (const g of all) {
+      if (g === e) continue;
+      const sameLine = cross(e.from, e.to, g.from) === 0 && cross(e.from, e.to, g.to) === 0;
+      if (sameLine && meet(e.from, e.to, g.from, g.to)) return false;
+      // (wires crossing wires are no joint; a line across a part is)
+      if ((isPart || parts.includes(g)) && !sameLine && meet(e.from, e.to, g.from, g.to)) return false;
+    }
+  }
+  return true;
 }
 
 function defaultValue(kind) {

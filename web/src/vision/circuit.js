@@ -244,7 +244,6 @@ export function readStructure(img, fig) {
     if (p.cls || p.dir || p.a === p.b || p.len < 8 * sw) continue;
     const a = deg(Math.atan2(Math.abs(p.dy), Math.abs(p.dx)));
     if (a < 20 || a > 70 || [p.a, p.b].some((v) => at[v].length < 2 && vertices[v].cut == null)) continue;
-    const next = [p.a, p.b].flatMap((v) => at[v].filter((id) => id !== p.id).map((id) => pieces[id]));
     // (the stroke on from either end, where nothing else meets, taken leaving p's end the way
     // p arrives at it)
     const turns = [p.a, p.b].some((v) => at[v].length === 2 && at[v].some((id) => {
@@ -253,13 +252,17 @@ export function readStructure(img, fig) {
       const out = q.a === v ? q : { dx: -q.dx, dy: -q.dy, len: q.len };
       // (two long strokes meeting sharply are a corner, as at the foot of a V; a zigzag's are short,
       // and of a length: a long stroke into a zigzag's first short tooth is its lead)
-      return sharp(into, out) && Math.min(p.len, q.len) < 12 * sw && q.len >= 0.4 * p.len;
+      return sharp(into, out) && Math.min(p.len, q.len) < 9 * sw && q.len >= 0.4 * p.len;
     }));
     // (or goes on round a bend into another long stroke, as a hexagon's sides do, or into a
     // zigzag run together into a band; the corner where wires meet may lie a tiny step on, the
     // thinning having split it)
     const meet = (v) => at[v].length >= 3 || vertices[v].cut != null;
-    const held = [p.a, p.b].some((v) => meet(v) || at[v].some((id) => id !== p.id && pieces[id].len < 1.5 * sw && meet(other(pieces[id], v)))) || next.some((q) => (q.dir && q.len >= 3 * sw) || (q.cls !== 'other' && q.len >= 6 * sw) || q.band);
+    const held = [p.a, p.b].some((v) => meet(v) || at[v].some((id) => {
+      if (id === p.id) return false;
+      const q = pieces[id];
+      return (q.len < 1.5 * sw && meet(other(q, v))) || (q.dir && q.len >= 3 * sw) || (q.cls !== 'other' && q.len >= 6 * sw) || q.band;
+    }));
     if (turns || !held) continue;
     p.dir = 'd'; p.cls = 'wire';
   }
@@ -407,8 +410,8 @@ export function readStructure(img, fig) {
     }
     let part = classifyPath(vertices[a], vertices[b], pts, box, sw, list, orderPath(a, b, list, pieces, at), lead);
     part = coilRings(part, vertices[a], vertices[b], box);
-    // (a zigzag run together into a band is one, however straight the line through it)
-    const band = list.some((id) => pieces[id].band) && part.type !== 'inductor';
+    // (a zigzag run together into a band is one, however straight or bent the line through it)
+    const band = list.some((id) => pieces[id].band);
     if (band) part.type = 'resistor';
     // an arrowhead drawn on the wire: the wire goes on, and the current's direction is marked
     const mark = band || part.type === 'inductor' ? null : markOf(vertices[a], vertices[b], pts);

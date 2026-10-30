@@ -237,7 +237,8 @@ export function parseLabel(chars) {
  * as print and as hand-writing; the figure is hand-written when most of its words read better
  * so (a printed figure keeps its printed readings: a word that reads as nothing printed is no
  * label, whatever hand-writing it may look like). named: values may be named in front of them
- * ("x₁ = 2.5Ω", as beside a delta's sides), the name read as no part of the value.
+ * ("x₁ = 2.5Ω", as beside a delta's sides), the name read as no part of the value (as they are
+ * anywhere after an "=" drawn).
  */
 export function readWords(all, mainH, img, tilt = 0, { named = false } = {}) {
   const words = [], print = [];
@@ -264,9 +265,26 @@ export function readWords(all, mainH, img, tilt = 0, { named = false } = {}) {
     const r = readWord(w, mainH, img, false);
     const two = r.type ? null : splitWord(w, mainH, img, tilt);
     if (two) { words.push(...two.words); print.push(...two.reads); continue; }
-    // (or a value read unsurely, when its end alone reads clearly)
-    const tail = named && (!r.type || r.score < -1.5) ? valueAfter(w, mainH, img, tilt) : null;
+    // (or a value read unsurely, when its end alone reads clearly: in writing beside a slanting
+    // part, or after an "=" drawn)
+    const tail = (!r.type || r.score < -1.5) && (named || hasEquals(w, mainH, img)) ? valueAfter(w, mainH, img, tilt) : null;
     if (tail && (!r.type || tail.read.score > r.score + 1)) { words.push(tail.word); print.push(tail.read); } else { words.push(w); print.push(r); }
+  }
+  // a resistance read negative whose minus has another short flat bar over or under it: the
+  // minus is half of an "=" ("Z₁ = 5Ω", the "=" split between two words)
+  if (img?.comps) {
+    const flat = (c) => c.x1 - c.x0 + 1 >= 1.8 * (c.y1 - c.y0 + 1) && c.y1 - c.y0 + 1 <= 0.25 * mainH;
+    print.forEach((r, k) => {
+      if (!(r.type === 'value' && r.value < 0 && (r.unit === 'Ω' || r.unit === 'S'))) return;
+      const g = [...words[k].glyphs].sort((a, b) => a.x0 - b.x0)[0];
+      const bar = g && g.ids.length === 1 ? img.comps[g.ids[0] - 1] : null;
+      if (!bar || !flat(bar)) return;
+      const pair = words.some((w) => w.glyphs.some((h) => h.ids.some((id) => {
+        const c = img.comps[id - 1];
+        return c !== bar && flat(c) && Math.min(c.x1, bar.x1) - Math.max(c.x0, bar.x0) + 1 >= 0.6 * Math.min(c.x1 - c.x0 + 1, bar.x1 - bar.x0 + 1) && Math.max(c.y0 - bar.y1, bar.y0 - c.y1) > 0 && Math.max(c.y0 - bar.y1, bar.y0 - c.y1) <= 0.5 * mainH;
+      })));
+      if (pair) print[k] = { ...r, value: -r.value, text: r.text.replace(/^−/, '') };
+    });
   }
   const sc = (r) => (r.type ? r.score : -8);
   const clear = (r) => !!r?.type && r.score > -1.5;
@@ -354,6 +372,23 @@ function fraction(w, mainH, img, tilt) {
 }
 
 /**
+ * Is an "=" drawn in the word ("Z₁ = 5Ω"), after its first character: two short flat bars one
+ * over the other (one character, or two side by side that overlap)?
+ */
+function hasEquals(w, mainH, img) {
+  if (!img?.comps) return false;
+  const bars = [];
+  for (const g of w.glyphs) {
+    if (g.y1 - g.y0 + 1 > 0.6 * mainH) continue;
+    for (const id of g.ids) {
+      const c = img.comps[id - 1];
+      if (c.x1 - c.x0 + 1 >= 1.8 * (c.y1 - c.y0 + 1) && c.y1 - c.y0 + 1 <= 0.25 * mainH && c.x0 > w.x0 + 0.3 * mainH) bars.push(c);
+    }
+  }
+  return bars.some((p) => bars.some((q) => q !== p && q.y0 > p.y1 && q.y0 - p.y1 <= 0.5 * mainH && Math.min(p.x1, q.x1) - Math.max(p.x0, q.x0) + 1 >= 0.6 * Math.min(p.x1 - p.x0 + 1, q.x1 - q.x0 + 1)));
+}
+
+/**
  * A value named in front of it ("R₁ = 10 Ω", "x₁ = 2.5Ω": the reader has no "="): the longest
  * end of the word, after a space, that reads as a value with its unit. Returns { word, read }
  * or null.
@@ -361,7 +396,8 @@ function fraction(w, mainH, img, tilt) {
 function valueAfter(w, mainH, img, tilt) {
   const gs = [...w.glyphs].sort((a, b) => a.x0 - b.x0);
   const gapAt = (k) => gs[k].x0 - Math.max(...gs.slice(0, k).map((g) => g.x1)) - 1;
-  const read = (list) => { const x = word(list.map((g) => ({ ...g })), mainH, tilt), r = readWord(x, mainH, img, false); return r.type === 'value' && r.unit && r.score > -2 ? { word: x, read: r } : null; };
+  // (a resistance is never negative: a minus before it is half of the "=")
+  const read = (list) => { const x = word(list.map((g) => ({ ...g })), mainH, tilt), r = readWord(x, mainH, img, false); return r.type === 'value' && r.unit && r.score > -2 && !(r.value < 0 && (r.unit === 'Ω' || r.unit === 'S')) ? { word: x, read: r } : null; };
   for (let k = 1; k <= gs.length - 2; k++) {
     if (gapAt(k) < 0.12 * mainH) continue;
     const got = read(gs.slice(k));

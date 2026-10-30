@@ -22,8 +22,8 @@ export function slantedWords(img, fig, S, words, H) {
     if (t > Math.PI / 2) t -= Math.PI; else if (t <= -Math.PI / 2) t += Math.PI;
     return { p, t, cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, L: Math.hypot(B.x - A.x, B.y - A.y), ids: [] };
   });
-  // (a label's characters together: those close to each other go with one part, as the label
-  // lies, though its first character alone may lie nearer another)
+  // (a label's characters together: those close to each other go together, as the label lies,
+  // though its first character alone may lie nearer another part)
   const ids = fig.near.filter((id) => { const c = comps[id - 1]; return c.area >= 0.3 * img.sw * img.sw && Math.max(c.x1 - c.x0, c.y1 - c.y0) <= 3 * H; });
   const up = new Map(ids.map((id) => [id, id]));
   const find = (id) => { while (up.get(id) !== id) id = up.get(id); return id; };
@@ -39,19 +39,30 @@ export function slantedWords(img, fig, S, words, H) {
     const area = list.reduce((t, id) => t + comps[id - 1].area, 0);
     const x = list.reduce((t, id) => t + comps[id - 1].area * (comps[id - 1].x0 + comps[id - 1].x1) / 2, 0) / area;
     const y = list.reduce((t, id) => t + comps[id - 1].area * (comps[id - 1].y0 + comps[id - 1].y1) / 2, 0) / area;
-    let best = null, bd = Infinity;
+    // (to each slanting part it lies beside: two labels close together, each beside its own
+    // part, may make one cluster; each part reads it at its own slant, and the better reading
+    // of each piece of writing is kept)
     for (const l of lines) {
       const u = (x - l.cx) * Math.cos(l.t) + (y - l.cy) * Math.sin(l.t), v = -(x - l.cx) * Math.sin(l.t) + (y - l.cy) * Math.cos(l.t);
-      if (Math.abs(u) > l.L / 2 + 4 * H || Math.abs(v) > 4 * H) continue;
-      if (Math.abs(v) < bd) { bd = Math.abs(v); best = l; }
+      if (Math.abs(u) <= l.L / 2 + 4 * H && Math.abs(v) <= 4 * H) l.ids.push(...list);
     }
-    if (best) best.ids.push(...list);
   }
   const { src } = img;
+  // (the patch as fine as the source picture, as level writing is read: from twice to five times
+  // the working picture's detail)
+  const f = Math.max(2, Math.min(5, 1 / src.k));
+  // how dark the source is round (x, y) in the working picture: the mean over the patch pixel
+  const n = Math.max(1, Math.round(1 / (f * src.k)));
+  const darkAt = (x, y) => {
+    const sx = Math.round(x / src.k - (n - 1) / 2), sy = Math.round(y / src.k - (n - 1) / 2);
+    let t = 0;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) t += src.d[Math.min(src.h - 1, Math.max(0, sy + j)) * src.w + Math.min(src.w - 1, Math.max(0, sx + i))];
+    return t / (n * n);
+  };
   // the writing of one part's side turned by t, read: { R, C, PW, u0, v0, f, c, s, from, good }
   const turned = (l, t) => {
     const own = new Set(l.ids), c = Math.cos(t), s = Math.sin(t);
-    // the patch, turned level, twice as fine as the working picture
+    // the patch, turned level
     let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
     for (const id of l.ids) {
       const q = comps[id - 1];
@@ -60,7 +71,7 @@ export function slantedWords(img, fig, S, words, H) {
         u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v);
       }
     }
-    const f = 2, m = 0.5 * H;
+    const m = 0.5 * H;
     u0 -= m; v0 -= m; u1 += m; v1 += m;
     const PW = Math.ceil((u1 - u0) * f), PH = Math.ceil((v1 - v0) * f);
     if (PW * PH > 4e6) return null;
@@ -73,8 +84,7 @@ export function slantedWords(img, fig, S, words, H) {
         if (X < 0 || Y < 0 || X >= w || Y >= img.h) continue;
         // how dark, from the sharper source picture (all of it: where the characters stand
         // apart in it, as a decimal point blurred into the next digit may)
-        const sx = Math.min(src.w - 1, Math.max(0, Math.round(x / src.k))), sy = Math.min(src.h - 1, Math.max(0, Math.round(y / src.k)));
-        dark[j * PW + i] = src.d[sy * src.w + sx];
+        dark[j * PW + i] = darkAt(x, y);
         const id = labels[Y * w + X];
         if (!own.has(id)) continue;
         ink[j * PW + i] = 1;
@@ -94,12 +104,12 @@ export function slantedWords(img, fig, S, words, H) {
   for (const l of lines) {
     if (l.ids.length < 2) continue;
     // written along the part, or across it
-    const tries = [l.t, l.t > 0 ? l.t - Math.PI / 2 : l.t + Math.PI / 2].map((t) => turned(l, t)).filter(Boolean);
-    if (!tries.length) continue;
-    const { R, C, PW, u0, v0, f, c, s, from } = tries.reduce((a, b) => (b.good > a.good ? b : a));
-    R.words.forEach((tw, k) => {
+    // (each piece of writing as it reads best: the better way first)
+    const tries = [l.t, l.t > 0 ? l.t - Math.PI / 2 : l.t + Math.PI / 2].map((t) => turned(l, t)).filter(Boolean).sort((a, b) => b.good - a.good);
+    for (const { R, C, PW, u0, v0, f, c, s, from } of tries) R.words.forEach((tw, k) => {
       const r = R.reads[k];
-      if (!r?.type || r.type === 'caption' || r.type === 'sign' || !(r.score > -2)) return;
+      // (values only: a name read along a side is likelier a misread letter than a marked quantity)
+      if (r?.type !== 'value' || !(r.score > -2)) return;
       // the pieces of writing it is made of, and where it lies in the picture
       const ids = new Set();
       for (const g of tw.glyphs) {
@@ -112,27 +122,29 @@ export function slantedWords(img, fig, S, words, H) {
       const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
       // (a resistance is positive: a minus before it is half of an "=" in "y₁ = 5Ω")
       if (r.type === 'value' && r.value < 0 && (r.unit === 'Ω' || r.unit === 'S')) Object.assign(r, { value: -r.value, text: r.text.replace(/^−/, '') });
-      const nw = { glyphs: [], x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys), read: { ...r, slant: true }, slant: Math.atan2(s, c) };
+      const nw = { glyphs: [], ids, x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys), read: { ...r, slant: true }, slant: Math.atan2(s, c) };
       nw.cx = (nw.x0 + nw.x1) / 2; nw.cy = (nw.y0 + nw.y1) / 2;
       // the level words made of the same writing: kept if one of them reads as well, as the
       // same kind of label (a value with its unit, read turned, outweighs bits of it read level
       // as other things; a name read turned, a value read level)
-      const level = out.filter((x) => x.glyphs.some((g) => g.ids.some((id) => ids.has(id))));
+      // (or read turned already, along another part or the other way)
+      const level = out.filter((x) => (x.ids ? [...x.ids] : x.glyphs.flatMap((g) => g.ids)).some((id) => ids.has(id)));
       const kind = (q) => (q?.type === 'value' && q.unit ? 2 : q?.type && q.type !== 'sign' ? 1 : 0);
       // (beside a slanting part, writing is likelier to run along it: the turned reading is
-      // given a little more weight)
-      if (level.some((x) => kind(x.read) > kind(r) || (kind(x.read) === kind(r) && x.read.score >= r.score + 0.7))) return;
+      // given a little more weight over a level one)
+      if (level.some((x) => kind(x.read) > kind(r) || (kind(x.read) === kind(r) && x.read.score >= r.score + (x.ids ? 0 : 0.7)))) return;
       // (nor does a bit of a value read level with its unit, its characters standing level,
-      // replace the whole of it)
+      // replace the whole of it: one of no more characters)
       const flat = (x) => {
         const c = x.glyphs.map((g) => [(g.x0 + g.x1) / 2, (g.y0 + g.y1) / 2]), n = c.length;
         const mx = c.reduce((t, q) => t + q[0], 0) / n, my = c.reduce((t, q) => t + q[1], 0) / n;
         const sxx = c.reduce((t, q) => t + (q[0] - mx) ** 2, 0), sxy = c.reduce((t, q) => t + (q[0] - mx) * (q[1] - my), 0);
         return n >= 2 && sxx > 0 && Math.abs(sxy / sxx) < 0.25;
       };
-      if (level.some((x) => kind(x.read) === 2 && flat(x) && !x.glyphs.every((g) => g.ids.every((id) => ids.has(id))))) return;
+      if (level.some((x) => !x.ids && kind(x.read) === 2 && flat(x) && x.glyphs.length >= tw.glyphs.length && !x.glyphs.every((g) => g.ids.every((id) => ids.has(id))))) return;
       out = [...out.filter((x) => !level.includes(x)), nw];
     });
   }
+  for (const x of out) delete x.ids;
   return out;
 }

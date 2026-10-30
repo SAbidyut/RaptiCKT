@@ -246,7 +246,7 @@ for (const name of ['practice.png', 'practice-photo.jpg']) {
 const currents = (r) => new Map(r.doc.elements.filter((e) => e.constructor.type === 'resistor').map((e) => [e.p.r, Math.abs(r.sim.v(e.nodes[0]) - r.sim.v(e.nodes[1])) / e.p.r]));
 
 for (const name of ['bridge.png', 'bridge-photo.jpg']) {
-  test(`${name}: a bridge drawn as a diamond, its sides slanting, is laid along the grid joined as drawn — 71/46 A through the 2 Ω, 9/23 A across the middle`, async () => {
+  test(`${name}: a bridge drawn as a diamond, its sides slanting, is set on the board as drawn — its four sides slanted — joined as drawn: 71/46 A through the 2 Ω, 9/23 A across the middle`, async () => {
     const r = await solve(name);
     assert.deepEqual(r.texts, ['10 V', '2 Ω', '3 Ω', '4 Ω', '5 Ω', '6 Ω']);
     const I = currents(r);
@@ -255,8 +255,9 @@ for (const name of ['bridge.png', 'bridge-photo.jpg']) {
     near(I.get(2), 71 / 46, 1e-6, '2 Ω');
     near(I.get(4), 29 / 23, 1e-6, '4 Ω');
     near(I.get(5), 9 / 23, 1e-6, '5 Ω');
-    // every part and wire level or upright on the board
-    for (const e of [...r.c.parts, ...r.c.wires]) assert.ok(e.from.x === e.to.x || e.from.y === e.to.y, 'laid along the grid');
+    // the four sides slanted on the board, the 5 Ω across the middle and the source not
+    const slanted = r.doc.elements.filter((e) => e.diag).map((e) => e.p.r).sort((a, b) => a - b);
+    assert.deepEqual(slanted, [2, 3, 4, 6], 'the sides slanted');
   });
 }
 
