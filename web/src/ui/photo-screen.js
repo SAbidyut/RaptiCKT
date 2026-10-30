@@ -333,7 +333,7 @@ export class PhotoScreen {
     const cv = body.querySelector('.ph-fig');
     const paint = () => {
       const el = b.els[this.hi];
-      this.fig = drawFigure(cv, { doc: b.doc, hi: new Set(el ? [el] : []), notes: [], load: null }, this.theme(), this.settings, 340);
+      this.fig = drawFigure(cv, { doc: b.doc, hi: new Set(el ? [el] : []), notes: [], load: null }, this.theme(), this.settings, 400, { readable: 11 });
       body.querySelectorAll('.ph-row').forEach((r) => r.classList.toggle('on', +r.dataset.i === this.hi));
     };
     requestAnimationFrame(paint);

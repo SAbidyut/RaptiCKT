@@ -248,3 +248,22 @@ test('drawn slanting, a part is slanted on the board and a wire runs straight: a
   const s = buildFromDrawing(circuit({ parts: [part('resistor', '1 Ω', 1, P(0, 0), P(1, 0)), part('resistor', '1 Ω', 1, P(2, 1), P(3, 1))], wires: [wire(P(1, 0), P(2, 1))] }));
   assert.ok(s.doc.wires.some((w) => w.pts.length === 2 && w.pts[0][0] !== w.pts[1][0] && w.pts[0][1] !== w.pts[1][1]), 'a straight slanting wire');
 });
+
+test('a side drawn straight but bent by the grid comes out as one straight line', () => {
+  // a star's arm as the grid gave it: corner (0,5) – wire – (1,4) – part – (2,2) – wire – (3,1),
+  // turning 18° at each joint; and a level wire along the bottom from the corner
+  const c = circuit({
+    parts: [part('voltage_source', '10 V', 10, P(3, 1), P(3, 0), 'from'), part('resistor', '5 Ω', 5, P(2, 2), P(1, 4))],
+    wires: [wire(P(3, 1), P(2, 2)), wire(P(1, 4), P(0, 5)), wire(P(0, 5), P(4, 5)), wire(P(3, 0), P(5, 0)), wire(P(5, 0), P(5, 5)), wire(P(5, 5), P(4, 5))],
+    ground: [P(0, 5)],
+  });
+  const r = solve(c);
+  const R = r.doc.elements.find((e) => e.constructor.type === 'resistor');
+  const A = [3 * 120, 1 * 120], B = [0, 5 * 120];
+  const cross = (p) => (B[0] - A[0]) * (p[1] - A[1]) - (B[1] - A[1]) * (p[0] - A[0]);
+  for (const p of R.getPosts()) assert.ok(Math.abs(cross(p)) < 1e-6, 'the part on the line from the node to the corner');
+  const arm = r.doc.wires.filter((w) => w.pts.every((p) => Math.abs(cross(p)) < 1e-6) && w.pts.length === 2);
+  assert.equal(arm.length, 2, 'two straight wires on that line, one at each end of the part');
+  assert.ok(R.getPosts().every(([x, y]) => x % 20 === 0 && y % 20 === 0), 'its terminals on grid points');
+  near(Math.abs(R.i), 2, 'and it still solves: 10 V across 5 Ω');
+});

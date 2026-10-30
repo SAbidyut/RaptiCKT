@@ -172,6 +172,21 @@ export class Element {
     this.rot = turn(Math.atan2(Q, P)); // the nearest straight way it points (meters keep their faces level by it)
   }
 
+  /**
+   * Turn it in place: fn changes its slant or quarter turns, and its middle is put back where it
+   * was before the first of a run of such turns, its terminals on the grid points nearest that.
+   * Turned round and round (Slant tapped again and again) it never walks away; moved, it starts
+   * a new run from where it is.
+   */
+  turnInPlace(fn) {
+    const sig = () => this.getPosts().map(String).join('|');
+    if (!this._pivot || this._pivot.posts !== sig()) this._pivot = { c: [this.x, this.y] };
+    fn();
+    [this.x, this.y] = this._pivot.c;
+    this.snapPosts();
+    this._pivot.posts = sig();
+  }
+
   /** Shift it (by less than a grid step) so its first terminal sits on a grid point. */
   snapPosts() {
     const [p] = this.getPosts();

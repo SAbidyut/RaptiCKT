@@ -114,3 +114,20 @@ test('a slanted part takes room by its own turned outline, not its square box', 
   const [p] = a.getPosts();
   assert.equal(routeCost(wireContext(d), [p, [p[0] - 60, p[1] - 60]]), 0);
 });
+
+test('turned again and again, a part stays where it is (Slant tapped over and over)', () => {
+  const e = makeElement('resistor', 200, 100);
+  const seen = new Set();
+  for (let i = 0; i < 60; i++) {
+    const d = Math.round(((e.boardAngle() * 180) / Math.PI + 15) / 15) * 15;
+    e.turnInPlace(() => e.setSlant(slantFor((d * Math.PI) / 180, 4)));
+    assert.ok(Math.abs(e.x - 200) <= 10 && Math.abs(e.y - 100) <= 10, `turn ${i}: its middle within half a grid step (${e.x}, ${e.y})`);
+    assert.ok(onGrid(e.getPosts()), `turn ${i}: terminals on grid points`);
+    seen.add(e.x + ',' + e.y);
+  }
+  // moved, it turns about its new place
+  e.x += 200; e.snapPosts();
+  const x0 = e.x;
+  e.turnInPlace(() => e.setSlant([3, 3]));
+  assert.ok(Math.abs(e.x - x0) <= 10);
+});

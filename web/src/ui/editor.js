@@ -17,7 +17,7 @@ import { store } from './store.js';
 import { RmsTracker, acFrequency } from './rms.js';
 import { WireHeat } from './wireheat.js';
 import { WIRE_PRESETS, cableLabel } from '../elements/cables.js';
-import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore, straightClear, partsHit } from './autoroute.js';
+import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore, straightClear, partsHit, freeRoute } from './autoroute.js';
 
 // two-terminal parts outside the Sources / Batteries / Diodes / Meters categories that still have a polarity
 const POLAR_TYPES = new Set(['ecap', 'tantalum', 'supercap', 'photodiode', 'solar', 'pvmodule', 'thermocouple', 'led', 'irled', 'laser', 'piezosens', 'tacho', 'ph', 'varactor', 'lm4040', 'buzzer', 'piezobuzz', 'motor', 'dcgen', 'dcsep', 'dcshunt', 'dcseries', 'dualpsu', 'benchpsu']);
@@ -1125,7 +1125,7 @@ export class Editor {
 
   rotateSelection() {
     this.transformSelection((e) => {
-      if (e.sv) { e.setSlant([-e.sv[1], e.sv[0]]); e.snapPosts(); } else e.rot = (e.rot + 1) & 3;
+      if (e.sv) e.turnInPlace(() => e.setSlant([-e.sv[1], e.sv[0]])); else e.rot = (e.rot + 1) & 3;
     });
   }
 
@@ -1148,8 +1148,7 @@ export class Editor {
     this.transformSelection((e) => {
       if (!e.canSlant()) return;
       const d = of(e), n = (2 * e.localPosts()[1][0]) / GRID;
-      e.setSlant(slantFor((d * Math.PI) / 180, n));
-      e.snapPosts();
+      e.turnInPlace(() => e.setSlant(slantFor((d * Math.PI) / 180, n)));
       shown = e;
     });
     if (shown && this.selection.has(shown)) this.toast(`${shown.name}: ${this.angleText(shown)}`, 1200);
@@ -1253,8 +1252,15 @@ export class Editor {
         continue;
       }
       // a straight wire stays one, from end to end, slanting if need be, where it runs clear of
-      // parts, terminals and other wires (else it is routed round them)
-      if (w.pts.length === 2 && (free || (a[0] !== b[0] && a[1] !== b[1])) && (same(na, nb) || straightClear(this.doc, na, nb, new Set([w, ...movedWires])))) { w.pts = [na, nb]; continue; }
+      // parts, terminals and other wires; else (moves free-angled, or a wire that slants) the
+      // neatest clear shape of level, upright and 45° runs, else it is routed round them
+      const slants = w.pts.some((q, i) => i && q[0] !== w.pts[i - 1][0] && q[1] !== w.pts[i - 1][1]);
+      if ((w.pts.length === 2 && free) || slants) {
+        const skip = new Set([w, ...movedWires]);
+        if (same(na, nb) || straightClear(this.doc, na, nb, skip)) { w.pts = [na, nb]; continue; }
+        const r = freeRoute(this.doc, na, nb, skip);
+        if (r) { w.pts = r; continue; }
+      }
       // a straight wire has no shape to keep: use the cleanest simple shape (cheap, no search while dragging)
       const simple = () => pickRoute(this.doc, simpleRoutes(na, nb, exitAt(this.doc, na), exitAt(this.doc, nb), a[1] === b[1]), { skipWires: new Set([w]), noSearch: true });
       let kept = stretchWire(w.pts, na, nb);
@@ -1327,12 +1333,18 @@ export class Editor {
   tidyWires(wires) {
     const list = wires.filter((w) => this.doc.wires.includes(w));
     const all = new Set(list);
-    const slanting = (w) => w.pts.length === 2 && w.pts[0][0] !== w.pts[1][0] && w.pts[0][1] !== w.pts[1][1];
+    const slanting = (w) => w.pts.some((q, i) => i && q[0] !== w.pts[i - 1][0] && q[1] !== w.pts[i - 1][1]);
+    const clear = (w, skip) => w.pts.every((q, i) => !i || straightClear(this.doc, w.pts[i - 1], q, skip));
     for (const pass of [0, 1, 2]) {
       for (const w of list) {
         const skip = pass === 0 ? all : new Set([w]);
-        // a straight slanting wire that runs clear stays as it is (it was drawn, or kept, straight)
-        if (slanting(w) && straightClear(this.doc, w.pts[0], w.pts[1], skip)) continue;
+        // a wire with slanting runs that runs clear stays as it is (it was drawn, or kept, so);
+        // one that does not gets the neatest clear slanting shape, if there is one
+        if (slanting(w)) {
+          if (clear(w, skip)) continue;
+          const r = freeRoute(this.doc, w.pts[0], w.pts[w.pts.length - 1], skip);
+          if (r) { w.pts = r; continue; }
+        }
         const ctx = wireContext(this.doc, skip);
         const bad = routeCost(ctx, w.pts) > 0;
         const a = w.pts[0], b = w.pts[w.pts.length - 1];
@@ -2210,8 +2222,9 @@ export class Editor {
     if (!b || same(a, b)) { this.cancelTapWire(); return; }
     const hFirst = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
     // (straight wires: from one to the other as the crow flies, as a delta's sides are drawn)
-    // (where it would cross a part, or run over a terminal or along a wire, it is routed round)
-    const smart = this.settings.straightWires && straightClear(this.doc, a, b) ? [a, b] : pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
+    // (where it would cross a part, or run over a terminal or along a wire: the neatest clear
+    // shape of level, upright and 45° runs, else routed round at right angles)
+    const smart = (this.settings.straightWires && freeRoute(this.doc, a, b)) || pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
     let pts = simplify(smart || route(a, b, hFirst));
     if (pts.length < 2) pts = [a, b];
     this.checkpoint();

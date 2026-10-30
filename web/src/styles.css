@@ -1192,8 +1192,6 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .th-math .mt i { font-family: 'Cambria Math', 'Noto Serif', Georgia, serif; font-size: 1.15em; color: var(--text); }
 
 /* ------------------------------------------------------------ circuit from photo */
-.ph-banner { margin-top: 10px; }
-.ph-banner .lf-ico { background: linear-gradient(135deg, #f59e0b, #ec4899); box-shadow: 0 6px 16px rgba(236, 72, 153, 0.3); }
 .screen.photo { overflow: hidden; }
 .ph-body { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding-bottom: calc(40px + var(--safe-b)); max-width: 640px; }
 .ph-hero { display: flex; gap: 14px; align-items: center; padding: 14px; border-radius: var(--r); border: 1px solid var(--border2);

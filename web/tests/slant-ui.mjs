@@ -73,20 +73,38 @@ ok(`Rotate turns a slanted part a quarter turn, still slanted (${r2.deg}°), on 
 await page.evaluate(() => app.editor.rotateSelection()); await page.evaluate(() => app.editor.rotateSelection()); await page.evaluate(() => app.editor.rotateSelection());
 ok('an op amp cannot be slanted (its terminals are not in line)', await page.evaluate(() => !app.editor.makeEl('opamp', 0, 0).canSlant()));
 
+// ---- the slant steps above done, a delta laid out with room, as a textbook draws one: the
+// source, R1 and R2 slanting up to a top corner, R3 level along the bottom
+await page.evaluate(() => {
+  const ed = app.editor, d = ed.doc;
+  d.elements = d.elements.filter((e) => e.name === 'V1' || e.name === 'R1' || e.name === 'R2' || e.name === 'R3');
+  d.wires = [];
+  const at = (n, [x0, y0], [x1, y1]) => { const e = d.elements.find((x) => x.name === n); e.setSlant([(x1 - x0) / 20, (y1 - y0) / 20]); e.x = (x0 + x1) / 2; e.y = (y0 + y1) / 2; e.snapPosts(); };
+  at('R1', [20, 160], [80, 60]); at('R2', [160, 60], [220, 160]); at('R3', [80, 240], [160, 240]);
+  const v = d.elements.find((x) => x.name === 'V1'); v.setSlant(null); v.rot = 1; v.x = -100; v.y = 140;
+  ed.topologyChanged(); ed.fit(); ed.dirtyDraw = true;
+});
+await page.waitForTimeout(400);
 // ---- straight wires: one tap of the toggle, then tap two terminals
 await page.evaluate(() => app.editor.select(null));
 await page.click('[data-a=straight]'); await page.waitForTimeout(300);
 ok('the slanting toggle is on', await page.evaluate(() => app.settings.straightWires && document.querySelector('[data-a=straight]').classList.contains('active')));
 const wire = async (a, b) => { await tapW(a); await tapW(b); };
 // the delta: R1's top to R2's top, R1's bottom to R3's left, R2's bottom to R3's right; the source across R1's ends
-await wire(await post('R1', 0), await post('R2', 0));
-await wire(await post('R1', 1), await post('R3', 0));
+await wire(await post('R1', 1), await post('R2', 0));
+await wire(await post('R1', 0), await post('R3', 0));
 await wire(await post('R2', 1), await post('R3', 1));
-await wire(await post('V1', 0), await post('R1', 0));
-await wire(await post('V1', 1), await post('R1', 1));
+await wire(await post('V1', 0), await post('R1', 1));
+await wire(await post('V1', 1), await post('R1', 0));
 const ws = await page.evaluate(() => app.editor.doc.wires.map((w) => w.pts));
 ok(`five wires drawn (${ws.length})`, ws.length === 5);
-ok('some of them slant, each one straight', ws.some((p) => p.length === 2 && p[0][0] !== p[1][0] && p[0][1] !== p[1][1]));
+const neat = (pts) => pts.every((q, i) => { if (!i) return true; const dx = Math.abs(q[0] - pts[i - 1][0]), dy = Math.abs(q[1] - pts[i - 1][1]); return pts.length === 2 || !dx || !dy || dx === dy; });
+ok(`each wire straight, or level, upright and 45° runs (${ws.map((p) => p.length).join(',')} points)`, ws.every(neat));
+ok('the corners joined by straight slanting wires', ws.filter((p) => p.length === 2 && p[0][0] !== p[1][0] && p[0][1] !== p[1][1]).length >= 2);
+ok('no wire crosses a part', await page.evaluate(() => {
+  const d = app.editor.doc;
+  return d.wires.every((w) => w.pts.every((q, i) => !i || !d.elements.some((e) => { const P = e.worldPoly(), a = w.pts[i - 1]; for (let t = 0.1; t < 0.9; t += 0.05) { const x = a[0] + (q[0] - a[0]) * t, y = a[1] + (q[1] - a[1]) * t; let inside = true; for (let k = 0; k < 4; k++) { const [p1, p2] = [P[k], P[(k + 1) % 4]]; if ((p2[0] - p1[0]) * (y - p1[1]) - (p2[1] - p1[1]) * (x - p1[0]) <= 0.5) { inside = false; break; } } if (inside) return true; } return false; })));
+}));
 // ---- run it: 6 V across R1 (100 Ω) and across R2 + R3 (500 Ω)
 await page.evaluate(() => app.editor.setRunning(true));
 await page.waitForTimeout(1200);

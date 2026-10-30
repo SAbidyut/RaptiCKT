@@ -200,22 +200,27 @@ const unit = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l];
  * height follows the figure's shape, and the view takes in every label and annotation.
  * Returns the renderer (for hit testing).
  */
-export function drawFigure(cv, built, theme, settings, maxH = 320, { fill = false, maxK = 1.2 } = {}) {
+export function drawFigure(cv, built, theme, settings, maxH = 320, { fill = false, maxK = 1.2, readable = 0 } = {}) {
   const { doc, hi, notes, load } = built;
   const st = { ...settings, grid: 'none', showValues: true, showNames: true, currentDots: false };
   const r = new Renderer(cv);
   r.fixedLabels = true;
-  r.chooseLabelSides({ doc, settings: st });
-  const base = drawingBox(doc);
+  // readable: labels drawn at least that many pixels high where there is room for them (a
+  // whole circuit shown small, as read from a photo); else at their usual size
+  const room = readable ? r.labelRoom(doc, st) : 1;
+  let lk = 1, base;
+  const lay = () => { r.figLk = lk; r.lk = lk; r._sidesSig = null; r.chooseLabelSides({ doc, settings: st }); base = drawingBox(doc, lk); };
+  lay();
   const W = cv.clientWidth || 320, pad = 12;
   const ctx = cv.getContext('2d');
   // annotations are sized in pixels, so the box they need depends on the scale: settle it in
   // rounds, until the scale holds
   let box = base, k = 1;
-  for (let round = 0; round < 6; round++) {
+  for (let round = 0; round < 8; round++) {
     const was = k;
     k = Math.min(maxK, (W - 2 * pad) / Math.max(1, box[2] - box[0]), fill ? (maxH - 2 * pad) / Math.max(1, box[3] - box[1]) : Infinity);
-    if (round > 1 && Math.abs(k - was) < 0.005 * was) break;
+    const want = readable ? Math.round(Math.max(1, Math.min(room, readable / (10.5 * k))) * 10) / 10 : 1;
+    if (want !== lk) { lk = want; lay(); } else if (round > 1 && Math.abs(k - was) < 0.005 * was) break;
     box = [...base];
     for (const d of layout(notes, k, load, ctx, doc)) {
       if (!d.w) continue;
@@ -234,12 +239,12 @@ export function drawFigure(cv, built, theme, settings, maxH = 320, { fill = fals
   return r;
 }
 
-/** Parts, wires and the parts' labels (name and value) in world units. */
-function drawingBox(doc) {
+/** Parts, wires and the parts' labels (name and value, lk times their usual size) in world units. */
+function drawingBox(doc, lk = 1) {
   let b = doc.bounds() || [0, 0, 100, 100];
   for (const e of doc.elements) {
     const val = e.valueLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
-    const q = e.labelRect(txt);
+    const q = e.labelRect(txt, undefined, lk);
     if (q) b = [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.max(b[2], q[2]), Math.max(b[3], q[3])];
   }
   return b;

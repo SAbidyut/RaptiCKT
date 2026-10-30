@@ -67,8 +67,9 @@ async function runAndRead(page, name) {
     return c.toDataURL('image/png').split(',')[1];
   });
 
-  check(await page.isVisible('.ph-banner'), 'Home shows "Circuit from photo"');
-  await page.click('.ph-banner'); await page.waitForTimeout(400);
+  check(!(await page.$('.ph-banner, [data-h=photo]')), 'Home has no "Circuit from photo" card (it is in the editor)');
+  await page.evaluate(() => app.newCircuit()); await page.waitForTimeout(700);
+  await page.click('.hint .hint-photo'); await page.waitForTimeout(400);
   check(await page.isVisible('.screen.photo.active .ph-btns'), 'the photo page opens with Take a photo / Choose an image');
   check(await page.isVisible('.ph-intro') && !(await page.$('.screen.photo .ph-mode, .screen.photo .ph-key, .screen.photo [data-mode]')), 'read on this phone: no reader to choose, no key to enter');
 

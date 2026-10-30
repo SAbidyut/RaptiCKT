@@ -22,6 +22,7 @@
 
 import { getType, GRID, slantFor, slantAlong } from '../elements/index.js';
 import { CircuitDoc } from './doc.js';
+import { straightClear, partsHit } from './autoroute.js';
 
 const G = GRID;
 const U = 6 * G; // one grid unit on the board: an 80-unit part with a 20-unit lead at each end
@@ -144,6 +145,9 @@ export function buildFromDrawing(c) {
     if (needGround) warnings.push('No ground was drawn: the bottom wire was taken as 0 V for the node voltages.');
   }
 
+  // a side drawn straight in the photo, bent on the grid: straight again
+  straightenRuns(doc);
+
   // dependent sources: what controls them
   for (const { part, el } of made) {
     if (el.constructor.type !== 'depsrc') continue;
@@ -174,6 +178,90 @@ export function buildFromDrawing(c) {
   if (loose.length) warnings.push(`Not joined to anything at one end: ${[...new Set(loose)].join(', ')}. Check the photo and add the missing wire.`);
   // (els: the board part made of each of the drawing's parts, null where one was left out)
   return { doc, warnings, asked: c.asked || [], els: (c.parts || []).map((p) => made.find((m) => m.part === p)?.el || null) };
+}
+
+/**
+ * Straighten the sides the grid bent. A side of a delta or a star, drawn as one straight line in
+ * the photo (a corner, a wire, a part, a wire, a node), can come out of the grid with a kink or
+ * two, as its points are rounded to rows and columns one by one. A run of straight wires and
+ * parts through points nothing else touches, turning no more than 28° at each, is laid again as
+ * one straight line between its two ends, its parts spread along it in order, each the way round
+ * it was; a run that would then cross or touch something is left as it was.
+ */
+function straightenRuns(doc) {
+  const k = (p) => p[0] + ',' + p[1], same = (a, b) => a[0] === b[0] && a[1] === b[1];
+  const movable = doc.elements.filter((e) => e.canSlant());
+  const edges = [];
+  for (const w of doc.wires) if (w.pts.length === 2 && !same(w.pts[0], w.pts[1])) edges.push({ w, a: w.pts[0], b: w.pts[1] });
+  for (const e of movable) { const [a, b] = e.getPosts(); edges.push({ e, a, b }); }
+  const at = new Map();
+  for (const ed of edges) for (const p of [ed.a, ed.b]) { if (!at.has(k(p))) at.set(k(p), []); at.get(k(p)).push(ed); }
+  // points something else holds on to: other parts' terminals, the corners of bent wires
+  const held = new Set();
+  for (const e of doc.elements) if (!movable.includes(e)) for (const p of e.getPosts()) held.add(k(p));
+  for (const w of doc.wires) if (w.pts.length !== 2) for (const p of w.pts) held.add(k(p));
+  const free = (p) => !held.has(k(p)) && at.get(k(p)).length === 2;
+  const dir = (a, b) => Math.atan2(b[1] - a[1], b[0] - a[0]);
+  const turn = (a, b) => { const d = Math.abs(a - b) % (2 * Math.PI); return Math.min(d, 2 * Math.PI - d); };
+  const MAX = (28 * Math.PI) / 180;
+  const done = new Set();
+  for (const first of edges) {
+    if (done.has(first)) continue;
+    // grow the run both ways through free points that do not turn too much
+    const run = [first], pts = [first.a, first.b];
+    done.add(first);
+    for (const back of [false, true]) {
+      for (;;) {
+        const end = back ? pts[0] : pts[pts.length - 1], prev = back ? pts[1] : pts[pts.length - 2];
+        if (!free(end)) break;
+        const next = at.get(k(end)).find((ed) => !run.includes(ed));
+        if (!next || done.has(next)) break;
+        const far = same(next.a, end) ? next.b : next.a;
+        if (turn(dir(prev, end), dir(end, far)) > MAX) break;
+        done.add(next);
+        if (back) { run.unshift(next); pts.unshift(far); } else { run.push(next); pts.push(far); }
+      }
+    }
+    if (run.length < 2) continue;
+    const A = pts[0], B = pts[pts.length - 1];
+    const cross = (p) => (B[0] - A[0]) * (p[1] - A[1]) - (B[1] - A[1]) * (p[0] - A[0]);
+    if (pts.every((p) => Math.abs(cross(p)) < 1e-6)) continue; // straight already
+    layRunStraight(doc, run, pts);
+  }
+}
+
+/** Lay one run (edges along points pts, see straightenRuns) straight from its first point to its last. */
+function layRunStraight(doc, run, pts) {
+  const same = (a, b) => a[0] === b[0] && a[1] === b[1];
+  const A = pts[0], B = pts[pts.length - 1];
+  const dx = (B[0] - A[0]) / G, dy = (B[1] - A[1]) / G;
+  const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a)), n = gcd(Math.abs(dx), Math.abs(dy));
+  if (!n || !Number.isInteger(dx) || !Number.isInteger(dy) || !slantAlong(dx, dy, 4)) return;
+  const parts = run.map((ed, i) => (ed.e ? { e: ed.e, headFirst: same(ed.e.getPosts()[0], pts[i]) } : null)).filter(Boolean);
+  if (!parts.length || parts.length * 2 > n) return;
+  // as they were, to put back if the straight run runs into something
+  const keep = parts.map(({ e }) => ({ e, sv: e.sv, rot: e.rot, x: e.x, y: e.y }));
+  const oldWires = run.filter((ed) => ed.w).map((ed) => ed.w);
+  const p = dx / n, q = dy / n, S = (s) => [A[0] + s * p * G, A[1] + s * q * G];
+  let at = A;
+  const chain = [];
+  parts.forEach(({ e, headFirst }, i) => {
+    const s0 = Math.round((i * n) / parts.length), s1 = Math.round(((i + 1) * n) / parts.length);
+    const [H, T] = headFirst ? [S(s0), S(s1)] : [S(s1), S(s0)];
+    slantBetween(e, H, T);
+    const [h, t] = e.getPosts(), near = headFirst ? h : t, far = headFirst ? t : h;
+    chain.push([at, near]);
+    at = far;
+  });
+  chain.push([at, B]);
+  doc.wires = doc.wires.filter((w) => !oldWires.includes(w));
+  const added = chain.filter(([a, b]) => !same(a, b)).map(([a, b]) => doc.addWire([a, b]));
+  const mine = new Set(added), els = new Set(parts.map(({ e }) => e));
+  const clear = added.every((w) => straightClear(doc, w.pts[0], w.pts[1], mine))
+    && parts.every(({ e }) => doc.elements.every((o) => o === e || els.has(o) || !partsHit(e, o)));
+  if (clear) return;
+  for (const o of keep) Object.assign(o.e, { sv: o.sv, rot: o.rot, x: o.x, y: o.y });
+  doc.wires = doc.wires.filter((w) => !mine.has(w)).concat(oldWires);
 }
 
 /**

@@ -744,7 +744,7 @@ export class Renderer {
    * lay the labels out again every frame.
    */
   labelScale(st) {
-    if (this.fixedLabels) return 1; // a figure laid out once at its own scale
+    if (this.fixedLabels) return this.figLk || 1; // a figure laid out once at its own scale
     const doc = st.doc, big = !!(doc && doc.bigLabels), base = big ? 1.35 : 1;
     const k = Math.max(base, Math.min(this.labelRoom(doc, st.settings), (big ? 13 : 11.5) / (10.5 * this.scale)));
     return Math.round(k * 10) / 10;
