@@ -1885,8 +1885,11 @@ export class Editor {
       this.startStretch(g, h.el, h.el.getPosts().findIndex((p) => same(p, h.pos)));
       if (g.type === 'stretch') return;
     }
-    // wires are drawn by tapping two terminals; dragging a terminal moves its part, dragging a wire pans
-    if (h.kind === 'post' && h.el) { h.kind = 'element'; }
+    // a terminal (or a wire's free end) dragged: a wire drawn where the finger goes, in straight runs
+    if (h.kind === 'post' && !this.multi) {
+      g.type = 'draw'; g.from = [...h.pos]; g.path = [this.renderer.toWorld(g.sx, g.sy)]; g.lastS = [g.sx, g.sy];
+      return;
+    }
     if (h.kind === 'element' || (h.kind === 'wire' && this.multi)) {
       g.type = 'move';
       let els, wires;
@@ -1965,6 +1968,86 @@ export class Editor {
     e.setSlant(sv);
     [e.x, e.y] = c || C;
     if (!c) e.snapPosts();
+  }
+
+  /**
+   * Where a wire drawn with a finger ends, for the finger at screen point (sx, sy): a terminal
+   * or a wire's point (join: true), a point on a wire (it is joined there), a part's nearest
+   * terminal, else the grid point under the finger (a loose end).
+   */
+  drawEnd(sx, sy, from) {
+    const h = this.hitTest(sx, sy), [wx, wy] = this.renderer.toWorld(sx, sy);
+    if (h.kind === 'post' && !same(h.pos, from)) return { at: [...h.pos], join: true };
+    if (h.kind === 'wire') {
+      const p = [snap(h.pos[0]), snap(h.pos[1])];
+      if (h.wire.pts.some((q, i) => i && (same(p, q) || same(p, h.wire.pts[i - 1]) || onSeg(p, h.wire.pts[i - 1], q)))) return { at: p, join: true };
+    }
+    if (h.kind === 'element') { const p = this.magnet(wx, wy, from); return { at: p, join: true }; }
+    return { at: [snap(wx), snap(wy)], join: false };
+  }
+
+  /**
+   * The finger's path from terminal g.from to `end`, as a wire of straight runs: its corners where
+   * the path turns (bends shallower than about a grid step's worth are smoothed away), on grid
+   * points, runs drawn nearly level, upright or at 45° made exactly so.
+   */
+  drawnWire(g, end) {
+    const eps = Math.max(GRID * 0.7, 14 / this.renderer.scale);
+    const raw = [g.from, ...g.path.slice(1), end];
+    // Ramer–Douglas–Peucker: keep only the points where the path really turns
+    const keep = new Array(raw.length).fill(false);
+    keep[0] = keep[raw.length - 1] = true;
+    const rdp = (i, j) => {
+      const [a, b] = [raw[i], raw[j]], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      let k = -1, dmax = eps;
+      for (let m = i + 1; m < j; m++) {
+        const d = Math.abs((b[0] - a[0]) * (raw[m][1] - a[1]) - (b[1] - a[1]) * (raw[m][0] - a[0])) / l;
+        if (d > dmax) { dmax = d; k = m; }
+      }
+      if (k > 0) { keep[k] = true; rdp(i, k); rdp(k, j); }
+    };
+    rdp(0, raw.length - 1);
+    const pts = raw.filter((_, i) => keep[i]).map((p, i, a) => (i === 0 || i === a.length - 1 ? [...p] : [snap(p[0]), snap(p[1])]));
+    // runs nearly level, upright or at 45°: exactly so (the corner moves; the ends never do)
+    const T = Math.tan((12 * Math.PI) / 180);
+    const square = (p, q) => {
+      const dx = q[0] - p[0], dy = q[1] - p[1], ax = Math.abs(dx), ay = Math.abs(dy);
+      if (ay <= T * ax) return [q[0], p[1]];
+      if (ax <= T * ay) return [p[0], q[1]];
+      if (Math.abs(ax - ay) <= 0.2 * Math.max(ax, ay)) return [q[0], p[1] + Math.sign(dy) * ax];
+      return q;
+    };
+    for (let i = 1; i < pts.length - 1; i++) pts[i] = square(pts[i - 1], pts[i]);
+    const n = pts.length;
+    if (n > 2) pts[n - 2] = (() => { const back = square(pts[n - 1], pts[n - 2]); return back; })();
+    const out = simplify(pts);
+    return out.length >= 2 ? out : [g.from, end];
+  }
+
+  /** A wire drawn with a finger, let go: added as drawn, unless it would join something it should not. */
+  finishDrawnWire(g) {
+    const end = this.drawEnd(g.lastS[0], g.lastS[1], g.from);
+    const len = g.path.reduce((s, p, i) => (i ? s + Math.hypot(p[0] - g.path[i - 1][0], p[1] - g.path[i - 1][1]) : s), 0);
+    if (same(end.at, g.from) || len < GRID * 0.8) return;
+    let pts = this.drawnWire(g, end.at);
+    // a corner on a terminal or a wire, or a run over one, would join them: then the neatest
+    // clear wire between the two ends instead
+    const k = (p) => p[0] + ',' + p[1];
+    const ends = new Set([k(pts[0]), k(pts[pts.length - 1])]);
+    const posts = this.doc.elements.flatMap((e) => e.getPosts());
+    const joins = (p) => posts.some((q) => same(p, q)) || this.doc.wires.some((w) => w.pts.some((q, i) => same(p, q) || (i && onSeg(p, w.pts[i - 1], q))));
+    const bad = pts.some((p, i) => i > 0 && i < pts.length - 1 && joins(p)) || pts.some((p, i) => i && !straightClear(this.doc, pts[i - 1], p, new Set(), { parts: false })) || ends.size < 2;
+    if (bad) {
+      const a = pts[0], b = pts[pts.length - 1];
+      pts = (this.slantMode() && freeRoute(this.doc, a, b)) || pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]))) || [a, b];
+      pts = simplify(pts);
+      this.toast('The wire as drawn would touch another terminal or wire: it was laid round it', 2200);
+    }
+    if (pts.length < 2) return;
+    this.checkpoint();
+    this.doc.addWire(pts, { cable: this.defaultCable() });
+    this.topologyChanged();
+    this.haptic(12);
   }
 
   /** Begin dragging terminal k of the selected part e: the other terminal stays put. */
@@ -2048,6 +2131,16 @@ export class Editor {
         } else { g.okDx = dx; g.okDy = dy; g.okAuto = auto; g.blocked = null; }
         break;
       }
+      case 'draw': {
+        const last = g.path[g.path.length - 1];
+        if (Math.hypot(wx - last[0], wy - last[1]) * R.scale > 3) g.path.push([wx, wy]);
+        g.lastS = [sx, sy];
+        const end = this.drawEnd(sx, sy, g.from);
+        this.hoverPost = end.join ? end.at : null;
+        this.preview = this.drawnWire(g, end.at);
+        this.dirtyDraw = true;
+        break;
+      }
       case 'stretch': {
         const T = [snap(wx), snap(wy)], e = g.e, other = g.els[0].posts[1 - g.k];
         if (g.at && same(g.at, T)) break;
@@ -2113,6 +2206,9 @@ export class Editor {
       case 'pending':
         this.tap(g);
         this.lastTap = g.hit.kind === 'none' || g.hit.kind === 'wire' ? { t: performance.now(), sx: g.sx, sy: g.sy } : null;
+        break;
+      case 'draw':
+        this.finishDrawnWire(g);
         break;
       case 'stretch':
       case 'move':

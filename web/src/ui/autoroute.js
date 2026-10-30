@@ -297,15 +297,16 @@ export function partsHit(e, o) {
 /**
  * Can a straight wire run from a to b (any slant) without crossing a part, passing over a
  * terminal or another wire's point (which would join them), or lying along another wire?
- * skip: wires to leave out (the wire itself, wires moving with it).
+ * skip: wires to leave out (the wire itself, wires moving with it). parts: false to let it cross
+ * parts' bodies (only the joins it would make count).
  */
-export function straightClear(doc, a, b, skip = new Set()) {
+export function straightClear(doc, a, b, skip = new Set(), { parts = true } = {}) {
   const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy);
   if (l < 1) return true;
   // (a few units in from each end: arriving at a terminal, a wire may graze the edge of its
   // part's box, as at the top of a ground symbol)
   const cut = Math.min(6, l / 4), a2 = [a[0] + (dx * cut) / l, a[1] + (dy * cut) / l], b2 = [b[0] - (dx * cut) / l, b[1] - (dy * cut) / l];
-  for (const e of doc.elements) {
+  if (parts) for (const e of doc.elements) {
     if (e.constructor.type === 'label') continue;
     if (segInPoly(a2, b2, e.worldPoly()) * (l - 2 * cut) > 1) return false;
   }

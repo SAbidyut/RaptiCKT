@@ -204,6 +204,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 | Drag a part | Moves it. Wires stay attached and follow. A part never lands on another part. |
 | Drag a terminal of the selected part | Slants and stretches it: that end goes where you drag it, at any angle. |
 | Tap a terminal, then another | Draws a wire between them (EveryCircuit style). |
+| Drag from a terminal to another | Draws the wire where your finger goes, in straight runs (no curves): its corners where you turned. |
 | Drag empty space | Pans the board. |
 | Pinch with two fingers | Zooms in and out. |
 | Double-tap the board and hold, then slide | One-finger zoom, like Google Maps: slide **down** to zoom in, **up** to zoom out, around the point you tapped. Works on empty board or a wire. |
@@ -278,7 +279,7 @@ Note: `m` is **milli** and `M` is **mega**. The unit letter (Ω, F, H, V, A) is 
 - **Move**: drag the part. It snaps to the grid. Connected wires follow and re-route neatly. A part cannot be dropped on top of another part, and its terminals never join another terminal or wire just by touching: it stops at the last free spot (drag on into free space to hop over), and you connect parts by drawing a wire. Duplicates are placed on a free spot too. The undo button reverses the move.
 - **Rotate**: quick bar button (or **R** on a keyboard).
 - **Slant**: quick bar button (or **T** on a keyboard): 15° more each time; **Rotate** turns a slanted part a quarter turn, still slanted. Tapped again and again, the part turns in place: it stays where it is (within half a grid step) and never walks away.
-- **Any angle, any length**: select the part, then drag one of its **terminals** (they show small squares): that end goes where your finger takes it, at any angle, the other end stays put, and the part stretches or shortens between them (its symbol keeps its size, its leads grow). A part left without a selection is moved by its terminal as before.
+- **Any angle, any length**: select the part, then drag one of its **terminals** (they show small squares): that end goes where your finger takes it, at any angle, the other end stays put, and the part stretches or shortens between them (its symbol keeps its size, its leads grow). Dragging a terminal of a part that is not selected draws a wire from it (see Wiring).
 - **Slanting by itself**: in a circuit drawn slanting (a slanted part or a slanting wire in it, as a circuit read from a photo of a delta or a bridge), or with the **⟋** button on (see Wiring), a part you move between two straight wires turns to lie along the line between their far ends, and snaps onto that line when you drop it near it, so the wires run on in line with it. Straight wires stay straight at any angle as parts move; where one would cross a part or run along another wire, it takes the neatest clear shape of level, upright and 45° runs instead.
 - **Flip**: properties sheet (mirrors the part).
 - **Copy**: properties sheet or selection bar. The copy appears slightly down and right.
@@ -309,6 +310,10 @@ The quickest way, as in EveryCircuit: tap two terminals and the app draws the wi
 2. **Tap another terminal.** A neat right-angled wire is drawn between them, going round parts where it can.
 3. You can also tap **a point on an existing wire** (to branch from it) or **the body of a part** (the wire goes to its nearest terminal).
 4. Changed your mind? Tap **empty space** or the same terminal again, or press **Back**, to cancel.
+
+#### Draw a wire with your finger
+
+Put your finger on a terminal (or a wire's loose end) and drag it to another terminal, a point on a wire or a part: the wire is drawn where your finger went, as **straight runs** — never a curve. Its corners are where you turned (small wobbles of the hand are smoothed away), they sit on grid points, and a run drawn nearly level, upright or at 45° is made exactly so. Let go on empty board and the wire ends there, loose. A path drawn over another terminal or wire would join it, so such a wire is laid round it instead (a message says so). Undo takes a drawn wire away. Dragging a part by its **body** still moves it; a selected part's terminal squares still slant and stretch it.
 
 #### Straight (slanting) wires
 

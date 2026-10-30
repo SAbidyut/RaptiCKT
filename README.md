@@ -67,6 +67,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
 - **Interaction**:
   - Drag from a terminal to wire, and wires follow moved parts; parts never land on each other or join by touching
   - Slanted circuits drawn as in a textbook (a delta, a star, a bridge drawn as a diamond), at any angle: **Slant** turns a part 15° at a time, the properties sheet takes any angle, and dragging a selected part's terminal slants and stretches it, its terminals always on grid points; the **⟋** button draws wires straight between two terminals at any angle, and a part moved between two straight wires turns to lie along them (snapping onto their line when dropped near it), its wires kept straight, or neat level, upright and 45° runs where a straight one would cross a part
+  - Draw a wire with a finger: drag from a terminal to another and the wire follows the path in straight runs (corners on grid points, nearly level, upright or 45° runs made exact), laid round anything it would otherwise touch
   - Values and live readings grow as the board is zoomed out, so they stay readable
   - **✋ Operate / Wire** board modes (like RaptiAuto): Wire while stopped (draw wires, move parts), Operate as soon as you press Run (tap switches and buttons; dragging only pans); switch either way at any time from the top right of the board
   - Rotary knob for any value
