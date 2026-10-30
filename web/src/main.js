@@ -190,7 +190,8 @@ class App {
     doc.folder = null;
     doc.name = this.photoName(doc.name);
     this.saveToLibrary(doc, true);
-    this.openEditor(doc, { autoRun: this.settings.autoStart });
+    // paused: a circuit read from a photo is checked (and fixed) before it is run
+    this.openEditor(doc, { autoRun: false, note: 'Read from a photo: check it against the picture and fix what is wrong, then press Run' });
   }
   /**
    * The name a circuit read from a photo is saved under: its figure's caption ("Figure 4.12"), else

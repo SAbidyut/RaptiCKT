@@ -5,7 +5,7 @@
 import { icon } from './icons.js';
 import { bridge, decodeImage } from './store.js';
 import { THEMES } from './theme.js';
-import { fmtSI } from '../engine/units.js';
+import { fmtSI, parseSI } from '../engine/units.js';
 import { drawFigure } from './theorem-figs.js';
 import { buildFromDrawing } from './photo-circuit.js';
 import { readPicture } from '../vision/index.js';
@@ -31,7 +31,22 @@ function picture({ width, height, data }) {
   return { data: cv.toDataURL('image/jpeg', 0.9).split(',')[1], mediaType: 'image/jpeg' };
 }
 
-/** what a part shows in the summary chips: "R1 20 Ω", "V1 20 V", "D1 0.1vx" */
+/**
+ * What a part read from the photo can be changed into in the list under the drawing (a part read
+ * wrong: a resistor read as a coil, a source read as a resistor …): [kind, name, unit].
+ * 'wire': it was no part at all, just a wire.
+ */
+const KINDS = [
+  ['resistor', 'Resistor', 'Ω'], ['inductor', 'Coil (inductor)', 'H'], ['capacitor', 'Capacitor', 'F'],
+  ['voltage_source', 'DC voltage source', 'V'], ['current_source', 'DC current source', 'A'],
+  ['ac_voltage_source', 'AC voltage source', 'V'], ['ac_current_source', 'AC current source', 'A'],
+  ['dependent_voltage_source', 'Dependent voltage source', '×'], ['dependent_current_source', 'Dependent current source', '×'],
+  ['open_switch', 'Switch (open)', ''], ['closed_switch', 'Switch (closed)', ''],
+  ['wire', 'Just a wire (no part)', ''],
+];
+const UNIT = Object.fromEntries(KINDS.map(([k, , u]) => [k, u]));
+
+/** A part in a few words, as it stands on the board: "R1 20 Ω", "V1 20 V", "D1 0.1vx". */
 function partLabel(e) {
   const t = e.constructor.type, p = e.p;
   if (t === 'resistor') return `${e.name} ${fmtSI(p.r, 'Ω', 4)}`;
@@ -44,7 +59,6 @@ function partLabel(e) {
   if (t === 'opamp') return `${e.name} op amp`;
   return e.name;
 }
-const PARTS = new Set(['resistor', 'dcv', 'acv', 'dci', 'aci', 'capacitor', 'inductor', 'switch', 'depsrc', 'opamp']);
 
 export class PhotoScreen {
   constructor(app, root) {
@@ -58,6 +72,8 @@ export class PhotoScreen {
     this.pick = 0;        // which circuit of a page with several
     this.error = null;
     this.abort = null;
+    this.original = null; // the circuits as read, before any change in the list
+    this.hi = -1;         // the part picked in the list (shown on the drawing)
   }
 
   get settings() { return this.app.settings; }
@@ -108,8 +124,8 @@ export class PhotoScreen {
         <li>Hold the phone flat over the page, with the whole circuit in the frame and in focus.</li>
         <li>Good light and no shadow across the drawing; every value should be readable.</li>
         <li>One circuit per photo reads best: crop the photo to it. A page with several figures works too — you pick one.</li>
-        <li>Always check the redrawn circuit against the picture before trusting the answer.</li>
-      </ul>`;
+      </ul>
+      <div class="ph-sure">${icon('info', 16)}<span><b>Not always 100 % right.</b> A circuit read from a photo can have a part, a value or a wire read wrong. Check it against the picture: change a wrong part or value in the list under the drawing, or fix it on the board after opening it.</span></div>`;
     body.querySelector('[data-x=camera]').addEventListener('click', () => this.take(true));
     body.querySelector('[data-x=gallery]').addEventListener('click', () => this.take(false));
   }
@@ -212,6 +228,8 @@ export class PhotoScreen {
       if (this.abort !== ctl) return;
       this.abort = null;
       this.answer = out;
+      this.original = JSON.stringify(out.circuits || []);
+      this.hi = -1;
       this.stage = 'result';
       this.render();
     } catch (e) {
@@ -289,28 +307,110 @@ export class PhotoScreen {
     }
     if (this.pick >= list.length) this.pick = 0;
     const b = this.built();
-    const parts = b.doc.elements.filter((e) => PARTS.has(e.constructor.type));
     const c = list[this.pick];
+    const n = b.els.filter(Boolean).length;
+    const edited = this.original && JSON.stringify(list) !== this.original;
     body.innerHTML = `
       ${list.length > 1 ? `<p class="th-q">This picture has ${list.length} circuits. <span>Pick one.</span></p>
         <div class="th-chips">${list.map((x, i) => `<button class="chip2 ${i === this.pick ? 'on' : ''}" data-c="${i}">${esc(x.title || 'Circuit ' + (i + 1))}</button>`).join('')}</div>` : ''}
-      <div class="ph-title"><b>${esc(this.app.photoName(c.title))}</b><span>${parts.length} part${parts.length === 1 ? '' : 's'} · check it against the picture</span></div>
+      <div class="ph-title"><b>${esc(this.app.photoName(c.title))}</b><span>${n} part${n === 1 ? '' : 's'} · check it against the picture</span></div>
       <canvas class="th-fig ph-fig"></canvas>
       <details class="ph-orig"><summary>${icon('camera', 16)} The photo</summary><img alt="" src="data:${esc(this.picture().mediaType)};base64,${this.picture().data}"></details>
-      <div class="ph-parts">${parts.map((e) => `<span>${esc(partLabel(e))}</span>`).join('')}</div>
+      <div class="ph-sure">${icon('info', 16)}<span><b>Not always 100 % right.</b> Reading a circuit from a photo can get a part, a value or a wire wrong. Check each part below against the photo and fix what is wrong here, or on the board after opening it.</span></div>
+      <div class="ph-edit">
+        <div class="ph-edhead"><b>Parts read</b><span>Tap a part to see it on the drawing · change its kind or value · ${icon('trash', 13)} removes it</span></div>
+        ${(c.parts || []).map((p, i) => this.partRow(p, i, b.els[i])).join('')}
+        ${edited ? `<button class="btn ph-undo" data-x="undo">${icon('undo', 16)} Back to what was read</button>` : ''}
+      </div>
       ${[...(c.notes || []), ...b.warnings].map((w) => `<div class="th-warn">${icon('info', 16)}<span>${esc(w)}</span></div>`).join('')}
       ${problem ? `<div class="ph-note">${icon('info', 16)}<span>${esc(problem)}</span></div>` : ''}
-      ${b.asked.length ? `<p class="ph-asked">Asked to find <b>${b.asked.map(esc).join(', ')}</b>. Press <b>Run</b> on the board: the live labels show every voltage and current.</p>` : ''}
+      ${b.asked.length ? `<p class="ph-asked">Asked to find <b>${b.asked.map(esc).join(', ')}</b>. Open it on the board and press <b>Run</b>: the live labels show every voltage and current.</p>` : ''}
       <div class="btn-row ph-go">
-        <button class="btn primary big" data-x="open">${icon('play', 18)} Open on the board</button>
+        <button class="btn primary big" data-x="open">${icon('check', 18)} Open on the board</button>
         <button class="btn" data-x="again">${icon('camera', 18)} Another photo</button>
       </div>
-      <p class="ph-by">Read on this phone. A part or a value read wrong? Fix it on the board.</p>`;
+      <p class="ph-by">Read on this phone. It opens on the board paused: press <b>Run</b> when you are ready.</p>`;
     const cv = body.querySelector('.ph-fig');
-    requestAnimationFrame(() => drawFigure(cv, { doc: b.doc, hi: new Set(), notes: [], load: null }, this.theme(), this.settings, 340));
-    body.querySelectorAll('[data-c]').forEach((x) => x.addEventListener('click', () => { this.pick = +x.dataset.c; this.render(); }));
+    const paint = () => {
+      const el = b.els[this.hi];
+      this.fig = drawFigure(cv, { doc: b.doc, hi: new Set(el ? [el] : []), notes: [], load: null }, this.theme(), this.settings, 340);
+      body.querySelectorAll('.ph-row').forEach((r) => r.classList.toggle('on', +r.dataset.i === this.hi));
+    };
+    requestAnimationFrame(paint);
+    // tap a part on the drawing: its row in the list
+    cv.addEventListener('click', (ev) => {
+      if (!this.fig) return;
+      const r = cv.getBoundingClientRect(), [wx, wy] = this.fig.toWorld(ev.clientX - r.left, ev.clientY - r.top);
+      const i = b.els.findIndex((e) => e && e.hitTest(wx, wy, 8));
+      this.hi = i === this.hi ? -1 : i;
+      paint();
+      if (this.hi >= 0) body.querySelector(`.ph-row[data-i="${this.hi}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+    body.querySelectorAll('.ph-row').forEach((row) => {
+      const i = +row.dataset.i, p = c.parts[i];
+      row.addEventListener('click', (ev) => { if (ev.target.closest('select, input, button')) return; this.hi = this.hi === i ? -1 : i; paint(); });
+      row.querySelector('select')?.addEventListener('focus', () => { this.hi = i; paint(); });
+      row.querySelector('select')?.addEventListener('change', (ev) => this.changeKind(i, ev.target.value));
+      const inp = row.querySelector('input');
+      inp?.addEventListener('focus', () => { this.hi = i; paint(); });
+      inp?.addEventListener('change', () => {
+        const v = parseSI(inp.value.replace(/[ΩΩ]|ohms?/gi, ''));
+        if (!Number.isFinite(v) || (v <= 0 && /resistor|inductor|capacitor/.test(p.kind))) { inp.classList.add('bad'); inp.value = this.valueText(p); return; }
+        p.value = v;
+        this.refresh();
+      });
+      row.querySelector('[data-x=del]')?.addEventListener('click', () => { c.parts.splice(i, 1); this.hi = -1; this.refresh(); });
+    });
+    body.querySelectorAll('[data-c]').forEach((x) => x.addEventListener('click', () => { this.pick = +x.dataset.c; this.hi = -1; this.render(); }));
+    body.querySelector('[data-x=undo]')?.addEventListener('click', () => { this.answer.circuits = JSON.parse(this.original); this.hi = -1; this.refresh(); });
     body.querySelector('[data-x=open]').addEventListener('click', () => this.app.openFromPhoto(this.built().doc));
     body.querySelector('[data-x=again]').addEventListener('click', () => { this.stage = 'start'; this.render(); });
+  }
+
+  /** Show the result again after a change in the parts list, scrolled where it was. */
+  refresh() {
+    const y = this.root.querySelector('.ph-body')?.scrollTop || 0;
+    this.render();
+    const b = this.root.querySelector('.ph-body');
+    if (b) b.scrollTop = y;
+  }
+
+  /** A part's value as typed in its row: "2.5", "10k", "4.7µ" (its unit beside it). */
+  valueText(p) { return Number.isFinite(p.value) ? fmtSI(p.value, '', 4).trim() : ''; }
+
+  /** One row of the parts list: its name on the board, what it is, its value, and remove. */
+  partRow(p, i, el) {
+    const name = el ? el.name : '—';
+    if (p.kind === 'opamp') {
+      return `<div class="ph-row" data-i="${i}" data-sum="${esc(el ? partLabel(el) : '')}"><b>${esc(name)}</b><span class="ph-kind">Op amp</span><span></span><button class="icon-btn ph-del" data-x="del" title="Remove">${icon('trash', 17)}</button></div>`;
+    }
+    const kinds = KINDS.filter(([k]) => !/^dependent/.test(k) || /^dependent/.test(p.kind));
+    const unit = /^dependent/.test(p.kind) ? `× ${p.control || '?'}` : UNIT[p.kind] ?? '';
+    const hasVal = !/switch/.test(p.kind);
+    return `<div class="ph-row" data-i="${i}" data-sum="${esc(el ? partLabel(el) : '')}">
+      <b>${esc(name)}</b>
+      <select aria-label="Kind of part">${kinds.map(([k, t]) => `<option value="${k}" ${k === p.kind ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+      ${hasVal ? `<label class="num-in ph-val"><input type="text" inputmode="decimal" value="${esc(this.valueText(p))}" aria-label="Value"><em>${esc(unit)}</em></label>` : '<span></span>'}
+      <button class="icon-btn ph-del" data-x="del" title="Remove">${icon('trash', 17)}</button>
+    </div>`;
+  }
+
+  /** A part read as the wrong kind: make it the kind picked (or a plain wire). */
+  changeKind(i, kind) {
+    const c = this.answer.circuits[this.pick], p = c.parts[i];
+    if (kind === 'wire') {
+      c.parts.splice(i, 1);
+      (c.wires ||= []).push({ from: p.from, to: p.to });
+      this.hi = -1;
+    } else {
+      const was = UNIT[p.kind];
+      p.kind = kind;
+      // a value in another unit means nothing for the new kind: keep the number only when it
+      // still makes sense (e.g. a voltage source and an AC one), else a usual one to change
+      if (UNIT[kind] !== was || !(Number.isFinite(p.value))) p.value = { resistor: 1e3, inductor: 1e-3, capacitor: 1e-6, voltage_source: 10, current_source: 1, ac_voltage_source: 10, ac_current_source: 1 }[kind] ?? p.value;
+      if (/source/.test(kind) && !p.polarity) p.polarity = 'from';
+    }
+    this.refresh();
   }
 
   // ---------------------------------------------------------------- error

@@ -391,6 +391,9 @@ input.toggle:checked::after { transform: translateX(18px); }
 .insp-actions button { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 58px; padding: 7px 6px; border-radius: 12px; font-size: 10.5px; font-weight: 600; color: var(--text2); background: var(--surface2); }
 .insp-actions button.danger { color: var(--danger); }
 .insp-body { padding: 4px 14px 16px; border-top: 1px solid var(--border); }
+.insp-angle .num-in { gap: 6px; }
+.insp-angle .num-in input { width: 64px; text-align: center; }
+.insp-angle .num-in button { flex: none; padding: 6px 9px; border-radius: 9px; font-size: 12px; font-weight: 600; color: var(--text2); background: var(--surface2); }
 .prop { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .prop > span { font-size: 13.5px; color: var(--text2); }
 .prop select, .prop input[type=text] { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 10px; height: 36px; padding: 0 10px; font: inherit; font-size: 14px; }
@@ -1232,6 +1235,23 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 .ph-orig { margin: 4px 0 8px; font-size: 13px; color: var(--text2); }
 .ph-orig summary { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 0; color: var(--accent); font-weight: 600; }
 .ph-orig img { display: block; width: 100%; margin-top: 6px; border-radius: 12px; border: 1px solid var(--border); background: #fff; }
+.ph-sure { display: flex; gap: 8px; align-items: flex-start; margin: 8px 0 10px; padding: 10px 12px; border-radius: 12px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.35); font-size: 13px; line-height: 1.45; color: var(--text); }
+.ph-sure svg { flex: none; margin-top: 2px; color: #f59e0b; }
+.ph-edit { margin: 4px 0 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.ph-edhead { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 8px; border-bottom: 1px solid var(--border); }
+.ph-edhead b { font-size: 14px; }
+.ph-edhead span { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.ph-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto 38px; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.ph-row:last-of-type { border-bottom: 0; }
+.ph-row.on { background: rgba(34, 211, 238, 0.1); box-shadow: inset 3px 0 0 var(--accent); }
+.ph-row > b { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text); }
+.ph-row select { min-width: 0; width: 100%; padding: 7px 6px; border-radius: 10px; font-size: 13px; }
+.ph-row .ph-kind { font-size: 13px; color: var(--text2); }
+.ph-row .ph-val input { width: 74px; padding: 7px 6px; border-radius: 10px; font-size: 13px; }
+.ph-row .ph-val input.bad { border-color: var(--danger); }
+.ph-row .ph-val em { min-width: 12px; }
+.ph-row .ph-del { width: 36px; height: 36px; color: var(--danger); }
+.ph-undo { margin: 8px 12px 10px; }
 .ph-parts { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
 .ph-parts span { padding: 4px 10px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text2); }
 .ph-note { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); font-size: 13px; color: var(--text2); }

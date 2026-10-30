@@ -30,7 +30,7 @@ async function open(init) {
   return { ctx, page, errs, away };
 }
 const stage = (page) => page.evaluate(() => app.photo.stage);
-const partsShown = (page) => page.evaluate(() => [...document.querySelectorAll('.ph-parts span')].map((s) => s.textContent).sort());
+const partsShown = (page) => page.evaluate(() => [...document.querySelectorAll('.ph-row')].map((r) => r.dataset.sum).sort());
 
 async function runAndRead(page, name) {
   await page.evaluate(() => app.editor.setRunning(true));
@@ -81,8 +81,23 @@ async function runAndRead(page, name) {
   check(JSON.stringify(parts) === JSON.stringify(['D1 0.1vx', 'I1 4 A', 'R1 4 Ω', 'R2 20 Ω', 'V1 20 V'].sort()) || (parts.length === 5 && parts.includes('D1 0.1vx') && parts.includes('V1 20 V')), `read: ${parts.join(', ')}`);
   check(await page.isVisible('.ph-by') && !(await page.$('[data-x=claude]')) && (await page.$$('.th-warn')).length === 0, 'says it was read on the phone, nothing else offered, no warnings');
   check((await page.textContent('.ph-title b')) === 'Photo circuit 1', 'named "Photo circuit 1" (the drawing has no figure number)');
+  check(await page.isVisible('.ph-sure'), 'it says a reading is not always 100 % right, and to fix it here or on the board');
+  // ---- a part read wrong is put right in the list: its kind, its value, or out it goes
+  const rowOf = (sum) => page.evaluate((s) => [...document.querySelectorAll('.ph-row')].find((r) => r.dataset.sum === s)?.dataset.i, sum);
+  const r4 = await rowOf('R1 4 Ω');
+  await page.fill(`.ph-row[data-i="${r4}"] input`, '8'); await page.dispatchEvent(`.ph-row[data-i="${r4}"] input`, 'change'); await page.waitForTimeout(300);
+  check((await partsShown(page)).includes('R1 8 Ω'), 'a value typed in its row: R1 8 Ω');
+  await page.selectOption(`.ph-row[data-i="${r4}"] select`, 'inductor'); await page.waitForTimeout(300);
+  check((await partsShown(page)).includes('L1 1 mH') && !(await partsShown(page)).includes('R1 8 Ω'), `a part made a coil instead: ${(await partsShown(page)).join(', ')}`);
+  await page.click(`.ph-row[data-i="${r4}"] [data-x=del]`); await page.waitForTimeout(300);
+  check((await partsShown(page)).length === 4, 'a part removed from the list');
+  check(await page.isVisible('[data-x=undo]'), 'changed: "Back to what was read" is offered');
+  await page.click('[data-x=undo]'); await page.waitForTimeout(300);
+  check(JSON.stringify(await partsShown(page)) === JSON.stringify(parts) && !(await page.$('[data-x=undo]')), 'Back to what was read: as read again');
   await page.click('[data-x=open]'); await page.waitForTimeout(900);
   check(await page.evaluate(() => app.editor.doc.name === 'Photo circuit 1'), '…and saved under that name');
+  check(await page.evaluate(() => !app.editor.running), 'it opens on the board paused (Run when ready)');
+  check(await page.evaluate(() => app.editor.doc.bigLabels && !app.editor.doc.elements.some((e) => e.constructor.type === 'netlabel' && e.p.name !== 'vx')), 'its values written big, and no names but the one the diamond reads (vx)');
   const vx = await runAndRead(page, 'vx');
   check(Math.abs(vx - 25) < 1e-6, `Run: vx = ${vx.toFixed(4)} V (book: 25 V)`);
   await page.evaluate(() => app.editor.setRunning(false));

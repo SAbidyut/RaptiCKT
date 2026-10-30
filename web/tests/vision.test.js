@@ -256,7 +256,7 @@ for (const name of ['bridge.png', 'bridge-photo.jpg']) {
     near(I.get(4), 29 / 23, 1e-6, '4 Ω');
     near(I.get(5), 9 / 23, 1e-6, '5 Ω');
     // the four sides slanted on the board, the 5 Ω across the middle and the source not
-    const slanted = r.doc.elements.filter((e) => e.diag).map((e) => e.p.r).sort((a, b) => a - b);
+    const slanted = r.doc.elements.filter((e) => e.sv).map((e) => e.p.r).sort((a, b) => a - b);
     assert.deepEqual(slanted, [2, 3, 4, 6], 'the sides slanted');
   });
 }

@@ -204,6 +204,7 @@ export function drawFigure(cv, built, theme, settings, maxH = 320, { fill = fals
   const { doc, hi, notes, load } = built;
   const st = { ...settings, grid: 'none', showValues: true, showNames: true, currentDots: false };
   const r = new Renderer(cv);
+  r.fixedLabels = true;
   r.chooseLabelSides({ doc, settings: st });
   const base = drawingBox(doc);
   const W = cv.clientWidth || 320, pad = 12;

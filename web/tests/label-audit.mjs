@@ -1,5 +1,7 @@
 // Runs every example and reports text that overlaps other text (value labels and
-// live readings) or sits on a part's body. Usage: node tests/label-audit.mjs
+// live readings) or sits on a part's body, measured at the size it is drawn (labels grow when
+// the board is zoomed out). Usage: node tests/label-audit.mjs (LK=1: also list the examples
+// whose labels are drawn bigger)
 import { chromium } from 'playwright';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -45,14 +47,14 @@ for (const id of scene ? ['scene'] : exIds.length ? exIds : ids) {
     for (const e of ed.doc.elements) {
       const val = e.valueLabel();
       const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
-      const r = txt && e.labelRect(txt);
+      const r = txt && e.labelRect(txt, undefined, R.lk || 1); // as drawn: labels grow when zoomed out
       if (r) texts.push({ who: e.name + ' label "' + txt + '"', r, el: e });
     }
     const lay = R._live;
     if (lay) {
-      ctx.save(); ctx.font = '600 10px Inter, system-ui, sans-serif';
+      ctx.save(); ctx.font = `600 ${10 * (lay.lk || 1)}px Inter, system-ui, sans-serif`; // (readings shrink back where big ones find no room)
       const rect = (L, txt) => {
-        const w = ctx.measureText(txt).width, h = 11;
+        const w = ctx.measureText(txt).width, h = 11 * (lay.lk || 1);
         const x1 = L.align === 'left' ? L.x : L.align === 'right' ? L.x - w : L.x - w / 2;
         const y1 = L.base === 'top' ? L.y : L.base === 'bottom' ? L.y - h : L.y - h / 2;
         return [x1, y1, x1 + w, y1 + h];
@@ -65,17 +67,18 @@ for (const id of scene ? ['scene'] : exIds.length ? exIds : ids) {
     const bad = [];
     for (let i = 0; i < texts.length; i++) for (let j = i + 1; j < texts.length; j++) {
       const a = ov(texts[i].r, texts[j].r);
-      if (a > 6) bad.push(`${texts[i].who} × ${texts[j].who} (${a.toFixed(0)}px²)`);
+      if (a > 6 * (R.lk || 1) ** 2) bad.push(`${texts[i].who} × ${texts[j].who} (${a.toFixed(0)}px²)`);
     }
     for (const t of texts) for (const e of ed.doc.elements) {
       if (t.el === e) continue;
       const a = ov(t.r, e.worldBox());
-      if (a > 20) bad.push(`${t.who} on body of ${e.name} (${a.toFixed(0)}px²)`);
+      if (a > 20 * (R.lk || 1) ** 2) bad.push(`${t.who} on body of ${e.name} (${a.toFixed(0)}px²)`);
     }
-    return bad;
+    return { bad, lk: R.lk || 1 };
   });
-  total += res.length;
-  if (res.length) console.log(id + ':\n  ' + res.join('\n  '));
+  total += res.bad.length;
+  if (process.env.LK && res.lk > 1) console.log(`${id}: labels ×${res.lk}`);
+  if (res.bad.length) console.log(id + ` (labels ×${res.lk}):\n  ` + res.bad.join('\n  '));
 }
 console.log('overlaps:', total, errs.length ? errs.join('\n') : 'no errors');
 await browser.close(); server.close();

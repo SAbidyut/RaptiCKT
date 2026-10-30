@@ -234,10 +234,96 @@ export function stretchWire(pts, na, nb) {
   return p;
 }
 
+// ------------------------------------------------------- slanted shapes
+/** Signed area sign of a polygon (1 or -1), so its inside can be told from its outside. */
+function turn(poly) {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; a += p[0] * q[1] - q[0] * p[1]; }
+  return a >= 0 ? 1 : -1;
+}
+
+/** Is (x, y) inside the convex polygon `poly`, by more than m? */
+export function inPoly(poly, x, y, m = 0) {
+  const sg = turn(poly);
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], ex = b[0] - a[0], ey = b[1] - a[1];
+    if ((sg * (ex * (y - a[1]) - ey * (x - a[0]))) / (Math.hypot(ex, ey) || 1) <= m) return false;
+  }
+  return true;
+}
+
+/** Do two convex polygons overlap by more than m (separating axes)? */
+export function polysHit(A, B, m = 2) {
+  for (const P of [A, B]) for (let i = 0; i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length], nx = a[1] - b[1], ny = b[0] - a[0], l = Math.hypot(nx, ny) || 1;
+    let a1 = Infinity, a2 = -Infinity, b1 = Infinity, b2 = -Infinity;
+    for (const p of A) { const d = (p[0] * nx + p[1] * ny) / l; if (d < a1) a1 = d; if (d > a2) a2 = d; }
+    for (const p of B) { const d = (p[0] * nx + p[1] * ny) / l; if (d < b1) b1 = d; if (d > b2) b2 = d; }
+    if (a2 - m <= b1 || b2 - m <= a1) return false;
+  }
+  return true;
+}
+
+/** How much of segment p–q (0 … 1) runs inside the convex polygon, kept m in from its edges. */
+export function segInPoly(p, q, poly, m = 0.5) {
+  const sg = turn(poly), dx = q[0] - p[0], dy = q[1] - p[1];
+  let t0 = 0, t1 = 1;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1;
+    const nx = (-sg * ey) / l, ny = (sg * ex) / l; // inward normal
+    const num = nx * (p[0] - a[0]) + ny * (p[1] - a[1]) - m, den = nx * dx + ny * dy;
+    if (Math.abs(den) < 1e-12) { if (num < 0) return 0; continue; }
+    const t = -num / den;
+    if (den > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+    if (t1 <= t0) return 0;
+  }
+  return t1 - t0;
+}
+
+/** Do two parts' outlines overlap (more than touching)? Slanted parts by their own turned boxes. */
+export function partsHit(e, o) {
+  const A = e.worldBox(), B = o.worldBox();
+  if (!(A[0] + 2 < B[2] && A[2] - 2 > B[0] && A[1] + 2 < B[3] && A[3] - 2 > B[1])) return false;
+  return !(e.sv || o.sv) || polysHit(e.worldPoly(), o.worldPoly());
+}
+
+/**
+ * Can a straight wire run from a to b (any slant) without crossing a part, passing over a
+ * terminal or another wire's point (which would join them), or lying along another wire?
+ * skip: wires to leave out (the wire itself, wires moving with it).
+ */
+export function straightClear(doc, a, b, skip = new Set()) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy);
+  if (l < 1) return true;
+  for (const e of doc.elements) {
+    if (e.constructor.type === 'label') continue;
+    if (segInPoly(a, b, e.worldPoly()) * l > 1) return false;
+  }
+  const on = (p) => {
+    if ((p[0] === a[0] && p[1] === a[1]) || (p[0] === b[0] && p[1] === b[1])) return false;
+    const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (l * l);
+    return t > 0 && t < 1 && Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / l < 0.5;
+  };
+  for (const e of doc.elements) for (const p of e.getPosts()) if (on(p)) return false;
+  for (const w of doc.wires) {
+    if (skip.has(w)) continue;
+    for (const p of w.pts) if (on(p)) return false;
+    for (let k = 1; k < w.pts.length; k++) {
+      const p = w.pts[k - 1], q = w.pts[k], ex = q[0] - p[0], ey = q[1] - p[1];
+      // lying along it: in line, and overlapping by more than a point
+      if (Math.abs(ex * dy - ey * dx) > 1e-6 || Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / l > 0.5) continue;
+      const s1 = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l, s2 = ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / l;
+      if (Math.min(l, Math.max(s1, s2)) - Math.max(0, Math.min(s1, s2)) > 1) return false;
+    }
+  }
+  return true;
+}
+
 /** Obstacle picture of the document, shared by the cost checks of one routing decision. */
 export function wireContext(doc, skipWires = new Set()) {
   const G = GRID;
   const bodies = doc.elements.map((e) => e.worldBox());
+  const polys = doc.elements.map((e) => (e.sv ? e.worldPoly() : null)); // slanted parts: their own turned outline
   const posts = new Set();
   for (const e of doc.elements) for (const p of e.getPosts()) posts.add(key(p[0], p[1]));
   const ends = new Set(), nodes = new Set(), edges = new Set(), segs = [];
@@ -257,7 +343,7 @@ export function wireContext(doc, skipWires = new Set()) {
       }
     }
   }
-  return { bodies, posts, ends, nodes, edges, segs };
+  return { bodies, polys, posts, ends, nodes, edges, segs };
 }
 
 /**
@@ -271,7 +357,7 @@ export function routeCost(ctx, pts, joinsOnly = false) {
   let cost = 0;
   const last = pts.length - 1;
   // joinsOnly: count only what would create a connection the user did not draw
-  const inBody = (x, y) => !joinsOnly && ctx.bodies.some(([x1, y1, x2, y2]) => x > x1 + 0.5 && x < x2 - 0.5 && y > y1 + 0.5 && y < y2 - 0.5);
+  const inBody = (x, y) => !joinsOnly && ctx.bodies.some(([x1, y1, x2, y2], i) => x > x1 + 0.5 && x < x2 - 0.5 && y > y1 + 0.5 && y < y2 - 0.5 && (!ctx.polys?.[i] || inPoly(ctx.polys[i], x, y, 0.5)));
   for (let k = 1; k <= last; k++) {
     const [p, q] = [pts[k - 1], pts[k]];
     const len = Math.max(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1]));

@@ -187,7 +187,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 
 #### The board
 
-- The big area with the grid is your **canvas**. It is unlimited: pan and zoom freely.
+- The big area with the grid is your **canvas**. It is unlimited: pan and zoom freely. Zoomed out, the values and live readings grow with it, so they stay readable on the screen.
 - The round **+** button (bottom right) adds a component.
 - The **✋ Operate | Wire** switch at the top right of the board picks what a finger does (chapter 4, *Operate and Wire mode*).
 - The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). When the phone cannot keep up it shows, in amber, the speed actually reached, for example `1.5 s/s max`.
@@ -202,6 +202,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 | Tap a part | Selects it. On a switch or button, it also operates it. |
 | Hold a part (half a second) | Opens its properties. |
 | Drag a part | Moves it. Wires stay attached and follow. A part never lands on another part. |
+| Drag a terminal of the selected part | Slants and stretches it: that end goes where you drag it, at any angle. |
 | Tap a terminal, then another | Draws a wire between them (EveryCircuit style). |
 | Drag empty space | Pans the board. |
 | Pinch with two fingers | Zooms in and out. |
@@ -211,7 +212,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 | Tap a wire | Selects the wire (then you can scope or delete it). |
 | Tap empty space | Clears the selection. |
 
-On a computer browser you can also use: **Delete** (remove), **R** (rotate), **T** (slant 45°), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), and the mouse wheel to zoom.
+On a computer browser you can also use: **Delete** (remove), **R** (rotate), **T** / **Shift+T** (slant 15° on / back), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), and the mouse wheel to zoom.
 
 <a id="ch-adding"></a>
 
@@ -240,7 +241,7 @@ Tap it. It is highlighted and the **quick bar** appears near the bottom with:
 - Its **name** (R1, C2, D1…), type and a live reading (for example `3.84 V · 816 µA`). Tap this area to open all properties.
 - **Reverse polarity** (only for polarised parts such as batteries, diodes, LEDs, electrolytic capacitors): swaps the two terminals while the wires stay connected.
 - **Rotate**: turns the part 90° each tap.
-- **Slant** (only for parts with their two terminals in line, such as resistors, capacitors, coils, sources): tilts the part 45°, as the sides of a delta, a star or a bridge are drawn; tap again to set it straight. Its terminals stay on grid points, so wires join it as usual.
+- **Slant** (only for parts with their two terminals in line, such as resistors, capacitors, coils, sources): turns the part a further **15°** each tap, at any angle round, as the sides of a delta, a star or a bridge are drawn. For any other angle, type it in the properties sheet, or drag one of its terminals (below). Its terminals stay on grid points, so wires join it as usual.
 - **Scope**: adds the part to the oscilloscope.
 - **Edit** (sliders icon): opens the properties sheet.
 - **Delete**.
@@ -250,7 +251,8 @@ Tap it. It is highlighted and the **quick bar** appears near the bottom with:
 Hold a part for half a second, or tap its name in the quick bar. A sheet slides up with:
 
 - **Live readings** while the simulation runs (voltage, current, power, state…).
-- Action buttons: **Rotate**, **Slant** (45°), **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.
+- Action buttons: **Rotate**, **Slant** (15° more), **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.
+- **Angle** (parts that can slant): type any angle in degrees (0° points right, 90° down, −30° up and to the right), or step it with **−15°** / **+15°**. The part takes the nearest angle that keeps its terminals on grid points, within a few degrees.
 - Every adjustable property: a text box and a slider for numbers, a drop-down for choices (for example the **model** of a transistor or op-amp), a switch for yes/no.
 - A short description of the part.
 - Tap the **✓** to close.
@@ -275,7 +277,9 @@ Note: `m` is **milli** and `M` is **mega**. The unit letter (Ω, F, H, V, A) is 
 
 - **Move**: drag the part. It snaps to the grid. Connected wires follow and re-route neatly. A part cannot be dropped on top of another part, and its terminals never join another terminal or wire just by touching: it stops at the last free spot (drag on into free space to hop over), and you connect parts by drawing a wire. Duplicates are placed on a free spot too. The undo button reverses the move.
 - **Rotate**: quick bar button (or **R** on a keyboard).
-- **Slant**: quick bar button (or **T** on a keyboard): 45°, and Rotate then turns it onto the other diagonals.
+- **Slant**: quick bar button (or **T** on a keyboard): 15° more each time; **Rotate** turns a slanted part a quarter turn, still slanted.
+- **Any angle, any length**: select the part, then drag one of its **terminals** (they show small squares): that end goes where your finger takes it, at any angle, the other end stays put, and the part stretches or shortens between them (its symbol keeps its size, its leads grow). A part left without a selection is moved by its terminal as before.
+- **Slanting by itself**: in a circuit drawn slanting (a slanted part or a slanting wire in it, as a circuit read from a photo of a delta or a bridge), or with the **⟋** button on (see Wiring), a part you move between two straight wires turns to lie along the line between their far ends, and snaps onto that line when you drop it near it, so the wires run on in line with it. Straight wires stay straight at any angle as parts move; where one would cross a part or run along another wire, it goes round instead.
 - **Flip**: properties sheet (mirrors the part).
 - **Copy**: properties sheet or selection bar. The copy appears slightly down and right.
 - **Delete**: quick bar or selection bar.
@@ -308,7 +312,7 @@ The quickest way, as in EveryCircuit: tap two terminals and the app draws the wi
 
 #### Straight (slanting) wires
 
-To draw a circuit as a textbook does, with slanting sides (a delta, a star, a bridge drawn as a diamond): in **Wire** mode tap the **⟋** button beside **Wire** (it lights up). Tapping two terminals then draws one **straight** wire between them, slanting if need be, instead of a right-angled one. Tap ⟋ again to go back to right-angled wires. A straight slanting wire stays straight when you move the parts at its ends. Use **Slant** on the parts themselves (above) to tilt them along such a side.
+To draw a circuit as a textbook does, with slanting sides (a delta, a star, a bridge drawn as a diamond): in **Wire** mode tap the **⟋** button beside **Wire** (it lights up). Tapping two terminals then draws one **straight** wire between them, slanting if need be, instead of a right-angled one (where a straight wire would cross a part or run over a terminal, it goes round instead). Moving parts then keeps their straight wires straight, at any angle, and a part moved between two straight wires turns to lie along them (see **Slanting by itself** under Moving). Tap ⟋ again to go back to right-angled wires. Use **Slant**, the **Angle** field or a terminal drag on the parts themselves (above) to set them at any angle along such a side.
 
 #### Branches and junctions
 
@@ -682,14 +686,15 @@ The picture is read **on this phone**: no internet, no account or key, and the p
 2. Crop it to the circuit: drag the corners of the box round the circuit you want read, leaving out other figures and the problem's text (drag the box to move it, or draw a new one; **Whole picture** takes all of it). Tap **Read the circuit**.
 3. Wait while the circuit is read. **Cancel** stops it.
 4. Check the redrawn circuit against the picture (tap **The photo** to see it again). A page with several figures lists them all: tap the one you want.
-5. Tap **Open on the board**. The circuit opens as a new circuit (also saved in My Circuits), named after the figure. Press **Run**: the live labels show every node voltage and branch current, so the asked quantity (vₓ, i, I₀ …) can be read straight off the board.
+5. Put right what was read wrong in the **Parts read** list under the drawing: tap a row to see that part highlighted on the drawing (or tap a part on the drawing to find its row); pick another kind for it (a resistor read as a coil, a source read as a resistor; **Just a wire** if it was no part at all), type its value, or tap the bin to remove it. **Back to what was read** undoes all your changes.
+6. Tap **Open on the board**. The circuit opens as a new circuit (also saved in My Circuits), named after the figure, **paused**. Check it once more, then press **Run**: the live labels show every node voltage and branch current, so the asked quantity (vₓ, i, I₀ …) can be read straight off the board.
 
-> **Tip:** Something is off — a value, a missed part? Fix it on the board, or take a sharper photo and read it again.
+> **Warning:** Reading a circuit from a photo is **not always 100 % right**: a part, a value or a wire can be read wrong. After opening it on the board, check it against the picture and fix whatever is wrong there (or in the list before opening), or take a sharper photo and read it again.
 
 #### What the phone reads
 
 - Straight wires and the joints between them; resistors (zigzags), coils (bumps, or loops like a spring seen from the side), capacitors and batteries of one cell or more (plates: the long plate is +), grounds, and open switches (a lever slanting from one wire end towards the next).
-- Wires and parts drawn slanting, as in a bridge drawn as a diamond or a delta and a star drawn as triangles: on the board they are drawn slanting too (the parts slanted 45°, the wires straight), joined exactly as drawn; where a slanting line would cross another part or run along another wire, the circuit is laid level and upright instead. Values printed along a slanting side are read too, also with a name before them (**x₁ = 2.5Ω**, and **Z₁ = 5Ω** written level).
+- Wires and parts drawn slanting, as in a bridge drawn as a diamond or a delta and a star drawn as triangles: on the board they are drawn slanting too, at the angle they were drawn (each part along its side, its leads in line with it, the wires straight), joined exactly as drawn; where a slanting line would cross another part or run along another wire, the circuit is laid level and upright instead. Values printed along a slanting side are read too, also with a name before them (**x₁ = 2.5Ω**, and **Z₁ = 5Ω** written level).
 - Resistors printed small, whose zigzag runs together into a thick bit of the line in a photo, and decimal points that run into the next digit (3.33Ω).
 - **Op amps** (a triangle with **−** and **+** inside, the output at its point): placed as the board's ideal op amp, pointing the way it was drawn, the − and + inputs where they were drawn (told by the signs; unseen, the − is taken as the upper or left input). Its supply rails are ±15 V: change them in its settings if the problem gives others.
 - Circles (or ovals) as independent sources — **+ −** marks make a voltage source, **~** an AC source, an arrow a current source (also one drawn on the wire running on through the circle) — and diamonds as **dependent sources**, with the expression written beside them (0.1vₓ, 4iₓ).
@@ -707,7 +712,7 @@ The picture is read **on this phone**: no internet, no account or key, and the p
 - Every value should be readable in the photo. Notes under the drawing say what was unsure — a part whose value could not be read gets a default value to set on the board.
 - Drawing it yourself? Use a dark pen, let wires meet at their corners, draw each part clearly bigger than the pen is thick, and write each value next to its part, clear of the wires.
 - Warnings under the drawing say what could not be rebuilt as read — a part end joined to nothing, a dependent source whose controlling quantity is not marked — so you can fix it on the board.
-- Nodes with a voltage written next to them (vₓ, v₁ …) get a **net label** with that name. Dependent sources are the **Dependent Source (diamond)** part: its **Controlled by** setting says what drives it (`node:vx`, `v:R2` or `i:R4`) and its gain carries the sign the drawing marks.
+- On the board, a circuit read from a photo shows its **values written big**, not the drawing's names (A, B, x₁ …): only a node voltage that drives a dependent source (vₓ) gets a **net label** with its name. Dependent sources are the **Dependent Source (diamond)** part: its **Controlled by** setting says what drives it (`node:vx`, `v:R2` or `i:R4`) and its gain carries the sign the drawing marks.
 - If the drawing has no ground symbol, the bottom wire is taken as 0 V.
 
 > **Warning:** Always compare the redrawn circuit with the photo before you trust the answer: a misread value or a missed wire gives a different circuit.

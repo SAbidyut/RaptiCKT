@@ -38,7 +38,7 @@ import './ladder.js';
 import './cables.js';
 
 import { getType } from './base.js';
-export { getType, allTypes, Element, GRID } from './base.js';
+export { getType, allTypes, Element, GRID, slantFor, slantAlong } from './base.js';
 
 export const CATEGORIES = [
   { id: 'Sources', icon: 'bolt', items: ['dcv', 'acv', 'mains', 'ac3y', 'ac3d', 'rail', 'ground', 'earth', 'chassis', 'netlabel', 'benchpsu', 'dualpsu', 'pvmodule', 'dci', 'aci', 'square', 'pulse', 'pwm', 'triangle', 'sawtooth', 'sweep', 'noise', 'amsrc', 'fmsrc', 'stepsrc', 'expsrc', 'dampsine', 'pwlsrc', 'rampsrc', 'funcsrc', 'vcvs', 'vccs', 'ccvs', 'cccs', 'depsrc'] },

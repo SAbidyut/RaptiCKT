@@ -20,7 +20,7 @@
 //     in parts, -1 for a node voltage), positive ('from' | 'to' | 'none') }]
 //   asked: names of the quantities the problem asks for.
 
-import { getType, GRID } from '../elements/index.js';
+import { getType, GRID, slantFor, slantAlong } from '../elements/index.js';
 import { CircuitDoc } from './doc.js';
 
 const G = GRID;
@@ -34,12 +34,14 @@ const TYPE = { resistor: 'resistor', voltage_source: 'dcv', current_source: 'dci
 const PREFIX = { resistor: 'R', dcv: 'V', dci: 'I', capacitor: 'C', inductor: 'L', acv: 'V', aci: 'I', switch: 'S', depsrc: 'D', opamp: 'U' };
 
 /**
- * Build a board circuit from one described circuit. Returns { doc, warnings }: warnings say what
- * could not be rebuilt as described (a part end left open, a control that names nothing …).
+ * Build a board circuit from one described circuit. Returns { doc, warnings, asked, els }:
+ * warnings say what could not be rebuilt as described (a part end left open, a control that
+ * names nothing …); els[i] is the board part made of c.parts[i].
  */
 export function buildFromDrawing(c) {
   const doc = new CircuitDoc(c.title || 'Circuit from photo');
   doc.description = 'Read from a photo.';
+  doc.bigLabels = true; // its values written big: the board shows values, not the drawing's names
   const warnings = [];
   const parts = (c.parts || []).filter((p) => p && TYPE[p.kind] && p.from && p.to && key(p.from) !== key(p.to) && (p.kind !== 'opamp' || (p.out && key(p.out) !== key(p.from) && key(p.out) !== key(p.to))));
   if (parts.length < (c.parts || []).length) warnings.push('Some parts could not be placed (both ends on one point, or an unknown kind) and were left out.');
@@ -76,13 +78,11 @@ export function buildFromDrawing(c) {
     if (isI) head = p.polarity === 'from' ? p.to : p.from;
     const tail = head === p.from ? p.to : p.from;
     const H = W(head), T = W(tail), horiz = P[1] === Q[1], vert = P[0] === Q[0];
-    // drawn slanting: slanted 45° on the board (or level or upright when it is nearly so), its
-    // leads straight to its two points
-    const slant = !horiz && !vert, a = Math.atan2(Math.abs(T[1] - H[1]), Math.abs(T[0] - H[0]));
-    if (slant && a > Math.PI / 8 && a < (3 * Math.PI) / 8 && el.canSlant()) {
-      el.diag = true;
-      el.rot = T[0] > H[0] ? (T[1] > H[1] ? 0 : 3) : T[1] > H[1] ? 1 : 2;
-    } else el.rot = (slant ? a <= Math.PI / 4 : horiz) ? (H[0] < T[0] ? 0 : 2) : H[1] < T[1] ? 1 : 3;
+    // drawn slanting: slanted on the board too, at the angle it was drawn, along the line between
+    // its two points, its leads running on in line to them
+    const slant = !horiz && !vert;
+    if (slant && el.canSlant()) slantBetween(el, H, T);
+    else el.rot = (slant ? Math.abs(T[1] - H[1]) <= Math.abs(T[0] - H[0]) : horiz) ? (H[0] < T[0] ? 0 : 2) : H[1] < T[1] ? 1 : 3;
     el.onParamChange?.();
     doc.elements.push(el);
     const [p0, p1] = el.getPosts();
@@ -116,12 +116,14 @@ export function buildFromDrawing(c) {
   const grounds = (c.ground || []).length ? c.ground : [];
   for (const g of grounds) doc.elements.push(new (getType('ground'))(...W(g)));
 
-  // named quantities: node voltages get a net label (dependent sources and the reader use it)
+  // named quantities: a node voltage that controls a dependent source gets a net label (the
+  // source reads it by that name); the drawing's other names are not put on the board
   const byName = new Map();
+  const controls = new Set(parts.filter((p) => p.control).map((p) => p.control));
   for (const q of quantities) {
     if (!q || !q.name) continue;
     byName.set(q.name, q);
-    if (q.kind === 'node_voltage' && q.at) {
+    if (q.kind === 'node_voltage' && q.at && controls.has(q.name)) {
       const nl = new (getType('netlabel'))(0, 0);
       nl.p.name = q.name;
       const [x, y] = W(q.at);
@@ -170,7 +172,29 @@ export function buildFromDrawing(c) {
   const loose = [];
   for (const { part, el } of made) for (const p of [part.from, part.to, ...(part.out ? [part.out] : [])]) if ((used.get(key(p)) || 0) < 2 && !wireThrough(c.wires || [], p)) loose.push(el.name);
   if (loose.length) warnings.push(`Not joined to anything at one end: ${[...new Set(loose)].join(', ')}. Check the photo and add the missing wire.`);
-  return { doc, warnings, asked: c.asked || [] };
+  // (els: the board part made of each of the drawing's parts, null where one was left out)
+  return { doc, warnings, asked: c.asked || [], els: (c.parts || []).map((p) => made.find((m) => m.part === p)?.el || null) };
+}
+
+/**
+ * Slant a two-terminal part to lie on the line from board point H to board point T (its first
+ * terminal towards H), in the middle of it, its terminals on grid points of that line; when the
+ * line has none near enough, at the nearest angle the grid allows.
+ */
+function slantBetween(el, H, T) {
+  const n = (2 * el.localPosts()[1][0]) / G, dx = (T[0] - H[0]) / G, dy = (T[1] - H[1]) / G;
+  const along = slantAlong(dx, dy, n);
+  if (along) {
+    const gcd = (a, b) => (b ? gcd(b, a % b) : Math.abs(a)), k = gcd(Math.abs(dx), Math.abs(dy));
+    const p = dx / k, q = dy / k, m = Math.max(1, Math.min(Math.round(along[0] / p || along[1] / q), k - 2));
+    const t = Math.floor((k - m) / 2);
+    el.setSlant([p * m, q * m]);
+    el.x = H[0] + (t + m / 2) * p * G; el.y = H[1] + (t + m / 2) * q * G;
+    return;
+  }
+  el.setSlant(slantFor(Math.atan2(dy, dx), n));
+  el.x = (H[0] + T[0]) / 2; el.y = (H[1] + T[1]) / 2;
+  el.snapPosts();
 }
 
 /**

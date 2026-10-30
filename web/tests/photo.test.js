@@ -17,8 +17,17 @@ function solve(c) {
   assert.ok(sim.start(), sim.error);
   for (let i = 0; i < 50; i++) assert.ok(sim.step(1e-4), sim.error);
   const el = (n) => doc.elements.find((e) => e.name === n);
+  // a node voltage: at its net label when it has one (a dependent source reads it), else at the
+  // point the drawing names, on the board (one grid unit is 6 grid steps)
   const label = (n) => doc.elements.find((e) => e.constructor.type === 'netlabel' && e.p.name === n);
-  return { doc, warnings, asked, sim, el, v: (n) => sim.v(label(n).nodes[0]) };
+  const at = (n) => {
+    const q = c.quantities.find((x) => x.name === n), X = q.at.x * 120, Y = q.at.y * 120;
+    const e = doc.elements.find((o) => o.getPosts().some(([x, y]) => x === X && y === Y));
+    if (e) return e.nodes[e.getPosts().findIndex(([x, y]) => x === X && y === Y)];
+    const i = doc.wires.findIndex((w) => w.pts.some(([x, y]) => x === X && y === Y));
+    return sim.wireNodes[i];
+  };
+  return { doc, warnings, asked, sim, el, v: (n) => sim.v(label(n) ? label(n).nodes[0] : at(n)) };
 }
 const near = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-6 * Math.max(1, Math.abs(b)), `${msg}: ${a} ≠ ${b}`);
 
@@ -220,8 +229,18 @@ test('drawn slanting, a part is slanted on the board and a wire runs straight: a
   const r = solve(c);
   assert.deepEqual(r.warnings, []);
   const R = (n) => r.doc.elements.find((e) => e.constructor.type === 'resistor' && e.p.r === n);
-  assert.ok(R(4).diag && R(2.5).diag && !R(3.5).diag, 'the slanting sides slanted');
+  assert.ok(R(4).sv && R(2.5).sv && !R(3.5).sv, 'the slanting sides slanted');
   for (const e of [R(4), R(2.5)]) for (const [x, y] of e.getPosts()) assert.ok(x % 20 === 0 && y % 20 === 0, 'terminals on grid points');
+  // each along the line it was drawn on, at its angle: its leads run on in line to its two points
+  for (const e of [R(4), R(2.5)]) {
+    const [a, b] = e.getPosts(), leads = r.doc.wires.filter((w) => [a, b].some((p) => w.pts.some((q) => q[0] === p[0] && q[1] === p[1])));
+    assert.equal(leads.length, 2, 'two leads');
+    for (const w of leads) {
+      assert.equal(w.pts.length, 2, 'a straight lead');
+      const [p, q] = w.pts;
+      assert.ok(Math.abs((q[0] - p[0]) * (b[1] - a[1]) - (q[1] - p[1]) * (b[0] - a[0])) < 1e-6, 'in line with the part');
+    }
+  }
   near(Math.abs(R(4).i), 3, '4 Ω');
   near(Math.abs(R(2.5).i), 2, '2.5 Ω');
   near(Math.abs(R(3.5).i), 2, '3.5 Ω');
