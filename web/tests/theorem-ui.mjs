@@ -1,6 +1,7 @@
 // ⋮ → Run with theorem: pick a theorem, pick the load (by tapping the drawing), solve, and check
 // every theorem reaches the hand-worked answer with a drawing on its steps; Back walks the
-// stages; Run the circuit returns to the running board with the load selected.
+// stages; a step's drawing tapped opens on the whole screen, and Back closes it; Run the circuit
+// returns to the running board with the load selected.
 // Usage: npm run build && node tests/theorem-ui.mjs
 import { chromium } from 'playwright';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
@@ -60,6 +61,19 @@ await page.click('.th-alt [data-m=mesh]'); await page.waitForTimeout(400);
 const mesh = await page.evaluate(() => ({ shown: [...document.querySelectorAll('.th-alt-b')].filter((b) => !b.hidden).map((b) => b.dataset.b), text: [...document.querySelectorAll('.th-alt-b:not([hidden])')].map((b) => b.textContent).join(' '), answer: document.querySelector('.th-answer b').textContent }));
 check(mesh.shown.every((m) => m === 'mesh') && /KVL round mesh/.test(mesh.text) && mesh.answer.includes('1.731 A'), 'Mesh analysis switch shows KVL with mesh currents, same answer');
 await page.click('.th-alt [data-m=nodal]'); await page.waitForTimeout(300);
+
+// a step's drawing tapped opens on the whole screen; double-tap zooms in; Back returns to the steps
+const fig = await page.$('.th-step .th-zoomable');
+await fig.scrollIntoViewIfNeeded(); await fig.tap(); await page.waitForTimeout(400);
+const zv = await page.evaluate(() => { const z = document.querySelector('.th-zoom'), c = z?.querySelector('canvas'), r = c?.getBoundingClientRect(); return z && { w: r.width, h: r.height, title: z.querySelector('.an-head b').textContent }; });
+check(zv && zv.w > 380 && zv.h > 500, `tapping a step's drawing shows it on the whole screen (${zv && Math.round(zv.w)}×${zv && Math.round(zv.h)}, "${zv?.title}")`);
+const zb = await (await page.$('.th-zoom-body')).boundingBox();
+await page.touchscreen.tap(zb.x + zb.width / 2, zb.y + zb.height / 2); await page.waitForTimeout(80);
+await page.touchscreen.tap(zb.x + zb.width / 2, zb.y + zb.height / 2); await page.waitForTimeout(300);
+const scale = await page.evaluate(() => +(/scale\(([\d.]+)\)/.exec(document.querySelector('.th-zoom-cv').style.transform) || [0, 1])[1]);
+check(scale > 1.5, `double-tap zooms in (×${scale})`);
+await page.evaluate(() => window.raptiBack()); await page.waitForTimeout(300);
+check(!(await page.$('.th-zoom')) && (await page.isVisible('.th-step')), 'Back closes the zoomed drawing and keeps the steps');
 for (const [th, expect] of [['nodal', 'KCL at'], ['mesh', 'KVL round mesh']]) {
   await page.evaluate((t) => { app.editor.theorem.theorem = t; app.editor.theorem.go('solve'); }, th); await page.waitForTimeout(600);
   const s = await page.evaluate(() => ({ answer: document.querySelector('.th-answer b').textContent, text: document.querySelector('.th-body').textContent }));

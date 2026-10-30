@@ -200,7 +200,7 @@ const unit = (x, y) => { const l = Math.hypot(x, y) || 1; return [x / l, y / l];
  * height follows the figure's shape, and the view takes in every label and annotation.
  * Returns the renderer (for hit testing).
  */
-export function drawFigure(cv, built, theme, settings, maxH = 320) {
+export function drawFigure(cv, built, theme, settings, maxH = 320, { fill = false, maxK = 1.2 } = {}) {
   const { doc, hi, notes, load } = built;
   const st = { ...settings, grid: 'none', showValues: true, showNames: true, currentDots: false };
   const r = new Renderer(cv);
@@ -208,10 +208,13 @@ export function drawFigure(cv, built, theme, settings, maxH = 320) {
   const base = drawingBox(doc);
   const W = cv.clientWidth || 320, pad = 12;
   const ctx = cv.getContext('2d');
-  // annotations are sized in pixels, so the box they need depends on the scale: settle it in two rounds
+  // annotations are sized in pixels, so the box they need depends on the scale: settle it in
+  // rounds, until the scale holds
   let box = base, k = 1;
-  for (let round = 0; round < 2; round++) {
-    k = Math.min(1.2, (W - 2 * pad) / Math.max(1, box[2] - box[0]));
+  for (let round = 0; round < 6; round++) {
+    const was = k;
+    k = Math.min(maxK, (W - 2 * pad) / Math.max(1, box[2] - box[0]), fill ? (maxH - 2 * pad) / Math.max(1, box[3] - box[1]) : Infinity);
+    if (round > 1 && Math.abs(k - was) < 0.005 * was) break;
     box = [...base];
     for (const d of layout(notes, k, load, ctx, doc)) {
       if (!d.w) continue;
@@ -219,10 +222,11 @@ export function drawFigure(cv, built, theme, settings, maxH = 320) {
       box = [Math.min(box[0], cx - hw), Math.min(box[1], cy - hh), Math.max(box[2], cx + hw), Math.max(box[3], cy + hh)];
     }
   }
-  const H = Math.round(Math.max(140, Math.min(maxH, (box[3] - box[1]) * k + 2 * pad)));
+  // (filling a given height: the whole drawing as big as it fits, as in the zoomed view)
+  const H = fill ? Math.round(maxH) : Math.round(Math.max(140, Math.min(maxH, (box[3] - box[1]) * k + 2 * pad)));
   cv.style.height = H + 'px';
   r.resize();
-  k = Math.min(1.2, (W - 2 * pad) / Math.max(1, box[2] - box[0]), (H - 2 * pad) / Math.max(1, box[3] - box[1]));
+  k = Math.min(maxK, (W - 2 * pad) / Math.max(1, box[2] - box[0]), (H - 2 * pad) / Math.max(1, box[3] - box[1]));
   r.scale = k; r.ox = W / 2 - ((box[0] + box[2]) / 2) * k; r.oy = H / 2 - ((box[1] + box[3]) / 2) * k;
   r.draw({ doc, sim: null, running: false, theme, t: 0, probes: [], settings: st, selection: hi, selWires: new Set(), graph: new WireGraph(doc) });
   paint(r, layout(notes, k, load, r.ctx, doc), theme);

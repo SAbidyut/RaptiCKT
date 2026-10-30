@@ -40,9 +40,10 @@ export class TheoremView {
 
   close() { this.host.classList.remove('open'); this.ed.overlayClosed('theorem'); }
 
-  /** Android back: one stage back, then close. */
+  /** Android back: a zoomed drawing first, then one stage back, then close. */
   back() {
-    if (this.stage === 'solve') this.go('target');
+    if (this.zoomed) this.unzoom();
+    else if (this.stage === 'solve') this.go('target');
     else if (this.stage === 'target') this.go('pick');
     else this.close();
     return true;
@@ -50,7 +51,96 @@ export class TheoremView {
 
   go(stage) { this.stage = stage; this.render(); }
 
+  /**
+   * A step's drawing on the whole screen, as big as it fits: pinch or double-tap to zoom in
+   * further, drag to move round it; Back (or ✕) returns to the steps.
+   */
+  zoom(built, title) {
+    this.unzoom();
+    const z = document.createElement('div');
+    z.className = 'th-zoom';
+    z.innerHTML = `
+      <div class="an-head">
+        <button class="icon-btn" data-z="close" title="Back">${icon('back', 22)}</button>
+        <b>${inline(title)}</b>
+        <span class="grow"></span>
+        <button class="icon-btn" data-z="turn" title="Turn sideways">${icon('rotate', 20)}</button>
+        <button class="icon-btn" data-z="fit" title="Fit">${icon('fit', 20)}</button>
+      </div>
+      <div class="th-zoom-body"><canvas class="th-zoom-cv"></canvas></div>
+      <p class="th-zoom-hint">Pinch or double-tap to zoom · drag to move</p>`;
+    this.host.appendChild(z);
+    this.zoomed = z;
+    const body = z.querySelector('.th-zoom-body'), cv = z.querySelector('canvas');
+    // the drawing fills the screen; zooming further scales and moves it
+    // (turned a quarter round, a wide drawing takes the tall screen's length: turn the phone)
+    let s = 1, tx = 0, ty = 0, turned = false;
+    const apply = () => { cv.style.transform = `translate(${tx}px, ${ty}px)${turned ? ' rotate(90deg)' : ''} scale(${s})`; };
+    const paint = () => {
+      const W = body.clientWidth, H = body.clientHeight;
+      cv.style.width = (turned ? H : W) + 'px';
+      cv.style.left = (turned ? (W - H) / 2 : 0) + 'px';
+      cv.style.top = (turned ? (H - W) / 2 : 0) + 'px';
+      // (measured untransformed: the canvas takes its pixel size from its box on screen)
+      cv.style.transform = 'none';
+      drawFigure(cv, built, this.theme(), this.ed.settings, turned ? W : H, { fill: true, maxK: 3 });
+      s = 1; tx = ty = 0;
+      apply();
+    };
+    const clamp = () => {
+      s = Math.max(1, Math.min(5, s));
+      const mx = (body.clientWidth * (s - 1)) / 2, my = (body.clientHeight * (s - 1)) / 2;
+      tx = Math.max(-mx, Math.min(mx, tx)); ty = Math.max(-my, Math.min(my, ty));
+      apply();
+    };
+    // zoom by f keeping the point (px, py) of the view (from its centre) where it is
+    const zoomAt = (f, px, py) => { const ns = Math.max(1, Math.min(5, s * f)); f = ns / s; tx = px - (px - tx) * f; ty = py - (py - ty) * f; s = ns; clamp(); };
+    requestAnimationFrame(() => {
+      // a wide drawing on an upright screen starts turned: it comes out biggest so
+      const b = built.doc.bounds();
+      turned = !!b && body.clientHeight > body.clientWidth && b[2] - b[0] > 1.2 * (b[3] - b[1]);
+      z.querySelector('[data-z=turn]').classList.toggle('on', turned);
+      paint();
+    });
+    const pts = new Map();
+    let last = null, tap = 0;
+    const centre = (e) => { const r = body.getBoundingClientRect(); return [e.clientX - r.left - r.width / 2, e.clientY - r.top - r.height / 2]; };
+    body.addEventListener('pointerdown', (e) => {
+      body.setPointerCapture?.(e.pointerId);
+      pts.set(e.pointerId, centre(e));
+      last = null;
+      if (pts.size === 1) {
+        const now = Date.now();
+        if (now - tap < 300) { const [px, py] = centre(e); if (s > 1.05) { s = 1; tx = ty = 0; clamp(); } else zoomAt(2.5, px, py); tap = 0; } else tap = now;
+      }
+    });
+    body.addEventListener('pointermove', (e) => {
+      if (!pts.has(e.pointerId)) return;
+      const prev = pts.get(e.pointerId), cur = centre(e);
+      pts.set(e.pointerId, cur);
+      if (pts.size === 1) { tx += cur[0] - prev[0]; ty += cur[1] - prev[1]; clamp(); return; }
+      const [a, b] = [...pts.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]), mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (last) { zoomAt(d / Math.max(1, last.d), mid[0], mid[1]); tx += mid[0] - last.mid[0]; ty += mid[1] - last.mid[1]; clamp(); }
+      last = { d, mid };
+    });
+    const up = (e) => { pts.delete(e.pointerId); last = null; };
+    body.addEventListener('pointerup', up);
+    body.addEventListener('pointercancel', up);
+    body.addEventListener('wheel', (e) => { e.preventDefault(); const [px, py] = centre(e); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, px, py); }, { passive: false });
+    z.querySelector('[data-z=close]').addEventListener('click', () => this.unzoom());
+    z.querySelector('[data-z=fit]').addEventListener('click', () => { s = 1; tx = ty = 0; clamp(); });
+    z.querySelector('[data-z=turn]').addEventListener('click', (e) => { turned = !turned; e.currentTarget.classList.toggle('on', turned); paint(); });
+  }
+
+  unzoom() {
+    if (!this.zoomed) return;
+    this.zoomed.remove();
+    this.zoomed = null;
+  }
+
   render() {
+    this.unzoom();
     const th = THEOREMS.find((t) => t.id === this.theorem);
     const title = this.stage === 'pick' ? 'Run with theorem' : th.title;
     this.host.innerHTML = `
@@ -163,7 +253,7 @@ export class TheoremView {
         return `
         <section class="th-step">
           <h3><i class="${m ? '' : 'dot'}">${m ? m[1] : ''}</i><span>${inline(m ? m[2] : s.title)}</span></h3>
-          ${s.fig ? '<canvas class="th-fig"></canvas>' : ''}
+          ${s.fig ? `<div class="th-figwrap"><canvas class="th-fig th-zoomable" title="Tap to zoom"></canvas><i class="th-zoomtag">${icon('fullscreen', 14)}</i></div>` : ''}
           ${s.blocks.map((b) => this.block(b)).join('')}
           ${s.result.length ? `<div class="th-res">${s.result.map(([k, v]) => `<span>${inline(k)} = <b>${esc(v)}</b></span>`).join('')}</div>` : ''}
         </section>`;
@@ -181,8 +271,10 @@ export class TheoremView {
       const s = res.steps[i], cv = cvs[i].querySelector('canvas');
       if (!cv) return;
       const built = s.fig.kind === 'board' ? boardFigure(this.ed.doc, s.fig, prep.net, this.method) : ladderFigure(s.fig);
-      if (built) drawFigure(cv, built, this.theme(), this.ed.settings);
-      else cv.remove();
+      if (!built) { cv.remove(); return; }
+      drawFigure(cv, built, this.theme(), this.ed.settings);
+      // a tap shows it on the whole screen
+      cv.onclick = () => this.zoom(built, s.title.replace(/^Step \d+ — /, ''));
     };
     requestAnimationFrame(() => res.steps.forEach((s, i) => draw(i)));
     // Nodal ⇄ Mesh: every switch on the page follows, and the drawings show node names or mesh currents

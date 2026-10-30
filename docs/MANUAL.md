@@ -630,6 +630,7 @@ Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` com
 2. Tap **⋮ → Run with theorem** and choose a theorem — **Thevenin**, **Norton**, **Superposition**, **Source transformation**, **Maximum power transfer**, **Millman**, **Reciprocity** or **Tellegen** — or, under **Analysis methods**, **Nodal analysis** or **Mesh analysis**.
 3. Choose the resistor (the load): tap it on the drawing or in the list. Choose **Current I** or **Voltage V**.
 4. Tap **Solve step by step**. Scroll through the steps. **Run the circuit** at the end goes back to the board, runs the simulation and selects the load, so you can compare with the live reading.
+5. Tap a step's drawing to see it on the whole screen: a wide circuit comes up turned sideways to fill the screen (turn the phone; **⟳** turns it back). Pinch or double-tap to zoom in, drag to move round it, **Fit** to see all of it again. **Back** returns to the steps.
 
 #### What each theorem shows
 
