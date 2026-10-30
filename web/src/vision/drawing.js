@@ -158,16 +158,16 @@ export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Ma
     if (p.unsure) notes.push(`The + of the source at ${describe(p, S)} could not be seen; + was put at its ${polarity === 'from' ? 'first' : 'second'} end.`);
     if (p.type === 'unknown') notes.push(`A part ${describe(p, S)} could not be recognised and was read as a resistor.`);
     index.set(k, parts.length);
-    parts.push({ kind, text: L.text || '', value: L.value ?? defaultValue(kind), from: { ...A }, to: { ...B }, polarity, control: L.control || '', a: p.a, b: p.b });
+    parts.push({ kind, text: L.text || '', value: L.value ?? defaultValue(kind), from: { ...A }, to: { ...B }, polarity, control: L.control || '', a: p.a, b: p.b, d: p.axis === 'd' });
   });
   let wires = [];
   for (const wv of S.wires) {
     const A = at[wv.a], B = at[wv.b];
     if (!A || !B || (A.x === B.x && A.y === B.y)) continue;
-    wires.push({ from: { ...A }, to: { ...B }, a: wv.a, b: wv.b });
+    wires.push({ from: { ...A }, to: { ...B }, a: wv.a, b: wv.b, d: wv.dir === 'd' });
   }
   wires = [...wires, ...squareUp(S, at, parts, wires)];
-  for (const x of [...parts, ...wires]) { delete x.a; delete x.b; }
+  for (const x of [...parts, ...wires]) { delete x.a; delete x.b; delete x.d; }
   const ground = S.grounds.map((g) => at[g.v]).filter(Boolean).map((p) => ({ ...p }));
   const qs = quantities.map((q) => {
     if (q.kind === 'node_voltage') {
@@ -198,7 +198,23 @@ export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Ma
  * nothing uses are taken out again.
  */
 function squareUp(S, at, parts, wires) {
-  const slanting = (e) => e.from.x !== e.to.x && e.from.y !== e.to.y;
+  // (and what was drawn slanting but came out lying along a part or another node's wire, as two
+  // sides of a delta between the same two corners: led round too)
+  const lies = new Set();
+  const along0 = (e, g) => {
+    const [a, b] = [e.from, e.to], [c, d] = [g.from, g.to];
+    if (a.x === b.x && c.x === d.x && a.x === c.x) return Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y)) > Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y));
+    if (a.y === b.y && c.y === d.y && a.y === c.y) return Math.min(Math.max(a.x, b.x), Math.max(c.x, d.x)) > Math.max(Math.min(a.x, b.x), Math.min(c.x, d.x));
+    return false;
+  };
+  const isWire = (e) => wires.includes(e);
+  const laid = [];
+  for (const e of [...parts.filter((x) => !x.d), ...wires.filter((x) => !x.d), ...parts.filter((x) => x.d), ...wires.filter((x) => x.d)]) {
+    if (e.from.x !== e.to.x && e.from.y !== e.to.y) continue;
+    if (e.d && laid.some((g) => along0(e, g) && !(isWire(e) && isWire(g)))) { lies.add(e); continue; }
+    laid.push(e);
+  }
+  const slanting = (e) => lies.has(e) || (e.from.x !== e.to.x && e.from.y !== e.to.y);
   if (![...parts, ...wires].some(slanting)) return [];
   // the nodes the level and upright wires make (a slanting wire joins two of them once it is led)
   const n = S.vertices.length;

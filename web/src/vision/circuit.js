@@ -113,7 +113,9 @@ export function readStructure(img, fig) {
         const endV = j === pts.length - 1 ? nodeV(e.b) : addV(run[run.length - 1][0], run[run.length - 1][1], { cut: inS[j + 1] });
         if (k > 0) shapeTerm[inS[k - 1]].push(startV);
         if (j < pts.length - 1) shapeTerm[inS[j + 1]].push(endV);
-        const keep = simplify(run, eps);
+        // (a zigzag drawn small and tight, run together into a band: a piece of its own)
+        const bands = bandsOf(run, art, W, H, sw);
+        const keep = [...new Set([...simplify(run, eps), ...bands.flat()])].sort((a, b) => a - b);
         const runId = runs++;
         let prevV = startV;
         for (let q = 1; q < keep.length; q++) {
@@ -121,7 +123,8 @@ export function readStructure(img, fig) {
           const vb = q === keep.length - 1 ? endV : addV(b[0], b[1]);
           const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy);
           const ang = deg(Math.atan2(Math.abs(dy), Math.abs(dx)));
-          pieces.push({ id: pieces.length, a: prevV, b: vb, pts: run.slice(keep[q - 1], keep[q] + 1), len, dx, dy, dir: ang <= 15 ? 'h' : ang >= 75 ? 'v' : null, cls: null, run: runId, k: q - 1 });
+          const band = bands.some(([i0, i1]) => keep[q - 1] >= i0 && keep[q] <= i1);
+          pieces.push({ id: pieces.length, a: prevV, b: vb, pts: run.slice(keep[q - 1], keep[q] + 1), len, dx, dy, dir: band ? null : ang <= 15 ? 'h' : ang >= 75 ? 'v' : null, cls: band ? 'other' : null, band, run: runId, k: q - 1 });
           prevV = vb;
         }
       } else if (run.length === 1 && k > 0 && j < pts.length - 1 && inS[k - 1] !== inS[j + 1]) {
@@ -214,11 +217,13 @@ export function readStructure(img, fig) {
   }
   // a zigzag drawn slanting (a side of a bridge drawn as a diamond) thins into short strokes by
   // turns level and upright, a staircase: no wire runs so
+  // (each stroke turning well away from the one before)
+  const turn = (p, q) => (p.dx * q.dx + p.dy * q.dy) / (p.len * q.len || 1) < 0.65;
   for (const list of byRun.values()) {
-    const step = (p) => !p.cls && p.dir && p.len < 6 * sw;
+    const step = (p) => !p.cls && p.len < 6 * sw;
     for (let k = 0; k < list.length;) {
       let j = k;
-      if (step(list[k])) while (j + 1 < list.length && step(list[j + 1]) && list[j + 1].dir !== list[j].dir) j++;
+      if (step(list[k])) while (j + 1 < list.length && step(list[j + 1]) && turn(list[j], list[j + 1])) j++;
       if (j - k >= 2 && axisOf(vertices[list[k].a], vertices[list[j].b]) === 'd') for (let t = k; t <= j; t++) list[t].cls = 'other';
       k = j + 1;
     }
@@ -231,7 +236,7 @@ export function readStructure(img, fig) {
   for (const p of pieces) {
     if (p.cls || p.dir || p.a === p.b || p.len < 8 * sw) continue;
     const a = deg(Math.atan2(Math.abs(p.dy), Math.abs(p.dx)));
-    if (a < 25 || a > 65 || [p.a, p.b].some((v) => at[v].length < 2 && vertices[v].cut == null)) continue;
+    if (a < 20 || a > 70 || [p.a, p.b].some((v) => at[v].length < 2 && vertices[v].cut == null)) continue;
     const next = [p.a, p.b].flatMap((v) => at[v].filter((id) => id !== p.id).map((id) => pieces[id]));
     // (the stroke on from either end, where nothing else meets, taken leaving p's end the way
     // p arrives at it)
@@ -239,9 +244,15 @@ export function readStructure(img, fig) {
       if (id === p.id) return false;
       const q = pieces[id], into = v === p.b ? p : { dx: -p.dx, dy: -p.dy, len: p.len };
       const out = q.a === v ? q : { dx: -q.dx, dy: -q.dy, len: q.len };
-      return sharp(into, out);
+      // (two long strokes meeting sharply are a corner, as at the foot of a V; a zigzag's are short,
+      // and of a length: a long stroke into a zigzag's first short tooth is its lead)
+      return sharp(into, out) && Math.min(p.len, q.len) < 12 * sw && q.len >= 0.4 * p.len;
     }));
-    const held = [p.a, p.b].some((v) => at[v].length >= 3 || vertices[v].cut != null) || next.some((q) => q.dir && q.len >= 3 * sw);
+    // (or goes on round a bend into another long stroke, as a hexagon's sides do, or into a
+    // zigzag run together into a band; the corner where wires meet may lie a tiny step on, the
+    // thinning having split it)
+    const meet = (v) => at[v].length >= 3 || vertices[v].cut != null;
+    const held = [p.a, p.b].some((v) => meet(v) || at[v].some((id) => id !== p.id && pieces[id].len < 1.5 * sw && meet(other(pieces[id], v)))) || next.some((q) => (q.dir && q.len >= 3 * sw) || (q.cls !== 'other' && q.len >= 6 * sw) || q.band);
     if (turns || !held) continue;
     p.dir = 'd'; p.cls = 'wire';
   }
@@ -389,8 +400,11 @@ export function readStructure(img, fig) {
     }
     let part = classifyPath(vertices[a], vertices[b], pts, box, sw, list, orderPath(a, b, list, pieces, at), lead);
     part = coilRings(part, vertices[a], vertices[b], box);
+    // (a zigzag run together into a band is one, however straight the line through it)
+    const band = list.some((id) => pieces[id].band) && part.type !== 'inductor';
+    if (band) part.type = 'resistor';
     // an arrowhead drawn on the wire: the wire goes on, and the current's direction is marked
-    const mark = part.type === 'inductor' ? null : markOf(vertices[a], vertices[b], pts);
+    const mark = band || part.type === 'inductor' ? null : markOf(vertices[a], vertices[b], pts);
     if (mark) {
       const dir = Math.abs(vertices[a].x - vertices[b].x) >= Math.abs(vertices[a].y - vertices[b].y) ? 'h' : 'v';
       for (const id of list) { pieces[id].cls = 'wire'; pieces[id].dir = axisOf(vertices[a], vertices[b]) === 'd' ? 'd' : dir; }
@@ -401,7 +415,7 @@ export function readStructure(img, fig) {
     // zigzags or coils: what never turns back and is hardly longer than its ends are apart is wire
     // (unless it turns this way and that all along, a zigzag drawn small and tight)
     const chord = Math.hypot(vertices[a].x - vertices[b].x, vertices[a].y - vertices[b].y);
-    if (part.type !== 'inductor' && part.flips <= 1 && part.turns < 4 && len < 1.35 * chord) {
+    if (!band && part.type !== 'inductor' && part.flips <= 1 && part.turns < 4 && len < 1.35 * chord) {
       // (a wire may slant, as a bridge's sides do)
       const dir = axisOf(vertices[a], vertices[b]);
       for (const id of list) { pieces[id].cls = 'wire'; pieces[id].dir = dir; }
@@ -731,12 +745,73 @@ function orderPath(a, b, list, pieces, at) {
 }
 
 /**
- * Which way a part or wire from A to B runs: 'h' (level), 'v' (upright) or 'd' (slanting by 30°
- * to 60°, as the sides of a bridge drawn as a diamond).
+ * Which way a part or wire from A to B runs: 'h' (level), 'v' (upright) or 'd' (slanting by 20°
+ * to 70°, as the sides of a bridge drawn as a diamond or of a delta).
  */
 export function axisOf(A, B) {
   const a = deg(Math.atan2(Math.abs(B.y - A.y), Math.abs(B.x - A.x)));
-  return a > 30 && a < 60 ? 'd' : a <= 45 ? 'h' : 'v';
+  return a > 20 && a < 70 ? 'd' : a <= 45 ? 'h' : 'v';
+}
+
+/**
+ * A zigzag drawn small and tight, its teeth run together in the ink (a photo's blur, fine
+ * print): the line swells to a band about twice its width for a stretch, thin line going on in
+ * line at both ends. run: a thinned line's points. Returns its stretches that are such bands,
+ * [[i0, i1]] (indices into run).
+ */
+function bandsOf(run, art, W, H, sw) {
+  const n = run.length, r = Math.max(2, Math.round(sw));
+  if (n < 8 * sw) return [];
+  const inkAt = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < W && Y < H && art[Y * W + X] === 1; };
+  // how far the ink runs either way across the line at point i ([nx, ny] across)
+  const across = (i, nx, ny) => {
+    const [x, y] = run[i];
+    let a = 0, b = 0;
+    while (a < 6 * sw && inkAt(x - (a + 0.5) * nx, y - (a + 0.5) * ny)) a += 0.5;
+    while (b < 6 * sw && inkAt(x + (b + 0.5) * nx, y + (b + 0.5) * ny)) b += 0.5;
+    return [a, b];
+  };
+  // the ink's width across the line at each point
+  const width = run.map((_, i) => {
+    const p = run[Math.max(0, i - r)], q = run[Math.min(n - 1, i + r)];
+    const L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    const [a, b] = across(i, -(q[1] - p[1]) / L, (q[0] - p[0]) / L);
+    return a + b + 0.5;
+  });
+  // how many times the band's middle swings from one side of its line to the other, as a
+  // zigzag's teeth take it (a line drawn heavier for a stretch runs on straight)
+  const swings = (i, j) => {
+    const P = run[i], Q = run[j], L = Math.hypot(Q[0] - P[0], Q[1] - P[1]) || 1;
+    const nx = -(Q[1] - P[1]) / L, ny = (Q[0] - P[0]) / L;
+    const mid = [];
+    for (let k = i; k <= j; k++) { const [a, b] = across(k, nx, ny); mid.push((run[k][0] - P[0]) * nx + (run[k][1] - P[1]) * ny + (b - a) / 2); }
+    const mean = mid.reduce((t, v) => t + v, 0) / mid.length;
+    let side = 0, n = 0;
+    for (const v of mid) {
+      const s = v - mean > 0.15 * sw ? 1 : v - mean < -0.15 * sw ? -1 : 0;
+      if (s && side && s !== side) n++;
+      if (s) side = s;
+    }
+    return n;
+  };
+  const med = (a) => [...a].sort((u, v) => u - v)[a.length >> 1];
+  // (over a tooth or two: teeth that only just touch leave it wide by turns)
+  const smooth = width.map((_, i) => { const a = width.slice(Math.max(0, i - r), i + r + 1).sort((u, v) => u - v); return a[Math.floor(0.7 * (a.length - 1))]; });
+  // (the line's own width, a thin one as wide as it is drawn: but a band is wide for the
+  // picture's lines too, not a stroke of a pen pressed harder)
+  const ref = Math.max(0.8 * sw, Math.min(sw, med(width)));
+  const out = [];
+  // (wide all along, if a little less where the teeth cross)
+  for (let i = 0; i < n;) {
+    if (smooth[i] < 1.25 * ref) { i++; continue; }
+    let j = i;
+    while (j + 1 < n && smooth[j + 1] >= 1.25 * ref) j++;
+    const len = Math.hypot(run[j][0] - run[i][0], run[j][1] - run[i][1]), wide = med(smooth.slice(i, j + 1));
+    // (long enough for a zigzag, thin line on either side)
+    if (wide >= 1.6 * ref && len >= 4 * sw && len <= 20 * sw && i >= 1.5 * sw && n - 1 - j >= 1.5 * sw && swings(i, j) >= 4) out.push([i, j]);
+    i = j + 1;
+  }
+  return out;
 }
 
 /**

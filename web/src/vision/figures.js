@@ -86,9 +86,12 @@ export function findFigures(ink, w, h, sw) {
     const box = [Math.min(...g.map((c) => c.x0)), Math.min(...g.map((c) => c.y0)), Math.max(...g.map((c) => c.x1)), Math.max(...g.map((c) => c.y1))];
     // a figure has both directions of wire and some size
     const hasH = g.some((c) => c.hrun >= 9 * sw), hasV = g.some((c) => c.vrun >= 9 * sw);
-    if (!hasH || !hasV) continue;
-    // (a rule across the page with a heading's box on it is no circuit: far too flat)
     const bw = box[2] - box[0] + 1, bh = box[3] - box[1] + 1;
+    // (a drawing of slanting lines, a delta or a star, may have wires of one way only: a thin
+    // drawing of some size in both ways)
+    const slants = (hasH || hasV) && Math.min(bw, bh) >= 12 * sw && g.reduce((t, c) => t + c.area, 0) < 0.15 * bw * bh;
+    if (!(hasH && hasV) && !slants) continue;
+    // (a rule across the page with a heading's box on it is no circuit: far too flat)
     if (Math.min(bw, bh) < 0.06 * Math.max(bw, bh)) continue;
     figures.push({ box, parts: g.map((c) => c.id) });
   }

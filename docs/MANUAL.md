@@ -683,7 +683,8 @@ The picture is read **on this phone**: no internet, no account or key, and the p
 #### What the phone reads
 
 - Straight wires and the joints between them; resistors (zigzags), coils (bumps, or loops like a spring seen from the side), capacitors and batteries of one cell or more (plates: the long plate is +), grounds, and open switches (a lever slanting from one wire end towards the next).
-- Wires and parts drawn slanting, as in a bridge drawn as a diamond: on the board they are laid level and upright, joined exactly as drawn.
+- Wires and parts drawn slanting, as in a bridge drawn as a diamond or a delta and a star drawn as triangles: on the board they are laid level and upright, joined exactly as drawn. Values printed along a slanting side are read too, also with a name before them (**x₁ = 2.5Ω**).
+- Resistors printed small, whose zigzag runs together into a thick bit of the line in a photo, and decimal points that run into the next digit (3.33Ω).
 - Circles (or ovals) as independent sources — **+ −** marks make a voltage source, **~** an AC source, an arrow a current source (also one drawn on the wire running on through the circle) — and diamonds as **dependent sources**, with the expression written beside them (0.1vₓ, 4iₓ).
 - Values with their units and prefixes: 20 Ω, 4.7 kΩ, 2 mH, 10 μF, 9 V, 3 A; values printed as fractions (½ H, ¼ F); a conductance in siemens (2 S) is a resistor of 1/G (0.5 Ω).
 - Marked quantities: **+ vₓ −** across a part, an arrow with **i** beside a branch (or an arrowhead drawn on the wire itself, named like **I_A**), a name like **vₓ** at a node. A dependent source is tied to the quantity its expression names. Mesh currents drawn as round arrows inside the meshes (i₁, i₂) are left out: they are no parts.

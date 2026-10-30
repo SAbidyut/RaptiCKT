@@ -8,6 +8,7 @@ import { readStructure, plateGap } from './circuit.js';
 import { findText } from './text.js';
 import { readWords } from './labels.js';
 import { assignLabels } from './assign.js';
+import { slantedWords } from './slant.js';
 import { toDrawing } from './drawing.js';
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -72,7 +73,7 @@ export async function readPicture(picture, { onProgress, signal } = {}) {
     if (parts.length < 2) continue;
     const T = findText(img, fig, S);
     const R = readWords(T.words, T.height, img, T.tilt);
-    const words = R.words.map((w, k) => ({ ...w, read: R.reads[k] }));
+    const words = slantedWords(img, fig, S, R.words.map((w, k) => ({ ...w, read: R.reads[k] })), T.height);
     const A = assignLabels(S, words, T.arrows, T.height, fig);
     const D = toDrawing(S, p.sw, { title: A.title || `Circuit ${circuits.length + 1}`, labels: A.labels, quantities: A.quantities, asked: A.quantities.map((q) => q.name) });
     D.notes = [...A.notes, ...D.notes];

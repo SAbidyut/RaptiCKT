@@ -4,8 +4,9 @@
 // tools/glyphs/figures.py) are read into circuits whose parts, values, marked quantities and
 // answers are right; so are they on ruled or squared paper and photographed well turned, a
 // practice problem printed in a book's own style, a bridge drawn as a diamond, conductances in
-// siemens, mesh currents drawn as round arrows, values printed as fractions, and a circuit drawn
-// here with an open switch and a coil drawn in loops.
+// siemens, mesh currents drawn as round arrows, values printed as fractions, a delta whose values
+// are printed along its slanting sides, and a circuit drawn here with an open switch and a coil
+// drawn in loops.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -287,6 +288,18 @@ for (const name of ['fractions.png', 'fractions-photo.jpg']) {
     assert.deepEqual(r.texts, ['1/2 H', '1/4 F', '2 Ω', '6 V']);
     near(r.c.parts.find((p) => p.kind === 'inductor').value, 0.5, 1e-12, 'L');
     near(r.c.parts.find((p) => p.kind === 'capacitor').value, 0.25, 1e-12, 'C');
+  });
+}
+
+for (const name of ['delta.png', 'delta-photo.jpg']) {
+  test(`${name}: a delta's values printed along its slanting sides ("x₁ = 4Ω") and a resistor printed small, its zigzag run together, are read — 3 A through the 4 Ω, 2 A round the other two`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['resistor', 'resistor', 'resistor', 'voltage_source']);
+    assert.deepEqual(r.texts, ['12 V', '2.5 Ω', '3.5 Ω', '4 Ω']);
+    const I = currents(r);
+    near(I.get(4), 3, 1e-6, '4 Ω');
+    near(I.get(2.5), 2, 1e-6, '2.5 Ω');
+    near(I.get(3.5), 2, 1e-6, '3.5 Ω');
   });
 }
 

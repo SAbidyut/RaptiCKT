@@ -78,6 +78,35 @@ class Fig:
         self.d.line([tuple(p) for p in pts], fill=0, width=LW, joint='curve')
         if label: self.text(tuple(c + n * 46 * side), label)
 
+    def tight(self, a, b, label=None, side=1):
+        """a resistor printed small, its zigzag's teeth as close as the line is thick: they run
+        together into a band"""
+        c, u, n = self._ends(a, b, 44)
+        pts = [c - u * 22] + [c - u * 22 + u * (2 + 4 * k) + n * (4 if k % 2 == 0 else -4) for k in range(10)] + [c + u * 22]
+        self.d.line([tuple(p) for p in pts], fill=0, width=LW, joint='curve')
+        if label: self.text(tuple(c + n * 40 * side), label)
+
+    def along(self, a, b, parts, side=1, off=50):
+        """a label printed along a slanting part, turned to its slant ("x₁ = 2.5Ω" up a delta's
+        side): parts are (text, font, raised) pieces in a row"""
+        A, B = np.array(self.P(*a), float), np.array(self.P(*b), float)
+        c, u = (A + B) / 2, (B - A) / np.linalg.norm(B - A)
+        if u[0] < 0: u = -u
+        n = np.array([-u[1], u[0]])
+        fonts = {'f': self.f, 'i': self.fi, 's': self.fs}
+        widths = [self.d.textlength(t, font=fonts[f]) for t, f, _ in parts]
+        pad = 12
+        lay = Image.new('L', (int(sum(widths)) + 2 * pad, 64), 0)
+        ld = ImageDraw.Draw(lay)
+        x = pad
+        for (t, f, raised), wd in zip(parts, widths):
+            ld.text((x, 32 + (12 if raised else 0)), t, font=fonts[f], fill=255, anchor='lm')
+            x += wd
+        lay = lay.rotate(math.degrees(math.atan2(-u[1], u[0])), resample=Image.BICUBIC, expand=True)
+        at = c + n * off * side
+        ink = Image.new('L', lay.size, 0)
+        self.im.paste(ink, (int(at[0] - lay.width / 2), int(at[1] - lay.height / 2)), lay)
+
     def vsource(self, a, b, label, plus_at_a=True, side=-1):
         c, u, n = self._ends(a, b, 64)
         r = 32
@@ -698,6 +727,20 @@ def main():
     f.frac((f.P(3, 1)[0] + 56, f.P(3, 1)[1]), '1', '4', 'F')
     f.wire((0, 2), (3, 2))
     f.save(out, 'fractions', random.Random(101))
+
+    # 14. a delta drawn as a triangle, its slanting sides' values printed along them ("x₁ = 4Ω",
+    # the name before the value) and its base a resistor printed small, its zigzag run together:
+    # 12 V across the 4 Ω, 3 A through it and 2 A round the other two
+    f = Fig(4, 2)
+    f.vsource((0, 0), (0, 2), '12 V', plus_at_a=True)
+    T, L, R = (2, 0), (1, 2), (3, 2)
+    f.wire((0, 0), T); f.wire((0, 2), L)
+    f.resistor(T, L, None)
+    f.along(T, L, [('x', 'i', False), ('1', 's', True), (' = 4Ω', 'f', False)], side=-1)
+    f.resistor(T, R, None)
+    f.along(T, R, [('2.5Ω', 'f', False)], side=-1)
+    f.tight(L, R, '3.5 Ω', side=1)
+    f.save(out, 'delta', random.Random(111))
     print('ok')
 
 

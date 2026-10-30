@@ -23,6 +23,25 @@ function slice(bm, a, b) {
   return { w, h, data, dy: y0 };
 }
 
+/**
+ * A decimal point run into the character after it: the blot the glyph's leftmost columns hold,
+ * low down and round, cut off. Returns { rest (the rest of the glyph), apart (a blank column
+ * between the two) }, or null.
+ */
+function dotLeft(bm) {
+  const top = (x) => { for (let y = 0; y < bm.h; y++) if (bm.data[y * bm.w + x]) return y; return bm.h; };
+  // (up to a gap, or to where the character rises from the line's lower part)
+  let x = 0;
+  while (x < bm.w && top(x) < bm.h && top(x) >= 0.65 * bm.h) x++;
+  if (x < 0.12 * bm.h || x > 0.4 * bm.h) return null;
+  let y0 = bm.h;
+  for (let c = 0; c < x; c++) y0 = Math.min(y0, top(c));
+  const dh = bm.h - y0;
+  if (Math.max(x, dh) > 1.8 * Math.min(x, dh)) return null;
+  const rest = slice(bm, x, bm.w);
+  return rest && rest.w >= 0.35 * bm.h && rest.h >= 0.8 * bm.h ? { rest, apart: top(x) === bm.h } : null;
+}
+
 /** Where a wide blot may be two (or three) touching characters: cut columns, best first. */
 function cuts(bm) {
   const col = new Float32Array(bm.w);
@@ -217,9 +236,10 @@ export function parseLabel(chars) {
  * hand }. Specks are no words; a value and its unit written apart become one. Each word is read
  * as print and as hand-writing; the figure is hand-written when most of its words read better
  * so (a printed figure keeps its printed readings: a word that reads as nothing printed is no
- * label, whatever hand-writing it may look like).
+ * label, whatever hand-writing it may look like). named: values may be named in front of them
+ * ("x₁ = 2.5Ω", as beside a delta's sides), the name read as no part of the value.
  */
-export function readWords(all, mainH, img, tilt = 0) {
+export function readWords(all, mainH, img, tilt = 0, { named = false } = {}) {
   const words = [], print = [];
   const list = all.filter((x) => x.glyphs.some((g) => g.y1 - g.y0 + 1 >= 0.45 * mainH));
   // a fraction's numerator left a word of its own (its bar run into the number under it): the
@@ -243,7 +263,10 @@ export function readWords(all, mainH, img, tilt = 0) {
     if (fr) { words.push(w); print.push(fr); continue; }
     const r = readWord(w, mainH, img, false);
     const two = r.type ? null : splitWord(w, mainH, img, tilt);
-    if (two) { words.push(...two.words); print.push(...two.reads); } else { words.push(w); print.push(r); }
+    if (two) { words.push(...two.words); print.push(...two.reads); continue; }
+    // (or a value read unsurely, when its end alone reads clearly)
+    const tail = named && (!r.type || r.score < -1.5) ? valueAfter(w, mainH, img, tilt) : null;
+    if (tail && (!r.type || tail.read.score > r.score + 1)) { words.push(tail.word); print.push(tail.read); } else { words.push(w); print.push(r); }
   }
   const sc = (r) => (r.type ? r.score : -8);
   const clear = (r) => !!r?.type && r.score > -1.5;
@@ -328,6 +351,29 @@ function fraction(w, mainH, img, tilt) {
   const unit = UNIT[m[2]], prefix = m[1] || '';
   const value = +((n.value / d.value) * (prefix ? PREFIX[prefix] : 1)).toPrecision(12);
   return { type: 'value', value, unit, prefix, imag: false, text: `${n.text}/${d.text} ${prefix}${unit}`, score: n.score + d.score + (u.score ?? 0), raw: `${n.text}/${d.text}${u.raw}`, frac: true };
+}
+
+/**
+ * A value named in front of it ("R₁ = 10 Ω", "x₁ = 2.5Ω": the reader has no "="): the longest
+ * end of the word, after a space, that reads as a value with its unit. Returns { word, read }
+ * or null.
+ */
+function valueAfter(w, mainH, img, tilt) {
+  const gs = [...w.glyphs].sort((a, b) => a.x0 - b.x0);
+  const gapAt = (k) => gs[k].x0 - Math.max(...gs.slice(0, k).map((g) => g.x1)) - 1;
+  const read = (list) => { const x = word(list.map((g) => ({ ...g })), mainH, tilt), r = readWord(x, mainH, img, false); return r.type === 'value' && r.unit && r.score > -2 ? { word: x, read: r } : null; };
+  for (let k = 1; k <= gs.length - 2; k++) {
+    if (gapAt(k) < 0.12 * mainH) continue;
+    const got = read(gs.slice(k));
+    if (got) return got;
+  }
+  // (or its start, a label after it: "5 Ω C", a corner's name beside it)
+  for (let k = gs.length - 1; k >= 2; k--) {
+    if (gapAt(k) < 0.12 * mainH) continue;
+    const got = read(gs.slice(0, k));
+    if (got) return got;
+  }
+  return null;
 }
 
 /**
@@ -423,12 +469,25 @@ export function readWord(word, mainH, img, hand = false) {
     const others = glyphs.filter((o, j) => j !== k && !low(o) && !o.small && o.y1 - o.y0 + 1 >= 0.72 * top);
     const mid = (a) => a.sort((x, y) => x - y)[a.length >> 1];
     const band = others.length ? [mid(others.map((o) => o.y0)), mid(others.map((o) => o.y1))] : null;
-    return { tiny, speck, alts: alternatives(g, top, band, hand).map((pieces) => Object.assign(pieces.map((p) => rank(p.bm, low(g), !!p.small)), { pen: pieces.pen })) };
+    // (a tiny round blot on the line is a decimal point, whatever its shape tells the reader)
+    const dot = tiny && !!band && g.y0 > (band[0] + band[1]) / 2 && Math.max(gw, gh) <= 1.8 * Math.min(gw, gh);
+    const alts = alternatives(g, top, band, hand).map((pieces) => Object.assign(pieces.map((p) => rank(p.bm, low(g), !!p.small)), { pen: pieces.pen }));
+    // (or one run into the character after it, "3.33" printed tight or blurred: a character
+    // wider than its neighbours, or than a digit is, a round blot low at its left)
+    const ws = others.map((o) => o.x1 - o.x0 + 1);
+    // (standing apart from it in the sharper picture, the two are first read apart)
+    const cut = k > 0 && band && !low(g) && !g.small && ws.length && (gw >= 1.3 * mid(ws) || gw >= 0.75 * gh) ? dotLeft(g.bitmap) : null;
+    if (cut) {
+      const two = Object.assign([{ ranked: [{ c: '.', lp: 0 }], sub: false, small: true }, rank(cut.rest, false, false)], { pen: Math.log(0.4) });
+      if (cut.apart) alts.unshift(two); else alts.push(two);
+    }
+    return { tiny, speck, dot, alts };
   });
-  // two neighbours that may be one broken character (an Ω whose arch did not print)
+  // two neighbours that may be one broken character (an Ω whose arch did not print; a decimal
+  // point is none)
   const merged = glyphs.map((g, k) => {
     const h = glyphs[k + 1];
-    if (!h || !img) return null;
+    if (!h || !img || slots[k].dot || slots[k + 1].dot) return null;
     const gap = h.x0 - g.x1 - 1, ov = Math.min(g.y1, h.y1) - Math.max(g.y0, h.y0) + 1;
     const hh = Math.max(g.y1 - g.y0, h.y1 - h.y0) + 1;
     if (gap > 0.15 * top || ov < 0.6 * Math.min(g.y1 - g.y0 + 1, h.y1 - h.y0 + 1) || Math.max(h.x1, g.x1) - Math.min(g.x0, h.x0) + 1 > 1.4 * hh) return null;
@@ -447,6 +506,7 @@ export function readWord(word, mainH, img, hand = false) {
     const sl = slots[k];
     for (const b of cur) {
       if (sl.tiny || sl.speck) { const d = Math.log(sl.tiny ? 0.25 : 0.2); push(k + 1, [{ tail: b.tail, n: b.n, score: b.score + d, skip: b.skip + d }]); }
+      if (sl.dot) push(k + 1, [add(b, { c: '.', lp: Math.log(0.5) }, { sub: false, small: true }, 0)]);
       sl.alts.forEach((pieces, ai) => {
         let partial = [{ tail: b.tail, n: b.n, score: b.score + (ai ? pieces.pen ?? Math.log(0.6) : 0), skip: b.skip }];
         for (const pc of pieces) {
