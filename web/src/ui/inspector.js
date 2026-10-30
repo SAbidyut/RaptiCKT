@@ -71,7 +71,7 @@ export class Inspector {
       </button>
       ${!e.damaged && this.ed.constructor.isPolar(e) ? `<button data-q="reverse" title="Reverse polarity">${icon('polarity', 19)}</button>` : ''}
       ${e.damaged ? '' : `<button data-q="rotate" title="Rotate">${icon('rotate', 19)}</button>`}
-      ${!e.damaged && e.canSlant() ? `<button data-q="slant" title="Slant 15° more (or drag a terminal: any angle)">${icon('slant', 19)}</button>` : ''}
+      ${!e.damaged && e.canSlant() ? `<button data-q="slantup" title="Slant 15° up (anticlockwise)">${icon('slant', 19)}</button><button data-q="slantdown" title="Slant 15° down (clockwise)">${icon('slant', 19, 'flipx')}</button>` : ''}
       ${canScope && !e.damaged ? `<button data-q="scope" title="Add to oscilloscope">${icon('scope', 19)}</button>` : ''}
       <button data-q="edit" title="Edit properties">${icon('sliders', 19)}</button>
       <button data-q="del" class="danger" title="Delete">${icon('trash', 19)}</button>`;
@@ -79,7 +79,8 @@ export class Inspector {
       const a = b.dataset.q;
       if (a === 'edit') this.openSheet();
       if (a === 'rotate') this.ed.rotateSelection();
-      if (a === 'slant') this.ed.slantSelection();
+      if (a === 'slantup') this.ed.slantSelection(-15);
+      if (a === 'slantdown') this.ed.slantSelection(15);
       if (a === 'reverse') this.ed.reversePolarity();
       if (a === 'del') this.ed.deleteSelection();
       if (a === 'scope') this.ed.addProbe({ kind: posts >= 2 ? 'volt' : 'cur', el: this.el.id });
@@ -126,7 +127,7 @@ export class Inspector {
         <div class="insp-read"></div>
         <div class="insp-actions">
           <button data-a="rotate">${icon('rotate', 18)}<span>Rotate</span></button>
-          ${e.canSlant() ? `<button data-a="slant">${icon('slant', 18)}<span>Slant</span></button>` : ''}
+          ${e.canSlant() ? `<button data-a="slantup">${icon('slant', 18)}<span>Slant up</span></button><button data-a="slantdown">${icon('slant', 18, 'flipx')}<span>Slant down</span></button>` : ''}
           <button data-a="flip">${icon('flip', 18)}<span>Flip</span></button>
           <button data-a="dup">${icon('copy', 18)}<span>Copy</span></button>
           ${posts >= 2 ? `<button data-a="scopeV">${icon('scope', 18)}<span>Scope V</span></button>` : ''}
@@ -318,7 +319,7 @@ export class Inspector {
     switch (a) {
       case 'close': this.closeSheet(); break;
       case 'rotate': this.ed.rotateSelection(); if (e.canSlant() && this.sheetOpen && this.ed.selection.has(e)) this.render(); break; // (its angle shown anew)
-      case 'slant': this.ed.slantSelection(); if (this.sheetOpen && this.ed.selection.has(e)) this.render(); break;
+      case 'slantup': case 'slantdown': this.ed.slantSelection(a === 'slantup' ? -15 : 15); if (this.sheetOpen && this.ed.selection.has(e)) this.render(); break;
       case 'flip': this.ed.flipSelection(); break;
       case 'dup': this.ed.duplicateSelection(); break;
       case 'del': this.ed.deleteSelection(); break;

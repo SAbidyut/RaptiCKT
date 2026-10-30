@@ -242,7 +242,7 @@ Tap it. It is highlighted and the **quick bar** appears near the bottom with:
 - Its **name** (R1, C2, D1…), type and a live reading (for example `3.84 V · 816 µA`). Tap this area to open all properties.
 - **Reverse polarity** (only for polarised parts such as batteries, diodes, LEDs, electrolytic capacitors): swaps the two terminals while the wires stay connected.
 - **Rotate**: turns the part 90° each tap.
-- **Slant** (only for parts with their two terminals in line, such as resistors, capacitors, coils, sources): turns the part a further **15°** each tap, at any angle round, as the sides of a delta, a star or a bridge are drawn. For any other angle, type it in the properties sheet, or drag one of its terminals (below). Its terminals stay on grid points, so wires join it as usual.
+- **Slant up / Slant down** (two buttons, only for parts with their two terminals in line, such as resistors, capacitors, coils, sources): turns the part **15°** each tap, up (anticlockwise) or down (clockwise), at any angle round, as the sides of a delta, a star or a bridge are drawn. For any other angle, type it in the properties sheet, or drag one of its terminals (below). Its terminals stay on grid points, so wires join it as usual.
 - **Scope**: adds the part to the oscilloscope.
 - **Edit** (sliders icon): opens the properties sheet.
 - **Delete**.
@@ -252,7 +252,7 @@ Tap it. It is highlighted and the **quick bar** appears near the bottom with:
 Hold a part for half a second, or tap its name in the quick bar. A sheet slides up with:
 
 - **Live readings** while the simulation runs (voltage, current, power, state…).
-- Action buttons: **Rotate**, **Slant** (15° more), **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.
+- Action buttons: **Rotate**, **Slant up** / **Slant down** (15° each way), **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.
 - **Angle** (parts that can slant): type any angle in degrees (0° points right, 90° down, −30° up and to the right), or step it with **−15°** / **+15°**. The part takes the nearest angle that keeps its terminals on grid points, within a few degrees.
 - Every adjustable property: a text box and a slider for numbers, a drop-down for choices (for example the **model** of a transistor or op-amp), a switch for yes/no.
 - A short description of the part.
@@ -278,9 +278,9 @@ Note: `m` is **milli** and `M` is **mega**. The unit letter (Ω, F, H, V, A) is 
 
 - **Move**: drag the part. It snaps to the grid. Connected wires follow and re-route neatly. A part cannot be dropped on top of another part, and its terminals never join another terminal or wire just by touching: it stops at the last free spot (drag on into free space to hop over), and you connect parts by drawing a wire. Duplicates are placed on a free spot too. The undo button reverses the move.
 - **Rotate**: quick bar button (or **R** on a keyboard).
-- **Slant**: quick bar button (or **T** on a keyboard): 15° more each time; **Rotate** turns a slanted part a quarter turn, still slanted. Tapped again and again, the part turns in place: it stays where it is (within half a grid step) and never walks away.
+- **Slant**: the two quick bar buttons (or **T** / **Shift+T** on a keyboard): 15° down or up each time; **Rotate** turns a slanted part a quarter turn, still slanted. Tapped again and again, the part turns in place: it stays where it is (within half a grid step) and never walks away.
 - **Any angle, any length**: select the part, then drag one of its **terminals** (they show small squares): that end goes where your finger takes it, at any angle, the other end stays put, and the part stretches or shortens between them (its symbol keeps its size, its leads grow). Dragging a terminal of a part that is not selected draws a wire from it (see Wiring).
-- **Slanting by itself**: in a circuit drawn slanting (a slanted part or a slanting wire in it, as a circuit read from a photo of a delta or a bridge), or with the **⟋** button on (see Wiring), a part you move between two straight wires turns to lie along the line between their far ends, and snaps onto that line when you drop it near it, so the wires run on in line with it. Straight wires stay straight at any angle as parts move; where one would cross a part or run along another wire, it takes the neatest clear shape of level, upright and 45° runs instead.
+- **Slanting by itself**: in a circuit drawn slanting (a slanted part or a slanting wire in it, as a circuit read from a photo of a delta or a bridge) a part you move between two straight wires turns to lie along the line between their far ends, and snaps onto that line when you drop it near it, so the wires run on in line with it. Straight wires stay straight at any angle as parts move; where one would cross a part or run along another wire, it takes the neatest clear shape of level, upright and 45° runs instead.
 - **Flip**: properties sheet (mirrors the part).
 - **Copy**: properties sheet or selection bar. The copy appears slightly down and right.
 - **Delete**: quick bar or selection bar.
@@ -291,7 +291,7 @@ Note: `m` is **milli** and `M` is **mega**. The unit letter (Ω, F, H, V, A) is 
 2. Drag a box **from left to right** = **window**: only parts and wires **completely inside** are selected.
 3. Drag a box **from right to left** = **crossing**: everything the box **touches** is selected.
 4. While Select is on, tap parts or wires one by one to add or remove them.
-5. A **selection bar** shows how many parts and wires are selected, with **Rotate**, **Slant**, **Copy**, **Delete** and **✕** (clear). Dragging any selected part moves them all together.
+5. A **selection bar** shows how many parts and wires are selected, with **Rotate**, the two **Slant** buttons, **Copy**, **Delete** and **✕** (clear). Dragging any selected part moves them all together.
 6. Tap **Select** again to leave the mode.
 
 #### Undo and redo
@@ -317,7 +317,7 @@ Put your finger on a terminal (or a wire's loose end) and drag it to another ter
 
 #### Straight (slanting) wires
 
-To draw a circuit as a textbook does, with slanting sides (a delta, a star, a bridge drawn as a diamond): in **Wire** mode tap the **⟋** button beside **Wire** (it lights up). Tapping two terminals then draws one **straight** wire between them, slanting if need be, instead of a right-angled one. Where a straight wire would cross a part, run over a terminal or along another wire, it takes the neatest clear shape of level, upright and 45° runs (leaving each terminal along its part's lead), and only if there is none goes round at right angles. Moving parts then keeps their straight wires straight, at any angle, and a part moved between two straight wires turns to lie along them (see **Slanting by itself** under Moving). Tap ⟋ again to go back to right-angled wires. Use **Slant**, the **Angle** field or a terminal drag on the parts themselves (above) to set them at any angle along such a side.
+To draw a circuit as a textbook does, with slanting sides (a delta, a star, a bridge drawn as a diamond): slant the parts (**Slant up / Slant down**, the **Angle** field, or a terminal drag, above) and draw the wires with your finger along the sides (above). Once a part is slanted, the circuit wires slanting by itself: tapping two terminals draws one **straight** wire between them where it runs clear, else the neatest clear shape of level, upright and 45° runs (leaving each terminal along its part's lead), and only if there is none goes round at right angles; moving parts keeps their straight wires straight at any angle, and a part moved between two straight wires turns to lie along them (see **Slanting by itself** under Moving).
 
 #### Branches and junctions
 

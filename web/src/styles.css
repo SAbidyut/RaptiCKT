@@ -885,10 +885,6 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 :root[data-theme=light] .editor.mode-operate .mseg.active { color: #15803d; }
 :root[data-theme=light] .editor.mode-wire .mseg.active { color: #b45309; }
 /* straight wires (slanting): a toggle beside Wire, shown in Wire mode only */
-.mslant { padding: 0 9px; }
-.editor.mode-operate .mslant { display: none; }
-.editor.mode-wire .mslant.active { color: #22d3ee; background: rgba(34, 211, 238, 0.14); box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.35); }
-:root[data-theme=light] .editor.mode-wire .mslant.active { color: #0e7490; }
 .editor.fs .mode-seg { right: calc(8px + var(--cut-r)); top: calc(8px + var(--stage-t)); }
 .editor.wide .mode-seg { top: 8px; }
 .editor.sheet-open.wide .mode-seg { opacity: 0; pointer-events: none; }

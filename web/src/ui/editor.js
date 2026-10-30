@@ -111,7 +111,6 @@ export class Editor {
         <div class="mode-seg" role="radiogroup" aria-label="Board mode">
           <button class="mseg" data-a="mode-operate" data-mode="operate" role="radio" title="Operate: tap switches and buttons">${icon('hand', 16)}<span>Operate</span></button>
           <button class="mseg" data-a="mode-wire" data-mode="wire" role="radio" title="Wire: draw wires, move and edit parts">${icon('wire', 16)}<span>Wire</span></button>
-          <button class="mseg mslant" data-a="straight" aria-pressed="false" title="Slanting: wires run straight between terminals at any angle, and a part moved between two wires turns to lie along them">${icon('slant', 16)}</button>
         </div>
         <div class="hud-error"></div>
         <div class="hint"></div>
@@ -161,7 +160,6 @@ export class Editor {
       case 'speed': this.openSpeed(); break;
       case 'mode-operate': this.setMode('operate', true); break;
       case 'mode-wire': this.setMode('wire', true); break;
-      case 'straight': this.setStraightWires(!this.settings.straightWires, true); break;
       default:
     }
   }
@@ -177,7 +175,6 @@ export class Editor {
     this.meterProbes = null;
     this.wireFrom = null;
     this.setMode('wire');
-    this.setStraightWires(this.settings.straightWires);
     this.renderer.maxDpr = undefined;
     this.q('.doc-name').textContent = doc.name;
     this.q('.doc-sub').textContent = doc.description ? doc.description.slice(0, 60) : `${doc.elements.length} components`;
@@ -815,7 +812,7 @@ export class Editor {
       ${burnt ? `<button data-s="repair" class="hot">${icon('reset', 17)}Repair</button>` : ''}
       ${wiresOnly ? `<button data-s="cable">${icon('wire', 17)}Cable</button>` : ''}
       ${onlyWire && !burnt ? `<button data-s="probe">${icon('scope', 17)}Scope</button>` : ''}
-      ${nEl ? `<button data-s="rotate">${icon('rotate', 17)}Rotate</button>${[...this.selection].some((e) => e.canSlant()) ? `<button data-s="slant">${icon('slant', 17)}Slant</button>` : ''}<button data-s="dup">${icon('copy', 17)}Copy</button>` : ''}
+      ${nEl ? `<button data-s="rotate">${icon('rotate', 17)}Rotate</button>${[...this.selection].some((e) => e.canSlant()) ? `<button data-s="slantup" title="Slant 15° up (anticlockwise)">${icon('slant', 17)}</button><button data-s="slantdown" title="Slant 15° down (clockwise)">${icon('slant', 17, 'flipx')}</button>` : ''}<button data-s="dup">${icon('copy', 17)}Copy</button>` : ''}
       <button data-s="del" class="danger">${icon('trash', 17)}Delete</button>
       <button data-s="x">${icon('x', 17)}</button>`;
     bar.classList.add('show');
@@ -825,7 +822,8 @@ export class Editor {
       if (s === 'repair') this.repairWires([...this.selWires]);
       if (s === 'cable') this.inspector.openWires([...this.selWires]);
       if (s === 'rotate') this.rotateSelection();
-      if (s === 'slant') this.slantSelection();
+      if (s === 'slantup') this.slantSelection(-15);
+      if (s === 'slantdown') this.slantSelection(15);
       if (s === 'dup') this.duplicateSelection();
       if (s === 'del') this.deleteSelection();
       if (s === 'x') this.select(null);
@@ -863,15 +861,6 @@ export class Editor {
       this.haptic(8);
       this.toast(m === 'operate' ? '✋ Operate: tap switches and buttons · drag parts to move them' : '🔌 Wire: tap two terminals to wire · drag parts to move them', 1800);
     }
-  }
-
-  /** Straight wires on or off: new wires run straight between their terminals (slanting), or along the grid. */
-  setStraightWires(on, byUser) {
-    this.settings.straightWires = !!on;
-    if (byUser) this.app.saveSettings();
-    const b = this.q('[data-a=straight]');
-    if (b) { b.classList.toggle('active', !!on); b.setAttribute('aria-pressed', !!on); }
-    if (byUser) { this.haptic(8); this.toast(on ? '⟋ Slanting on: wires run straight at any angle, and a part you move between two wires turns to lie along them' : 'Wires run along the grid again (a circuit drawn slanting still moves slanting)', 2600); }
   }
 
   /** Has this part something to work with a finger (a switch, button, breaker reset…)? */
@@ -1917,11 +1906,11 @@ export class Editor {
   }
 
   /**
-   * Are moves free-angled: slanting on (⟋), or a circuit drawn slanting (a slanted part or a
-   * straight slanting wire in it, as a circuit read from a photo of a delta or a bridge)?
+   * Are wires free-angled: a circuit drawn slanting (a slanted part or a straight slanting wire in
+   * it, as a circuit read from a photo of a delta or a bridge)?
    */
   slantMode() {
-    return !!this.settings.straightWires || this.doc.elements.some((e) => e.sv)
+    return this.doc.elements.some((e) => e.sv)
       || this.doc.wires.some((w) => w.pts.length === 2 && w.pts[0][0] !== w.pts[1][0] && w.pts[0][1] !== w.pts[1][1]);
   }
 
@@ -2320,7 +2309,7 @@ export class Editor {
     // (straight wires: from one to the other as the crow flies, as a delta's sides are drawn)
     // (where it would cross a part, or run over a terminal or along a wire: the neatest clear
     // shape of level, upright and 45° runs, else routed round at right angles)
-    const smart = (this.settings.straightWires && freeRoute(this.doc, a, b)) || pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
+    const smart = (this.slantMode() && freeRoute(this.doc, a, b)) || pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
     let pts = simplify(smart || route(a, b, hFirst));
     if (pts.length < 2) pts = [a, b];
     this.checkpoint();

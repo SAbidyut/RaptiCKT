@@ -42,15 +42,18 @@ const drag = async (from, to) => {
   await page.waitForTimeout(300);
 };
 
-// ---- Slant from the quick bar: 15° a tap, any angle round
+// ---- Slant from the quick bar, either way: 15° a tap, any angle round
 await tapW(await centre('R1'));
-ok('R1: its quick bar offers Slant', await page.isVisible('.quickbar [data-q=slant]'));
-await page.click('.quickbar [data-q=slant]'); await page.waitForTimeout(300);
+ok('R1: its quick bar offers Slant both ways', await page.isVisible('.quickbar [data-q=slantdown]') && await page.isVisible('.quickbar [data-q=slantup]'));
+await page.click('.quickbar [data-q=slantdown]'); await page.waitForTimeout(300);
 let r1 = await part('R1');
-ok(`one tap: 15° (${r1.deg}°), its terminals on grid points`, Math.abs(r1.deg - 15) <= 2 && r1.sv && onGrid(r1.posts));
-await page.click('.quickbar [data-q=slant]'); await page.waitForTimeout(300);
+ok(`one tap down: 15° clockwise (${r1.deg}°), its terminals on grid points`, Math.abs(r1.deg - 15) <= 2 && r1.sv && onGrid(r1.posts));
+await page.click('.quickbar [data-q=slantdown]'); await page.waitForTimeout(300);
 r1 = await part('R1');
-ok(`two taps: 30° (${r1.deg}°)`, Math.abs(r1.deg - 30) <= 2 && onGrid(r1.posts));
+ok(`two taps down: 30° (${r1.deg}°)`, Math.abs(r1.deg - 30) <= 2 && onGrid(r1.posts));
+for (let k = 0; k < 4; k++) { await page.click('.quickbar [data-q=slantup]'); await page.waitForTimeout(250); }
+r1 = await part('R1');
+ok(`four taps up from there: 30° the other way (${r1.deg}°)`, Math.abs(r1.deg + 30) <= 2 && onGrid(r1.posts));
 // ---- any angle typed in the properties sheet
 await page.click('.quickbar [data-q=edit]'); await page.waitForTimeout(400);
 ok('the sheet has an Angle field', await page.isVisible('.insp-angle input'));
@@ -87,8 +90,7 @@ await page.evaluate(() => {
 await page.waitForTimeout(400);
 // ---- straight wires: one tap of the toggle, then tap two terminals
 await page.evaluate(() => app.editor.select(null));
-await page.click('[data-a=straight]'); await page.waitForTimeout(300);
-ok('the slanting toggle is on', await page.evaluate(() => app.settings.straightWires && document.querySelector('[data-a=straight]').classList.contains('active')));
+ok('no slanting toggle beside Wire (a circuit with slanted parts wires slanting by itself)', !(await page.$('[data-a=straight]')));
 const wire = async (a, b) => { await tapW(a); await tapW(b); };
 // the delta: R1's top to R2's top, R1's bottom to R3's left, R2's bottom to R3's right; the source across R1's ends
 await wire(await post('R1', 1), await post('R2', 0));
