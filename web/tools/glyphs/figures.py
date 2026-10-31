@@ -247,14 +247,28 @@ class Fig:
             self.d.arc(box, start=ang + 180, end=ang + 360, fill=0, width=LW)
         if label: self.text(tuple(c + n * 50 * side), label)
 
-    def diode(self, a, b, label=None, side=1):
+    def diode(self, a, b, label=None, side=1, outline=False, zener=False, led=False):
         """a diode from its anode (a) to its cathode (b), printed as in an electronics book: a filled
-        triangle pointing at a bar across the wire"""
+        triangle pointing at a bar across the wire (or the triangle drawn in outline, as by hand)"""
         c, u, n = self._ends(a, b, 36)
         base, tip = c - u * 18, c + u * 16
-        self.d.polygon([tuple(base + n * 19), tuple(base - n * 19), tuple(tip)], fill=0)
+        if outline: self.d.polygon([tuple(base + n * 19), tuple(base - n * 19), tuple(tip)], outline=0, width=LW)
+        else: self.d.polygon([tuple(base + n * 19), tuple(base - n * 19), tuple(tip)], fill=0)
         bar = c + u * 18
         self.d.line([tuple(bar - n * 19), tuple(bar + n * 19)], fill=0, width=LW + 2)
+        if zener:
+            # the bar's ends bent, one each way along the wire
+            for sg in (-1, 1):
+                e = bar + n * 19 * sg
+                self.d.line([tuple(e), tuple(e + u * 9 * sg + n * 6 * sg)], fill=0, width=LW)
+        if led:
+            # two little arrows slanting away beside it
+            for k in (-1, 1):
+                a0 = c + n * 30 + u * (k * 10)
+                v = (n + u * 0.0) * 0.7 + np.array([u[0], u[1]]) * 0.7
+                a1 = a0 + v * 26
+                self.d.line([tuple(a0), tuple(a1)], fill=0, width=3)
+                self._head(a1 + v * 2, v / np.linalg.norm(v), L=10, w=5)
         if label: self.text(tuple(c + n * 46 * side), label)
 
     def _head(self, tip, u, L=20, w=9):
@@ -262,7 +276,7 @@ class Fig:
         n = np.array([-u[1], u[0]])
         self.d.polygon([tuple(tip), tuple(tip - u * L + n * w), tuple(tip - u * L - n * w)], fill=0)
 
-    def bjt(self, base, col, emit, pnp=False):
+    def bjt(self, base, col, emit, pnp=False, bar=12):
         """a bipolar transistor, its bar upright: the base's lead from the grid point base, level,
         to the bar; the collector and emitter leaving the bar's other side at a slant and on,
         upright, to the grid points col and emit (above and below, in one column)"""
@@ -270,7 +284,7 @@ class Fig:
         bx = C[0] - 60
         y = B[1]
         self.d.line([tuple(B), (bx, y)], fill=0, width=LW)
-        self.d.line([(bx, y - 40), (bx, y + 40)], fill=0, width=12)
+        self.d.line([(bx, y - 40), (bx, y + 40)], fill=0, width=bar)
         for P, s in ((C, -1), (E, 1)):
             a, k = np.array([bx + 6, y + s * 16], float), np.array([C[0], y + s * 58], float)
             self.d.line([tuple(a), tuple(k)], fill=0, width=LW)
@@ -294,6 +308,26 @@ class Fig:
             k = np.array([D[0], y + s * 34])
             self.d.line([(bx + 5, k[1]), tuple(k)], fill=0, width=LW)
             self.d.line([tuple(k), tuple(P)], fill=0, width=LW)
+
+    def mosfet(self, gate, drain, source, enhancement=True):
+        """an n-channel MOSFET, upright: the gate plate and, a little apart, the channel (in three
+        pieces for an enhancement type); the gate's lead from the grid point gate; the drain and
+        source leaving the channel square near its ends, on to the grid points drain and source;
+        the substrate's lead from its middle, its arrowhead at the channel, tied to the source"""
+        G, D, S = (np.array(self.P(*q), float) for q in (gate, drain, source))
+        cx, y = D[0] - 46, G[1]
+        gx = cx - 20
+        self.d.line([(gx, y - 44), (gx, y + 44)], fill=0, width=10)
+        self.d.line([tuple(G), (gx, y)], fill=0, width=LW)
+        segs = [(-44, -22), (-11, 11), (22, 44)] if enhancement else [(-44, 44)]
+        for a, b in segs: self.d.line([(cx, y + a), (cx, y + b)], fill=0, width=10)
+        for P, s in ((D, -1), (S, 1)):
+            k = np.array([D[0], y + s * 33])
+            self.d.line([(cx + 4, k[1]), tuple(k)], fill=0, width=LW)
+            self.d.line([tuple(k), tuple(P)], fill=0, width=LW)
+        self.d.line([(cx + 4, y), (D[0], y)], fill=0, width=LW)
+        self.d.line([(D[0], y), (D[0], y + 33)], fill=0, width=LW)
+        self._head(np.array([cx + 6, y]), np.array([-1.0, 0.0]), L=22, w=10)
 
     def supply(self, a, text):
         """a supply terminal: a small ring at the wire's end, its voltage over it"""
@@ -876,6 +910,63 @@ def main():
     f.label((x, y + 46), 'V', 'P', anchor='lm')
     f.text((x + 44, y + 46), '= −8 V', anchor='lm')
     f.save(out, 'jfet', random.Random(151))
+
+    # 19. a diode drawn by hand, its triangle in outline: 12 V through 1 kΩ and the diode ≈ 11.3 mA
+    f = SketchFig(3, 2, sk)
+    f.battery((0, 2), (0, 0), '12 V', plus_at_a=False, side=-1)
+    f.resistor((0, 0), (2, 0), '1 kΩ', side=-1)
+    f.wire((2, 0), (3, 0))
+    f.diode((3, 0), (3, 2), None, outline=True)
+    f.wire((0, 2), (3, 2))
+    f.ground((1.5, 2))
+    f.save(out, 'sketch-diode', BLUE)
+
+    # 20. a transistor drawn by hand (its base bar a plain stroke), fixed bias: 12 V, 470 kΩ to
+    # the base, 2.2 kΩ to the collector
+    f = SketchFig(4, 3, sk)
+    f.supply((0, 0), '12 V')
+    f.wire((0, 0), (0, 0.2), (3, 0.2))
+    f.resistor((1.4, 0.2), (1.4, 1.5), '470 kΩ', side=1)
+    f.resistor((3, 0.2), (3, 1.1), '2.2 kΩ', side=-1)
+    f.bjt((1.4, 1.5), (3, 1.1), (3, 1.9), bar=LW)
+    f.wire((3, 1.9), (3, 2.6))
+    f.ground((3, 2.6))
+    f.save(out, 'sketch-bjt', BLACK)
+
+    # 21. an enhancement MOSFET with drain feedback, as Boylestad's Example 7.11: 12 V, 2 kΩ to the
+    # drain, 10 MΩ from the drain to the gate, VGS(Th) = 3 V, ID(on) = 6 mA at VGS(on) = 8 V:
+    # ID ≈ 2.8 mA, VDS ≈ 6.4 V
+    f = Fig(4, 3)
+    f.supply((3, 0), '12 V')
+    f.resistor((3, 0), (3, 1.1), None)
+    f.text((f.P(3, 0.55)[0] + 70, f.P(3, 0.55)[1]), '2 kΩ')
+    f.wire((3, 1.1), (3, 0.9), (1.4, 0.9))
+    f.resistor((1.4, 0.9), (1.4, 1.5), None)
+    f.text((f.P(1.4, 1.2)[0] - 84, f.P(1.4, 1.2)[1]), '10 MΩ')
+    f.mosfet((1.4, 1.5), (3, 1.1), (3, 1.9))
+    f.wire((3, 1.9), (3, 2.6))
+    f.ground((3, 2.6))
+    x, y = f.P(3.2, 1.25)
+    for k, (name, sub, val) in enumerate([('V', 'GS(Th)', '= 3 V'), ('I', 'D(on)', '= 6 mA'), ('V', 'GS(on)', '= 8 V')]):
+        f.label((x, y + 46 * k), name, sub, anchor='lm')
+        f.text((x + 110, y + 46 * k), val, anchor='lm')
+    f.save(out, 'mosfet', random.Random(161))
+
+    # 22. a zener and an LED: 20 V, 1 kΩ to a 10 V zener turned against it (10 V across it), and
+    # another 1 kΩ to an LED
+    f = Fig(4, 2)
+    f.battery((0, 2), (0, 0), None, plus_at_a=False)
+    f.text((f.P(0, 1)[0] - 80, f.P(0, 1)[1]), '20 V')
+    f.resistor((0, 0), (2, 0), '1 kΩ', side=-1)
+    f.wire((2, 0), (2.2, 0), (4, 0))
+    f.diode((2, 2), (2, 0), None, zener=True)
+    f.text((f.P(2, 1)[0] - 66, f.P(2, 1)[1]), '10 V')
+    f.resistor((4, 0), (4, 1), None)
+    f.text((f.P(4, 0.5)[0] + 76, f.P(4, 0.5)[1]), '1 kΩ')
+    f.diode((4, 1), (4, 2), None, led=True)
+    f.wire((0, 2), (4, 2))
+    f.ground((1, 2))
+    f.save(out, 'zener-led', random.Random(171))
     print('ok')
 
 

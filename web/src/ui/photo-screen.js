@@ -44,14 +44,16 @@ const KINDS = [
   ['open_switch', 'Switch (open)', ''], ['closed_switch', 'Switch (closed)', ''],
   ['wire', 'Just a wire (no part)', ''],
 ];
-// semiconductors: each changes only to its own kind's other form (a diode to a zener, an npn to
-// a pnp …); the value is a zener's voltage, a transistor's β, a FET's IDSS
+// semiconductors: each changes only to its own kind's other forms (a diode to a zener or an
+// LED, an npn to a pnp …); the value is a zener's voltage, a transistor's β, a JFET's IDSS (a
+// MOSFET's threshold and k are set on the board)
 const SEMIS = [
-  ['diode', 'Diode', ''], ['zener', 'Zener diode', 'V'],
+  ['diode', 'Diode', ''], ['zener', 'Zener diode', 'V'], ['led', 'LED', ''],
   ['npn', 'NPN transistor', 'β'], ['pnp', 'PNP transistor', 'β'],
   ['njfet', 'N-channel JFET', 'A'], ['pjfet', 'P-channel JFET', 'A'],
+  ['nmos', 'N-channel MOSFET', ''], ['pmos', 'P-channel MOSFET', ''], ['depnmos', 'Depletion N-MOSFET', ''],
 ];
-const PAIR = { diode: 'zener', zener: 'diode', npn: 'pnp', pnp: 'npn', njfet: 'pjfet', pjfet: 'njfet' };
+const PAIR = { diode: ['zener', 'led'], zener: ['diode', 'led'], led: ['diode', 'zener'], npn: ['pnp'], pnp: ['npn'], njfet: ['pjfet'], pjfet: ['njfet'], nmos: ['pmos', 'depnmos'], pmos: ['nmos', 'depnmos'], depnmos: ['nmos', 'pmos'] };
 const UNIT = Object.fromEntries([...KINDS, ...SEMIS].map(([k, , u]) => [k, u]));
 
 /** A part in a few words, as it stands on the board: "R1 20 Ω", "V1 20 V", "D1 0.1vx". */
@@ -66,6 +68,8 @@ function partLabel(e) {
   if (t === 'depsrc') return `${e.name} ${e.valueLabel()}`;
   if (t === 'opamp') return `${e.name} op amp`;
   if (t === 'diode') return `${e.name} diode`;
+  if (t === 'led') return `${e.name} LED`;
+  if (t === 'nmos' || t === 'pmos' || t === 'depnmos') return `${e.name} ${{ nmos: 'n-MOSFET', pmos: 'p-MOSFET', depnmos: 'depletion n-MOSFET' }[t]} VT ${fmtSI(p.vt, 'V', 4)}`;
   if (t === 'zener') return `${e.name} zener ${fmtSI(p.bv, 'V', 4)}`;
   if (t === 'npn' || t === 'pnp') return `${e.name} ${t} β ${p.bf}`;
   if (t === 'njfet' || t === 'pjfet') return `${e.name} ${t === 'njfet' ? 'n' : 'p'}-JFET ${fmtSI(p.idss, 'A', 4)}`;
@@ -398,9 +402,9 @@ export class PhotoScreen {
     }
     const semi = PAIR[p.kind];
     // (a diode may also have been no part at all: a wire)
-    const kinds = semi ? SEMIS.filter(([k]) => k === p.kind || k === semi).concat(/diode|zener/.test(p.kind) ? KINDS.filter(([k]) => k === 'wire') : []) : KINDS.filter(([k]) => !/^dependent/.test(k) || /^dependent/.test(p.kind));
+    const kinds = semi ? SEMIS.filter(([k]) => k === p.kind || semi.includes(k)).concat(/diode|zener|led/.test(p.kind) ? KINDS.filter(([k]) => k === 'wire') : []) : KINDS.filter(([k]) => !/^dependent/.test(k) || /^dependent/.test(p.kind));
     const unit = /^dependent/.test(p.kind) ? `× ${p.control || '?'}` : UNIT[p.kind] ?? '';
-    const hasVal = !/switch/.test(p.kind) && p.kind !== 'diode';
+    const hasVal = !/switch|mos/.test(p.kind) && p.kind !== 'diode' && p.kind !== 'led';
     return `<div class="ph-row" data-i="${i}" data-sum="${esc(el ? partLabel(el) : '')}">
       <b>${esc(name)}</b>
       <select aria-label="Kind of part">${kinds.map(([k, t]) => `<option value="${k}" ${k === p.kind ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>

@@ -15,8 +15,8 @@ function unitsFor(p) {
   // (a zener is marked with its breakdown voltage; a plain diode and a transistor by no unit)
   if (p.type === 'diode') return p.zener ? ['V'] : [];
   if (p.type === 'npn' || p.type === 'pnp') return [];
-  // (a FET's IDSS and pinch-off voltage are taken after)
-  if (p.type === 'njfet' || p.type === 'pjfet') return [];
+  // (a FET's IDSS and pinch-off voltage, a MOSFET's threshold and k, are taken after)
+  if (/jfet|mos/.test(p.type)) return [];
   if (p.type === 'source') return p.kind === 'current' ? ['A'] : ['V', ''];
   if (p.type === 'depsource') return [];
   return UNIT_FOR[p.type] || ['Ω', 'S', ''];
@@ -55,8 +55,10 @@ export function assignLabels(S, words, arrows, H, fig) {
   for (const t of [...(S.terminals || [])].sort((a, b) => a.cy - b.cy)) {
     if (driven.has(find(t.v))) continue;
     let best = null, bd = Infinity;
+    // (a voltage, or a bare number with a "V" written a little apart after it)
+    const volts = (w) => w.read.type === 'value' && (w.read.unit === 'V' || (!w.read.unit && live.some((x) => /^[vV]$/.test(x.read.raw || '') && Math.abs(x.cy - w.cy) < 0.6 * H && x.x0 > w.x1 && x.x0 - w.x1 < 1.5 * H)));
     for (const w of live) {
-      if (taken.has(w) || w.read.type !== 'value' || w.read.unit !== 'V') continue;
+      if (taken.has(w) || !volts(w)) continue;
       const d = gap([t.cx - t.r, t.cy - t.r, t.cx + t.r, t.cy + t.r], boxOf(w)) / H;
       // (by a bare wire end, only right beside it, where the wire runs on to: "+16 V" printed
       // over a wire running up to it)
@@ -133,9 +135,11 @@ export function assignLabels(S, words, arrows, H, fig) {
     }
     return best;
   };
-  // (the value printed after a name: on its line, just right of it)
+  // (the value printed after a name: on its line, just right of it; the name itself may read as
+  // no label at all, "VGS(Th)" as "vcstIbj")
+  const named = words.filter((w) => !(cap && w.y0 > cap.y0 - 0.3 * H) && w.y0 < fig.box[3] + 2 * H);
   const after = (re, ok, near) => {
-    for (const n of live) {
+    for (const n of named) {
       if (!re.test(n.read.raw || '') || gap(near, boxOf(n)) / H > 8) continue;
       const v = live.find((w) => !taken.has(w) && w.read.type === 'value' && ok(w.read) && Math.abs(w.cy - n.cy) < 0.6 * H && w.x0 > n.x0 && w.x0 - n.x1 < 4 * H);
       if (v) return v;
@@ -143,13 +147,49 @@ export function assignLabels(S, words, arrows, H, fig) {
     return null;
   };
   for (const p of parts) {
-    if ((p.type !== 'njfet' && p.type !== 'pjfet') || labels.has(p.k)) continue;
+    if (!/jfet|depnmos/.test(p.type) || labels.has(p.k)) continue;
     const id = after(/^[Il1|][oODd0][s5S][s5S]/, (r) => r.unit === 'A' && r.value > 0, p.box) || nearest(p.box, (r) => r.unit === 'A' && r.value > 0, 8);
     if (!id) continue;
     taken.add(id);
     const L = { text: `IDSS = ${id.read.text}`, value: id.read.value };
     const vp = after(/^[vV][pP]/, (r) => r.unit === 'V' && r.value !== 0, boxOf(id)) || nearest(boxOf(id), (r) => r.unit === 'V' && r.value !== 0, 2.5);
     if (vp) { L.vp = vp.read.value; L.text += `, VP = ${vp.read.text}`; taken.add(vp); }
+    labels.set(p.k, L);
+  }
+  // an enhancement MOSFET's threshold, "VGS(Th) = 3 V", and its k: printed as "k = 0.3 × 10⁻³ A/V²",
+  // or from the drain current it gives at a gate voltage, "ID(on) = 6 mA" at "VGS(on) = 8 V"
+  // (the voltages printed after names beginning with V near it: the threshold is below the gate
+  // voltage of its "on" point, whose name may read with or without its "on")
+  const allAfter = (re, ok, near) => {
+    const out = [];
+    for (const n of named) {
+      if (!re.test(n.read.raw || '') || gap(near, boxOf(n)) / H > 8) continue;
+      const v = live.find((w) => !taken.has(w) && !out.some((o) => o.w === w) && w.read.type === 'value' && ok(w.read) && Math.abs(w.cy - n.cy) < 0.6 * H && w.x0 > n.x0 && w.x0 - n.x1 < 4 * H);
+      if (v) out.push({ n, w: v });
+    }
+    return out;
+  };
+  for (const p of parts) {
+    if ((p.type !== 'nmos' && p.type !== 'pmos') || labels.has(p.k)) continue;
+    const vs = allAfter(/^v/, (r) => r.unit === 'V' && r.value !== 0, p.box);
+    if (!vs.length) continue;
+    const named0 = vs.filter((x) => !/on/.test(x.n.read.raw)), byV = [...vs].sort((a, b) => Math.abs(a.w.read.value) - Math.abs(b.w.read.value));
+    const th = (named0.length === 1 ? named0[0] : byV[0]).w;
+    taken.add(th);
+    const vt = Math.abs(th.read.value), L = { text: `VGS(Th) = ${vt} V`, value: 0, vt };
+    const kw = named.find((w) => /^k-{0,2}[0-9.]+[x×]10-?[0-9]+$/.test(w.read.raw || '') && gap(p.box, boxOf(w)) / H < 8);
+    if (kw) {
+      const [, a, e] = /^k-{0,2}([0-9.]+)[x×]10-?([0-9]+)$/.exec(kw.read.raw);
+      L.k = +a * 10 ** -e; L.text += `, k = ${a} × 10⁻${e}`;
+    } else {
+      const on = vs.map((x) => x.w).filter((w) => w !== th && Math.abs(w.read.value) > vt).sort((a, b) => Math.abs(b.read.value) - Math.abs(a.read.value))[0];
+      const id = on && nearest(boxOf(on), (r) => r.unit === 'A' && r.value !== 0, 2.5);
+      if (on && id) {
+        taken.add(on); taken.add(id);
+        L.k = +(Math.abs(id.read.value) / (Math.abs(on.read.value) - vt) ** 2).toPrecision(6);
+        L.text += `, ID(on) = ${+(Math.abs(id.read.value) * 1e3).toPrecision(4)} mA at ${Math.abs(on.read.value)} V`;
+      }
+    }
     labels.set(p.k, L);
   }
   // a transistor's β, printed beside it

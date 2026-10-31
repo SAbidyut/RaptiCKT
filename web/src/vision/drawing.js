@@ -11,13 +11,16 @@ const KIND = {
   unknown: () => 'resistor',
   switch: () => 'open_switch',
   opamp: () => 'opamp',
-  diode: (p) => (p.zener ? 'zener' : 'diode'),
+  diode: (p) => (p.led ? 'led' : p.zener ? 'zener' : 'diode'),
   npn: () => 'npn',
   pnp: () => 'pnp',
   njfet: () => 'njfet',
   pjfet: () => 'pjfet',
+  nmos: () => 'nmos',
+  pmos: () => 'pmos',
+  depnmos: () => 'depnmos',
 };
-const TRANSISTOR = new Set(['npn', 'pnp', 'njfet', 'pjfet']);
+const TRANSISTOR = new Set(['npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'depnmos']);
 
 /**
  * Grid positions for the structure's vertices. Rows join vertices tied by horizontal wires and
@@ -187,7 +190,7 @@ function lay(S, sw, labels, slants) {
       const O = at[p.out];
       if (!O || (O.x === A.x && O.y === A.y) || (O.x === B.x && O.y === B.y)) { notes.push('A transistor whose base could not be placed was left out.'); return; }
       index.set(k, parts.length);
-      parts.push({ kind, text: L.text || '', value: L.value ?? 0, ...(L.vp != null ? { vp: L.vp } : {}), from: { ...A }, to: { ...B }, out: { ...O }, polarity: 'none', control: '', a: p.a, b: p.b, o: p.out, d: false });
+      parts.push({ kind, text: L.text || '', value: L.value ?? 0, ...(L.vp != null ? { vp: L.vp } : {}), ...(L.vt != null ? { vt: L.vt } : {}), ...(L.k != null ? { k: L.k } : {}), from: { ...A }, to: { ...B }, out: { ...O }, polarity: 'none', control: '', a: p.a, b: p.b, o: p.out, d: false });
       return;
     }
     let polarity = 'none';
@@ -429,7 +432,7 @@ function straightSlants(parts, wires) {
 }
 
 function defaultValue(kind) {
-  if (kind === 'diode' || kind === 'zener') return 0;
+  if (kind === 'diode' || kind === 'zener' || kind === 'led') return 0;
   if (kind === 'resistor') return 1000;
   if (kind === 'capacitor') return 1e-6;
   if (kind === 'inductor') return 1e-3;

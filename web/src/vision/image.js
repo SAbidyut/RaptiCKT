@@ -131,6 +131,16 @@ export function otsu(hist) {
  */
 export function inkMask(d, w, h, block) {
   const bg = paperLevel(d, w, h, block);
+  // (on an evenly lit page, a page or a scan, the paper is never darker than halfway to the ink:
+  // inside a big solid shape the blocks are all ink, and the level taken from them would make its
+  // middle paper; a photo's shadows may well be darker)
+  {
+    const hd = new Uint32Array(256), hb = new Uint32Array(256);
+    for (let i = 0; i < d.length; i += 3) { hd[d[i]]++; hb[bg[i]]++; }
+    const pct = (hist, f) => { let n = 0; for (const v of hist) n += v; let k = 0, acc = 0; while (k < 255 && acc + hist[k] < f * n) acc += hist[k++]; return k; };
+    const paper = pct(hb, 0.5), inkD = pct(hd, 0.995), cap = paper + 0.5 * (inkD - paper);
+    if (inkD - paper > 60 && pct(hb, 0.9) - pct(hb, 0.1) <= 12) for (let i = 0; i < bg.length; i++) if (bg[i] > cap) bg[i] = cap;
+  }
   const c = new Uint8Array(w * h);
   const hist = new Uint32Array(256);
   for (let i = 0; i < c.length; i++) { const v = Math.max(0, d[i] - bg[i]); c[i] = v; hist[v]++; }
@@ -145,7 +155,42 @@ export function inkMask(d, w, h, block) {
   for (let i = 0; i < c.length; i++) if (c[i] >= hi && labels[i]) keep[labels[i]] = 1;
   const ink = new Uint8Array(w * h);
   for (let i = 0; i < c.length; i++) if (labels[i] && keep[labels[i]]) ink[i] = 1;
+  fillDarkHoles(ink, d, w, h);
   return { ink, contrast: c, threshold: hi };
+}
+
+/**
+ * Fill, in place, the paper-coloured holes of an ink mask that are as dark as ink: the middle of
+ * a big solid shape (a diode's filled triangle) reads as paper where the paper level, taken
+ * block by block, rose into it. A hole is filled when it is dark through and through and ink
+ * all round.
+ */
+function fillDarkHoles(ink, d, w, h) {
+  const inkD = [];
+  for (let i = 0; i < ink.length; i += 7) if (ink[i]) inkD.push(d[i]);
+  if (inkD.length < 20) return;
+  inkD.sort((a, b) => a - b);
+  const dark = 0.85 * inkD[inkD.length >> 1];
+  const seen = new Uint8Array(w * h), stack = [], list = [];
+  for (let i = 0; i < ink.length; i++) {
+    if (ink[i] || seen[i] || d[i] < dark) continue;
+    let closed = true, rim = 0, leak = 0;
+    list.length = 0;
+    seen[i] = 1; stack.push(i);
+    while (stack.length) {
+      const j = stack.pop(), x = j % w, y = (j - x) / w;
+      list.push(j);
+      if (!x || !y || x === w - 1 || y === h - 1 || list.length > 0.01 * w * h) closed = false;
+      for (const k of [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, y > 0 ? j - w : -1, y < h - 1 ? j + w : -1]) {
+        if (k < 0 || seen[k]) continue;
+        if (ink[k]) { rim++; continue; }
+        // (paper next to it, other than a crack where the shape's edge came out pale)
+        if (d[k] < dark) { leak++; continue; }
+        seen[k] = 1; stack.push(k);
+      }
+    }
+    if (closed && leak <= 0.15 * (rim + leak)) for (const j of list) ink[j] = 1;
+  }
 }
 
 /**

@@ -10,14 +10,15 @@
 // A drawing: { title, parts, wires, ground, quantities, asked, notes? }
 //   parts: [{ kind, text, value, from, to, polarity, control }] — kind: resistor, voltage_source,
 //     current_source, dependent_voltage_source, dependent_current_source, capacitor, inductor,
-//     ac_voltage_source, ac_current_source, open_switch, closed_switch, opamp, diode, zener, npn,
-//     pnp, njfet, pjfet; value in SI units (the gain for a dependent source, a zener's breakdown
-//     voltage, a bipolar transistor's β, a FET's IDSS with its pinch-off voltage at `vp`; 0 for
-//     the board's default); from / to: grid points { x, y } (an op amp's − and + inputs, with its
-//     output at `out`; a diode's anode and cathode; a transistor's collector and emitter, with its
-//     base at `out`; a FET's drain and source, with its gate at `out`); polarity: the end ('from' | 'to') of a source's + or
-//     arrow, else 'none'; control: what a dependent source's gain multiplies ('vx', 'ix'), as
-//     named in quantities.
+//     ac_voltage_source, ac_current_source, open_switch, closed_switch, opamp, diode, zener, led,
+//     npn, pnp, njfet, pjfet, nmos, pmos, depnmos; value in SI units (the gain for a dependent source,
+//     a zener's breakdown voltage, a bipolar transistor's β, a FET's IDSS with its pinch-off
+//     voltage at `vp`, an enhancement MOSFET's threshold at `vt` and k at `k`; 0 for the board's
+//     default); from / to: grid points { x, y } (an op amp's − and + inputs, with its output at
+//     `out`; a diode's anode and cathode; a transistor's collector and emitter, with its base at
+//     `out`; a FET's drain and source, with its gate at `out`); polarity: the end ('from' | 'to')
+//     of a source's + or arrow, else 'none'; control: what a dependent source's gain multiplies
+//     ('vx', 'ix'), as named in quantities.
 //   wires: [{ from, to }]; ground: [{ x, y }]; supplies: [{ at, value }] — an open terminal
 //     marked with a voltage (+16 V), a supply rail referred to ground
 //   quantities: [{ name, kind: node_voltage | voltage_across | current_through, at, part (index
@@ -35,10 +36,10 @@ const U = 6 * G; // one grid unit on the board: an 80-unit part with a 20-unit l
 const key = (p) => p.x + ',' + p.y;
 const W = (p) => [p.x * U, p.y * U];
 
-const TYPE = { resistor: 'resistor', voltage_source: 'dcv', current_source: 'dci', capacitor: 'capacitor', inductor: 'inductor', ac_voltage_source: 'acv', ac_current_source: 'aci', open_switch: 'switch', closed_switch: 'switch', dependent_current_source: 'depsrc', dependent_voltage_source: 'depsrc', opamp: 'opamp', diode: 'diode', zener: 'zener', npn: 'npn', pnp: 'pnp', njfet: 'njfet', pjfet: 'pjfet' };
-const PREFIX = { resistor: 'R', dcv: 'V', dci: 'I', capacitor: 'C', inductor: 'L', acv: 'V', aci: 'I', switch: 'S', depsrc: 'D', opamp: 'U', diode: 'D', zener: 'D', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J' };
+const TYPE = { resistor: 'resistor', voltage_source: 'dcv', current_source: 'dci', capacitor: 'capacitor', inductor: 'inductor', ac_voltage_source: 'acv', ac_current_source: 'aci', open_switch: 'switch', closed_switch: 'switch', dependent_current_source: 'depsrc', dependent_voltage_source: 'depsrc', opamp: 'opamp', diode: 'diode', zener: 'zener', led: 'led', npn: 'npn', pnp: 'pnp', njfet: 'njfet', pjfet: 'pjfet', nmos: 'nmos', pmos: 'pmos', depnmos: 'depnmos' };
+const PREFIX = { resistor: 'R', dcv: 'V', dci: 'I', capacitor: 'C', inductor: 'L', acv: 'V', aci: 'I', switch: 'S', depsrc: 'D', opamp: 'U', diode: 'D', zener: 'D', led: 'D', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J', nmos: 'M', pmos: 'M', depnmos: 'M' };
 // (parts with a third terminal at `out`)
-const THREE = new Set(['opamp', 'npn', 'pnp', 'njfet', 'pjfet']);
+const THREE = new Set(['opamp', 'npn', 'pnp', 'njfet', 'pjfet', 'nmos', 'pmos', 'depnmos']);
 
 /**
  * Build a board circuit from one described circuit. Returns { doc, warnings, asked, els }:
@@ -363,6 +364,13 @@ function placeTransistor(doc, p, C, count) {
   if (pre === 'Q' && p.value > 0) { el.p.model = 'custom'; el.p.bf = p.value; }
   if (pre === 'J' && p.value > 0) el.p.idss = p.value;
   if (pre === 'J' && Number.isFinite(p.vp) && p.vp !== 0) el.p.vp = Math.abs(p.vp);
+  // a MOSFET: ID = k(VGS − VT)², the board's kp/2 (a depletion one's VT its pinch-off, k its
+  // IDSS / VP²)
+  if (pre === 'M') {
+    const set = (vt, k) => { el.p.model = 'custom'; if (Number.isFinite(vt)) el.p.vt = vt; if (k > 0) el.p.kp = 2 * k; };
+    if (C.type === 'depnmos' && Number.isFinite(p.vp) && p.vp !== 0) set(-Math.abs(p.vp), p.value > 0 ? p.value / p.vp ** 2 : NaN);
+    else if (Number.isFinite(p.vt)) set(Math.abs(p.vt), p.k);
+  }
   const Cp = W(p.from), Ep = W(p.to), Bp = W(p.out);
   const unit = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
   const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];

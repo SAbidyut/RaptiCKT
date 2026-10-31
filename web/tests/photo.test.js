@@ -297,3 +297,18 @@ test('a transistor is set as drawn, its base on either side; a diode points as d
     assert.ok(Math.sign(q.getPosts()[0][0] - q.getPosts()[1][0]) === side, 'base side');
   }
 });
+
+test('a MOSFET gets the curve printed by it: an enhancement one its threshold and k, a depletion one its IDSS and VP', () => {
+  const build = (p) => {
+    const c = circuit({ parts: [part('resistor', '1 kΩ', 1000, P(2, -1), P(2, 0)), { ...p, from: P(2, 0), to: P(2, 2), out: P(0, 1) }, part('resistor', '1 MΩ', 1e6, P(0, 1), P(0, 2))], wires: [wire(P(0, 2), P(2, 2))], ground: [P(2, 2)], supplies: [{ at: P(2, -1), value: 10 }] });
+    return buildFromDrawing(c).doc.elements.find((e) => /mos/.test(e.constructor.type));
+  };
+  const e = build({ ...part('nmos', '', 0), vt: 3, k: 0.24e-3 });
+  assert.equal(e.constructor.type, 'nmos');
+  assert.equal(e.p.vt, 3);
+  near(e.p.kp, 0.48e-3, 'kp is twice k');
+  const d = build({ ...part('depnmos', '', 8e-3), vp: -4 });
+  assert.equal(d.constructor.type, 'depnmos');
+  assert.equal(d.p.vt, -4);
+  near(d.p.kp, (2 * 8e-3) / 16, 'kp = 2 IDSS / VP²');
+});

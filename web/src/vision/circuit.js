@@ -8,7 +8,7 @@ import { thin, skeletonGraph, pruneSpurs, edgePoints, simplify } from './skeleto
 import { findShapes, inTriangle } from './shapes.js';
 import { components, fillPinholes } from './image.js';
 import { arrowTip } from './arrow.js';
-import { findDevices } from './devices.js';
+import { findDevices, diodeAlong, ledArrows } from './devices.js';
 
 const deg = (a) => (a * 180) / Math.PI;
 
@@ -512,11 +512,44 @@ export function readStructure(img, fig) {
     }
   }
 
+  // a diode whose triangle is not solid ink (drawn in outline, or printed with paper inside it),
+  // which thins into bits of no part: between two wire ends facing each other in line, read by
+  // how far its ink reaches across the line, along it
+  const facing = [];
+  for (const v of vertices) {
+    if (v.cut != null) continue;
+    const ws = live(v.id, -1).filter((id) => pieces[id].cls === 'wire' && pieces[id].len >= 2 * sw);
+    if (ws.length !== 1 || live(v.id, -1).some((id) => pieces[id].cls === 'wire' && id !== ws[0])) continue;
+    const o = vertices[other(pieces[ws[0]], v.id)], L = Math.hypot(v.x - o.x, v.y - o.y) || 1;
+    facing.push({ v, u: [(v.x - o.x) / L, (v.y - o.y) / L] });
+  }
+  const usedEnd = new Set();
+  for (const E of facing) {
+    if (usedEnd.has(E.v.id)) continue;
+    let best = null;
+    for (const F of facing) {
+      if (F === E || usedEnd.has(F.v.id) || E.u[0] * F.u[0] + E.u[1] * F.u[1] > -0.95) continue;
+      const dx = F.v.x - E.v.x, dy = F.v.y - E.v.y, ahead = dx * E.u[0] + dy * E.u[1], aside = Math.abs(-dx * E.u[1] + dy * E.u[0]);
+      if (ahead < 3 * sw || ahead > 20 * sw || aside > 1.2 * sw || (best && ahead > best.ahead)) continue;
+      best = { F, ahead };
+    }
+    if (!best) continue;
+    const F = best.F.v, d = diodeAlong(art, W, H, sw, E.v, F);
+    if (!d) continue;
+    usedEnd.add(E.v.id); usedEnd.add(F.id);
+    const [A, B] = d.anode === 'a' ? [E.v, F] : [F, E.v];
+    const r = 3 * sw, box = [Math.min(A.x, B.x) - r, Math.min(A.y, B.y) - r, Math.max(A.x, B.x) + r, Math.max(A.y, B.y) + r];
+    // (the bits it thinned into are no parts of their own)
+    const inSpan = (q) => q.box && q.cx != null && q.cx > box[0] && q.cx < box[2] && q.cy > box[1] && q.cy < box[3];
+    for (let k = parts.length - 1; k >= 0; k--) if (['resistor', 'unknown', 'inductor', 'loose'].includes(parts[k].type) && inSpan(parts[k] ?? {}) || (parts[k].type === 'loose' && parts[k].box && parts[k].box[0] >= box[0] && parts[k].box[2] <= box[2] && parts[k].box[1] >= box[1] && parts[k].box[3] <= box[3])) parts.splice(k, 1);
+    parts.push({ type: 'diode', zener: d.zener, a: A.id, b: B.id, axis: axisOf(A, B), cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, box });
+  }
+
   // ---------------------------------------------------------------- sources
   shapes.forEach((s, k) => {
     // where a wire (or a part) leaves the body: not a speck pruned away
     const terms = [...new Set(shapeTerm[k])].filter((v) => at[v].some((id) => pieces[id].cls !== 'drop'));
-    if (s.kind === 'triangle') { parts.push(opAmpOf(s, k, terms)); return; }
+    if (s.kind === 'triangle') { const op = opAmpOf(s, k, terms); parts.push(op.type === 'loose' ? diodeOf(s, k, terms) || op : op); return; }
     if (s.kind === 'device') { parts.push(deviceOf(s, k, terms)); return; }
     // a small ring is no source: at a wire's end it is an open terminal (a, b), where the wire
     // just ends; between wires, a joint
@@ -564,7 +597,17 @@ export function readStructure(img, fig) {
     const A = vertices[a], B = vertices[b];
     part.a = a; part.b = b;
     part.axis = Math.abs(B.x - A.x) >= Math.abs(B.y - A.y) ? 'h' : 'v';
-    Object.assign(part, innerSymbol(all, W, H, s, A, B, sw));
+    // (a small "body" that is a diode drawn in outline: its triangle closes round paper, its bar
+    // just outside it)
+    const sym = innerSymbol(all, W, H, s, A, B, sw);
+    const L = Math.hypot(B.x - A.x, B.y - A.y) || 1, ex = ((B.x - A.x) / L) * 3 * sw, ey = ((B.y - A.y) / L) * 3 * sw;
+    // (a source has its signs or its arrow inside)
+    const dd = s.r < 8 * sw && !sym.signs && sym.kind !== 'current' && sym.kind !== 'ac' ? diodeAlong(art, W, H, sw, { x: A.x - ex, y: A.y - ey }, { x: B.x + ex, y: B.y + ey }) : null;
+    if (dd) {
+      parts.push({ type: 'diode', zener: dd.zener, a: dd.anode === 'a' ? a : b, b: dd.anode === 'a' ? b : a, axis: part.axis, cx: s.cx, cy: s.cy, box: [part.box[0] - 2 * sw, part.box[1] - 2 * sw, part.box[2] + 2 * sw, part.box[3] + 2 * sw], shape: k });
+      return;
+    }
+    Object.assign(part, sym);
     parts.push(part);
   });
 
@@ -589,6 +632,20 @@ export function readStructure(img, fig) {
     const seen = sym.signs > 0 && !sym.unsure;
     if (seen && sym.plus === 'a') [a, b] = [b, a];
     return { type: 'opamp', shape: k, a, b, out: outs[0], axis: dx ? 'v' : 'h', dir: s.dir, cx: s.cx, cy: s.cy, r: s.r, box, unsure: !seen };
+  }
+
+  // a diode drawn in outline (a triangle with no signs inside, its bar across its point): from
+  // the wire at its base to the one leaving its point
+  function diodeOf(s, k, terms) {
+    const [dx, dy] = s.dir, base = s.pts[1];
+    const along = (v) => (vertices[v].x - base[0]) * dx + (vertices[v].y - base[1]) * dy;
+    const ins = terms.filter((v) => along(v) < 3 * sw), outs = terms.filter((v) => along(v) > 0.6 * s.len);
+    if (ins.length !== 1 || !outs.length) return null;
+    const a = ins[0], b = outs.sort((u, v) => along(v) - along(u))[0], A = vertices[a], B = vertices[b];
+    const d = diodeAlong(art, W, H, sw, { x: A.x - 3 * sw * dx, y: A.y - 3 * sw * dy }, { x: B.x + 3 * sw * dx, y: B.y + 3 * sw * dy });
+    if (!d || d.anode !== 'a') return null;
+    const xs = s.pts.map((q) => q[0]), ys = s.pts.map((q) => q[1]);
+    return { type: 'diode', zener: d.zener, a, b, axis: axisOf(A, B), cx: s.cx, cy: s.cy, box: [Math.min(...xs) - 2 * sw, Math.min(...ys) - 2 * sw, Math.max(...xs) + 2 * sw, Math.max(...ys) + 2 * sw], shape: k };
   }
 
   // a diode from its anode (a) to its cathode (b); a bipolar transistor from its collector (a) to
@@ -652,6 +709,27 @@ export function readStructure(img, fig) {
     marks.push({ x0: box[0], y0: box[1], x1: box[2], y1: box[3], cx: (box[0] + box[2]) / 2, cy: (box[1] + box[3]) / 2, dir: dir === 'h' ? [Math.sign(mark[0]), 0] : [0, Math.sign(mark[1])] });
     for (const q of bunch) parts.splice(parts.indexOf(q), 1);
     i = -1;
+  }
+
+  // the bits of a diode's bar left on either side of its wire are no wires
+  for (let round = 0; round < 3; round++) {
+    for (const p of parts) {
+      if (p.type !== 'diode' || !p.box) continue;
+      const inB = (v) => vertices[v].x >= p.box[0] && vertices[v].x <= p.box[2] && vertices[v].y >= p.box[1] && vertices[v].y <= p.box[3];
+      for (const q of pieces) {
+        if (q.cls !== 'wire' || !inB(q.a) || !inB(q.b)) continue;
+        const end = [q.a, q.b].find((v) => live(v, q.id).length === 0 && v !== p.a && v !== p.b && vertices[v].cut == null);
+        if (end != null) q.cls = 'drop';
+      }
+    }
+  }
+
+  // an LED: a diode with two little arrows beside it
+  for (const p of parts) {
+    if (p.type !== 'diode' || p.zener) continue;
+    const A = vertices[p.a], B = vertices[p.b], L = Math.hypot(B.x - A.x, B.y - A.y) || 1;
+    const r = Math.max(p.box[2] - p.box[0], p.box[3] - p.box[1]) / 2;
+    p.led = ledArrows(all, art, W, H, sw, (p.box[0] + p.box[2]) / 2, (p.box[1] + p.box[3]) / 2, (B.x - A.x) / L, (B.y - A.y) / L, r + 8 * sw);
   }
 
   // loose straight bars nearby (the lower bars of a ground, the inner cells of a battery, a plate
@@ -718,6 +796,14 @@ export function readStructure(img, fig) {
       const Q = plates[mate];
       P.paired = Q.paired = true;
       const A = vertices[P.v], B = vertices[Q.v];
+      // (a diode drawn in outline: its triangle's base and its bar look like two plates, with ink
+      // all the way between them)
+      const dd = diodeAlong(art, W, H, sw, A, B);
+      if (dd) {
+        const [a, b] = dd.anode === 'a' ? [P.v, Q.v] : [Q.v, P.v], r = Math.max(P.len, Q.len) / 2 + sw;
+        parts.push({ type: 'diode', zener: dd.zener, a, b, axis: P.dir === 'v' ? 'h' : 'v', cx: (A.x + B.x) / 2, cy: (A.y + B.y) / 2, box: [Math.min(A.x, B.x) - r, Math.min(A.y, B.y) - r, Math.max(A.x, B.x) + r, Math.max(A.y, B.y) + r] });
+        continue;
+      }
       const axis = P.dir === 'v' ? 'h' : 'v';
       const ratio = Math.min(P.len, Q.len) / Math.max(P.len, Q.len);
       const between = bars.filter((r) => r.dir === P.dir && (axis === 'h' ? r.cx > Math.min(A.x, B.x) && r.cx < Math.max(A.x, B.x) && Math.abs(r.cy - A.y) < 2 * sw : r.cy > Math.min(A.y, B.y) && r.cy < Math.max(A.y, B.y) && Math.abs(r.cx - A.x) < 2 * sw));

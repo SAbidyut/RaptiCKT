@@ -5,9 +5,10 @@
 // answers are right; so are they on ruled or squared paper and photographed well turned, a
 // practice problem printed in a book's own style, a bridge drawn as a diamond, conductances in
 // siemens, mesh currents drawn as round arrows, values printed as fractions, a delta whose values
-// are printed along its slanting sides, an op amp, diodes, a bipolar transistor and a junction
-// FET as an electronics book prints them, and a circuit drawn here with an open switch and a
-// coil drawn in loops.
+// are printed along its slanting sides, an op amp, diodes (a zener, an LED), a bipolar transistor,
+// a junction FET and an enhancement MOSFET as an electronics book prints them, a diode and a
+// transistor drawn by hand, and a circuit drawn here with an open switch and a coil drawn in
+// loops.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,6 +19,7 @@ import { buildFromDrawing } from '../src/ui/photo-circuit.js';
 import { Simulator } from '../src/engine/sim.js';
 import { glyphFeatures } from '../src/vision/glyph-features.js';
 import { classify, CLASSES } from '../src/vision/glyph.js';
+import { darkness, inkMask } from '../src/vision/image.js';
 
 function load(name) {
   const buf = fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
@@ -360,6 +362,66 @@ for (const name of ['jfet.png', 'jfet-photo.jpg']) {
     near(vd, 4.75, 0.4, 'VD');
   });
 }
+
+for (const name of ['mosfet.png', 'mosfet-photo.jpg']) {
+  test(`${name}: Boylestad's drain-feedback enhancement MOSFET — 12 V, 2 kΩ, 10 MΩ, VGS(Th) = 3 V, ID(on) = 6 mA at 8 V — VDS ≈ 6.4 V`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['nmos', 'resistor', 'resistor']);
+    const m = r.el((e) => e.constructor.type === 'nmos');
+    assert.equal(m.p.vt, 3);
+    // (k = 6 mA / (8 V − 3 V)² = 0.24 mA/V²: the board's kp is twice that)
+    near(m.p.kp, 0.48e-3, 1e-9, 'kp');
+    const [vg, vd, vs] = pins(r, 'nmos');
+    near(vd - vs, 6.4, 0.3, 'VDS');
+    near(vg, vd, 1e-3, 'the gate at the drain (no gate current)');
+  });
+}
+for (const name of ['zener-led.png', 'zener-led-photo.jpg']) {
+  test(`${name}: a 10 V zener turned against 20 V through 1 kΩ holds 10 V; an LED is an LED`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['led', 'resistor', 'resistor', 'voltage_source', 'zener']);
+    const z = r.el((e) => e.constructor.type === 'zener');
+    assert.equal(z.p.bv, 10);
+    near(r.sim.v(z.nodes[1]) - r.sim.v(z.nodes[0]), 10, 0.3, 'across the zener');
+    const [a, k] = pins(r, 'led');
+    assert.ok(a - k > 1.4 && a - k < 2.4, `the LED's forward voltage ${a - k}`);
+  });
+}
+for (const name of ['sketch-diode.png', 'sketch-diode-photo.jpg']) {
+  test(`${name}: a diode drawn by hand, its triangle in outline, points the way it was drawn`, async () => {
+    const out = await readPicture(load(name));
+    const c = out.circuits[0];
+    assert.deepEqual(c.parts.map((p) => p.kind).sort(), ['diode', 'resistor', 'voltage_source']);
+    const { doc } = buildFromDrawing(c);
+    const sim = new Simulator().build(doc.elements, doc.wires);
+    assert.ok(sim.start(), sim.error);
+    for (let i = 0; i < 30; i++) assert.ok(sim.step(1e-4), sim.error);
+    const d = doc.elements.find((e) => e.constructor.type === 'diode');
+    const v = sim.v(d.nodes[0]) - sim.v(d.nodes[1]);
+    assert.ok(v > 0.55 && v < 0.85, `forward: ${v}`);
+  });
+}
+for (const name of ['sketch-bjt.png', 'sketch-bjt-photo.jpg']) {
+  test(`${name}: a transistor drawn by hand (a plain stroke for its base bar), fed from a 12 V terminal written by hand`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['npn', 'resistor', 'resistor']);
+    assert.deepEqual(r.c.supplies.map((s) => s.value), [12]);
+    const [vb, , ve] = pins(r, 'npn');
+    near(vb - ve, 0.7, 0.1, 'VBE');
+  });
+}
+
+test('the middle of a big solid shape is ink, though the paper level rose into it', () => {
+  const w = 300, h = 200, data = new Uint8ClampedArray(w * h * 4).fill(255);
+  // a solid triangle 90 px wide, and a thin line
+  for (let y = 40; y < 160; y++) for (let x = 60; x < 60 + ((y - 40) * 3) / 4; x++) data.fill(25, 4 * (y * w + x), 4 * (y * w + x) + 3);
+  for (let x = 160; x < 280; x++) for (let y = 99; y < 102; y++) data.fill(25, 4 * (y * w + x), 4 * (y * w + x) + 3);
+  const d = darkness({ width: w, height: h, data });
+  const { ink } = inkMask(d, w, h, 16);
+  let holes = 0;
+  for (let y = 60; y < 155; y++) for (let x = 62; x < 60 + ((y - 40) * 3) / 4 - 3; x++) if (!ink[y * w + x]) holes++;
+  assert.equal(holes, 0);
+});
 
 test('laid out as compactly as drawn by hand, turned or not: parts come out at their own size', async () => {
   const size = async (name) => {
