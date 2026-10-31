@@ -20,30 +20,32 @@ Everything in the app, explained step by step.
 12. [Multimeter](#ch-meter)
 13. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
 14. [Network theorems, step by step](#ch-theorems)
-15. [Load Flow Analysis (power systems)](#ch-loadflow)
-16. [Saving, opening and sharing](#ch-saving)
-17. [Settings reference](#ch-settings)
-18. [Component library (all 520)](#ch-library)
-19. [Examples (all 104)](#ch-examples)
-20. [Quick reference: formulas and units](#ch-formulas)
-21. [Troubleshooting and FAQ](#ch-troubleshooting)
-22. [About RAPTI and contact](#ch-about)
+15. [Circuit from photo](#ch-photo)
+16. [Load Flow Analysis (power systems)](#ch-loadflow)
+17. [Saving, opening and sharing](#ch-saving)
+18. [Settings reference](#ch-settings)
+19. [Component library (all 521)](#ch-library)
+20. [Examples (all 104)](#ch-examples)
+21. [Quick reference: formulas and units](#ch-formulas)
+22. [Troubleshooting and FAQ](#ch-troubleshooting)
+23. [About RAPTI and contact](#ch-about)
 
 <a id="ch-welcome"></a>
 
 ## 1. Welcome to RaptiCKT
 
-**RaptiCKT** is a circuit simulator that runs on your phone. You draw a circuit, press **Run**, and the app calculates what every wire and part is doing, live: voltages glow on the wires, small dots show current flowing, and you can measure with an oscilloscope and a multimeter. Nothing needs an internet connection.
+**RaptiCKT** is a circuit simulator that runs on your phone. You draw a circuit, press **Run**, and the app calculates what every wire and part is doing, live: voltages glow on the wires, small dots show current flowing, and you can measure with an oscilloscope and a multimeter. Nothing needs an internet connection — even a circuit photo is read on the phone itself.
 
 #### What you can do with it
 
 - Build analog, digital and mixed circuits on an unlimited canvas.
-- Pick from **520 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
+- Pick from **521 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
 - Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.
 - Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
 - Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**).
+- Take a **photo of a circuit diagram** — a textbook figure, an exam question, a neat sketch — and it is redrawn on the board with its values, dependent sources included, ready to run (**Circuit from photo**). Printed diagrams and neat hand sketches are read on the phone itself, offline.
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
 - Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
@@ -55,7 +57,7 @@ Electrical and electronic engineering students, teachers, technicians, hobbyists
 #### Requirements
 
 - Android 8.0 or newer.
-- No internet needed. Everything, including your saved circuits, stays on your phone.
+- No internet needed. **Circuit from photo** reads pictures on the phone itself; everything, including your saved circuits and photos, stays on your phone.
 
 #### How to read this manual
 
@@ -185,11 +187,11 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 
 #### The board
 
-- The big area with the grid is your **canvas**. It is unlimited: pan and zoom freely.
+- The big area with the grid is your **canvas**. It is unlimited: pan and zoom freely. Zoomed out, the values and live readings grow with it, so they stay readable on the screen.
 - The round **+** button (bottom right) adds a component.
 - The **✋ Operate | Wire** switch at the top right of the board picks what a finger does (chapter 4, *Operate and Wire mode*).
 - The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). When the phone cannot keep up it shows, in amber, the speed actually reached, for example `1.5 s/s max`.
-- A red or yellow bar appears at the top when the circuit has a problem (chapter 21).
+- A red or yellow bar appears at the top when the circuit has a problem (chapter 22).
 - When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.
 - Messages (toasts) appear briefly at the bottom to confirm what happened.
 
@@ -200,7 +202,9 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 | Tap a part | Selects it. On a switch or button, it also operates it. |
 | Hold a part (half a second) | Opens its properties. |
 | Drag a part | Moves it. Wires stay attached and follow. A part never lands on another part. |
+| Drag a terminal of the selected part | Slants and stretches it: that end goes where you drag it, at any angle. |
 | Tap a terminal, then another | Draws a wire between them (EveryCircuit style). |
+| Drag from a terminal to another | Draws the wire where your finger goes, in straight runs (no curves): its corners where you turned. |
 | Drag empty space | Pans the board. |
 | Pinch with two fingers | Zooms in and out. |
 | Double-tap the board and hold, then slide | One-finger zoom, like Google Maps: slide **down** to zoom in, **up** to zoom out, around the point you tapped. Works on empty board or a wire. |
@@ -209,7 +213,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 | Tap a wire | Selects the wire (then you can scope or delete it). |
 | Tap empty space | Clears the selection. |
 
-On a computer browser you can also use: **Delete** (remove), **R** (rotate), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), and the mouse wheel to zoom.
+On a computer browser you can also use: **Delete** (remove), **R** (rotate), **T** / **Shift+T** (slant 15° on / back), **Space** (run/pause), **Ctrl+Z / Ctrl+Y** (undo/redo), **Ctrl+D** (copy), and the mouse wheel to zoom.
 
 <a id="ch-adding"></a>
 
@@ -225,7 +229,7 @@ On a computer browser you can also use: **Delete** (remove), **R** (rotate), **S
 
 > **Tip:** Always add a **Ground** to your circuit (see chapter 7). Many examples show where it goes.
 
-The complete list of all 520 components, with what each one does and which values you can change, is in the chapter **Component library**.
+The complete list of all 521 components, with what each one does and which values you can change, is in the chapter **Component library**.
 
 <a id="ch-editing"></a>
 
@@ -238,6 +242,7 @@ Tap it. It is highlighted and the **quick bar** appears near the bottom with:
 - Its **name** (R1, C2, D1…), type and a live reading (for example `3.84 V · 816 µA`). Tap this area to open all properties.
 - **Reverse polarity** (only for polarised parts such as batteries, diodes, LEDs, electrolytic capacitors): swaps the two terminals while the wires stay connected.
 - **Rotate**: turns the part 90° each tap.
+- **Slant up / Slant down** (two buttons, only for parts with their two terminals in line, such as resistors, capacitors, coils, sources): turns the part **15°** each tap, up (anticlockwise) or down (clockwise), at any angle round, as the sides of a delta, a star or a bridge are drawn. For any other angle, type it in the properties sheet, or drag one of its terminals (below). Its terminals stay on grid points, so wires join it as usual.
 - **Scope**: adds the part to the oscilloscope.
 - **Edit** (sliders icon): opens the properties sheet.
 - **Delete**.
@@ -247,7 +252,8 @@ Tap it. It is highlighted and the **quick bar** appears near the bottom with:
 Hold a part for half a second, or tap its name in the quick bar. A sheet slides up with:
 
 - **Live readings** while the simulation runs (voltage, current, power, state…).
-- Action buttons: **Rotate**, **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.
+- Action buttons: **Rotate**, **Slant up** / **Slant down** (15° each way), **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.
+- **Angle** (parts that can slant): type any angle in degrees (0° points right, 90° down, −30° up and to the right), or step it with **−15°** / **+15°**. The part takes the nearest angle that keeps its terminals on grid points, within a few degrees.
 - Every adjustable property: a text box and a slider for numbers, a drop-down for choices (for example the **model** of a transistor or op-amp), a switch for yes/no.
 - A short description of the part.
 - Tap the **✓** to close.
@@ -272,6 +278,9 @@ Note: `m` is **milli** and `M` is **mega**. The unit letter (Ω, F, H, V, A) is 
 
 - **Move**: drag the part. It snaps to the grid. Connected wires follow and re-route neatly. A part cannot be dropped on top of another part, and its terminals never join another terminal or wire just by touching: it stops at the last free spot (drag on into free space to hop over), and you connect parts by drawing a wire. Duplicates are placed on a free spot too. The undo button reverses the move.
 - **Rotate**: quick bar button (or **R** on a keyboard).
+- **Slant**: the two quick bar buttons (or **T** / **Shift+T** on a keyboard): 15° down or up each time; **Rotate** turns a slanted part a quarter turn, still slanted. Tapped again and again, the part turns in place: it stays where it is (within half a grid step) and never walks away.
+- **Any angle, any length**: select the part, then drag one of its **terminals** (they show small squares): that end goes where your finger takes it, at any angle, the other end stays put, and the part stretches or shortens between them (its symbol keeps its size, its leads grow). Dragging a terminal of a part that is not selected draws a wire from it (see Wiring).
+- **Slanting by itself**: in a circuit drawn slanting (a slanted part or a slanting wire in it, as a circuit read from a photo of a delta or a bridge) a part you move between two straight wires turns to lie along the line between their far ends, and snaps onto that line when you drop it near it, so the wires run on in line with it. Straight wires stay straight at any angle as parts move; where one would cross a part or run along another wire, it takes the neatest clear shape of level, upright and 45° runs instead.
 - **Flip**: properties sheet (mirrors the part).
 - **Copy**: properties sheet or selection bar. The copy appears slightly down and right.
 - **Delete**: quick bar or selection bar.
@@ -282,7 +291,7 @@ Note: `m` is **milli** and `M` is **mega**. The unit letter (Ω, F, H, V, A) is 
 2. Drag a box **from left to right** = **window**: only parts and wires **completely inside** are selected.
 3. Drag a box **from right to left** = **crossing**: everything the box **touches** is selected.
 4. While Select is on, tap parts or wires one by one to add or remove them.
-5. A **selection bar** shows how many parts and wires are selected, with **Rotate**, **Copy**, **Delete** and **✕** (clear). Dragging any selected part moves them all together.
+5. A **selection bar** shows how many parts and wires are selected, with **Rotate**, the two **Slant** buttons, **Copy**, **Delete** and **✕** (clear). Dragging any selected part moves them all together.
 6. Tap **Select** again to leave the mode.
 
 #### Undo and redo
@@ -301,6 +310,14 @@ The quickest way, as in EveryCircuit: tap two terminals and the app draws the wi
 2. **Tap another terminal.** A neat right-angled wire is drawn between them, going round parts where it can.
 3. You can also tap **a point on an existing wire** (to branch from it) or **the body of a part** (the wire goes to its nearest terminal).
 4. Changed your mind? Tap **empty space** or the same terminal again, or press **Back**, to cancel.
+
+#### Draw a wire with your finger
+
+Put your finger on a terminal (or a wire's loose end) and drag it to another terminal, a point on a wire or a part: the wire is drawn where your finger went, as **straight runs** — never a curve. Its corners are where you turned (small wobbles of the hand are smoothed away), they sit on grid points, and a run drawn nearly level, upright or at 45° is made exactly so. Let go on empty board and the wire ends there, loose. A path drawn over another terminal or wire would join it, so such a wire is laid round it instead (a message says so). Undo takes a drawn wire away. Dragging a part by its **body** still moves it; a selected part's terminal squares still slant and stretch it.
+
+#### Straight (slanting) wires
+
+To draw a circuit as a textbook does, with slanting sides (a delta, a star, a bridge drawn as a diamond): slant the parts (**Slant up / Slant down**, the **Angle** field, or a terminal drag, above) and draw the wires with your finger along the sides (above). Once a part is slanted, the circuit wires slanting by itself: tapping two terminals draws one **straight** wire between them where it runs clear, else the neatest clear shape of level, upright and 45° runs (leaving each terminal along its part's lead), and only if there is none goes round at right angles; moving parts keeps their straight wires straight at any angle, and a part moved between two straight wires turns to lie along them (see **Slanting by itself** under Moving).
 
 #### Branches and junctions
 
@@ -628,6 +645,7 @@ Generates a standard SPICE netlist of your schematic, with `.op` and `.tran` com
 2. Tap **⋮ → Run with theorem** and choose a theorem — **Thevenin**, **Norton**, **Superposition**, **Source transformation**, **Maximum power transfer**, **Millman**, **Reciprocity** or **Tellegen** — or, under **Analysis methods**, **Nodal analysis** or **Mesh analysis**.
 3. Choose the resistor (the load): tap it on the drawing or in the list. Choose **Current I** or **Voltage V**.
 4. Tap **Solve step by step**. Scroll through the steps. **Run the circuit** at the end goes back to the board, runs the simulation and selects the load, so you can compare with the live reading.
+5. Tap a step's drawing to see it on the whole screen: a wide circuit comes up turned sideways to fill the screen (turn the phone; **⟳** turns it back). Pinch or double-tap to zoom in, drag to move round it, **Fit** to see all of it again. **Back** returns to the steps.
 
 #### What each theorem shows
 
@@ -657,9 +675,61 @@ The ends of the load are named **a** and **b**: a is the end at the higher volta
 
 > **Tip:** Superposition adds currents and voltages, not powers: the last step shows the difference.
 
+<a id="ch-photo"></a>
+
+## 15. Circuit from photo
+
+Take a photo of a circuit diagram — a figure in your textbook, an exam question, a neat sketch on paper — or choose a picture or a screenshot, and the circuit is redrawn on the board with every value, ready to run. Independent and **dependent sources** (the diamonds: 0.1vₓ, 4iₓ, 0.5V₀ …), resistors, capacitors, batteries, coils and grounds are read, and so are the voltages and currents the drawing marks.
+
+Open it from **⋮ → Circuit from photo** in the editor, or from **Or start from a photo** on an empty board (tap **New circuit** on Home first).
+
+The picture is read **on this phone**: no internet, no account or key, and the picture never leaves the phone. Printed diagrams (textbooks, exam papers, screenshots) and neat hand-drawn sketches are read, usually in a few seconds.
+
+#### Reading a circuit
+
+1. Tap **Take a photo** (the camera opens) or **Choose an image** (a picture or screenshot from the gallery).
+2. Crop it to the circuit: drag the corners of the box round the circuit you want read, leaving out other figures and the problem's text (drag the box to move it, or draw a new one; **Whole picture** takes all of it). Tap **Read the circuit**.
+3. Wait while the circuit is read. **Cancel** stops it.
+4. Check the redrawn circuit against the picture (tap **The photo** to see it again). A page with several figures lists them all: tap the one you want.
+5. The drawing shows each part's name and value big enough to read. Put right what was read wrong in the **Parts read** list under it: tap a row to see that part highlighted on the drawing (or tap a part on the drawing to find its row); pick another kind for it (a resistor read as a coil, a source read as a resistor; **Just a wire** if it was no part at all), type its value, or tap the bin to remove it. **Back to what was read** undoes all your changes.
+6. Tap **Open on the board**. The circuit opens as a new circuit (also saved in My Circuits), named after the figure, **paused**. Check it once more, then press **Run**: the live labels show every node voltage and branch current, so the asked quantity (vₓ, i, I₀ …) can be read straight off the board.
+
+> **Warning:** Reading a circuit from a photo is **not always 100 % right**: a part, a value or a wire can be read wrong. After opening it on the board, check it against the picture and fix whatever is wrong there (or in the list before opening), or take a sharper photo and read it again.
+
+#### What the phone reads
+
+- Straight wires and the joints between them; resistors (zigzags), coils (bumps, or loops like a spring seen from the side), capacitors and batteries of one cell or more (plates: the long plate is +), grounds, and open switches (a lever slanting from one wire end towards the next).
+- Wires and parts drawn slanting, as in a bridge drawn as a diamond or a delta and a star drawn as triangles: on the board they are drawn slanting too, at the angle they were drawn (each part along its side, its leads in line with it, the wires straight), joined exactly as drawn; a side drawn as one straight line (a corner, a part, a node) comes out as one straight line, without the kinks the grid would put in it; where a slanting line would cross another part or run along another wire, the circuit is laid level and upright instead. Values printed along a slanting side are read too, also with a name before them (**x₁ = 2.5Ω**, and **Z₁ = 5Ω** written level).
+- Resistors printed small, whose zigzag runs together into a thick bit of the line in a photo, and decimal points that run into the next digit (3.33Ω).
+- **Op amps** (a triangle with **−** and **+** inside, the output at its point): placed as the board's ideal op amp, pointing the way it was drawn, the − and + inputs where they were drawn (told by the signs; unseen, the − is taken as the upper or left input). Its supply rails are ±15 V: change them in its settings if the problem gives others.
+- **Electronics as a book prints it** (an electronic-devices textbook's figures): **diodes** (a filled triangle pointing at a bar; the anode at the triangle's base), told apart as **zeners** (the bar's ends bent, one each way; the voltage printed by it is its breakdown voltage) and **LEDs** (two little arrows beside it); **bipolar transistors** (a thick base bar, the collector and emitter leaving it at a slant, the arrowhead on the emitter pointing out for an **npn**, in for a **pnp**; the base on either side); **junction FETs** (a thick channel bar, the drain and source leaving it square near its ends, the gate's arrowhead pointing in for an **n-channel**, out for a **p-channel**); and **MOSFETs** (the gate plate drawn a little apart from the channel: one solid bar for a **depletion** type, three pieces for an **enhancement** type, the substrate's arrowhead telling n from p). Each is placed as the board's part, turned and mirrored the way it was drawn. A transistor's **β = 90** sets its gain; a JFET's or a depletion MOSFET's **IDSS = 8 mA** and **VP = −4 V** set its curve; an enhancement MOSFET's **VGS(Th) = 3 V** sets its threshold and **k = 0.3 × 10⁻³** (or **ID(on) = 6 mA** at **VGS(on) = 8 V**) its k. Unread, the board's defaults are kept: set them in its settings.
+- **Drawn by hand**: a diode whose triangle is drawn in outline, and a transistor whose base bar is a plain stroke, are read too.
+- **Supply terminals**: a wire ending in a little ring (or just ending) with a voltage printed by it (**+16 V**, **18 V**, **−12 V**) is a **Voltage Rail** of that voltage, referred to ground.
+- Circles (or ovals) as independent sources — **+ −** marks make a voltage source, **~** an AC source, an arrow a current source (also one drawn on the wire running on through the circle) — and diamonds as **dependent sources**, with the expression written beside them (0.1vₓ, 4iₓ).
+- Values with their units and prefixes: 20 Ω, 4.7 kΩ, 2 mH, 10 μF, 9 V, 3 A; values printed as fractions (½ H, ¼ F); a conductance in siemens (2 S) is a resistor of 1/G (0.5 Ω).
+- Marked quantities: **+ vₓ −** across a part, an arrow with **i** beside a branch (or an arrowhead drawn on the wire itself, named like **I_A**), a name like **vₓ** at a node. A dependent source is tied to the quantity its expression names. Mesh currents drawn as round arrows inside the meshes (i₁, i₂) are left out: they are no parts.
+- The figure number (**Figure 4.12**) names the circuit; a page with several figures gives each its own.
+- Sketches drawn by hand in pen, with their values written by hand: wavy lines, corners that overshoot, rings that do not quite close, rounded zigzags, capacitor plates drawn far apart, a unit written a little apart from its value (2  Ω), a decimal point written run into the digit before it (1.67 Ω), a 4 written open at the top, a current arrow drawn with two strokes.
+- Drawings on ruled or squared paper (the printed lines are left out, a wire drawn along one is kept) and photos taken a little turned (they are straightened first).
+- Whole textbook pages: coloured headings, shaded boxes behind a figure, thick bus bars or meters drawn beside a circuit seldom upset the reading of its lines and labels.
+- A MOSFET drawn by hand, other symbols, and untidy or crowded sketches are not read: draw those parts on the board yourself.
+
+#### Getting a good result
+
+- Hold the phone flat over the page, with the whole circuit in the frame, in focus and in good light. Crop the photo to the circuit: one circuit at a time reads best.
+- Every value should be readable in the photo. Notes under the drawing say what was unsure — a part whose value could not be read gets a default value to set on the board.
+- Drawing it yourself? Use a dark pen, let wires meet at their corners, draw each part clearly bigger than the pen is thick, and write each value next to its part, clear of the wires.
+- Warnings under the drawing say what could not be rebuilt as read — a part end joined to nothing, a dependent source whose controlling quantity is not marked — so you can fix it on the board.
+- On the board, a circuit read from a photo shows its **values written big**, not the drawing's names (A, B, x₁ …): only a node voltage that drives a dependent source (vₓ) gets a **net label** with its name. Dependent sources are the **Dependent Source (diamond)** part: its **Controlled by** setting says what drives it (`node:vx`, `v:R2` or `i:R4`) and its gain carries the sign the drawing marks.
+- If the drawing has no ground symbol, the bottom wire is taken as 0 V.
+
+> **Warning:** Always compare the redrawn circuit with the photo before you trust the answer: a misread value or a missed wire gives a different circuit.
+
+Reading handwriting was learned in part from **HASYv2**, a set of hand-written symbols by Martin Thoma, made available under the Open Database License (ODbL) 1.0.
+
 <a id="ch-loadflow"></a>
 
-## 15. Load Flow Analysis (power systems)
+## 16. Load Flow Analysis (power systems)
 
 A separate section for **power-system load flow (power flow) studies**: the bus voltages |V|∠δ, the real and reactive power in every line and transformer, the slack-bus generation and the losses of a transmission network. Open it from the **Load Flow Analysis** card on Home, or from **⋮ → Load flow analysis** in the editor. Back returns to where you came from.
 
@@ -709,7 +779,7 @@ It works on bus and branch data (like MATPOWER or the IEEE common data format), 
 
 <a id="ch-saving"></a>
 
-## 16. Saving, opening and sharing
+## 17. Saving, opening and sharing
 
 #### Automatic saving
 
@@ -724,6 +794,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 | Circuit name & notes | Change the name and add a note (up to 500 characters). |
 | Export file (.rckt) | Saves the circuit as a file you can keep or send. |
 | Open file… | Opens a `.rckt` circuit or a backup file. |
+| Circuit from photo | Reads a circuit diagram from a photo or a picture and opens it as a new circuit (see the chapter **Circuit from photo**). |
 | Share circuit | Sends the circuit through any app on your phone. |
 | SPICE netlist | Opens Analysis on the netlist tab. |
 | Export image (PNG) | Saves a picture of the board with the circuit name and RAPTI credit, good for reports. |
@@ -750,7 +821,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 
 <a id="ch-settings"></a>
 
-## 17. Settings reference
+## 18. Settings reference
 
 Open Settings from the sliders icon on Home or from **⋮ → Settings** in the editor. Every change is saved at once.
 
@@ -813,11 +884,11 @@ These are the same defaults SPICE uses. Change them only if you know why; **Rese
 
 <a id="ch-library"></a>
 
-## 18. Component library (all 520)
+## 19. Component library (all 521)
 
 Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.
 
-### Sources — 34
+### Sources — 35
 
 Every circuit needs a source. **DC Voltage** is a battery-like source; **AC Voltage**, **Square**, **Pulse**, **Triangle**, **Sawtooth**, **Sweep**, **Noise**, **AM/FM**, **Step**, **Exponential**, **Damped sine**, **Piecewise-linear** and **f(t)** are signal generators for testing. **AC Mains** and the **3-phase** supplies are for power and house-wiring circuits (values are RMS). **Ground**, **Protective Earth** and **Chassis Ground** are all 0 V. The controlled sources (VCVS, VCCS, CCVS, CCCS) copy a measurement from one pair of terminals to another.
 
@@ -857,6 +928,7 @@ Every circuit needs a source. **DC Voltage** is a battery-like source; **AC Volt
 | **VCCS** | Voltage-controlled current source: Iout = gm · Vin, flowing through the source from + to −. <br>*Settings:* Transconductance (S) |
 | **CCVS** | Current-controlled voltage source: Vout = r · Iin, where Iin flows through the left terminals (0 V sense). <br>*Settings:* Transresistance (Ω) |
 | **CCCS** | Current-controlled current source: Iout = β · Iin, where Iin flows through the left terminals. <br>*Settings:* Current gain (A/A) |
+| **Dependent Source (diamond)** | A dependent (controlled) source drawn as a diamond in its branch, like in a textbook. "Controlled by": node:NAME — the voltage of the net label NAME to ground; v:PART — the voltage across a part (+ at its first terminal); i:PART — the current through a part (from its first terminal to its second). A current type pushes gain × control in the direction of the arrow; a voltage type keeps + at the first terminal. <br>*Settings:* Type, Gain, Controlled by, Symbol (as in the book) |
 
 ### Batteries — 16
 
@@ -1493,7 +1565,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="ch-examples"></a>
 
-## 19. Examples (all 104)
+## 20. Examples (all 104)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1654,7 +1726,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-formulas"></a>
 
-## 20. Quick reference: formulas and units
+## 21. Quick reference: formulas and units
 
 #### Ohm's law and power
 
@@ -1705,7 +1777,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-troubleshooting"></a>
 
-## 21. Troubleshooting and FAQ
+## 22. Troubleshooting and FAQ
 
 #### Nothing happens when I press Run
 
@@ -1775,7 +1847,7 @@ Circuits live inside the app on your phone. Clearing the app's data or uninstall
 
 #### Can I use it without internet?
 
-Yes. Only the buttons that open the RAPTI website, WhatsApp, email or map need internet.
+Yes. **Circuit from photo** reads pictures on the phone too. Only the buttons that open the RAPTI website, WhatsApp, email or map need internet.
 
 #### Is the result exactly like a real circuit?
 
@@ -1783,7 +1855,7 @@ The engine follows SPICE methods and has been checked against textbook answers (
 
 <a id="ch-about"></a>
 
-## 22. About RAPTI and contact
+## 23. About RAPTI and contact
 
 **Resonance Automation Professional Training Institute** (RAPTI) was established in 2019. Established in 2019 with one goal: developing skilled manpower for the automation industry. Courses at RAPTI are designed by experienced, competent engineers so that every student can work independently in any industry after completing a course — with the knowledge and skills that real job positions demand.
 

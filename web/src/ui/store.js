@@ -43,7 +43,12 @@ function write(k, v) {
 }
 
 export const store = {
-  settings() { return { ...DEFAULT_SETTINGS, ...read(K.settings, {}) }; },
+  settings() {
+    const s = read(K.settings, {});
+    // photos are read on the phone only: an API key an older version kept for them goes
+    if ('claudeKey' in s || 'photoReader' in s) { delete s.claudeKey; delete s.photoReader; write(K.settings, s); }
+    return { ...DEFAULT_SETTINGS, ...s };
+  },
   saveSettings(s) { write(K.settings, s); },
   circuits() { return read(K.circuits, []); },
   saveCircuit(entry) {
@@ -92,6 +97,34 @@ export const store = {
   flag(name) { return !!read(K.flags, {})[name]; },
   setFlag(name, v = true) { const f = read(K.flags, {}); f[name] = v; write(K.flags, f); },
 };
+
+/** A picture ({ data: base64, mediaType }) → its pixels (ImageData), on white. */
+export async function decodeImage({ data, mediaType }) {
+  const bin = atob(data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const bmp = await createImageBitmap(new Blob([bytes], { type: mediaType || 'image/jpeg' }));
+  const cv = document.createElement('canvas');
+  cv.width = bmp.width; cv.height = bmp.height;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.drawImage(bmp, 0, 0);
+  bmp.close?.();
+  return ctx.getImageData(0, 0, cv.width, cv.height);
+}
+
+/** A picture file → JPEG with its long side at most `max` px (the camera's rotation applied). */
+export async function shrinkImage(file, max = 2600) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(bmp.width * k)); cv.height = Math.max(1, Math.round(bmp.height * k));
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height); // transparent PNGs read as white paper
+  ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+  bmp.close?.();
+  return { data: cv.toDataURL('image/jpeg', 0.88).split(',')[1], mediaType: 'image/jpeg' };
+}
 
 // ----------------------------------------------------------- native bridge
 const A = () => (typeof window !== 'undefined' ? window.RaptiAndroid : undefined);
@@ -143,6 +176,29 @@ export const bridge = {
         const f = inp.files[0];
         if (!f) return reject(new Error('No file'));
         f.text().then((text) => resolve({ name: f.name, text }), reject);
+      };
+      inp.click();
+    });
+  },
+  /**
+   * A picture from the camera (camera = true) or the gallery, made smaller (long side ≤ max px)
+   * as JPEG. Resolves { data (base64), mediaType }.
+   */
+  pickImage(camera = false, max = 2600) {
+    return new Promise((resolve, reject) => {
+      if (A() && A().pickImage) {
+        window.__raptiImage = (b64) => resolve({ data: b64, mediaType: 'image/jpeg' });
+        window.__raptiImageError = (msg) => reject(new Error(msg));
+        try { A().pickImage(!!camera, Math.round(max)); } catch (e) { reject(e); }
+        return;
+      }
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'image/*';
+      if (camera) inp.setAttribute('capture', 'environment');
+      inp.onchange = () => {
+        const f = inp.files[0];
+        if (!f) { reject(new Error('cancelled')); return; }
+        shrinkImage(f, max).then(resolve, reject);
       };
       inp.click();
     });

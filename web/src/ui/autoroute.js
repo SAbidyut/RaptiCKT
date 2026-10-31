@@ -69,15 +69,16 @@ export function autoRoute(doc, a, b, opts = {}) {
   const cell = new Uint8Array(cols * rows);
   for (const e of doc.elements) {
     const [x1, y1, x2, y2] = e.worldBox();
+    const poly = e.sv ? e.worldPoly() : null; // a slanted part: its own turned outline, not its square box
     const i0 = Math.max(0, Math.floor((x1 - G - xmin) / HG)), i1 = Math.min(cols - 1, Math.ceil((x2 + G - xmin) / HG));
     const j0 = Math.max(0, Math.floor((y1 - G - ymin) / HG)), j1 = Math.min(rows - 1, Math.ceil((y2 + G - ymin) / HG));
     for (let j = j0; j <= j1; j++) {
       const y = ymin + j * HG;
       for (let i = i0; i <= i1; i++) {
         const x = xmin + i * HG;
-        if (x > x1 + 0.5 && x < x2 - 0.5 && y > y1 + 0.5 && y < y2 - 0.5) cell[j * cols + i] |= BODY;
+        if (poly ? inPoly(poly, x, y, 0.5) : x > x1 + 0.5 && x < x2 - 0.5 && y > y1 + 0.5 && y < y2 - 0.5) cell[j * cols + i] |= BODY;
         // hugging a part's outline: allowed, but a route one step further out looks cleaner
-        if (x > x1 - G + 0.5 && x < x2 + G - 0.5 && y > y1 - G + 0.5 && y < y2 + G - 0.5) cell[j * cols + i] |= HUG;
+        if (poly ? inPoly(poly, x, y, -G + 0.5) : x > x1 - G + 0.5 && x < x2 + G - 0.5 && y > y1 - G + 0.5 && y < y2 + G - 0.5) cell[j * cols + i] |= HUG;
       }
     }
   }
@@ -95,6 +96,12 @@ export function autoRoute(doc, a, b, opts = {}) {
     for (let k = 1; k < w.pts.length; k++) {
       const [p, q] = [w.pts[k - 1], w.pts[k]];
       const sx = Math.sign(q[0] - p[0]), sy = Math.sign(q[1] - p[1]);
+      if (sx && sy) {
+        // slanting: the grid points it passes through, at any slant
+        const gx = Math.round((q[0] - p[0]) / G), gy = Math.round((q[1] - p[1]) / G), gcd = (u, v) => (v ? gcd(v, u % v) : Math.abs(u)), n = gcd(gx, gy) || 1;
+        for (let s = 0; s <= n; s++) wireNodes.add(key(p[0] + (gx / n) * s * G, p[1] + (gy / n) * s * G));
+        continue;
+      }
       const n = Math.round(Math.max(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1])) / G);
       for (let s = 0; s <= n; s++) {
         const x = p[0] + sx * s * G, y = p[1] + sy * s * G;
@@ -234,10 +241,187 @@ export function stretchWire(pts, na, nb) {
   return p;
 }
 
+// ------------------------------------------------------- slanted shapes
+/** Signed area sign of a polygon (1 or -1), so its inside can be told from its outside. */
+function turn(poly) {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; a += p[0] * q[1] - q[0] * p[1]; }
+  return a >= 0 ? 1 : -1;
+}
+
+/** Is (x, y) inside the convex polygon `poly`, by more than m? */
+export function inPoly(poly, x, y, m = 0) {
+  const sg = turn(poly);
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], ex = b[0] - a[0], ey = b[1] - a[1];
+    if ((sg * (ex * (y - a[1]) - ey * (x - a[0]))) / (Math.hypot(ex, ey) || 1) <= m) return false;
+  }
+  return true;
+}
+
+/** Do two convex polygons overlap by more than m (separating axes)? */
+export function polysHit(A, B, m = 2) {
+  for (const P of [A, B]) for (let i = 0; i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length], nx = a[1] - b[1], ny = b[0] - a[0], l = Math.hypot(nx, ny) || 1;
+    let a1 = Infinity, a2 = -Infinity, b1 = Infinity, b2 = -Infinity;
+    for (const p of A) { const d = (p[0] * nx + p[1] * ny) / l; if (d < a1) a1 = d; if (d > a2) a2 = d; }
+    for (const p of B) { const d = (p[0] * nx + p[1] * ny) / l; if (d < b1) b1 = d; if (d > b2) b2 = d; }
+    if (a2 - m <= b1 || b2 - m <= a1) return false;
+  }
+  return true;
+}
+
+/** How much of segment p–q (0 … 1) runs inside the convex polygon, kept m in from its edges. */
+export function segInPoly(p, q, poly, m = 0.5) {
+  const sg = turn(poly), dx = q[0] - p[0], dy = q[1] - p[1];
+  let t0 = 0, t1 = 1;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1;
+    const nx = (-sg * ey) / l, ny = (sg * ex) / l; // inward normal
+    const num = nx * (p[0] - a[0]) + ny * (p[1] - a[1]) - m, den = nx * dx + ny * dy;
+    if (Math.abs(den) < 1e-12) { if (num < 0) return 0; continue; }
+    const t = -num / den;
+    if (den > 0) t0 = Math.max(t0, t); else t1 = Math.min(t1, t);
+    if (t1 <= t0) return 0;
+  }
+  return t1 - t0;
+}
+
+/** Do two parts' outlines overlap (more than touching)? Slanted parts by their own turned boxes. */
+export function partsHit(e, o) {
+  const A = e.worldBox(), B = o.worldBox();
+  if (!(A[0] + 2 < B[2] && A[2] - 2 > B[0] && A[1] + 2 < B[3] && A[3] - 2 > B[1])) return false;
+  return !(e.sv || o.sv) || polysHit(e.worldPoly(), o.worldPoly());
+}
+
+/**
+ * Can a straight wire run from a to b (any slant) without crossing a part, passing over a
+ * terminal or another wire's point (which would join them), or lying along another wire?
+ * skip: wires to leave out (the wire itself, wires moving with it). parts: false to let it cross
+ * parts' bodies (only the joins it would make count).
+ */
+export function straightClear(doc, a, b, skip = new Set(), { parts = true } = {}) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy);
+  if (l < 1) return true;
+  // (a few units in from each end: arriving at a terminal, a wire may graze the edge of its
+  // part's box, as at the top of a ground symbol)
+  const cut = Math.min(6, l / 4), a2 = [a[0] + (dx * cut) / l, a[1] + (dy * cut) / l], b2 = [b[0] - (dx * cut) / l, b[1] - (dy * cut) / l];
+  if (parts) for (const e of doc.elements) {
+    if (e.constructor.type === 'label') continue;
+    if (segInPoly(a2, b2, e.worldPoly()) * (l - 2 * cut) > 1) return false;
+  }
+  const on = (p) => {
+    if ((p[0] === a[0] && p[1] === a[1]) || (p[0] === b[0] && p[1] === b[1])) return false;
+    const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (l * l);
+    return t > 0 && t < 1 && Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / l < 0.5;
+  };
+  for (const e of doc.elements) for (const p of e.getPosts()) if (on(p)) return false;
+  for (const w of doc.wires) {
+    if (skip.has(w)) continue;
+    for (const p of w.pts) if (on(p)) return false;
+    for (let k = 1; k < w.pts.length; k++) {
+      const p = w.pts[k - 1], q = w.pts[k], ex = q[0] - p[0], ey = q[1] - p[1];
+      // lying along it: in line, and overlapping by more than a point
+      if (Math.abs(ex * dy - ey * dx) > 1e-6 || Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / l > 0.5) continue;
+      const s1 = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l, s2 = ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / l;
+      if (Math.min(l, Math.max(s1, s2)) - Math.max(0, Math.min(s1, s2)) > 1) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Which way a wire leaves terminal p of a part, as a whole grid step [dx, dy] (grid units) on
+ * along the part's own line (a slanted part's too), or null when p is no part's terminal.
+ */
+function leadStep(doc, p) {
+  for (const e of doc.elements) {
+    const posts = e.getPosts(), i = posts.findIndex((q) => q[0] === p[0] && q[1] === p[1]);
+    if (i < 0) continue;
+    if (posts.length === 2) {
+      const o = posts[1 - i], gx = Math.round((p[0] - o[0]) / GRID), gy = Math.round((p[1] - o[1]) / GRID);
+      const gcd = (u, v) => (v ? gcd(v, u % v) : Math.abs(u)), n = gcd(gx, gy);
+      if (n) return [gx / n, gy / n];
+    }
+    const d = exitDir(e, p);
+    return d >= 0 ? DIRS[d] : null;
+  }
+  return null;
+}
+
+/**
+ * A wire from a to b where wires may slant (slanting on, or a circuit drawn slanting): straight
+ * when it runs clear, else the neatest clear shape of level, upright and 45° runs with a bend or
+ * two, leaving and entering terminals along their parts' leads where it can. Every run is held
+ * to straightClear and no bend may sit on a terminal or another wire. Returns the points, or
+ * null when no such shape is clear (the right-angled router takes over).
+ */
+export function freeRoute(doc, a, b, skip = new Set()) {
+  const G = GRID, same = (p, q) => p[0] === q[0] && p[1] === q[1];
+  if (same(a, b)) return [a, b];
+  const shapes = (p, q) => {
+    const dx = q[0] - p[0], dy = q[1] - p[1], sx = Math.sign(dx), sy = Math.sign(dy), d = Math.min(Math.abs(dx), Math.abs(dy));
+    const out = [[p, q]];
+    if (dx && dy) {
+      if (Math.abs(dx) !== Math.abs(dy)) out.push([p, [p[0] + sx * d, p[1] + sy * d], q], [p, [q[0] - sx * d, q[1] - sy * d], q]);
+      out.push([p, [q[0], p[1]], q], [p, [p[0], q[1]], q]);
+    }
+    return out;
+  };
+  const la = leadStep(doc, a), lb = leadStep(doc, b);
+  const cands = shapes(a, b);
+  for (const s of [1, 2]) {
+    const a1 = la ? [a[0] + la[0] * s * G, a[1] + la[1] * s * G] : a, b1 = lb ? [b[0] + lb[0] * s * G, b[1] + lb[1] * s * G] : b;
+    if (la || lb) for (const mid of shapes(a1, b1)) cands.push([a, ...mid, b]);
+  }
+  // a bend may not sit on a terminal or on another wire (it would join them)
+  const onWire = (p) => doc.wires.some((w) => !skip.has(w) && w.pts.some((q, i) => same(p, q) || (i > 0 && onSegment(p, w.pts[i - 1], q))));
+  const onPost = (p) => doc.elements.some((e) => e.getPosts().some((q) => same(p, q)));
+  const angle = (u, v) => { const c = (u[0] * v[0] + u[1] * v[1]) / ((Math.hypot(...u) * Math.hypot(...v)) || 1); return Math.acos(Math.max(-1, Math.min(1, c))); };
+  let best = null, bestScore = Infinity;
+  for (const raw of cands) {
+    const pts = [];
+    for (const p of raw) if (!pts.length || !same(pts[pts.length - 1], p)) pts.push(p);
+    // (drop points in line with their neighbours)
+    for (let i = pts.length - 2; i >= 1; i--) {
+      const [p, q, r] = [pts[i - 1], pts[i], pts[i + 1]];
+      if ((q[0] - p[0]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[0] - q[0]) === 0 && (q[0] - p[0]) * (r[0] - q[0]) + (q[1] - p[1]) * (r[1] - q[1]) > 0) pts.splice(i, 1);
+    }
+    if (pts.length < 2) continue;
+    let score = 0, ok = true;
+    for (let i = 1; i < pts.length && ok; i++) {
+      const p = pts[i - 1], q = pts[i];
+      score += Math.hypot(q[0] - p[0], q[1] - p[1]) / G;
+      if (!straightClear(doc, p, q, skip)) ok = false;
+      if (i < pts.length - 1) {
+        if (onWire(q) || onPost(q)) ok = false;
+        const t = angle([q[0] - p[0], q[1] - p[1]], [pts[i + 1][0] - q[0], pts[i + 1][1] - q[1]]);
+        if (t > (100 * Math.PI) / 180) ok = false; // doubling back
+        score += 1.5 + (t > Math.PI / 3 ? 0.6 : 0);
+      }
+    }
+    if (!ok) continue;
+    // leaving or entering a terminal across its own part, or sideways to its lead
+    const n = pts.length;
+    if (la) { const t = angle(la, [pts[1][0] - a[0], pts[1][1] - a[1]]); score += t > Math.PI / 2 + 0.1 ? 6 : t > Math.PI / 4 + 0.1 ? 0.4 : 0; }
+    if (lb) { const t = angle(lb, [pts[n - 2][0] - b[0], pts[n - 2][1] - b[1]]); score += t > Math.PI / 2 + 0.1 ? 6 : t > Math.PI / 4 + 0.1 ? 0.4 : 0; }
+    if (score < bestScore - 1e-9) { bestScore = score; best = pts; }
+  }
+  return best;
+}
+
+function onSegment(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy;
+  if (!l2) return false;
+  const t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2;
+  return t > 0 && t < 1 && Math.abs((p[0] - a[0]) * dy - (p[1] - a[1]) * dx) / Math.sqrt(l2) < 0.5;
+}
+
 /** Obstacle picture of the document, shared by the cost checks of one routing decision. */
 export function wireContext(doc, skipWires = new Set()) {
   const G = GRID;
   const bodies = doc.elements.map((e) => e.worldBox());
+  const polys = doc.elements.map((e) => (e.sv ? e.worldPoly() : null)); // slanted parts: their own turned outline
   const posts = new Set();
   for (const e of doc.elements) for (const p of e.getPosts()) posts.add(key(p[0], p[1]));
   const ends = new Set(), nodes = new Set(), edges = new Set(), segs = [];
@@ -247,7 +431,12 @@ export function wireContext(doc, skipWires = new Set()) {
     for (let k = 1; k < w.pts.length; k++) {
       const [p, q] = [w.pts[k - 1], w.pts[k]];
       segs.push([p, q]);
-      if (p[0] !== q[0] && p[1] !== q[1]) continue;
+      if (p[0] !== q[0] && p[1] !== q[1]) {
+        // slanting: the grid points it passes through (a route bending there would join it)
+        const gx = Math.round((q[0] - p[0]) / G), gy = Math.round((q[1] - p[1]) / G), gcd = (u, v) => (v ? gcd(v, u % v) : Math.abs(u)), n = gcd(gx, gy) || 1;
+        for (let s = 0; s <= n; s++) nodes.add(key(p[0] + (gx / n) * s * G, p[1] + (gy / n) * s * G));
+        continue;
+      }
       const sx = Math.sign(q[0] - p[0]), sy = Math.sign(q[1] - p[1]);
       const m = Math.round(Math.max(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1])) / G);
       for (let s = 0; s <= m; s++) {
@@ -257,7 +446,7 @@ export function wireContext(doc, skipWires = new Set()) {
       }
     }
   }
-  return { bodies, posts, ends, nodes, edges, segs };
+  return { bodies, polys, posts, ends, nodes, edges, segs };
 }
 
 /**
@@ -271,7 +460,7 @@ export function routeCost(ctx, pts, joinsOnly = false) {
   let cost = 0;
   const last = pts.length - 1;
   // joinsOnly: count only what would create a connection the user did not draw
-  const inBody = (x, y) => !joinsOnly && ctx.bodies.some(([x1, y1, x2, y2]) => x > x1 + 0.5 && x < x2 - 0.5 && y > y1 + 0.5 && y < y2 - 0.5);
+  const inBody = (x, y) => !joinsOnly && ctx.bodies.some(([x1, y1, x2, y2], i) => x > x1 + 0.5 && x < x2 - 0.5 && y > y1 + 0.5 && y < y2 - 0.5 && (!ctx.polys?.[i] || inPoly(ctx.polys[i], x, y, 0.5)));
   for (let k = 1; k <= last; k++) {
     const [p, q] = [pts[k - 1], pts[k]];
     const len = Math.max(Math.abs(q[0] - p[0]), Math.abs(q[1] - p[1]));

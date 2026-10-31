@@ -2,7 +2,7 @@
 
 import { Simulator } from '../engine/sim.js';
 import { fmtSI } from '../engine/units.js';
-import { GRID, Element } from '../elements/index.js';
+import { GRID, Element, slantFor, slantAlong } from '../elements/index.js';
 import { CircuitDoc, Wire, snap, route, simplify, makeElement } from './doc.js';
 import { Renderer, WireGraph } from './render.js';
 import { THEMES } from './theme.js';
@@ -17,7 +17,7 @@ import { store } from './store.js';
 import { RmsTracker, acFrequency } from './rms.js';
 import { WireHeat } from './wireheat.js';
 import { WIRE_PRESETS, cableLabel } from '../elements/cables.js';
-import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore } from './autoroute.js';
+import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore, straightClear, partsHit, freeRoute } from './autoroute.js';
 
 // two-terminal parts outside the Sources / Batteries / Diodes / Meters categories that still have a polarity
 const POLAR_TYPES = new Set(['ecap', 'tantalum', 'supercap', 'photodiode', 'solar', 'pvmodule', 'thermocouple', 'led', 'irled', 'laser', 'piezosens', 'tacho', 'ph', 'varactor', 'lm4040', 'buzzer', 'piezobuzz', 'motor', 'dcgen', 'dcsep', 'dcshunt', 'dcseries', 'dualpsu', 'benchpsu']);
@@ -165,7 +165,7 @@ export class Editor {
   }
 
   // -------------------------------------------------------------- lifecycle
-  open(doc, { autoRun = false } = {}) {
+  open(doc, { autoRun = false, note = '' } = {}) {
     this.stopSound();
     this.doc = doc;
     this.doc.assignNames();
@@ -192,6 +192,7 @@ export class Editor {
     this.updateToolbar();
     this.updateHint();
     if (autoRun && doc.elements.length) this.setRunning(true);
+    if (note) this.toast(note, 3600);
     if (!this.raf) this.raf = requestAnimationFrame(this.loop);
     this.active = true;
     if (!this.prewarmed) { this.prewarmed = true; setTimeout(() => this.palette.prewarm(), 1200); }
@@ -688,7 +689,15 @@ export class Editor {
       selection: this.marqueePick ? this.marqueePick.els : this.selection, selWires: this.marqueePick ? this.marqueePick.wires : this.selWires, graph: this.graph, t, preview: this.preview,
       probes: this.doc.probes, hoverPost: this.hoverPost, wireFrom: this.wireFrom, marquee: this.marquee, meterProbes: this.meter.open ? this.meterProbes : null,
       vScale: this.vScale, iScale: this.iScale, iMin: this.iScale * 1e-3 + 1e-12, errorEl: this.errorEl, rms: this.running ? this.rms : null,
+      handles: this.stretchHandles(),
     };
+  }
+
+  /** The terminals of the one selected part that can be dragged to slant it (any angle) and stretch it. */
+  stretchHandles() {
+    if (this.multi || this.mode === 'operate' || this.selection.size !== 1 || this.marqueePick) return null;
+    const [e] = this.selection;
+    return e.canSlant() && !e.damaged ? e.getPosts() : null;
   }
 
   updateStatus() {
@@ -723,7 +732,8 @@ export class Editor {
   updateHint() {
     const h = this.q('.hint');
     if (!this.doc.elements.length) {
-      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Tap two terminals to draw a wire. Press <b>Run</b> to simulate.</span></div>`;
+      h.innerHTML = `<div class="hint-card">${icon('bolt', 28)}<b>Start building</b><span>Tap <b>+</b> to add components. Tap two terminals to draw a wire. Press <b>Run</b> to simulate.</span><button class="btn hint-photo">${icon('camera', 18)} Or start from a photo</button></div>`;
+      h.querySelector('.hint-photo').addEventListener('click', () => this.app.openPhoto());
       h.classList.add('show');
     } else h.classList.remove('show');
   }
@@ -802,7 +812,7 @@ export class Editor {
       ${burnt ? `<button data-s="repair" class="hot">${icon('reset', 17)}Repair</button>` : ''}
       ${wiresOnly ? `<button data-s="cable">${icon('wire', 17)}Cable</button>` : ''}
       ${onlyWire && !burnt ? `<button data-s="probe">${icon('scope', 17)}Scope</button>` : ''}
-      ${nEl ? `<button data-s="rotate">${icon('rotate', 17)}Rotate</button><button data-s="dup">${icon('copy', 17)}Copy</button>` : ''}
+      ${nEl ? `<button data-s="rotate">${icon('rotate', 17)}Rotate</button>${[...this.selection].some((e) => e.canSlant()) ? `<button data-s="slantup" title="Slant 15° up (anticlockwise)">${icon('slant', 17)}</button><button data-s="slantdown" title="Slant 15° down (clockwise)">${icon('slant', 17, 'flipx')}</button>` : ''}<button data-s="dup">${icon('copy', 17)}Copy</button>` : ''}
       <button data-s="del" class="danger">${icon('trash', 17)}Delete</button>
       <button data-s="x">${icon('x', 17)}</button>`;
     bar.classList.add('show');
@@ -812,6 +822,8 @@ export class Editor {
       if (s === 'repair') this.repairWires([...this.selWires]);
       if (s === 'cable') this.inspector.openWires([...this.selWires]);
       if (s === 'rotate') this.rotateSelection();
+      if (s === 'slantup') this.slantSelection(-15);
+      if (s === 'slantdown') this.slantSelection(15);
       if (s === 'dup') this.duplicateSelection();
       if (s === 'del') this.deleteSelection();
       if (s === 'x') this.select(null);
@@ -992,7 +1004,7 @@ export class Editor {
     const moving = new Set(els), moved = new Set(movedWires);
     const solid = (e) => e.constructor.type !== 'label'; // a text note is not a part
     const still = this.doc.elements.filter((e) => !moving.has(e) && solid(e));
-    const stillBoxes = still.map((e) => [e, e.worldBox()]);
+    const stillBoxes = still.map((e) => [e, e.worldBox()]); // (overlaps: partsHit, slanted parts by their turned outlines)
     const stillPosts = new Set(this.doc.elements.filter((e) => !moving.has(e)).flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
     const touches = (w, p) => w.pts.some((q, i) => same(p, q) || (i && onSeg(p, w.pts[i - 1], q)));
     const stillPts = [...stillPosts].map((k) => k.split(',').map(Number));
@@ -1007,7 +1019,7 @@ export class Editor {
     const before = new Map(), attached = new Map();
     for (const e of els) {
       const B = e.worldBox();
-      before.set(e, new Set(fresh ? [] : stillBoxes.filter(([, b]) => boxesHit(B, b)).map(([o]) => o)));
+      before.set(e, new Set(fresh ? [] : stillBoxes.filter(([o, b]) => boxesHit(B, b) && partsHit(e, o)).map(([o]) => o)));
       attached.set(e, e.getPosts().map((p) => new Set(fresh ? [] : this.doc.wires.filter((w) => touches(w, p)))));
     }
     return { els, solid, moved, stillBoxes, stillPosts, touches, before, attached, onWire, wireHad };
@@ -1024,7 +1036,7 @@ export class Editor {
     for (const e of c.els) {
       if (c.solid(e)) {
         const B = e.worldBox(), was = c.before.get(e);
-        for (const [o, b] of c.stillBoxes) if (!was.has(o) && boxesHit(B, b)) return 'part';
+        for (const [o, b] of c.stillBoxes) if (!was.has(o) && boxesHit(B, b) && partsHit(e, o)) return 'part';
       }
       const att = c.attached.get(e);
       const posts = e.getPosts();
@@ -1100,7 +1112,44 @@ export class Editor {
     this.topologyChanged();
   }
 
-  rotateSelection() { this.transformSelection((e) => { e.rot = (e.rot + 1) & 3; }); }
+  rotateSelection() {
+    this.transformSelection((e) => {
+      if (e.sv) e.turnInPlace(() => e.setSlant([-e.sv[1], e.sv[0]])); else e.rot = (e.rot + 1) & 3;
+    });
+  }
+
+  /**
+   * Slant the selected parts a further `step` degrees (to the next multiple of 15°), at any
+   * angle round: parts with their two terminals in line. Dragging a selected part's terminal
+   * sets any other angle.
+   */
+  slantSelection(step = 15) {
+    const els = [...this.selection].filter((e) => e.canSlant());
+    if (!els.length) { this.toast('Only parts with their two terminals in line can be slanted'); return; }
+    const deg = (e) => Math.round(((e.boardAngle() * 180) / Math.PI + step) / 15) * 15;
+    this.setAngleSelection(null, (e) => deg(e));
+  }
+
+  /** Turn the selected slantable parts to `deg` degrees (clockwise from pointing right), or by of(e). */
+  setAngleSelection(deg, of = () => deg) {
+    if (![...this.selection].some((e) => e.canSlant())) return;
+    let shown = null;
+    this.transformSelection((e) => {
+      if (!e.canSlant()) return;
+      const d = of(e), n = (2 * e.localPosts()[1][0]) / GRID;
+      e.turnInPlace(() => e.setSlant(slantFor((d * Math.PI) / 180, n)));
+      shown = e;
+    });
+    if (shown && this.selection.has(shown)) this.toast(`${shown.name}: ${this.angleText(shown)}`, 1200);
+  }
+
+  /** "30°" (as the board shows it: 0° pointing right, turning clockwise; within 180°). */
+  angleText(e) {
+    let d = Math.round((e.boardAngle() * 180) / Math.PI);
+    d = ((d % 360) + 360) % 360;
+    if (d > 180) d -= 360;
+    return `${d}°`;
+  }
 
   /** Parts whose two terminals are not interchangeable (+/−, anode/cathode…). */
   static isPolar(e) {
@@ -1120,6 +1169,7 @@ export class Editor {
     if (!els.length) return;
     this.checkpoint();
     for (const e of els) {
+      if (e.sv) { e.setSlant([-e.sv[0], -e.sv[1]]); continue; } // slanted: end for end along its line
       const before = e.getPosts().map((p) => p.join(',')).sort().join('|');
       e.rot = (e.rot + 2) & 3;
       const after = e.getPosts().map((p) => p.join(',')).sort().join('|');
@@ -1175,6 +1225,8 @@ export class Editor {
     }
     const changed = [];
     if (!moves.length) return changed;
+    // slanting on, or a circuit drawn slanting: a straight wire stays straight, at whatever slant
+    const free = this.slantMode();
     for (const w of this.doc.wires) {
       if (movedWires.has(w)) continue;
       const a = w.pts[0], b = w.pts[w.pts.length - 1];
@@ -1187,6 +1239,16 @@ export class Editor {
         const dx = na[0] - a[0], dy = na[1] - a[1];
         w.pts = w.pts.map(([x, y]) => [x + dx, y + dy]);
         continue;
+      }
+      // a straight wire stays one, from end to end, slanting if need be, where it runs clear of
+      // parts, terminals and other wires; else (moves free-angled, or a wire that slants) the
+      // neatest clear shape of level, upright and 45° runs, else it is routed round them
+      const slants = w.pts.some((q, i) => i && q[0] !== w.pts[i - 1][0] && q[1] !== w.pts[i - 1][1]);
+      if ((w.pts.length === 2 && free) || slants) {
+        const skip = new Set([w, ...movedWires]);
+        if (same(na, nb) || straightClear(this.doc, na, nb, skip)) { w.pts = [na, nb]; continue; }
+        const r = freeRoute(this.doc, na, nb, skip);
+        if (r) { w.pts = r; continue; }
       }
       // a straight wire has no shape to keep: use the cleanest simple shape (cheap, no search while dragging)
       const simple = () => pickRoute(this.doc, simpleRoutes(na, nb, exitAt(this.doc, na), exitAt(this.doc, nb), a[1] === b[1]), { skipWires: new Set([w]), noSearch: true });
@@ -1260,9 +1322,18 @@ export class Editor {
   tidyWires(wires) {
     const list = wires.filter((w) => this.doc.wires.includes(w));
     const all = new Set(list);
+    const slanting = (w) => w.pts.some((q, i) => i && q[0] !== w.pts[i - 1][0] && q[1] !== w.pts[i - 1][1]);
+    const clear = (w, skip) => w.pts.every((q, i) => !i || straightClear(this.doc, w.pts[i - 1], q, skip));
     for (const pass of [0, 1, 2]) {
       for (const w of list) {
         const skip = pass === 0 ? all : new Set([w]);
+        // a wire with slanting runs that runs clear stays as it is (it was drawn, or kept, so);
+        // one that does not gets the neatest clear slanting shape, if there is one
+        if (slanting(w)) {
+          if (clear(w, skip)) continue;
+          const r = freeRoute(this.doc, w.pts[0], w.pts[w.pts.length - 1], skip);
+          if (r) { w.pts = r; continue; }
+        }
         const ctx = wireContext(this.doc, skip);
         const bad = routeCost(ctx, w.pts) > 0;
         const a = w.pts[0], b = w.pts[w.pts.length - 1];
@@ -1448,7 +1519,7 @@ export class Editor {
     const items = [
       ['book', 'theorem', 'Run with theorem'],
       ['save', 'save', 'Save to My Circuits'], ['copy', 'saveas', 'Save as copy'], ['edit', 'info', 'Circuit name & notes'],
-      ['download', 'export', 'Export file (.rckt)'], ['upload', 'import', 'Open file…'], ['share', 'share', 'Share circuit'],
+      ['download', 'export', 'Export file (.rckt)'], ['upload', 'import', 'Open file…'], ['camera', 'photo', 'Circuit from photo'], ['share', 'share', 'Share circuit'],
       ['code', 'netlist', 'SPICE netlist'], ['camera', 'shot', 'Export image (PNG)'], ['table', 'op', 'Operating point'],
       ['reset', 'repair', 'Replace burnt parts & wires'], ['tower', 'loadflow', 'Load flow analysis'],
       ['sliders', 'settings', 'Settings'], ['manual', 'manual', 'User manual'], ['help', 'help', 'Help & gestures'], ['trash', 'clear', 'Clear circuit'],
@@ -1472,6 +1543,7 @@ export class Editor {
       case 'info': this.editInfo(); break;
       case 'export': app.bridge.saveFile(this.doc.name.replace(/[^\w\- ]+/g, '_') + '.rckt', 'application/json', JSON.stringify(this.doc.toJSON(), null, 1)); break;
       case 'import': app.importFile(); break;
+      case 'photo': app.openPhoto(); break;
       case 'share': app.bridge.share(this.doc.name + ' – RaptiCKT circuit', JSON.stringify(this.doc.toJSON())); break;
       case 'netlist': this.analysis.open('net'); break;
       case 'op': this.analysis.open('op'); break;
@@ -1603,6 +1675,7 @@ export class Editor {
       if (!this.active || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
       if (e.key === 'Delete' || e.key === 'Backspace') this.deleteSelection();
       else if (e.key === 'r') this.rotateSelection();
+      else if (e.key === 't' || e.key === 'T') this.slantSelection(e.key === 'T' ? -15 : 15);
       else if (e.key === 'o') this.setMode('operate', true);
       else if (e.key === 'w') this.setMode('wire', true);
       else if (e.key === ' ') { e.preventDefault(); this.togglePlay(); }
@@ -1743,7 +1816,7 @@ export class Editor {
     clearTimeout(this.lpT);
     const g = this.gesture;
     if (g && g.pressed) { g.pressed.onRelease(); this.pressChanged(g.pressed); }
-    if (g && g.type === 'move' && g.moved) this.topologyChanged();
+    if (g && (g.type === 'move' || g.type === 'stretch') && g.moved) this.topologyChanged();
     this.preview = null; this.marquee = null; this.marqueePick = null; this.drag = false;
     this.gesture = null;
   }
@@ -1796,8 +1869,16 @@ export class Editor {
       g.ox = this.renderer.ox; g.oy = this.renderer.oy;
       return;
     }
-    // wires are drawn by tapping two terminals; dragging a terminal moves its part, dragging a wire pans
-    if (h.kind === 'post' && h.el) { h.kind = 'element'; }
+    // a selected part's terminal: dragged, it sets the part's slant and length (any angle)
+    if (h.kind === 'post' && h.el && !this.multi && this.selection.size === 1 && this.selection.has(h.el) && h.el.canSlant() && !h.el.damaged) {
+      this.startStretch(g, h.el, h.el.getPosts().findIndex((p) => same(p, h.pos)));
+      if (g.type === 'stretch') return;
+    }
+    // a terminal (or a wire's free end) dragged: a wire drawn where the finger goes, in straight runs
+    if (h.kind === 'post' && !this.multi) {
+      g.type = 'draw'; g.from = [...h.pos]; g.path = [this.renderer.toWorld(g.sx, g.sy)]; g.lastS = [g.sx, g.sy];
+      return;
+    }
     if (h.kind === 'element' || (h.kind === 'wire' && this.multi)) {
       g.type = 'move';
       let els, wires;
@@ -1815,12 +1896,175 @@ export class Editor {
       const fixed = new Set(this.doc.elements.filter((e) => !moving.has(e)).flatMap((e) => e.getPosts()).map((p) => p[0] + ',' + p[1]));
       g.bridges = els.flatMap((e) => e.getPosts()).filter((p) => fixed.has(p[0] + ',' + p[1])).map((p) => ({ p: [...p], w: new Wire([p, p]) }));
       g.place = this.placementCtx(els, wires);
-      g.dx = 0; g.dy = 0; g.okDx = 0; g.okDy = 0;
+      g.auto = els.length === 1 && !wires.length ? this.autoSlantSetup(els[0]) : null;
+      g.dx = 0; g.dy = 0; g.okDx = 0; g.okDy = 0; g.okAuto = !!g.auto;
       return;
     }
     g.type = this.multi && h.kind === 'none' ? 'marquee' : 'pan';
     if (g.type === 'marquee') this.marquee = [g.sx, g.sy, g.sx, g.sy];
     g.ox = this.renderer.ox; g.oy = this.renderer.oy;
+  }
+
+  /**
+   * Are wires free-angled: a circuit drawn slanting (a slanted part or a straight slanting wire in
+   * it, as a circuit read from a photo of a delta or a bridge)?
+   */
+  slantMode() {
+    return this.doc.elements.some((e) => e.sv)
+      || this.doc.wires.some((w) => w.pts.length === 2 && w.pts[0][0] !== w.pts[1][0] && w.pts[0][1] !== w.pts[1][1]);
+  }
+
+  /**
+   * Auto-slant: a part moved on its own, joined at each terminal by one straight wire, while
+   * moves are free-angled (slantMode). It then
+   * turns to lie along the line between its wires' far ends A and B, as a delta's or a star's
+   * sides are drawn; near that line it snaps onto it, so the wires run on in line with it. Returns
+   * what the move needs, or null (moved as it is).
+   */
+  autoSlantSetup(e) {
+    if (!e.canSlant() || e.damaged) return null;
+    const posts = e.getPosts();
+    const far = posts.map((p) => {
+      const ws = this.doc.wires.filter((w) => same(w.a, p) || same(w.b, p));
+      if (ws.length !== 1 || ws[0].pts.length !== 2) return null;
+      return { w: ws[0], q: [...(same(ws[0].a, p) ? ws[0].b : ws[0].a)] };
+    });
+    if (!far[0] || !far[1] || same(far[0].q, far[1].q) || posts.some((p) => far.some((f) => same(f.q, p)))) return null;
+    // (a terminal sitting right on another part's: it is not free to turn)
+    if (this.doc.elements.some((o) => o !== e && o.getPosts().some((q) => posts.some((p) => same(p, q))))) return null;
+    if (!this.slantMode()) return null;
+    return { e, A: far[0].q, B: far[1].q, ws: [far[0].w, far[1].w], sv: e.sv && [...e.sv], rot: e.rot };
+  }
+
+  /** Turn and place an auto-slanted part (autoSlantSetup) for its middle at C: along A→B, on that line when near it. */
+  autoSlant(a, C) {
+    const e = a.e, [A, B] = [a.A, a.B];
+    const n = (2 * e.localPosts()[1][0]) / GRID, dx = (B[0] - A[0]) / GRID, dy = (B[1] - A[1]) / GRID;
+    const along = slantAlong(dx, dy, n);
+    let sv = along || slantFor(Math.atan2(dy, dx), n), c = null;
+    if (along) {
+      const gcd = (x, y) => (y ? gcd(y, x % y) : Math.abs(x)), k = gcd(Math.abs(dx), Math.abs(dy));
+      const p = dx / k, q = dy / k, ux = p * GRID, uy = q * GRID, l2 = ux * ux + uy * uy;
+      const off = Math.abs((C[0] - A[0]) * uy - (C[1] - A[1]) * ux) / Math.sqrt(l2);
+      // as many of the line's grid steps as its usual length takes, a step of wire left at each end
+      const m = Math.min(Math.round(along[0] / p || along[1] / q), k - 2);
+      if (off <= 1.25 * GRID && m >= 1 && m * Math.hypot(p, q) >= n * 0.6) {
+        const t = Math.max(1, Math.min(k - m - 1, Math.round(((C[0] - A[0]) * ux + (C[1] - A[1]) * uy) / l2 - m / 2)));
+        sv = [p * m, q * m];
+        c = [A[0] + (t + m / 2) * ux, A[1] + (t + m / 2) * uy];
+      }
+    }
+    e.setSlant(sv);
+    [e.x, e.y] = c || C;
+    if (!c) e.snapPosts();
+  }
+
+  /**
+   * Where a wire drawn with a finger ends, for the finger at screen point (sx, sy): a terminal
+   * or a wire's point (join: true), a point on a wire (it is joined there), a part's nearest
+   * terminal, else the grid point under the finger (a loose end).
+   */
+  drawEnd(sx, sy, from) {
+    const h = this.hitTest(sx, sy), [wx, wy] = this.renderer.toWorld(sx, sy);
+    if (h.kind === 'post' && !same(h.pos, from)) return { at: [...h.pos], join: true };
+    if (h.kind === 'wire') {
+      const p = [snap(h.pos[0]), snap(h.pos[1])];
+      if (h.wire.pts.some((q, i) => i && (same(p, q) || same(p, h.wire.pts[i - 1]) || onSeg(p, h.wire.pts[i - 1], q)))) return { at: p, join: true };
+    }
+    if (h.kind === 'element') { const p = this.magnet(wx, wy, from); return { at: p, join: true }; }
+    return { at: [snap(wx), snap(wy)], join: false };
+  }
+
+  /**
+   * The finger's path from terminal g.from to `end`, as a wire of straight runs: its corners where
+   * the path turns (bends shallower than about a grid step's worth are smoothed away), on grid
+   * points, runs drawn nearly level, upright or at 45° made exactly so.
+   */
+  drawnWire(g, end) {
+    const eps = Math.max(GRID * 0.7, 14 / this.renderer.scale);
+    const raw = [g.from, ...g.path.slice(1), end];
+    // Ramer–Douglas–Peucker: keep only the points where the path really turns
+    const keep = new Array(raw.length).fill(false);
+    keep[0] = keep[raw.length - 1] = true;
+    const rdp = (i, j) => {
+      const [a, b] = [raw[i], raw[j]], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      let k = -1, dmax = eps;
+      for (let m = i + 1; m < j; m++) {
+        const d = Math.abs((b[0] - a[0]) * (raw[m][1] - a[1]) - (b[1] - a[1]) * (raw[m][0] - a[0])) / l;
+        if (d > dmax) { dmax = d; k = m; }
+      }
+      if (k > 0) { keep[k] = true; rdp(i, k); rdp(k, j); }
+    };
+    rdp(0, raw.length - 1);
+    const pts = raw.filter((_, i) => keep[i]).map((p, i, a) => (i === 0 || i === a.length - 1 ? [...p] : [snap(p[0]), snap(p[1])]));
+    // runs nearly level, upright or at 45°: exactly so (the corner moves; the ends never do)
+    const T = Math.tan((12 * Math.PI) / 180);
+    const square = (p, q) => {
+      const dx = q[0] - p[0], dy = q[1] - p[1], ax = Math.abs(dx), ay = Math.abs(dy);
+      if (ay <= T * ax) return [q[0], p[1]];
+      if (ax <= T * ay) return [p[0], q[1]];
+      if (Math.abs(ax - ay) <= 0.2 * Math.max(ax, ay)) return [q[0], p[1] + Math.sign(dy) * ax];
+      return q;
+    };
+    for (let i = 1; i < pts.length - 1; i++) pts[i] = square(pts[i - 1], pts[i]);
+    const n = pts.length;
+    if (n > 2) pts[n - 2] = (() => { const back = square(pts[n - 1], pts[n - 2]); return back; })();
+    const out = simplify(pts);
+    return out.length >= 2 ? out : [g.from, end];
+  }
+
+  /** A wire drawn with a finger, let go: added as drawn, unless it would join something it should not. */
+  finishDrawnWire(g) {
+    const end = this.drawEnd(g.lastS[0], g.lastS[1], g.from);
+    const len = g.path.reduce((s, p, i) => (i ? s + Math.hypot(p[0] - g.path[i - 1][0], p[1] - g.path[i - 1][1]) : s), 0);
+    if (same(end.at, g.from) || len < GRID * 0.8) return;
+    let pts = this.drawnWire(g, end.at);
+    // a corner on a terminal or a wire, or a run over one, would join them: then the neatest
+    // clear wire between the two ends instead
+    const k = (p) => p[0] + ',' + p[1];
+    const ends = new Set([k(pts[0]), k(pts[pts.length - 1])]);
+    const posts = this.doc.elements.flatMap((e) => e.getPosts());
+    const joins = (p) => posts.some((q) => same(p, q)) || this.doc.wires.some((w) => w.pts.some((q, i) => same(p, q) || (i && onSeg(p, w.pts[i - 1], q))));
+    const bad = pts.some((p, i) => i > 0 && i < pts.length - 1 && joins(p)) || pts.some((p, i) => i && !straightClear(this.doc, pts[i - 1], p, new Set(), { parts: false })) || ends.size < 2;
+    if (bad) {
+      const a = pts[0], b = pts[pts.length - 1];
+      pts = (this.slantMode() && freeRoute(this.doc, a, b)) || pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]))) || [a, b];
+      pts = simplify(pts);
+      this.toast('The wire as drawn would touch another terminal or wire: it was laid round it', 2200);
+    }
+    if (pts.length < 2) return;
+    this.checkpoint();
+    this.doc.addWire(pts, { cable: this.defaultCable() });
+    this.topologyChanged();
+    this.haptic(12);
+  }
+
+  /** Begin dragging terminal k of the selected part e: the other terminal stays put. */
+  startStretch(g, e, k) {
+    if (k < 0) return;
+    g.type = 'stretch';
+    g.undoSnap = this.snapshot();
+    this.splitAtJunctions();
+    g.e = e; g.k = k;
+    g.els = [{ e, x: e.x, y: e.y, posts: e.getPosts() }];
+    g.wires = [];
+    g.wirePts = this.doc.wires.map((w) => w.pts.map((p) => [...p]));
+    const fixed = new Set(this.doc.elements.filter((o) => o !== e).flatMap((o) => o.getPosts()).map((p) => p[0] + ',' + p[1]));
+    g.bridges = e.getPosts().filter((p) => fixed.has(p[0] + ',' + p[1])).map((p) => ({ p: [...p], w: new Wire([p, p]) }));
+    g.place = this.placementCtx([e], []);
+    g.ok = { sv: e.sv && [...e.sv], rot: e.rot, x: e.x, y: e.y };
+    g.at = null;
+  }
+
+  /** Put the stretched part's dragged terminal at grid point T (its other terminal where it was). */
+  applyStretch(g, st) {
+    const e = g.e;
+    this.doc.wires.forEach((w, i) => { if (g.wirePts[i]) w.pts = g.wirePts[i].map((p) => [...p]); });
+    e.sv = st.sv && [...st.sv]; e.rot = st.rot; e.x = st.x; e.y = st.y;
+    for (const b of g.bridges) { b.w.pts = [[...b.p], [...b.p]]; if (!this.doc.wires.includes(b.w)) this.doc.wires.push(b.w); }
+    g.follow = this.followWires(new Map([[e, g.els[0].posts]]));
+    this.graph = new WireGraph(this.doc);
+    this.dirtyDraw = true;
   }
 
   magnet(wx, wy, exclude) {
@@ -1863,13 +2107,49 @@ export class Editor {
         const dx = snap(wx - g.w[0]), dy = snap(wy - g.w[1]);
         if (dx === g.dx && dy === g.dy) break;
         g.dx = dx; g.dy = dy; g.moved = true;
-        this.applyMove(g, dx, dy);
-        const why = (dx || dy) && this.placementBlocked(g.place, (g.bridges || []).map((b) => b.w), g.follow || []);
+        const blocked = () => (dx || dy) && this.placementBlocked(g.place, (g.bridges || []).map((b) => b.w), g.follow || []);
+        // auto-slanted first: kept only when it lands clear with both its wires straight
+        let auto = !!g.auto;
+        this.applyMove(g, dx, dy, auto);
+        let why = blocked();
+        if (auto && (why || g.auto.ws.some((w) => w.pts.length !== 2))) { auto = false; this.applyMove(g, dx, dy, false); why = blocked(); }
         if (why) {
           // the part stops at the last free spot until the finger reaches free space again
-          this.applyMove(g, g.okDx, g.okDy);
+          this.applyMove(g, g.okDx, g.okDy, g.okAuto);
           if (g.blocked !== why) { g.blocked = why; this.blockedToast(why); }
-        } else { g.okDx = dx; g.okDy = dy; g.blocked = null; }
+        } else { g.okDx = dx; g.okDy = dy; g.okAuto = auto; g.blocked = null; }
+        break;
+      }
+      case 'draw': {
+        const last = g.path[g.path.length - 1];
+        if (Math.hypot(wx - last[0], wy - last[1]) * R.scale > 3) g.path.push([wx, wy]);
+        g.lastS = [sx, sy];
+        const end = this.drawEnd(sx, sy, g.from);
+        this.hoverPost = end.join ? end.at : null;
+        this.preview = this.drawnWire(g, end.at);
+        this.dirtyDraw = true;
+        break;
+      }
+      case 'stretch': {
+        const T = [snap(wx), snap(wy)], e = g.e, other = g.els[0].posts[1 - g.k];
+        if (g.at && same(g.at, T)) break;
+        g.at = T; g.moved = true;
+        const v = [(T[0] - other[0]) / GRID, (T[1] - other[1]) / GRID];
+        const sv = g.k === 1 ? v : [-v[0], -v[1]];
+        if (Math.hypot(sv[0], sv[1]) < 2) break; // too short for a part
+        const keep = { sv: e.sv, rot: e.rot, x: e.x, y: e.y };
+        e.setSlant(sv);
+        const st = { sv: e.sv, rot: e.rot, x: (T[0] + other[0]) / 2, y: (T[1] + other[1]) / 2 };
+        Object.assign(e, keep);
+        this.applyStretch(g, st);
+        const why = this.placementBlocked(g.place, g.bridges.map((b) => b.w), g.follow || []);
+        if (why) {
+          this.applyStretch(g, g.ok);
+          if (g.blocked !== why) { g.blocked = why; this.blockedToast(why); }
+        } else {
+          g.ok = st; g.blocked = null;
+          this.toast(`${e.name}: ${this.angleText(e)}`, 1200);
+        }
         break;
       }
       case 'marquee':
@@ -1881,10 +2161,15 @@ export class Editor {
     }
   }
 
-  /** Put the dragged parts (and selected wires) at offset dx, dy from where the drag began. */
-  applyMove(g, dx, dy) {
+  /** Put the dragged parts (and selected wires) at offset dx, dy from where the drag began (auto: auto-slanted). */
+  applyMove(g, dx, dy, auto = false) {
     this.doc.wires.forEach((w, i) => { if (g.wirePts[i]) w.pts = g.wirePts[i].map((p) => [...p]); });
     for (const o of g.els) { o.e.x = o.x + dx; o.e.y = o.y + dy; }
+    if (g.auto) {
+      const a = g.auto;
+      a.e.sv = a.sv && [...a.sv]; a.e.rot = a.rot;
+      if (auto) this.autoSlant(a, [g.els[0].x + dx, g.els[0].y + dy]);
+    }
     const moved = new Set();
     for (const o of g.wires) { o.w.pts = o.pts.map(([x, y]) => [x + dx, y + dy]); moved.add(o.w); }
     for (const b of g.bridges || []) { b.w.pts = [[...b.p], [...b.p]]; if (!this.doc.wires.includes(b.w)) this.doc.wires.push(b.w); }
@@ -1911,6 +2196,10 @@ export class Editor {
         this.tap(g);
         this.lastTap = g.hit.kind === 'none' || g.hit.kind === 'wire' ? { t: performance.now(), sx: g.sx, sy: g.sy } : null;
         break;
+      case 'draw':
+        this.finishDrawnWire(g);
+        break;
+      case 'stretch':
       case 'move':
         // a bridge wire whose part came back to where it was is not needed
         for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
@@ -2017,7 +2306,10 @@ export class Editor {
     else if (h.kind === 'element') b = this.magnet(w[0], w[1], a);
     if (!b || same(a, b)) { this.cancelTapWire(); return; }
     const hFirst = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]);
-    const smart = pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
+    // (straight wires: from one to the other as the crow flies, as a delta's sides are drawn)
+    // (where it would cross a part, or run over a terminal or along a wire: the neatest clear
+    // shape of level, upright and 45° runs, else routed round at right angles)
+    const smart = (this.slantMode() && freeRoute(this.doc, a, b)) || pickRoute(this.doc, simpleRoutes(a, b, exitAt(this.doc, a), exitAt(this.doc, b), hFirst));
     let pts = simplify(smart || route(a, b, hFirst));
     if (pts.length < 2) pts = [a, b];
     this.checkpoint();

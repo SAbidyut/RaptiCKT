@@ -1,5 +1,5 @@
-// Component menu stays open while adding several parts (only ✕ closes it),
-// reverse-polarity button, decade knob (digits, −/+ decades) and stepped knob.
+// Component menu stays open while adding several parts (only ✕ closes it) and stays put from tab
+// to tab, reverse-polarity button, decade knob (digits, −/+ decades) and stepped knob.
 // Usage: npm run build && node tests/editor-tools.mjs [outdir]
 import { chromium } from 'playwright';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
@@ -30,6 +30,13 @@ const r1 = await page.evaluate(() => {
 check('menu still open after adding 5 resistors', r1.open, JSON.stringify(r1));
 check('5 resistors, all in different places, all visible above the menu', r1.n === 5 && r1.distinct === 5 && r1.visible);
 await page.screenshot({ path: path.join(out, 'menu-open.png') });
+// the menu stays put from tab to tab, also on a tab of a few parts (Renewables, Recent)
+const tops = [];
+for (const t of ['Passive', 'Renewables', 'Recent', 'Vacuum Tubes', 'Sources']) {
+  await page.evaluate((t) => document.querySelector(`.pal-tabs button[data-t="${t}"]`).click(), t); await sleep(150);
+  tops.push(await page.evaluate(() => Math.round(app.editor.palette.host.getBoundingClientRect().top)));
+}
+check('the menu does not move from tab to tab', tops.every((y) => y === tops[0]), JSON.stringify(tops));
 // tapping the board does not close it
 await page.touchscreen.tap(60, 150); await sleep(300);
 check('tap on the board keeps the menu open', await page.evaluate(() => app.editor.palette.isOpen));

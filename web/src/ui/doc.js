@@ -54,6 +54,7 @@ export class CircuitDoc {
     this.id = null;
     this.description = '';
     this.folder = null; // My Circuits folder id (not part of the saved file)
+    this.bigLabels = false; // values drawn a third bigger (a circuit read from a photo)
   }
 
   add(e) { this.elements.push(e); return e; }
@@ -104,6 +105,7 @@ export class CircuitDoc {
       wires: this.wires.map((w) => w.toJSON()),
       probes: this.probes.map((p) => ({ ...p, el: p.el != null ? idx.get(p.el) : undefined })),
       sim: this.simSettings,
+      bl: this.bigLabels ? 1 : undefined,
     };
   }
 
@@ -121,6 +123,7 @@ export class CircuitDoc {
     }
     d.probes = (o.probes || []).map((p) => ({ ...p, el: p.el != null && d.elements[p.el] ? d.elements[p.el].id : undefined })).filter((p) => p.kind === 'node' || p.el != null);
     d.simSettings = o.sim || {};
+    d.bigLabels = !!o.bl;
     d.assignNames();
     return d;
   }

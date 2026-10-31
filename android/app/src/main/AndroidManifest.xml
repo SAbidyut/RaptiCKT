@@ -41,5 +41,12 @@
                 <data android:mimeType="application/json" />
             </intent-filter>
         </activity>
+
+        <!-- the file the camera app writes a "Circuit from photo" picture into -->
+        <provider
+            android:name=".PhotoProvider"
+            android:authorities="${applicationId}.photo"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

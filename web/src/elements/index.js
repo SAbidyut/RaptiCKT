@@ -38,10 +38,10 @@ import './ladder.js';
 import './cables.js';
 
 import { getType } from './base.js';
-export { getType, allTypes, Element, GRID } from './base.js';
+export { getType, allTypes, Element, GRID, slantFor, slantAlong } from './base.js';
 
 export const CATEGORIES = [
-  { id: 'Sources', icon: 'bolt', items: ['dcv', 'acv', 'mains', 'ac3y', 'ac3d', 'rail', 'ground', 'earth', 'chassis', 'netlabel', 'benchpsu', 'dualpsu', 'pvmodule', 'dci', 'aci', 'square', 'pulse', 'pwm', 'triangle', 'sawtooth', 'sweep', 'noise', 'amsrc', 'fmsrc', 'stepsrc', 'expsrc', 'dampsine', 'pwlsrc', 'rampsrc', 'funcsrc', 'vcvs', 'vccs', 'ccvs', 'cccs'] },
+  { id: 'Sources', icon: 'bolt', items: ['dcv', 'acv', 'mains', 'ac3y', 'ac3d', 'rail', 'ground', 'earth', 'chassis', 'netlabel', 'benchpsu', 'dualpsu', 'pvmodule', 'dci', 'aci', 'square', 'pulse', 'pwm', 'triangle', 'sawtooth', 'sweep', 'noise', 'amsrc', 'fmsrc', 'stepsrc', 'expsrc', 'dampsine', 'pwlsrc', 'rampsrc', 'funcsrc', 'vcvs', 'vccs', 'ccvs', 'cccs', 'depsrc'] },
   { id: 'Batteries', icon: 'battery', items: ['cellaa', 'bat9v', 'coincell', 'nimh', 'nicd', 'liion', 'lipo2s', 'lifepo4', 'lifepo12', 'leadacid', 'agm', 'gel', 'batpack', 'supercap', 'bms', 'cccv'] },
   { id: 'Renewables', icon: 'sun', items: ['pvarray', 'mpptcc', 'pwmcc', 'invoff', 'invgrid', 'windgen', 'fuelcell'] },
   { id: 'Passive', icon: 'wave', items: ['resistor', 'shuntr', 'fusibler', 'rheostat', 'pot', 'trimpot', 'capacitor', 'ecap', 'npecap', 'tantalum', 'varcap', 'realcap', 'ceramiccap', 'filmcap', 'polyestercap', 'ppcap', 'micacap', 'inductor', 'varind', 'coreind', 'ferrite', 'crystal', 'ceramicres', 'tline', 'memristor'] },

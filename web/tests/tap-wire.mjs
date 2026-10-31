@@ -62,7 +62,7 @@ ok('Undo removes a tap-drawn wire', await wires() === 1);
 // tapping a part still selects it
 await tapAt(body);
 ok('tapping a part body still selects it', await page.evaluate(() => app.editor.selected() === app.editor.doc.elements[1]));
-// dragging from a terminal no longer draws a wire: it moves the part
+// dragging from a terminal draws a wire along the finger (in straight runs); the part stays put
 const p0 = await at([0, 0]);
 await page.evaluate(() => app.editor.select(null));
 const before = await page.evaluate(() => [app.editor.doc.elements[0].x, app.editor.doc.elements[0].y]);
@@ -75,8 +75,8 @@ const drag = async ([x1, y1], [x2, y2]) => {
 };
 await drag(p0, [p0[0], p0[1] + 80]);
 const after = await page.evaluate(() => [app.editor.doc.elements[0].x, app.editor.doc.elements[0].y]);
-ok('dragging from a terminal does not draw a wire', await wires() === 1);
-ok('...it moves the part instead', after[1] !== before[1]);
+ok('dragging from a terminal draws a wire (a loose end where the finger stopped)', await wires() === 2);
+ok('...and the part stays where it was', after[0] === before[0] && after[1] === before[1]);
 // the how-to toast is shown only the first time
 const toastAfter = async () => { await tapAt(await at([0, 0])); const t = await page.evaluate(() => document.querySelector('.screen.editor .toast').classList.contains('show') && document.querySelector('.screen.editor .toast').textContent); await page.evaluate(() => app.editor.cancelTapWire()); return t; };
 await page.waitForTimeout(2500);

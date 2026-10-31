@@ -197,6 +197,12 @@ export class WireGraph {
   }
 }
 
+/** Does text running along a part at angle `a` read upside down (pointing down or left)? */
+function readsBackwards(a) {
+  const d = ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  return d >= Math.PI / 2 - 1e-6 && d < (3 * Math.PI) / 2 - 1e-6;
+}
+
 // ---------------------------------------------------------- graphics helper
 export function makeGraphics(ctx, theme, opts) {
   const vcCache = new Map();
@@ -205,7 +211,7 @@ export function makeGraphics(ctx, theme, opts) {
     body: theme.body, fill: theme.fill, accent: theme.accent, muted: theme.muted, text1: theme.text1, text2: theme.text2,
     pos: theme.pos, neg: theme.neg, bg: theme.bg, hi: theme.hi, lo: theme.lo, hiFill: theme.hiFill, loFill: theme.loFill, hiRGB: theme.hiRGB,
     lw: 2.2, running: false, t: 0, vScale: 5, iScale: 0.01, showCharge: true, voltColors: true,
-    rot: 0, flip: false,
+    rot: 0, flip: false, ang: 0, // the part's quarter turns, mirror, and angle (radians: any, when slanted)
     pv: () => 0,
     vc(v) {
       if (!g.voltColors || !g.running) return theme.body;
@@ -256,20 +262,21 @@ export function makeGraphics(ctx, theme, opts) {
       if (o.fill) { ctx.fillStyle = o.fill; ctx.fill(); }
       if (o.stroke) { ctx.strokeStyle = o.stroke; ctx.lineWidth = o.width || g.lw; ctx.stroke(); }
     },
-    /** run fn in an upright (unrotated, unmirrored) frame centred on the part */
+    /** run fn in an upright (unrotated, unmirrored, unslanted) frame centred on the part */
     upright(fn, cx = 0, cy = 0) {
-      const r = g.rot, f = g.flip;
+      const r = g.rot, f = g.flip, a = g.ang;
       ctx.save();
       ctx.translate(cx, cy);
       if (f) ctx.scale(1, -1);
-      if (r) ctx.rotate((-r * Math.PI) / 2);
-      g.rot = 0; g.flip = false;
-      try { fn(); } finally { ctx.restore(); g.rot = r; g.flip = f; }
+      if (a) ctx.rotate(-a);
+      g.rot = 0; g.flip = false; g.ang = 0;
+      try { fn(); } finally { ctx.restore(); g.rot = r; g.flip = f; g.ang = a; }
     },
     /** upright text at local (lx, ly), anchored so it extends away from the part in that direction */
     textSide(str, lx, ly, o = {}) {
       let x = lx, y = g.flip ? -ly : ly;
-      [x, y] = [[x, y], [-y, x], [-x, -y], [y, -x]][g.rot & 3];
+      const c = Math.cos(g.ang), sn = Math.sin(g.ang);
+      [x, y] = [x * c - y * sn, x * sn + y * c];
       let align = 'center', baseline = 'middle';
       if (Math.abs(x) > Math.abs(y)) align = x > 0 ? 'left' : 'right';
       else baseline = y < 0 ? 'alphabetic' : 'top';
@@ -289,8 +296,8 @@ export function makeGraphics(ctx, theme, opts) {
       let align = o.align || 'center';
       const follow = o.follow ?? (align !== 'center');
       if (!follow) {
-        if (g.rot) ctx.rotate((-g.rot * Math.PI) / 2);
-      } else if (g.rot === 1 || g.rot === 2) {
+        if (g.ang) ctx.rotate(-g.ang);
+      } else if (readsBackwards(g.ang)) {
         // keep pin labels readable: rotate a half turn instead of reading upside down
         ctx.rotate(Math.PI);
         align = align === 'left' ? 'right' : align === 'right' ? 'left' : align;
@@ -348,6 +355,52 @@ export function fillRich(ctx, str, x, y, size, font, align = 'center') {
     cx += ctx.measureText(t).width;
   }
   ctx.textAlign = keep; ctx.font = font(size);
+}
+
+/**
+ * Where each part's value label goes with labels lk times their usual size: [{ e, side, r }],
+ * side null for the part's usual side, r the label's rectangle.
+ */
+function sideLayout(doc, settings, lk) {
+  const segs = [];
+  for (const w of doc.wires) for (let k = 1; k < w.pts.length; k++) {
+    const [a, b] = [w.pts[k - 1], w.pts[k]];
+    segs.push([Math.min(a[0], b[0]) - 2, Math.min(a[1], b[1]) - 2, Math.max(a[0], b[0]) + 2, Math.max(a[1], b[1]) + 2]);
+  }
+  const boxes = doc.elements.map((e) => e.worldBox());
+  const placed = []; // labels already positioned, so two labels never share a spot
+  const hit = (r, own) => {
+    let a = 0;
+    const add = (o, wgt = 1) => {
+      const w = Math.min(r[2], o[2]) - Math.max(r[0], o[0]), h = Math.min(r[3], o[3]) - Math.max(r[1], o[1]);
+      if (w > 0 && h > 0) a += w * h * wgt;
+    };
+    for (const o of segs) add(o);
+    boxes.forEach((o, i) => { if (i !== own) add(o); });
+    for (const o of placed) add(o, 3);
+    return a;
+  };
+  const out = [];
+  doc.elements.forEach((e, i) => {
+    const val = e.valueLabel();
+    const txt = settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
+    if (!txt) { out.push({ e, side: null, r: null }); return; }
+    const [sx, sy] = e.labelSide();
+    const sides = [[sx, sy], [-sx, -sy], [sy, sx], [-sy, -sx]];
+    let best = null, bestScore = Infinity;
+    // keep the part's usual side unless it collides; then try the other sides, then a step further out
+    for (const extra of [0, 12 * lk, 24 * lk]) sides.forEach(([a, b], k) => {
+      const sd = [a, b, extra], r = e.labelRect(txt, sd, lk);
+      if (!r) return;
+      const sc = hit(r, i) + k * 4 + extra * 1.5;
+      if (sc < bestScore) { bestScore = sc; best = sd; }
+    });
+    const side = best && (best[0] !== sx || best[1] !== sy || best[2]) ? best : null;
+    const r = e.labelRect(txt, side || [sx, sy], lk);
+    if (r) placed.push(r);
+    out.push({ e, side, r });
+  });
+  return out;
 }
 
 // ---------------------------------------------------------------- renderer
@@ -439,17 +492,22 @@ export class Renderer {
       const err = st.errorEl === e;
       ctx.save();
       ctx.translate(e.x, e.y);
-      ctx.rotate(((e.rot & 3) * Math.PI) / 2);
+      // slanted: turned to its angle (and drawn smaller when its terminals are close), its leads
+      // drawn out to its terminals
+      const sf = e.sv ? e.slantFrame() : null, ax = sf ? (x) => e.slantAxis(x) : (x) => x;
+      g.ang = e.boardAngle();
+      ctx.rotate(g.ang);
+      if (sf && sf.s !== 1) ctx.scale(sf.s, sf.s);
       if (e.flip) ctx.scale(1, -1);
       g.rot = e.rot & 3; g.flip = e.flip;
       if (sel || err) {
         const [a, b, c, d] = e.localBox();
-        g.box(a - 5, b - 5, c + 5, d + 5, { fill: err ? 'rgba(248,113,113,0.12)' : 'rgba(34,211,238,0.08)', stroke: err ? '#f87171' : th.select, width: 1.2, r: 6 });
+        g.box(ax(a) - 5, b - 5, ax(c) + 5, d + 5, { fill: err ? 'rgba(248,113,113,0.12)' : 'rgba(34,211,238,0.08)', stroke: err ? '#f87171' : th.select, width: 1.2, r: 6 });
       }
-      for (const [pi, x1, y1, x2, y2] of e.leads()) g.line(x1, y1, x2, y2, g.vc(g.pv(pi)), g.lw);
+      for (const [pi, x1, y1, x2, y2] of e.leads()) g.line(ax(x1), y1, ax(x2), y2, g.vc(g.pv(pi)), g.lw);
       e.draw(g);
       ctx.restore();
-      g.rot = 0; g.flip = false;
+      g.rot = 0; g.flip = false; g.ang = 0;
       if (e.fault && e.fault.m && e.fault.m !== 'none') { // fault badge at the top-right corner
         const [, y1, x2] = e.worldBox();
         g.circle(x2 + 2, y1 - 2, 7, { fill: '#ef4444', stroke: th.bg, width: 1.5 });
@@ -479,7 +537,14 @@ export class Renderer {
       }
     }
 
-    // labels
+    // handles on the selected part's terminals: drag one to slant and stretch it
+    for (const [x, y] of st.handles || []) {
+      const hs = Math.max(4.5, 5 / this.scale);
+      g.box(x - hs, y - hs, x + hs, y + hs, { stroke: th.select, width: 1.6, r: 2 });
+    }
+
+    // labels (bigger when zoomed out, so they stay readable)
+    this.lk = this.labelScale(st);
     if (st.settings.showValues !== false) {
       this.drawLabels(st, g);
       if (running) this.drawLive(st, sim);
@@ -672,54 +737,61 @@ export class Renderer {
   }
 
   /**
+   * How many times their usual size value labels and live readings are drawn: never smaller on
+   * the screen than about 11.5 px (13 px in a circuit read from a photo, whose values are also a
+   * third bigger to begin with), however far the board is zoomed out, as far as the room between
+   * the labels allows (labelRoom; 5 times at most). In steps of a tenth, so that zooming does not
+   * lay the labels out again every frame.
+   */
+  labelScale(st) {
+    if (this.fixedLabels) return this.figLk || 1; // a figure laid out once at its own scale
+    const doc = st.doc, big = !!(doc && doc.bigLabels), base = big ? 1.35 : 1;
+    const k = Math.max(base, Math.min(this.labelRoom(doc, st.settings), (big ? 13 : 11.5) / (10.5 * this.scale)));
+    return Math.round(k * 10) / 10;
+  }
+
+  /**
+   * How big labels may grow before they run into each other or into parts: the largest size
+   * (5 times at most) at which, laid out again, no more of them land on another label or on a
+   * part's body than at their usual size. Worked out again when parts or wires are added or
+   * removed.
+   */
+  labelRoom(doc, settings) {
+    if (!doc) return 1;
+    const sig = doc.elements.length + '|' + doc.wires.length + '|' + (settings.showNames ? 1 : 0);
+    if (this._room && this._room.doc === doc && this._room.sig === sig) return this._room.k;
+    const boxes = doc.elements.map((e) => e.worldBox());
+    const ov = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    const clashes = (k) => {
+      const lay = sideLayout(doc, settings, k).filter((l) => l.r);
+      let n = 0;
+      for (let i = 0; i < lay.length; i++) {
+        for (let j = i + 1; j < lay.length; j++) if (ov(lay[i].r, lay[j].r) > 6 * k * k) n++;
+        boxes.forEach((b, m) => { if (doc.elements[m] !== lay[i].e && ov(lay[i].r, b) > 20 * k * k) n++; });
+      }
+      return n;
+    };
+    const n1 = clashes(1);
+    let k = 1;
+    for (const t of [5, 4, 3, 2.5, 2, 1.6, 1.3]) if (clashes(t) <= n1) { k = t; break; }
+    this._room = { doc, sig, k };
+    return k;
+  }
+
+  /**
    * Put each value label on the side of its part where it does not sit on a wire
    * or another part (e.g. a transformer rating above a primary wire). Cached per geometry.
    */
   chooseLabelSides(st) {
     const doc = st.doc;
-    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0);
+    const lk = this.lk || 1;
+    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0) + '|' + lk;
     for (const w of doc.wires) sig += '|' + w.pts.join(';');
     // only the label's length counts (labelRect): a fan's rpm ticking over must not redo this every frame
-    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + e.valueLabel().length;
+    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + (e.sv || '') + e.valueLabel().length;
     if (this._sidesSig === sig) return;
     this._sidesSig = sig;
-    const segs = [];
-    for (const w of doc.wires) for (let k = 1; k < w.pts.length; k++) {
-      const [a, b] = [w.pts[k - 1], w.pts[k]];
-      segs.push([Math.min(a[0], b[0]) - 2, Math.min(a[1], b[1]) - 2, Math.max(a[0], b[0]) + 2, Math.max(a[1], b[1]) + 2]);
-    }
-    const boxes = doc.elements.map((e) => e.worldBox());
-    const placed = []; // labels already positioned, so two labels never share a spot
-    const hit = (r, own) => {
-      let a = 0;
-      const add = (o, wgt = 1) => {
-        const w = Math.min(r[2], o[2]) - Math.max(r[0], o[0]), h = Math.min(r[3], o[3]) - Math.max(r[1], o[1]);
-        if (w > 0 && h > 0) a += w * h * wgt;
-      };
-      for (const o of segs) add(o);
-      boxes.forEach((o, i) => { if (i !== own) add(o); });
-      for (const o of placed) add(o, 3);
-      return a;
-    };
-    doc.elements.forEach((e, i) => {
-      e.chosenSide = null;
-      const val = e.valueLabel();
-      const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
-      if (!txt) return;
-      const [sx, sy] = e.labelSide();
-      const sides = [[sx, sy], [-sx, -sy], [sy, sx], [-sy, -sx]];
-      let best = null, bestScore = Infinity;
-      // keep the part's usual side unless it collides; then try the other sides, then a step further out
-      for (const extra of [0, 12, 24]) sides.forEach(([a, b], k) => {
-        const sd = [a, b, extra], r = e.labelRect(txt, sd);
-        if (!r) return;
-        const sc = hit(r, i) + k * 4 + extra * 1.5;
-        if (sc < bestScore) { bestScore = sc; best = sd; }
-      });
-      if (best && (best[0] !== sx || best[1] !== sy || best[2])) e.chosenSide = best;
-      const r = e.labelRect(txt);
-      if (r) placed.push(r);
-    });
+    for (const { e, side } of sideLayout(doc, st.settings, lk)) e.chosenSide = side;
   }
 
   drawLabels(st, g) {
@@ -730,7 +802,7 @@ export class Renderer {
       const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
       if (!txt) continue;
       const o = e.labelAnchor();
-      g.text(txt, o[0], o[1], { size: 10.5, color: th.text2, align: o[2], baseline: o[3], bold: true, follow: false, rich: e.richName });
+      g.text(txt, o[0], o[1], { size: 10.5 * (this.lk || 1), color: th.text2, align: o[2], baseline: o[3], bold: true, follow: false, rich: e.richName });
     }
   }
 
@@ -739,10 +811,10 @@ export class Renderer {
     const ctx = this.ctx, th = st.theme, set = st.settings;
     const volts = set.liveVolts !== false, amps = set.liveAmps !== false;
     if (!volts && !amps) return;
-    const lay = this.liveLayout(st, sim);
-    ctx.font = '600 10px Inter, system-ui, sans-serif';
+    const lay = this.liveLayout(st, sim), lk = lay.lk || 1;
+    ctx.font = `600 ${10 * lk}px Inter, system-ui, sans-serif`;
     ctx.lineJoin = 'round';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3 * lk;
     ctx.strokeStyle = th.bg;
     const put = (txt, x, y, align, base, col) => {
       ctx.textAlign = align; ctx.textBaseline = base;
@@ -806,16 +878,34 @@ export class Renderer {
 
   /** Placement of live labels; recomputed only when the circuit geometry or the solver changes. */
   liveLayout(st, sim) {
-    const doc = st.doc;
-    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0);
+    const doc = st.doc, lk = this.lk || 1;
+    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0) + '|' + lk;
     // value-label length and side matter too: turning a knob changes the label's length (its
     // text does not: a running fan's rpm changes every frame and must not redo the layout)
-    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + e.valueLabel().length + (e.chosenSide ? e.chosenSide.join(':') : '');
+    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + (e.sv || '') + e.valueLabel().length + (e.chosenSide ? e.chosenSide.join(':') : '');
     for (const p of st.probes || []) if (p.pos) sig += '|p' + p.pos[0] + ',' + p.pos[1];
     if (this._live && this._live.sim === sim && this._live.sig === sig) return this._live;
+    // as big as the labels are drawn, or smaller where readings that big would land on each other
+    // or on parts
+    let best = null;
+    for (let k = lk; ; k = Math.max(1, Math.round(k * 8) / 10)) {
+      const L = this.liveLayoutAt(st, sim, k);
+      if (!best || L.bad < best.bad) best = L;
+      if (!L.bad || k === 1) break;
+    }
+    this._live = { sim, sig, ...best };
+    return this._live;
+  }
 
-    const VW = 58, VH = 13, AW = 66; // text extents for layout (widest typical reading, e.g. "→ 188.5 mA~")
+  /** liveLayout with readings lk times their usual size: { volts, amps, lk, bad (how many land on something) }. */
+  liveLayoutAt(st, sim, lk) {
+    const doc = st.doc, vk = this.lk || 1; // (vk: the size the value labels are drawn at)
+    const VW = 58 * lk, VH = 13 * lk, AW = 66 * lk; // text extents for layout (widest typical reading, e.g. "→ 188.5 mA~")
     const obs = [];
+    // bad: readings that land on another label or on a part's body (a wire under one is fine)
+    let bad = 0;
+    const texts = [], ov2 = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+    const lands = (r) => texts.some((t) => ov2(r, t) > 6 * lk * lk) || doc.elements.some((e) => ov2(r, e.worldBox()) > 20 * lk * lk);
     const box = (r, pad = 0, py = pad) => obs.push([r[0] - pad, r[1] - py, r[2] + pad, r[3] + py]);
     const overlap = (r) => {
       let a = 0;
@@ -844,8 +934,8 @@ export class Renderer {
       box(e.worldBox(), 2);
       const val = e.valueLabel();
       const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
-      const r = e.labelRect(txt);
-      if (r) box(r, 9, 1); // a clear gap so two readings on one line never run together
+      const r = e.labelRect(txt, undefined, vk);
+      if (r) { box(r, 9, 1); texts.push(r); } // a clear gap so two readings on one line never run together
     }
     // probe pins stand above their point; keep readings out from under them
     for (const p of st.probes || []) if (p.pos) box([p.pos[0] - 14, p.pos[1] - 30, p.pos[0] + 14, p.pos[1] + 12]);
@@ -864,20 +954,20 @@ export class Renderer {
       const push = (x, y, align, base, pen) => cands.push({ x, y, align, base: base === 'alphabetic' ? 'bottom' : base, pen });
       const [ox, oy, oa, ob] = e.labelAnchor([-sx, -sy]);
       push(ox, oy, oa, ob, 0);
-      if (ob === 'middle') { push(ox, oy + 14, oa, 'middle', 6); push(ox, oy - 14, oa, 'middle', 7); }
+      if (ob === 'middle') { push(ox, oy + 14 * lk, oa, 'middle', 6); push(ox, oy - 14 * lk, oa, 'middle', 7); }
       const [vx, vy, va, vb] = e.labelAnchor();
       if (!val) push(vx, vy, va, vb, 2);
-      else if (vb === 'middle') { push(vx, vy + 14, va, 'middle', 3); push(vx, vy - 14, va, 'middle', 4); }
-      else if (vb === 'top') push(vx, vy + 14, va, 'top', 4);
-      else push(vx, vy - 14, va, 'bottom', 5);
+      else if (vb === 'middle') { push(vx, vy + 7 * vk + 7 * lk, va, 'middle', 3); push(vx, vy - 7 * vk - 7 * lk, va, 'middle', 4); }
+      else if (vb === 'top') push(vx, vy + 14 * vk, va, 'top', 4);
+      else push(vx, vy - 14 * vk, va, 'bottom', 5);
       // crowded (a text label, a tag or a neighbour right where the reading would go):
       // step further out on every side rather than settle on top of something
       const out = { left: [1, 0], right: [-1, 0], top: [0, 1], alphabetic: [0, -1] };
       [[-sx, -sy], [sx, sy], [sy, sx], [-sy, -sx]].forEach((sd, j) => {
         const [x, y, a, bl] = e.labelAnchor(sd);
         const [ux, uy] = bl === 'middle' ? out[a] : out[bl];
-        for (let k = 1; k <= 3; k++) push(x + ux * 13 * k, y + uy * 13 * k, a, bl, 10 + j * 3 + k * 4);
-        if (bl === 'middle') for (const d of [-26, 26]) push(x, y + d, a, bl, 14 + j * 3);
+        for (let s = 1; s <= 3; s++) push(x + ux * 13 * lk * s, y + uy * 13 * lk * s, a, bl, 10 + j * 3 + s * 4);
+        if (bl === 'middle') for (const d of [-26 * lk, 26 * lk]) push(x, y + d, a, bl, 14 + j * 3);
         else for (const d of [-1, 1]) push(x + d * (AW / 2 + 8), y, a, bl, 14 + j * 3);
       });
       let best = null, bestScore = Infinity;
@@ -889,6 +979,8 @@ export class Renderer {
       const [p0, p1] = e.getPosts();
       const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
       const dir = (ux, uy) => Math.abs(ux) >= Math.abs(uy) ? (ux > 0 ? '→' : '←') : (uy > 0 ? '↓' : '↑');
+      if (lands(best.r)) bad++;
+      texts.push(best.r);
       amps.push({ el: e, x: best.x, y: best.y, align: best.align, base: best.base, fwd: dir(dx, dy), back: dir(-dx, -dy) });
       box(best.r, 9, 1);
     }
@@ -920,21 +1012,21 @@ export class Renderer {
           const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
           if (horiz) {
             const room = (len >= VW + 8 ? 0 : 12) + short; // prefer stretches wide enough for the text
-            cands.push({ x, y: y - 5, align: 'center', base: 'bottom', pen: room + Math.abs(t - 0.5) * 6 });
-            cands.push({ x, y: y + 5, align: 'center', base: 'top', pen: room + 4 + Math.abs(t - 0.5) * 6 });
+            cands.push({ x, y: y - 5 * lk, align: 'center', base: 'bottom', pen: room + Math.abs(t - 0.5) * 6 });
+            cands.push({ x, y: y + 5 * lk, align: 'center', base: 'top', pen: room + 4 + Math.abs(t - 0.5) * 6 });
             // one line further out, for when the spot next to the wire is taken
-            cands.push({ x, y: y - 19, align: 'center', base: 'bottom', pen: room + 40 + Math.abs(t - 0.5) * 6 });
-            cands.push({ x, y: y + 19, align: 'center', base: 'top', pen: room + 44 + Math.abs(t - 0.5) * 6 });
+            cands.push({ x, y: y - 19 * lk, align: 'center', base: 'bottom', pen: room + 40 + Math.abs(t - 0.5) * 6 });
+            cands.push({ x, y: y + 19 * lk, align: 'center', base: 'top', pen: room + 44 + Math.abs(t - 0.5) * 6 });
           } else {
             const pen = 10 + short + Math.abs(t - 0.5) * 6;
-            cands.push({ x: x + 6, y, align: 'left', base: 'middle', pen });
-            cands.push({ x: x - 6, y, align: 'right', base: 'middle', pen: pen + 2 });
-            cands.push({ x: x + 20, y, align: 'left', base: 'middle', pen: pen + 38 });
-            cands.push({ x: x - 20, y, align: 'right', base: 'middle', pen: pen + 40 });
+            cands.push({ x: x + 6 * lk, y, align: 'left', base: 'middle', pen });
+            cands.push({ x: x - 6 * lk, y, align: 'right', base: 'middle', pen: pen + 2 });
+            cands.push({ x: x + 20 * lk, y, align: 'left', base: 'middle', pen: pen + 38 });
+            cands.push({ x: x - 20 * lk, y, align: 'right', base: 'middle', pen: pen + 40 });
           }
         }
       }
-      for (const [x, y] of posts) for (const [d, p] of [[5, 30], [16, 50]]) {
+      for (const [x, y] of posts) for (const [d, p] of [[5 * lk, 30], [16 * lk, 50]]) {
         cands.push({ x: x + 5, y: y - d, align: 'left', base: 'bottom', pen: p });
         cands.push({ x: x - 5, y: y - d, align: 'right', base: 'bottom', pen: p + 2 });
         cands.push({ x: x + 5, y: y + d, align: 'left', base: 'top', pen: p + 4 });
@@ -950,11 +1042,12 @@ export class Renderer {
       // nowhere free near the net (pins wired straight into a crowded block): leave the
       // reading out rather than print it over a part or another label; a probe still reads it
       if (!best || best.ov > VW * VH * 0.35 || onBody(best.r) > 18) continue;
+      if (lands(best.r)) bad++;
+      texts.push(best.r);
       box(best.r, 2);
       volts.push({ node: n, x: best.x, y: best.y, align: best.align, base: best.base });
     }
-    this._live = { sim, sig, volts, amps };
-    return this._live;
+    return { volts, amps, lk, bad };
   }
 
   drawProbe(pr, g, st) {

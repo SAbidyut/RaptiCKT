@@ -439,3 +439,79 @@ export class CCCS extends Controlled {
   }
 }
 register(CCCS);
+
+/**
+ * Dependent source drawn the textbook way — a diamond in a branch, two terminals — with its
+ * control named instead of wired: "node:vx" (the voltage of net label vx to ground),
+ * "v:R3" (the voltage across part R3, + at its first terminal) or "i:R1" (the current
+ * through part R1, from its first terminal to its second). Value = gain × control.
+ */
+export class DepSource extends TwoTerm {
+  static type = 'depsrc'; static title = 'Dependent Source (diamond)'; static prefix = 'D';
+  static keywords = 'dependent source controlled diamond vccs vcvs cccs ccvs 0.1vx 4ix textbook';
+  static props = [
+    { key: 'kind', label: 'Type', type: 'select', def: 'vccs', options: [['vccs', 'Current source, voltage controlled (VCCS)'], ['cccs', 'Current source, current controlled (CCCS)'], ['vcvs', 'Voltage source, voltage controlled (VCVS)'], ['ccvs', 'Voltage source, current controlled (CCVS)']] },
+    { key: 'gain', label: 'Gain', unit: '', def: 0.1, min: -1e9, max: 1e9, knob: true },
+    { key: 'ctrl', label: 'Controlled by', type: 'text', def: 'node:vx' },
+    { key: 'sym', label: 'Symbol (as in the book)', type: 'text', def: 'vx' },
+  ];
+  static description = 'A dependent (controlled) source drawn as a diamond in its branch, like in a textbook. "Controlled by": node:NAME — the voltage of the net label NAME to ground; v:PART — the voltage across a part (+ at its first terminal); i:PART — the current through a part (from its first terminal to its second). A current type pushes gain × control in the direction of the arrow; a voltage type keeps + at the first terminal.';
+  isCurrent() { return this.p.kind === 'vccs' || this.p.kind === 'cccs'; }
+  branchCount() { return this.isCurrent() ? 0 : 1; }
+  reset() { this.setCurrent(0); }
+  /** The control as { p, q, k }: a node pair scaled by k, or a branch unknown `br` scaled by k. */
+  control(s) {
+    const c = String(this.p.ctrl || '').trim(), m = /^(node|v|i):\s*(.+)$/.exec(c);
+    if (!m) return null;
+    const els = s.elements || [];
+    if (m[1] === 'node') {
+      const lab = els.find((e) => e.netName && e.netName() === m[2] && e.nodes && e.nodes.length);
+      return lab ? { p: lab.nodes[0], q: 0, k: 1 } : null;
+    }
+    const e = els.find((x) => x.name === m[2]);
+    if (!e || !e.nodes || e.nodes.length < 2) return null;
+    if (m[1] === 'v') return { p: e.nodes[0], q: e.nodes[1], k: 1 };
+    if (e.branches && e.branches.length) return { br: e.branches[0], k: 1 };
+    const R = e.R ?? e.p.r; // a resistor's current is its voltage over R
+    return R > 0 ? { p: e.nodes[0], q: e.nodes[1], k: 1 / R } : null;
+  }
+  /** shared by the transient and the AC stamps (both expose addA / addVCCS / addBranchKCL) */
+  stampWith(m, s) {
+    const [a, b] = this.nodes, c = this.control(s), g = this.p.gain * (c ? c.k : 0);
+    if (this.isCurrent()) {
+      if (!c) return;
+      if (c.br != null) { m.addA(a - 1, c.br, g); m.addA(b - 1, c.br, -g); } else m.addVCCS(a, b, c.p, c.q, g);
+      return;
+    }
+    const k = this.branches[0];
+    m.addBranchKCL(a, b, k); m.addA(k, a - 1, 1); m.addA(k, b - 1, -1);
+    if (!c) return;
+    if (c.br != null) m.addA(k, c.br, -g); else { m.addA(k, c.p - 1, -g); m.addA(k, c.q - 1, g); }
+  }
+  stamp(s) { this.stampWith(s, s); }
+  stampAC(ac) { this.stampWith(ac, ac.sim); }
+  accept(s) {
+    if (!this.isCurrent()) { this.setCurrent(s.x[this.branches[0]]); return; }
+    const c = this.control(s);
+    if (!c) { this.setCurrent(0); return; }
+    const v = c.br != null ? s.x[c.br] : s.v(c.p) - s.v(c.q);
+    this.setCurrent(this.p.gain * c.k * v);
+  }
+  valueLabel() {
+    const sym = String(this.p.sym || '').trim() || String(this.p.ctrl || '').replace(/^\w+:/, '');
+    return `${+this.p.gain.toPrecision(4)}${sym}`;
+  }
+  leads() { return [[0, -2 * G, 0, -G * 0.8, 0], [1, 2 * G, 0, G * 0.8, 0]]; }
+  draw(g) {
+    const d = G * 0.8;
+    g.poly([[-d, 0], [0, -d], [d, 0], [0, d]], { stroke: g.body, width: g.lw * 0.9, fill: g.fill, close: true });
+    if (this.isCurrent()) {
+      g.line(-G * 0.42, 0, G * 0.3, 0, g.accent, g.lw);
+      g.poly([[G * 0.42, 0], [G * 0.1, -G * 0.22], [G * 0.1, G * 0.22]], { fill: g.accent });
+    } else {
+      g.text('+', -G * 0.36, 0, { size: 10, color: g.pos, bold: true });
+      g.text('−', G * 0.36, 0, { size: 10, color: g.neg, bold: true });
+    }
+  }
+}
+register(DepSource);
