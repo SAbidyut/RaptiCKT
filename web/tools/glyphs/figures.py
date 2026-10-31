@@ -226,7 +226,7 @@ class Fig:
             self.d.line([tuple(p - n * 26), tuple(p + n * 26)], fill=0, width=LW)
         if label: self.text(tuple(c + n * 80 * side), label)
 
-    def battery(self, a, b, label, plus_at_a=True, side=1, cells=1):
+    def battery(self, a, b, label=None, plus_at_a=True, side=1, cells=1):
         c, u, n = self._ends(a, b, 16 + 32 * (cells - 1))
         for k in range(cells):
             o = (k - (cells - 1) / 2) * 32
@@ -234,7 +234,7 @@ class Fig:
             sp = c + u * (o + 8) if plus_at_a else c - u * (o + 8)
             self.d.line([tuple(lp - n * 28), tuple(lp + n * 28)], fill=0, width=LW)
             self.d.line([tuple(sp - n * 14), tuple(sp + n * 14)], fill=0, width=LW + 3)
-        self.text(tuple(c + n * 56 * side), label)
+        if label: self.text(tuple(c + n * 56 * side), label)
 
     def inductor(self, a, b, label, side=1):
         c, u, n = self._ends(a, b, 72)
@@ -246,6 +246,60 @@ class Fig:
             ang = math.degrees(math.atan2(u[1], u[0]))
             self.d.arc(box, start=ang + 180, end=ang + 360, fill=0, width=LW)
         if label: self.text(tuple(c + n * 50 * side), label)
+
+    def diode(self, a, b, label=None, side=1):
+        """a diode from its anode (a) to its cathode (b), printed as in an electronics book: a filled
+        triangle pointing at a bar across the wire"""
+        c, u, n = self._ends(a, b, 36)
+        base, tip = c - u * 18, c + u * 16
+        self.d.polygon([tuple(base + n * 19), tuple(base - n * 19), tuple(tip)], fill=0)
+        bar = c + u * 18
+        self.d.line([tuple(bar - n * 19), tuple(bar + n * 19)], fill=0, width=LW + 2)
+        if label: self.text(tuple(c + n * 46 * side), label)
+
+    def _head(self, tip, u, L=20, w=9):
+        """a filled arrowhead with its point at tip, pointing along u"""
+        n = np.array([-u[1], u[0]])
+        self.d.polygon([tuple(tip), tuple(tip - u * L + n * w), tuple(tip - u * L - n * w)], fill=0)
+
+    def bjt(self, base, col, emit, pnp=False):
+        """a bipolar transistor, its bar upright: the base's lead from the grid point base, level,
+        to the bar; the collector and emitter leaving the bar's other side at a slant and on,
+        upright, to the grid points col and emit (above and below, in one column)"""
+        B, C, E = (np.array(self.P(*q), float) for q in (base, col, emit))
+        bx = C[0] - 60
+        y = B[1]
+        self.d.line([tuple(B), (bx, y)], fill=0, width=LW)
+        self.d.line([(bx, y - 40), (bx, y + 40)], fill=0, width=12)
+        for P, s in ((C, -1), (E, 1)):
+            a, k = np.array([bx + 6, y + s * 16], float), np.array([C[0], y + s * 58], float)
+            self.d.line([tuple(a), tuple(k)], fill=0, width=LW)
+            self.d.line([tuple(k), tuple(P)], fill=0, width=LW)
+            if s == 1:
+                u = (k - a) / np.linalg.norm(k - a)
+                self._head(a + u * 52, u, L=24, w=11) if not pnp else self._head(a + u * 18, -u, L=24, w=11)
+
+    def jfet(self, gate, drain, source, n_channel=True):
+        """a junction FET, its channel bar upright: the gate's lead from the grid point gate, level,
+        to the bar, an arrowhead on it at the bar (pointing in for an n channel); the drain and
+        source leaving the bar's other side square near its ends, then on, upright, to the grid
+        points drain and source"""
+        G, D, S = (np.array(self.P(*q), float) for q in (gate, drain, source))
+        bx, y = D[0] - 50, G[1]
+        self.d.line([tuple(G), (bx, y)], fill=0, width=LW)
+        self.d.line([(bx, y - 44), (bx, y + 44)], fill=0, width=12)
+        u = np.array([1.0, 0.0])
+        self._head(np.array([bx - 6, y]), u, L=26, w=12) if n_channel else self._head(np.array([bx - 32, y]), -u, L=26, w=12)
+        for P, s in ((D, -1), (S, 1)):
+            k = np.array([D[0], y + s * 34])
+            self.d.line([(bx + 5, k[1]), tuple(k)], fill=0, width=LW)
+            self.d.line([tuple(k), tuple(P)], fill=0, width=LW)
+
+    def supply(self, a, text):
+        """a supply terminal: a small ring at the wire's end, its voltage over it"""
+        x, y = self.P(*a)
+        self.d.ellipse([x - 9, y - 18, x + 9, y], outline=0, width=LW, fill=255)
+        self.text((x, y - 42), text)
 
     def ground(self, a):
         x, y = self.P(*a)
@@ -772,6 +826,56 @@ def main():
     f.text((f.P(4.6, 2.15)[0] + 78, f.P(4.6, 2.15)[1]), '5 kΩ')
     f.wire((0, 3), (4.6, 3))
     f.save(out, 'opamp', random.Random(121))
+
+    # 16. diodes as an electronics book prints them: 12 V through 2.2 kΩ and a diode down to
+    # ground, a second diode turned the other way across to ground: ≈ 5.1 mA, none in the second
+    f = Fig(4, 2)
+    f.battery((0, 2), (0, 0), None, plus_at_a=False)
+    f.text((f.P(0, 1)[0] - 80, f.P(0, 1)[1]), '12 V')
+    f.resistor((0, 0), (2, 0), '2.2 kΩ', side=-1)
+    f.wire((2, 0), (4, 0))
+    f.diode((2, 0), (2, 2), None)
+    f.diode((4, 2), (4, 0), None)
+    f.wire((0, 2), (4, 2))
+    f.ground((2, 2))
+    f.save(out, 'diodes', random.Random(131))
+
+    # 17. a transistor with fixed bias, as Boylestad's Example 4.1: +12 V, 240 kΩ to the base,
+    # 2.2 kΩ to the collector, β = 50: IC ≈ 2.35 mA, VCE ≈ 6.8 V
+    f = Fig(4, 3)
+    f.supply((0, 0), '12 V')
+    f.wire((0, 0), (0, 0.2), (3, 0.2))
+    f.resistor((1.4, 0.2), (1.4, 1.5), None)
+    f.text((f.P(1.4, 0.85)[0] - 84, f.P(1.4, 0.85)[1]), '240 kΩ')
+    f.resistor((3, 0.2), (3, 1.1), None)
+    f.text((f.P(3, 0.65)[0] + 84, f.P(3, 0.65)[1]), '2.2 kΩ')
+    f.bjt((1.4, 1.5), (3, 1.1), (3, 1.9))
+    f.wire((3, 1.9), (3, 2.6))
+    f.ground((3, 2.6))
+    f.text((f.P(3.6, 1.5)[0] + 30, f.P(3.6, 1.5)[1]), 'β = 50', font=f.fi)
+    f.save(out, 'bjt', random.Random(141))
+
+    # 18. a junction FET with fixed bias, as Boylestad's Example 7.1: +16 V through 2 kΩ to the
+    # drain, the gate at −2 V through 1 MΩ, IDSS = 10 mA, VP = −8 V: ID ≈ 5.6 mA, VD ≈ 4.75 V
+    f = Fig(4, 3)
+    f.supply((3, 0), '16 V')
+    f.resistor((3, 0), (3, 1.1), None)
+    f.text((f.P(3, 0.55)[0] + 70, f.P(3, 0.55)[1]), '2 kΩ')
+    f.jfet((1.6, 1.5), (3, 1.1), (3, 1.9))
+    f.wire((3, 1.9), (3, 3))
+    f.wire((1.6, 1.5), (0.8, 1.5))
+    f.resistor((0.8, 1.5), (0.8, 2.4), None)
+    f.text((f.P(0.8, 1.95)[0] - 76, f.P(0.8, 1.95)[1]), '1 MΩ')
+    f.battery((0.8, 3), (0.8, 2.4), None, plus_at_a=True)
+    f.text((f.P(0.8, 2.7)[0] - 70, f.P(0.8, 2.7)[1]), '2 V')
+    f.wire((0.8, 3), (3, 3))
+    f.ground((2, 3))
+    x, y = f.P(3.2, 1.25)
+    f.label((x, y), 'I', 'DSS', anchor='lm')
+    f.text((x + 64, y), '= 10 mA', anchor='lm')
+    f.label((x, y + 46), 'V', 'P', anchor='lm')
+    f.text((x + 44, y + 46), '= −8 V', anchor='lm')
+    f.save(out, 'jfet', random.Random(151))
     print('ok')
 
 

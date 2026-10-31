@@ -103,6 +103,24 @@ async function runAndRead(page, name) {
   check(Math.abs(vx - 25) < 1e-6, `Run: vx = ${vx.toFixed(4)} V (book: 25 V)`);
   await page.evaluate(() => app.editor.setRunning(false));
 
+  // ---- an electronics book's figure: a supply terminal, an npn with its β
+  await page.click('[data-a=more]'); await page.waitForTimeout(250);
+  await page.click('.more-menu [data-m=photo]'); await page.waitForTimeout(400);
+  await page.click('[data-x=again]');
+  await page.waitForTimeout(300);
+  await choose(fixture('bjt.png'), 'bjt.png', 'image/png');
+  await page.waitForFunction(() => app.photo.stage === 'result', null, { timeout: 30000 });
+  const bjtParts = await partsShown(page);
+  check(bjtParts.includes('Q1 npn β 50') && bjtParts.includes('R1 2.2 kΩ') && bjtParts.includes('R2 240 kΩ'), `a transistor with its β: ${bjtParts.join(', ')}`);
+  const q1 = await rowOf('Q1 npn β 50');
+  check(JSON.stringify(await page.$$eval(`.ph-row[data-i="${q1}"] option`, (os) => os.map((o) => o.value))) === '["npn","pnp"]', 'a transistor changes only to the other kind of transistor');
+  await page.click('[data-x=open]'); await page.waitForTimeout(900);
+  check(await page.evaluate(() => app.editor.doc.elements.some((e) => e.constructor.type === 'rail' && e.p.amp === 12)), 'the 12 V supply terminal is a voltage rail');
+  await page.evaluate(() => app.editor.setRunning(true)); await page.waitForTimeout(900);
+  const vce = await page.evaluate(() => { const q = app.editor.doc.elements.find((e) => e.constructor.type === 'npn'); return app.editor.sim.v(q.nodes[1]) - app.editor.sim.v(q.nodes[2]); });
+  check(vce > 6 && vce < 7.5, `Run: VCE = ${vce.toFixed(2)} V (book: 6.83 V)`);
+  await page.evaluate(() => app.editor.setRunning(false));
+
   // ---- from the editor: ⋮ → Circuit from photo, a page of two figures
   await page.click('[data-a=more]'); await page.waitForTimeout(250);
   await page.click('.more-menu [data-m=photo]'); await page.waitForTimeout(400);
@@ -126,7 +144,7 @@ async function runAndRead(page, name) {
   await page.click('[data-x=open]'); await page.waitForTimeout(900);
   check(await page.evaluate(() => app.current === 'editor' && app.editor.doc.elements.length > 7), 'Open on the board: a new circuit with its parts');
   const names = await page.evaluate(() => JSON.parse(localStorage.getItem('raptickt.circuits.v1') || '[]').map((c) => c.name).sort());
-  check(JSON.stringify(names) === JSON.stringify(['Photo circuit 1', 'Photo circuit 2']), `each photo circuit gets its own name (${names.join(', ')})`);
+  check(JSON.stringify(names) === JSON.stringify(['Photo circuit 1', 'Photo circuit 2', 'Photo circuit 3']), `each photo circuit gets its own name (${names.join(', ')})`);
   await page.evaluate(() => app.editor.setRunning(true)); await page.waitForTimeout(900);
   const i3 = await page.evaluate(() => Math.abs(app.editor.doc.elements.find((e) => e.constructor.type === 'resistor' && e.p.r === 3).i));
   check(Math.abs(i3 - 2) < 1e-6, `Run: i through the 3 Ω = ${i3.toFixed(4)} A (book: 2 A)`);

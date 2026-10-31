@@ -24,7 +24,8 @@ export function findText(img, fig, S) {
     if (c.area < 0.3 * sw * sw || Math.max(cw, ch) < 0.6 * sw) continue;
     const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2;
     // the signs and arrows drawn inside a source (or an op amp) belong to it
-    if (S.shapes.some((s) => (s.kind === 'triangle' ? inTriangle(s, cx, cy, 0) : (s.kind === 'circle' ? Math.hypot(cx - s.cx, cy - s.cy) : (Math.abs(cx - s.cx) + Math.abs(cy - s.cy)) / 1.2) < s.r))) continue;
+    // (a diode's or a transistor's labels sit close beside it, and are read)
+    if (S.shapes.some((s) => s.kind !== 'device' && (s.kind === 'triangle' ? inTriangle(s, cx, cy, 0) : (s.kind === 'circle' ? Math.hypot(cx - s.cx, cy - s.cy) : (Math.abs(cx - s.cx) + Math.abs(cy - s.cy)) / 1.2) < s.r))) continue;
     cands.push({ ids: [id], x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, area: c.area });
   }
   const hs = cands.map((g) => g.y1 - g.y0 + 1).filter((v) => v >= 2 * sw && v <= 20 * sw);

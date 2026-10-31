@@ -44,7 +44,15 @@ const KINDS = [
   ['open_switch', 'Switch (open)', ''], ['closed_switch', 'Switch (closed)', ''],
   ['wire', 'Just a wire (no part)', ''],
 ];
-const UNIT = Object.fromEntries(KINDS.map(([k, , u]) => [k, u]));
+// semiconductors: each changes only to its own kind's other form (a diode to a zener, an npn to
+// a pnp …); the value is a zener's voltage, a transistor's β, a FET's IDSS
+const SEMIS = [
+  ['diode', 'Diode', ''], ['zener', 'Zener diode', 'V'],
+  ['npn', 'NPN transistor', 'β'], ['pnp', 'PNP transistor', 'β'],
+  ['njfet', 'N-channel JFET', 'A'], ['pjfet', 'P-channel JFET', 'A'],
+];
+const PAIR = { diode: 'zener', zener: 'diode', npn: 'pnp', pnp: 'npn', njfet: 'pjfet', pjfet: 'njfet' };
+const UNIT = Object.fromEntries([...KINDS, ...SEMIS].map(([k, , u]) => [k, u]));
 
 /** A part in a few words, as it stands on the board: "R1 20 Ω", "V1 20 V", "D1 0.1vx". */
 function partLabel(e) {
@@ -57,6 +65,10 @@ function partLabel(e) {
   if (t === 'switch') return `${e.name} ${p.closed ? 'closed' : 'open'}`;
   if (t === 'depsrc') return `${e.name} ${e.valueLabel()}`;
   if (t === 'opamp') return `${e.name} op amp`;
+  if (t === 'diode') return `${e.name} diode`;
+  if (t === 'zener') return `${e.name} zener ${fmtSI(p.bv, 'V', 4)}`;
+  if (t === 'npn' || t === 'pnp') return `${e.name} ${t} β ${p.bf}`;
+  if (t === 'njfet' || t === 'pjfet') return `${e.name} ${t === 'njfet' ? 'n' : 'p'}-JFET ${fmtSI(p.idss, 'A', 4)}`;
   return e.name;
 }
 
@@ -384,9 +396,11 @@ export class PhotoScreen {
     if (p.kind === 'opamp') {
       return `<div class="ph-row" data-i="${i}" data-sum="${esc(el ? partLabel(el) : '')}"><b>${esc(name)}</b><span class="ph-kind">Op amp</span><span></span><button class="icon-btn ph-del" data-x="del" title="Remove">${icon('trash', 17)}</button></div>`;
     }
-    const kinds = KINDS.filter(([k]) => !/^dependent/.test(k) || /^dependent/.test(p.kind));
+    const semi = PAIR[p.kind];
+    // (a diode may also have been no part at all: a wire)
+    const kinds = semi ? SEMIS.filter(([k]) => k === p.kind || k === semi).concat(/diode|zener/.test(p.kind) ? KINDS.filter(([k]) => k === 'wire') : []) : KINDS.filter(([k]) => !/^dependent/.test(k) || /^dependent/.test(p.kind));
     const unit = /^dependent/.test(p.kind) ? `× ${p.control || '?'}` : UNIT[p.kind] ?? '';
-    const hasVal = !/switch/.test(p.kind);
+    const hasVal = !/switch/.test(p.kind) && p.kind !== 'diode';
     return `<div class="ph-row" data-i="${i}" data-sum="${esc(el ? partLabel(el) : '')}">
       <b>${esc(name)}</b>
       <select aria-label="Kind of part">${kinds.map(([k, t]) => `<option value="${k}" ${k === p.kind ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
@@ -407,7 +421,7 @@ export class PhotoScreen {
       p.kind = kind;
       // a value in another unit means nothing for the new kind: keep the number only when it
       // still makes sense (e.g. a voltage source and an AC one), else a usual one to change
-      if (UNIT[kind] !== was || !(Number.isFinite(p.value))) p.value = { resistor: 1e3, inductor: 1e-3, capacitor: 1e-6, voltage_source: 10, current_source: 1, ac_voltage_source: 10, ac_current_source: 1 }[kind] ?? p.value;
+      if (UNIT[kind] !== was || !(Number.isFinite(p.value))) p.value = { resistor: 1e3, inductor: 1e-3, capacitor: 1e-6, voltage_source: 10, current_source: 1, ac_voltage_source: 10, ac_current_source: 1, zener: 5.1, diode: 0 }[kind] ?? p.value;
       if (/source/.test(kind) && !p.polarity) p.polarity = 'from';
     }
     this.refresh();

@@ -1,22 +1,26 @@
 // From a figure's line drawing to a circuit: wires (straight horizontal and vertical runs),
 // the vertices they meet at, and the two-terminal parts between wire ends — resistors
 // (zigzags), sources (circles and diamonds), capacitors and batteries (plates), inductors
-// (coils) — op amps (triangles: their inputs and output), plus grounds hanging off a wire end.
+// (coils) — op amps (triangles: their inputs and output), diodes and transistors (devices.js),
+// plus grounds hanging off a wire end.
 
 import { thin, skeletonGraph, pruneSpurs, edgePoints, simplify } from './skeleton.js';
 import { findShapes, inTriangle } from './shapes.js';
 import { components, fillPinholes } from './image.js';
 import { arrowTip } from './arrow.js';
+import { findDevices } from './devices.js';
 
 const deg = (a) => (a * 180) / Math.PI;
 
 /** Inside a source body (outline included)? */
 function inShape(s, x, y, pad) {
+  if (s.kind === 'device') return s.inside(x, y, pad);
   if (s.kind === 'triangle') return inTriangle(s, x, y, pad);
   if (s.kind === 'circle') return Math.hypot((x - s.cx) / ((s.rx || s.r) + pad), (y - s.cy) / ((s.ry || s.r) + pad)) <= 1;
   return Math.abs(x - s.cx) + Math.abs(y - s.cy) <= s.r + pad * 1.42;
 }
 function inInterior(s, x, y, pad) {
+  if (s.kind === 'device') return s.inside(x, y, -pad);
   if (s.kind === 'triangle') return inTriangle(s, x, y, -pad);
   if (s.kind === 'circle') return Math.hypot((x - s.cx) / Math.max(1, (s.rx || s.r) - pad), (y - s.cy) / Math.max(1, (s.ry || s.r) - pad)) <= 1;
   return Math.abs(x - s.cx) + Math.abs(y - s.cy) <= s.r - pad * 1.42;
@@ -89,6 +93,12 @@ export function readStructure(img, fig) {
   // drawn as a triangle has none)
   const opAmp = (t) => innerSymbol(all, W, H, t, { x: t.pts[1][0], y: t.pts[1][1] }, { x: t.pts[2][0], y: t.pts[2][1] }, sw).signs > 0;
   const shapes = findShapes(art, W, H, [0, 0, W - 1, H - 1], sw, { opAmp });
+  // diodes and transistors, found by their solid ink: the wires are cut where they leave them (an
+  // arrowhead drawn inside a source's circle is no diode; a little hole in a diode's filled
+  // triangle is no source body)
+  const devices = findDevices(art, W, H, sw).filter((d) => !shapes.some((s) => s.r >= 3 * sw && inShape(s, d.cx, d.cy, 0)));
+  for (let k = shapes.length - 1; k >= 0; k--) if (shapes[k].r < 3 * sw && devices.some((d) => d.inside(shapes[k].cx, shapes[k].cy, sw))) shapes.splice(k, 1);
+  for (const d of devices) shapes.push({ ...d, kind: 'device', dev: d.kind });
   const holes = smallHoles(art, W, H, sw);
   let g = skeletonGraph(thin(art, W, H), W, H);
   g = pruneSpurs(g, Math.max(3, Math.round(1.6 * sw)));
@@ -246,14 +256,27 @@ export function readStructure(img, fig) {
     if (a < 20 || a > 70 || [p.a, p.b].some((v) => at[v].length < 2 && vertices[v].cut == null)) continue;
     // (the stroke on from either end, where nothing else meets, taken leaving p's end the way
     // p arrives at it)
-    const turns = [p.a, p.b].some((v) => at[v].length === 2 && at[v].some((id) => {
+    const turnAt = (v, short, bent = sharp) => at[v].length === 2 && at[v].some((id) => {
       if (id === p.id) return false;
       const q = pieces[id], into = v === p.b ? p : { dx: -p.dx, dy: -p.dy, len: p.len };
       const out = q.a === v ? q : { dx: -q.dx, dy: -q.dy, len: q.len };
       // (two long strokes meeting sharply are a corner, as at the foot of a V; a zigzag's are short,
       // and of a length: a long stroke into a zigzag's first short tooth is its lead)
-      return sharp(into, out) && Math.min(p.len, q.len) < 9 * sw && q.len >= 0.4 * p.len;
+      return bent(into, out) && (!short || Math.min(p.len, q.len) < 9 * sw) && q.len >= 0.4 * p.len;
+    });
+    // (turning back at both ends, by a right angle or more, it is a zigzag's stroke however long:
+    // a bold zigzag printed among thin wires has strokes many wire widths long)
+    const square = (a, b) => a.dx * b.dx + a.dy * b.dy < 0.34 * a.len * b.len;
+    // (or two such strokes meeting at a tip, each going on at its far end into a zigzag's short
+    // turns rather than a wire: a bridge's sides meet at a corner where wires go on)
+    const short = (u, but) => at[u].length === 2 && at[u].some((j) => j !== but && !pieces[j].dir && pieces[j].len < 4 * sw);
+    const tip = [p.a, p.b].some((v) => at[v].length === 2 && at[v].some((id) => {
+      if (id === p.id) return false;
+      const q = pieces[id], into = v === p.b ? p : { dx: -p.dx, dy: -p.dy, len: p.len };
+      const out = q.a === v ? q : { dx: -q.dx, dy: -q.dy, len: q.len };
+      return square(into, out) && q.len >= 0.6 * p.len && q.len <= 1.6 * p.len && short(other(p, v), p.id) && short(other(q, v), q.id);
     }));
+    const turns = tip || turnAt(p.a, true) || turnAt(p.b, true) || (turnAt(p.a, false, square) && turnAt(p.b, false, square));
     // (or goes on round a bend into another long stroke, as a hexagon's sides do, or into a
     // zigzag run together into a band; the corner where wires meet may lie a tiny step on, the
     // thinning having split it)
@@ -386,6 +409,7 @@ export function readStructure(img, fig) {
   };
   const marks = [];
   const parts = [];
+  const terminals = []; // open terminals: a little ring where a wire ends
   for (const list of groups) {
     if (!list.length) continue;
     const vs = new Set();
@@ -493,9 +517,11 @@ export function readStructure(img, fig) {
     // where a wire (or a part) leaves the body: not a speck pruned away
     const terms = [...new Set(shapeTerm[k])].filter((v) => at[v].some((id) => pieces[id].cls !== 'drop'));
     if (s.kind === 'triangle') { parts.push(opAmpOf(s, k, terms)); return; }
+    if (s.kind === 'device') { parts.push(deviceOf(s, k, terms)); return; }
     // a small ring is no source: at a wire's end it is an open terminal (a, b), where the wire
     // just ends; between wires, a joint
     if (s.r < 3 * sw) {
+      if (terms.length === 1) terminals.push({ v: terms[0], cx: s.cx, cy: s.cy, r: s.r });
       if (terms.length >= 2) {
         const c = addV(s.cx, s.cy);
         at.push([]);
@@ -563,6 +589,26 @@ export function readStructure(img, fig) {
     const seen = sym.signs > 0 && !sym.unsure;
     if (seen && sym.plus === 'a') [a, b] = [b, a];
     return { type: 'opamp', shape: k, a, b, out: outs[0], axis: dx ? 'v' : 'h', dir: s.dir, cx: s.cx, cy: s.cy, r: s.r, box, unsure: !seen };
+  }
+
+  // a diode from its anode (a) to its cathode (b); a bipolar transistor from its collector (a) to
+  // its emitter (b), its base the third terminal (out); a FET from its drain to its source, its
+  // gate the third: each pin the nearest wire leaving the device
+  function deviceOf(s, k, terms) {
+    const names = s.dev === 'diode' ? ['a', 'k'] : s.dev === 'npn' || s.dev === 'pnp' ? ['c', 'e', 'b'] : ['d', 's', 'g'];
+    const pick = new Map();
+    const pairs = [];
+    for (const nm of names) for (const v of terms) pairs.push({ nm, v, d: Math.hypot(vertices[v].x - s.pins[nm][0], vertices[v].y - s.pins[nm][1]) });
+    pairs.sort((p, q) => p.d - q.d);
+    const usedV = new Set();
+    for (const { nm, v, d } of pairs) if (!pick.has(nm) && !usedV.has(v) && d <= Math.max(4 * sw, 0.6 * s.r)) { pick.set(nm, v); usedV.add(v); }
+    const box = s.box.slice();
+    if (names.some((nm) => !pick.has(nm))) return { type: 'loose', terms, box, shape: k };
+    const a = pick.get(names[0]), b = pick.get(names[1]);
+    const part = { type: s.dev, a, b, axis: axisOf(vertices[a], vertices[b]), cx: s.cx, cy: s.cy, box, shape: k };
+    if (s.dev === 'diode') part.zener = !!s.zener;
+    else part.out = pick.get(names[2]);
+    return part;
   }
 
   // an arrowhead drawn big on a wire thins into bits on either side of it (round the little ring
@@ -739,6 +785,18 @@ export function readStructure(img, fig) {
 
   // ---------------------------------------------------------------- wires
   const wires = pieces.filter((p) => p.cls === 'wire').map((p) => ({ a: p.a, b: p.b, dir: p.dir, len: p.len, id: p.id }));
+  // a wire's free end, where nothing else is (blurred, a terminal's little ring fills in): a
+  // terminal too, for a supply's voltage printed by it
+  const ends = new Set([...plates.map((P) => P.v), ...grounds.map((g) => g.v), ...terminals.map((t) => t.v)]);
+  for (const p of parts) for (const v of [p.a, p.b, p.out, ...(p.terms || [])]) if (v != null) ends.add(v);
+  for (const v of vertices) {
+    if (ends.has(v.id) || v.cut != null) continue;
+    const inc = live(v.id, -1);
+    if (inc.length !== 1 || pieces[inc[0]].cls !== 'wire' || pieces[inc[0]].len < 3 * sw) continue;
+    // (the way the wire runs out to it)
+    const o = vertices[other(pieces[inc[0]], v.id)], L = Math.hypot(v.x - o.x, v.y - o.y) || 1;
+    terminals.push({ v: v.id, cx: v.x, cy: v.y, r: sw, free: [(v.x - o.x) / L, (v.y - o.y) / L] });
+  }
   // how far the page is turned (dy per dx): the long wires run a little off level by as much
   const slopes = [];
   for (const wv of wires) {
@@ -756,8 +814,9 @@ export function readStructure(img, fig) {
     if (p.box) p.box = [p.box[0] + X0, p.box[1] + Y0, p.box[2] + X0, p.box[3] + Y0];
   }
   for (const P of plates) { P.cx += X0; P.cy += Y0; }
+  for (const t of terminals) { t.cx += X0; t.cy += Y0; }
   for (const m of marks) { m.x0 += X0; m.x1 += X0; m.cx += X0; m.y0 += Y0; m.y1 += Y0; m.cy += Y0; }
-  return { vertices, wires, parts, grounds, shapes: shapes.map((s) => ({ ...s, cx: s.cx + X0, cy: s.cy + Y0, ...(s.pts ? { pts: s.pts.map(([x, y]) => [x + X0, y + Y0]) } : {}) })), plates, marks, origin: [X0, Y0], pieces, usedBars: [...usedBars], tilt };
+  return { vertices, wires, parts, grounds, terminals, shapes: shapes.map((s) => ({ ...s, cx: s.cx + X0, cy: s.cy + Y0, ...(s.pts ? { pts: s.pts.map(([x, y]) => [x + X0, y + Y0]) } : {}), ...(s.kind === 'device' ? { box: [s.box[0] + X0, s.box[1] + Y0, s.box[2] + X0, s.box[3] + Y0], inside: (x, y, pad) => s.inside(x - X0, y - Y0, pad) } : {}) })), plates, marks, origin: [X0, Y0], pieces, usedBars: [...usedBars], tilt };
 }
 
 /** The group's pieces in order from vertex a to vertex b, when they form one simple path. */
@@ -1087,7 +1146,9 @@ function looseBars(img, fig, X0, Y0, sw) {
     const tr = sxx + syy, d = Math.sqrt(Math.max(0, tr * tr / 4 - (sxx * syy - sxy * sxy)));
     // a uniform bar of length L spreads L / √12 along itself
     const len = Math.sqrt(12 * (tr / 2 + d)), thick = Math.sqrt(12 * Math.max(0, tr / 2 - d));
-    if (thick > 2.2 * sw || len < 2.5 * sw || len < 2.5 * Math.max(1, thick)) continue;
+    // (a battery's short plate printed bold is a stubby solid block: as long as twice its width
+    // will do when it is filled in all over)
+    if (thick > 3.2 * sw || len < 2.5 * sw || len < 1.8 * Math.max(1, thick) || (thick > 2.2 * sw || len < 2.5 * Math.max(1, thick)) && n < 0.85 * len * thick) continue;
     // a solid stroke, not a bent one (a letter)
     if (n < 0.6 * len * Math.max(1, thick)) continue;
     const ang = Math.atan2(2 * sxy, sxx - syy) / 2, lean = Math.abs(Math.sin(ang)), dir = lean < 0.42 ? 'h' : lean > 0.906 ? 'v' : null;

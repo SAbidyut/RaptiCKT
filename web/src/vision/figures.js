@@ -145,7 +145,7 @@ export function findFigures(ink, w, h, sw) {
   // and the rest of a word written past that margin (a label written large, by hand): characters
   // on the line of one already in, right beside it (a few at most: not a line of the page's text)
   const loose = comps.filter((c) => !c.lineArt && !taken[c.id] && c.area >= 2 * sw * sw);
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < 6; round++) {
     for (const f of figures) {
       const add = [];
       for (const c of loose) {
@@ -153,6 +153,8 @@ export function findFigures(ink, w, h, sw) {
         const ch = c.y1 - c.y0 + 1;
         const by = f.near.some((id) => {
           const d = comps[id - 1], dh = d.y1 - d.y0 + 1;
+          // (the bars of an "=" before it: "IDSS = 10 mA", the value past the margin)
+          if (dh <= 0.3 * ch && d.x1 - d.x0 + 1 >= 2 * dh && ch >= 2 * sw) return c.x0 > d.x1 && c.x0 - d.x1 <= 0.8 * ch && (d.y0 + d.y1) / 2 > c.y0 && (d.y0 + d.y1) / 2 < c.y1;
           if (ch > 3 * dh || dh > 3 * ch || Math.max(ch, dh) < 2 * sw) return false;
           const gap = Math.max(c.x0, d.x0) - Math.min(c.x1, d.x1), ov = Math.min(c.y1, d.y1) - Math.max(c.y0, d.y0) + 1;
           return gap <= 0.8 * Math.max(ch, dh) && ov >= 0.5 * Math.min(ch, dh);

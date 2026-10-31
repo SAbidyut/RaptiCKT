@@ -5,8 +5,9 @@
 // answers are right; so are they on ruled or squared paper and photographed well turned, a
 // practice problem printed in a book's own style, a bridge drawn as a diamond, conductances in
 // siemens, mesh currents drawn as round arrows, values printed as fractions, a delta whose values
-// are printed along its slanting sides, an op amp, and a circuit drawn here with an open switch
-// and a coil drawn in loops.
+// are printed along its slanting sides, an op amp, diodes, a bipolar transistor and a junction
+// FET as an electronics book prints them, and a circuit drawn here with an open switch and a
+// coil drawn in loops.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -315,6 +316,48 @@ for (const name of ['opamp.png', 'opamp-photo.jpg']) {
     const I = currents(r);
     near(I.get(5000), 1.6e-3, 1e-7, '5 kΩ');
     near(I.get(30000), 0.2e-3, 1e-7, '30 kΩ');
+  });
+}
+
+// electronics as a book prints them: diodes (filled triangles against bars), a transistor with a
+// thick base bar and an arrowhead on its emitter, a junction FET, supplies at open terminals
+const pins = (r, type) => { const e = r.el((x) => x.constructor.type === type); return e.nodes.map((n) => r.sim.v(n)); };
+for (const name of ['diodes.png', 'diodes-photo.jpg']) {
+  test(`${name}: 12 V through 2.2 kΩ and a diode to ground, another diode turned against it — ≈ 5.15 mA, none the other way`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['diode', 'diode', 'resistor', 'voltage_source']);
+    const ds = r.doc.elements.filter((e) => e.constructor.type === 'diode').map((e) => r.sim.v(e.nodes[0]) - r.sim.v(e.nodes[1]));
+    // one forward (about 0.65 V across it), one reversed (the same voltage, the other way)
+    assert.ok(ds.some((v) => v > 0.55 && v < 0.8) && ds.some((v) => v < -0.55 && v > -0.8), `diode voltages ${ds}`);
+    const R = r.el((e) => e.constructor.type === 'resistor');
+    near(Math.abs(r.sim.v(R.nodes[0]) - r.sim.v(R.nodes[1])) / R.p.r, 5.15e-3, 0.15e-3, 'current');
+  });
+}
+for (const name of ['bjt.png', 'bjt-photo.jpg']) {
+  test(`${name}: Boylestad's fixed bias — a 12 V supply terminal, 240 kΩ, 2.2 kΩ, an npn with β = 50 — VCE ≈ 6.8 V`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['npn', 'resistor', 'resistor']);
+    assert.deepEqual(r.texts, ['2.2 kΩ', '240 kΩ', 'β = 50']);
+    assert.deepEqual(r.c.supplies.map((s) => s.value), [12]);
+    const q = r.el((e) => e.constructor.type === 'npn');
+    assert.equal(q.p.bf, 50);
+    const [vb, vc, ve] = pins(r, 'npn');
+    near(vb - ve, 0.7, 0.1, 'VBE');
+    // (the board's transistor has an Early voltage: its collector current a little higher)
+    near(vc - ve, 6.83, 0.6, 'VCE');
+  });
+}
+for (const name of ['jfet.png', 'jfet-photo.jpg']) {
+  test(`${name}: Boylestad's fixed-bias JFET — 16 V, 2 kΩ, the gate at −2 V through 1 MΩ, IDSS = 10 mA, VP = −8 V — VD ≈ 4.75 V`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.kinds, ['njfet', 'resistor', 'resistor', 'voltage_source']);
+    assert.deepEqual(r.c.supplies.map((s) => s.value), [16]);
+    const j = r.el((e) => e.constructor.type === 'njfet');
+    assert.equal(j.p.idss, 0.01);
+    assert.equal(j.p.vp, 8);
+    const [vg, vd, vs] = pins(r, 'njfet');
+    near(vg - vs, -2, 1e-3, 'VGS');
+    near(vd, 4.75, 0.4, 'VD');
   });
 }
 

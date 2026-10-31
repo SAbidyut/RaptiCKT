@@ -207,6 +207,10 @@ export function parseLabel(chars) {
     const unit = m[5] ? UNIT[m[5]] : '';
     return { type: 'value', value: num, unit, prefix: m[4] || '', imag: !!m[2], text: `${m[1] ? '−' : ''}${m[2] ? 'j' : ''}${m[3]}${m[4] ? ' ' + m[4] : unit ? ' ' : ''}${unit}`.replace(/ ([kMmμn])/, ' $1') };
   }
+  // a transistor's gain, "β = 90": the reader has no β (it reads as a μ or a b) and no "=" (two
+  // short bars, read as minus signs)
+  m = /^[μb]-{1,2}([0-9]+(?:[.][0-9]+)?)$/.exec(s);
+  if (m && !chars.some((x) => (x.sub || x.small) && /[0-9]/.test(x.c))) return { type: 'beta', value: +m[1], text: `β = ${m[1]}` };
   // a dependent source's expression or a name: [number] letter [subscript]
   m = /^([0-9]+(?:[.][0-9]+)?)?(v|μ|i|I|j|R|L|c)(.{0,3})$/.exec(s);
   if (m) {

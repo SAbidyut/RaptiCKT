@@ -12,6 +12,11 @@ function gap(a, b) {
 const boxOf = (w) => [w.x0, w.y0, w.x1, w.y1];
 
 function unitsFor(p) {
+  // (a zener is marked with its breakdown voltage; a plain diode and a transistor by no unit)
+  if (p.type === 'diode') return p.zener ? ['V'] : [];
+  if (p.type === 'npn' || p.type === 'pnp') return [];
+  // (a FET's IDSS and pinch-off voltage are taken after)
+  if (p.type === 'njfet' || p.type === 'pjfet') return [];
   if (p.type === 'source') return p.kind === 'current' ? ['A'] : ['V', ''];
   if (p.type === 'depsource') return [];
   return UNIT_FOR[p.type] || ['Ω', 'S', ''];
@@ -37,13 +42,55 @@ export function assignLabels(S, words, arrows, H, fig) {
   const live = words.filter((w) => w.read.type && w.read.type !== 'caption' && !(cap && w.y0 > cap.y0 - 0.3 * H) && w.y0 < fig.box[3] + 2 * H);
   const labels = new Map();
   const taken = new Set();
+  // ---------------------------------------------------------------- supplies
+  // an open terminal with a voltage beside it (+16 V, a bare 10 V over the ring) is a supply
+  // rail: the value nearest it, nearer it than to any source or battery
+  const supplies = [];
+  const srcs = parts.filter((p) => unitsFor(p).includes('V'));
+  // (a terminal on a source's own wires is the source's end, its voltage the source's: no supply)
+  const root = S.vertices.map((_, k) => k), find = (a) => { while (root[a] !== a) a = root[a] = root[root[a]]; return a; };
+  for (const wv of S.wires) root[find(wv.a)] = find(wv.b);
+  // (nor one on ground, or a second on one node)
+  const driven = new Set([...srcs.flatMap((p) => [find(p.a), find(p.b)]), ...S.grounds.map((g) => find(g.v))]);
+  for (const t of [...(S.terminals || [])].sort((a, b) => a.cy - b.cy)) {
+    if (driven.has(find(t.v))) continue;
+    let best = null, bd = Infinity;
+    for (const w of live) {
+      if (taken.has(w) || w.read.type !== 'value' || w.read.unit !== 'V') continue;
+      const d = gap([t.cx - t.r, t.cy - t.r, t.cx + t.r, t.cy + t.r], boxOf(w)) / H;
+      // (by a bare wire end, only right beside it, where the wire runs on to: "+16 V" printed
+      // over a wire running up to it)
+      if (d > (t.free ? 1.4 : 2.2) || d >= bd || srcs.some((p) => gap(p.box, boxOf(w)) / H < d)) continue;
+      if (t.free) {
+        const dx = w.cx - t.cx, dy = w.cy - t.cy, ahead = dx * t.free[0] + dy * t.free[1], aside = Math.abs(-dx * t.free[1] + dy * t.free[0]);
+        if (ahead <= 0 || aside > 0.6 * (w.x1 - w.x0) + 0.5 * H) continue;
+      }
+      bd = d; best = w;
+    }
+    if (!best) continue;
+    taken.add(best);
+    driven.add(find(t.v));
+    supplies.push({ v: t.v, value: best.read.value, text: best.read.text });
+  }
+  // a transistor's "β = 50" read in two words (the β as a μ or a b, the "=" as nothing): a bare
+  // number just after it on its line is its gain, no part's value
+  const betas = [];
+  if (parts.some((p) => p.type === 'npn' || p.type === 'pnp')) {
+    for (const w of live) {
+      if (w.read.type === 'beta') { betas.push({ w, value: w.read.value, text: w.read.text }); continue; }
+      if (!/^[μβb]$/.test(w.read.raw || '')) continue;
+      // (the "=" read as minus signs in front of it: "−50")
+      const n = live.find((x) => !taken.has(x) && x.read.type === 'value' && !x.read.unit && x.read.value !== 0 && Math.abs(x.cy - w.cy) < 0.6 * H && x.x0 > w.x1 && x.x0 - w.x1 < 3 * H);
+      if (n) { taken.add(n); taken.add(w); betas.push({ w: n, value: Math.abs(n.read.value), text: `β = ${Math.abs(n.read.value)}` }); }
+    }
+  }
   // ---------------------------------------------------------------- values
   const pairs = [];
   for (const p of parts) {
     const units = unitsFor(p);
     for (const w of live) {
       if (w.read.type !== 'value') continue;
-      if (!units.includes(w.read.unit)) continue;
+      if (!units.includes(w.read.unit) || taken.has(w)) continue;
       const d = gap(p.box, boxOf(w)) / H;
       if (d > 4.5) continue;
       // a value without its unit fits less well; a value across a wire from the part less still
@@ -74,6 +121,46 @@ export function assignLabels(S, words, arrows, H, fig) {
       labels.set(p.k, valueOf(x.w)); owner.set(x.w, p);
       break;
     }
+  }
+  // a FET's IDSS (a current printed beside it, "IDSS = 8 mA"), and its pinch-off voltage printed
+  // with it ("VP = −4 V", just under or beside it)
+  const nearest = (box, ok, most) => {
+    let best = null, bd = most;
+    for (const w of live) {
+      if (taken.has(w) || w.read.type !== 'value' || !ok(w.read)) continue;
+      const d = gap(box, boxOf(w)) / H;
+      if (d < bd) { bd = d; best = w; }
+    }
+    return best;
+  };
+  // (the value printed after a name: on its line, just right of it)
+  const after = (re, ok, near) => {
+    for (const n of live) {
+      if (!re.test(n.read.raw || '') || gap(near, boxOf(n)) / H > 8) continue;
+      const v = live.find((w) => !taken.has(w) && w.read.type === 'value' && ok(w.read) && Math.abs(w.cy - n.cy) < 0.6 * H && w.x0 > n.x0 && w.x0 - n.x1 < 4 * H);
+      if (v) return v;
+    }
+    return null;
+  };
+  for (const p of parts) {
+    if ((p.type !== 'njfet' && p.type !== 'pjfet') || labels.has(p.k)) continue;
+    const id = after(/^[Il1|][oODd0][s5S][s5S]/, (r) => r.unit === 'A' && r.value > 0, p.box) || nearest(p.box, (r) => r.unit === 'A' && r.value > 0, 8);
+    if (!id) continue;
+    taken.add(id);
+    const L = { text: `IDSS = ${id.read.text}`, value: id.read.value };
+    const vp = after(/^[vV][pP]/, (r) => r.unit === 'V' && r.value !== 0, boxOf(id)) || nearest(boxOf(id), (r) => r.unit === 'V' && r.value !== 0, 2.5);
+    if (vp) { L.vp = vp.read.value; L.text += `, VP = ${vp.read.text}`; taken.add(vp); }
+    labels.set(p.k, L);
+  }
+  // a transistor's β, printed beside it
+  for (const { w, value, text } of betas) {
+    let best = null, bd = Infinity;
+    for (const p of parts) {
+      if ((p.type !== 'npn' && p.type !== 'pnp') || labels.has(p.k)) continue;
+      const d = gap(p.box, boxOf(w)) / H;
+      if (d < bd) { bd = d; best = p; }
+    }
+    if (best && bd < 6) { labels.set(best.k, { text, value }); taken.add(w); }
   }
   // ---------------------------------------------------------------- dependent sources
   const deps = [];
@@ -132,7 +219,7 @@ export function assignLabels(S, words, arrows, H, fig) {
     // amp's are its inputs)
     let best = null, bd = Infinity;
     for (const p of parts) {
-      if (p.type === 'opamp') continue;
+      if (p.type === 'opamp' || p.out != null) continue;
       const d = gap(p.box, boxOf(w)) / H;
       if (d < bd) { bd = d; best = p; }
     }
@@ -201,9 +288,9 @@ export function assignLabels(S, words, arrows, H, fig) {
     } else notes.push(`What controls the dependent source "${read.text}" is not marked on the drawing: set its control on the board.`);
   }
   // parts left without a value
-  const bare = parts.filter((p) => !labels.has(p.k) && p.type !== 'depsource' && p.type !== 'opamp');
+  const bare = parts.filter((p) => !labels.has(p.k) && p.type !== 'depsource' && p.type !== 'opamp' && p.out == null && !(p.type === 'diode' && !p.zener));
   if (bare.length) notes.push(`${bare.length} part${bare.length > 1 ? 's have' : ' has'} no readable value; a default was used — tap ${bare.length > 1 ? 'them' : 'it'} on the board to set ${bare.length > 1 ? 'their values' : 'its value'}.`);
-  return { labels, quantities, title, notes };
+  return { labels, quantities, title, notes, supplies };
 }
 
 function subDist(a, b) {
@@ -217,7 +304,7 @@ function branchPart(S, parts, arrow, H) {
   const vert = arrow.dir[0] === 0;
   let best = null, bd = Infinity;
   for (const p of parts) {
-    if ((p.axis === 'v') !== vert || p.type === 'opamp') continue;
+    if ((p.axis === 'v') !== vert || p.type === 'opamp' || p.out != null) continue;
     const A = S.vertices[p.a], B = S.vertices[p.b];
     // across the branch: how far the arrow is from the part's line; along it: how far from its span
     const across = vert ? Math.abs(arrow.cx - (A.x + B.x) / 2) : Math.abs(arrow.cy - (A.y + B.y) / 2);

@@ -10,12 +10,16 @@
 // A drawing: { title, parts, wires, ground, quantities, asked, notes? }
 //   parts: [{ kind, text, value, from, to, polarity, control }] — kind: resistor, voltage_source,
 //     current_source, dependent_voltage_source, dependent_current_source, capacitor, inductor,
-//     ac_voltage_source, ac_current_source, open_switch, closed_switch, opamp; value in SI units
-//     (the gain for a dependent source); from / to: grid points { x, y } (an op amp's − and +
-//     inputs, with its output at `out`); polarity: the end ('from' | 'to') of a source's + or
+//     ac_voltage_source, ac_current_source, open_switch, closed_switch, opamp, diode, zener, npn,
+//     pnp, njfet, pjfet; value in SI units (the gain for a dependent source, a zener's breakdown
+//     voltage, a bipolar transistor's β, a FET's IDSS with its pinch-off voltage at `vp`; 0 for
+//     the board's default); from / to: grid points { x, y } (an op amp's − and + inputs, with its
+//     output at `out`; a diode's anode and cathode; a transistor's collector and emitter, with its
+//     base at `out`; a FET's drain and source, with its gate at `out`); polarity: the end ('from' | 'to') of a source's + or
 //     arrow, else 'none'; control: what a dependent source's gain multiplies ('vx', 'ix'), as
 //     named in quantities.
-//   wires: [{ from, to }]; ground: [{ x, y }]
+//   wires: [{ from, to }]; ground: [{ x, y }]; supplies: [{ at, value }] — an open terminal
+//     marked with a voltage (+16 V), a supply rail referred to ground
 //   quantities: [{ name, kind: node_voltage | voltage_across | current_through, at, part (index
 //     in parts, -1 for a node voltage), positive ('from' | 'to' | 'none') }]
 //   asked: names of the quantities the problem asks for.
@@ -31,8 +35,10 @@ const U = 6 * G; // one grid unit on the board: an 80-unit part with a 20-unit l
 const key = (p) => p.x + ',' + p.y;
 const W = (p) => [p.x * U, p.y * U];
 
-const TYPE = { resistor: 'resistor', voltage_source: 'dcv', current_source: 'dci', capacitor: 'capacitor', inductor: 'inductor', ac_voltage_source: 'acv', ac_current_source: 'aci', open_switch: 'switch', closed_switch: 'switch', dependent_current_source: 'depsrc', dependent_voltage_source: 'depsrc', opamp: 'opamp' };
-const PREFIX = { resistor: 'R', dcv: 'V', dci: 'I', capacitor: 'C', inductor: 'L', acv: 'V', aci: 'I', switch: 'S', depsrc: 'D', opamp: 'U' };
+const TYPE = { resistor: 'resistor', voltage_source: 'dcv', current_source: 'dci', capacitor: 'capacitor', inductor: 'inductor', ac_voltage_source: 'acv', ac_current_source: 'aci', open_switch: 'switch', closed_switch: 'switch', dependent_current_source: 'depsrc', dependent_voltage_source: 'depsrc', opamp: 'opamp', diode: 'diode', zener: 'zener', npn: 'npn', pnp: 'pnp', njfet: 'njfet', pjfet: 'pjfet' };
+const PREFIX = { resistor: 'R', dcv: 'V', dci: 'I', capacitor: 'C', inductor: 'L', acv: 'V', aci: 'I', switch: 'S', depsrc: 'D', opamp: 'U', diode: 'D', zener: 'D', npn: 'Q', pnp: 'Q', njfet: 'J', pjfet: 'J' };
+// (parts with a third terminal at `out`)
+const THREE = new Set(['opamp', 'npn', 'pnp', 'njfet', 'pjfet']);
 
 /**
  * Build a board circuit from one described circuit. Returns { doc, warnings, asked, els }:
@@ -44,7 +50,7 @@ export function buildFromDrawing(c) {
   doc.description = 'Read from a photo.';
   doc.bigLabels = true; // its values written big: the board shows values, not the drawing's names
   const warnings = [];
-  const parts = (c.parts || []).filter((p) => p && TYPE[p.kind] && p.from && p.to && key(p.from) !== key(p.to) && (p.kind !== 'opamp' || (p.out && key(p.out) !== key(p.from) && key(p.out) !== key(p.to))));
+  const parts = (c.parts || []).filter((p) => p && TYPE[p.kind] && p.from && p.to && key(p.from) !== key(p.to) && (!THREE.has(p.kind) || (p.out && key(p.out) !== key(p.from) && key(p.out) !== key(p.to))));
   if (parts.length < (c.parts || []).length) warnings.push('Some parts could not be placed (both ends on one point, or an unknown kind) and were left out.');
   const count = {};
   const made = [];
@@ -54,6 +60,7 @@ export function buildFromDrawing(c) {
   const mark = (p) => points.set(key(p), p);
   for (const p of parts) { mark(p.from); mark(p.to); if (p.out) mark(p.out); }
   for (const g of c.ground || []) mark(g);
+  for (const s of c.supplies || []) if (s && s.at) mark(s.at);
   for (const q of quantities) if (q.kind === 'node_voltage' && q.at) mark(q.at);
   for (const w of c.wires || []) { mark(w.from); mark(w.to); }
 
@@ -61,16 +68,19 @@ export function buildFromDrawing(c) {
     const type = TYPE[p.kind];
     const C = getType(type);
     if (type === 'opamp') { made.push(placeOpAmp(doc, p, C, count)); return; }
+    if (THREE.has(type)) { made.push(placeTransistor(doc, p, C, count)); return; }
     const P = W(p.from), Q = W(p.to), mx = (P[0] + Q[0]) / 2, my = (P[1] + Q[1]) / 2;
     const el = new C(mx, my);
-    count[type] = (count[type] || 0) + 1;
-    el.name = `${PREFIX[type]}${count[type]}`;
+    // (numbered by name: a diode and a zener are D1 and D2)
+    count[PREFIX[type]] = (count[PREFIX[type]] || 0) + 1;
+    el.name = `${PREFIX[type]}${count[PREFIX[type]]}`;
     const v = Number.isFinite(p.value) ? p.value : 0;
     if (type === 'resistor') el.p.r = v > 0 ? v : 1;
     else if (type === 'dcv' || type === 'dci' || type === 'acv' || type === 'aci') el.p.amp = v;
     else if (type === 'capacitor') el.p.c = v > 0 ? v : 1e-6;
     else if (type === 'inductor') el.p.l = v > 0 ? v : 1e-3;
     else if (type === 'switch') el.p.closed = p.kind === 'closed_switch';
+    else if (type === 'zener' && v > 0) el.p.bv = v;
     // the first terminal goes at: + of a voltage source, the tail of a current source's arrow
     let head = p.from;
     const isV = p.kind === 'voltage_source' || p.kind === 'ac_voltage_source' || p.kind === 'dependent_voltage_source';
@@ -116,6 +126,14 @@ export function buildFromDrawing(c) {
   // ground: as drawn, else at the lowest-left point of the circuit (the usual reference)
   const grounds = (c.ground || []).length ? c.ground : [];
   for (const g of grounds) doc.elements.push(new (getType('ground'))(...W(g)));
+  // supply rails at their terminals
+  for (const s of c.supplies || []) {
+    if (!s || !s.at || !Number.isFinite(s.value)) continue;
+    const rail = new (getType('rail'))(...W(s.at));
+    rail.p.amp = s.value;
+    rail.onParamChange?.();
+    doc.elements.push(rail);
+  }
 
   // named quantities: a node voltage that controls a dependent source gets a net label (the
   // source reads it by that name); the drawing's other names are not put on the board
@@ -137,8 +155,12 @@ export function buildFromDrawing(c) {
   }
   const needGround = !grounds.length && made.some(({ part }) => part.control && byName.get(part.control)?.kind === 'node_voltage');
   if (needGround || (!grounds.length && made.length)) {
-    // the bottom wire is the reference in a textbook drawing: its leftmost point
-    const pts = [...points.values()];
+    // the bottom wire is the reference in a textbook drawing: its leftmost point (not a point
+    // wired to a supply terminal: the supply is above ground)
+    const net = new Map(), find = (k) => { while (net.has(k) && net.get(k) !== k) k = net.get(k); return k; };
+    for (const w of c.wires || []) { if (!w.from || !w.to) continue; const a = find(key(w.from)), b = find(key(w.to)); net.set(a, a); if (a !== b) net.set(b, a); }
+    const fed = new Set((c.supplies || []).filter((x) => x && x.at).map((x) => find(key(x.at))));
+    const all = [...points.values()], pts = all.filter((p) => !fed.has(find(key(p)))).length ? all.filter((p) => !fed.has(find(key(p)))) : all;
     const maxY = Math.max(...pts.map((p) => p.y));
     const g = pts.filter((p) => p.y === maxY).sort((p, q) => p.x - q.x)[0];
     if (g) doc.elements.push(new (getType('ground'))(...W(g)));
@@ -173,6 +195,7 @@ export function buildFromDrawing(c) {
   for (const p of parts) { bump(p.from); bump(p.to); if (p.out) bump(p.out); }
   for (const w of c.wires || []) { bump(w.from); bump(w.to); }
   for (const g of grounds) bump(g);
+  for (const s of c.supplies || []) if (s && s.at) bump(s.at);
   const loose = [];
   for (const { part, el } of made) for (const p of [part.from, part.to, ...(part.out ? [part.out] : [])]) if ((used.get(key(p)) || 0) < 2 && !wireThrough(c.wires || [], p)) loose.push(el.name);
   if (loose.length) warnings.push(`Not joined to anything at one end: ${[...new Set(loose)].join(', ')}. Check the photo and add the missing wire.`);
@@ -322,6 +345,54 @@ function placeOpAmp(doc, p, C, count) {
   lead(M, pm); lead(P, pp);
   if (O[0] === po[0] || O[1] === po[1]) doc.addWire([O, po]);
   else doc.addWire(upright ? [O, [O[0], po[1]], po] : [O, [po[0], O[1]], po]);
+  return { part: p, el, head: p.from, tail: p.to };
+}
+
+/**
+ * A transistor between its collector (p.from), its emitter (p.to) and its base (p.out) — a FET's
+ * drain, source and gate: turned and mirrored so its three pins lie the way they were drawn, its
+ * collector–emitter line midway between theirs, its pins led to the three points; its β (a
+ * FET's IDSS and pinch-off voltage) set when read. Returns { part, el, head, tail } as for the
+ * other parts.
+ */
+function placeTransistor(doc, p, C, count) {
+  const el = new C(0, 0);
+  const pre = PREFIX[C.type];
+  count[pre] = (count[pre] || 0) + 1;
+  el.name = `${pre}${count[pre]}`;
+  if (pre === 'Q' && p.value > 0) { el.p.model = 'custom'; el.p.bf = p.value; }
+  if (pre === 'J' && p.value > 0) el.p.idss = p.value;
+  if (pre === 'J' && Number.isFinite(p.vp) && p.vp !== 0) el.p.vp = Math.abs(p.vp);
+  const Cp = W(p.from), Ep = W(p.to), Bp = W(p.out);
+  const unit = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const ce = unit(Cp, Ep), side = unit(mid(Cp, Ep), Bp);
+  let best = null;
+  for (let rot = 0; rot < 4; rot++) {
+    for (const flip of [false, true]) {
+      el.rot = rot; el.flip = flip;
+      const [pb, pc, pe] = el.getPosts(), u = unit(pc, pe), s = unit(mid(pc, pe), pb);
+      const score = u[0] * ce[0] + u[1] * ce[1] + s[0] * side[0] + s[1] * side[1];
+      if (!best || score > best.score) best = { rot, flip, score };
+    }
+  }
+  el.rot = best.rot; el.flip = best.flip;
+  {
+    const [, pc, pe] = el.getPosts(), m = mid(pc, pe), M = mid(Cp, Ep);
+    el.x += M[0] - m[0]; el.y += M[1] - m[1];
+  }
+  el.onParamChange?.();
+  doc.elements.push(el);
+  const [pb, pc, pe] = el.getPosts();
+  const lead = (from, post, alongFirst) => {
+    if (from[0] === post[0] && from[1] === post[1]) return;
+    if (from[0] === post[0] || from[1] === post[1]) { doc.addWire([from, post]); return; }
+    doc.addWire(alongFirst ? [from, [post[0], from[1]], post] : [from, [from[0], post[1]], post]);
+  };
+  // (the collector's and emitter's leads along their line, the base's across to its pin)
+  const upright = Math.abs(ce[1]) >= Math.abs(ce[0]);
+  lead(Cp, pc, !upright); lead(Ep, pe, !upright);
+  lead(Bp, pb, upright);
   return { part: p, el, head: p.from, tail: p.to };
 }
 

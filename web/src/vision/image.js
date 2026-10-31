@@ -234,7 +234,7 @@ export function strokeWidth(ink, w, h) {
  * The stroke width and whether it was taken from the thin lines among thick ink (mixed): only
  * with `contrast` (the ink mask's), and not when `mixed` is false.
  */
-function strokeInfo(ink, w, h, { mixed = true, contrast = null } = {}) {
+function strokeInfo(ink, w, h, { mixed = true, contrast = null, known = false } = {}) {
   const { labels, comps } = components(ink, w, h);
   const big = Math.max(20, 0.04 * Math.max(w, h));
   const use = new Uint8Array(comps.length + 1);
@@ -297,7 +297,10 @@ function strokeInfo(ink, w, h, { mixed = true, contrast = null } = {}) {
   // are its lines
   const along = Float64Array.from(hist, (v, r) => (r ? v / r : 0));
   const fine = median(along, 256);
-  if (mixed && contrast && all > 2.2 * fine) {
+  // (measured again after resizing a picture found so: resampled, the thin lines come out paler
+  // than the thick ones, and they are its lines all the same)
+  if (known) return { sw: median(hist, Math.min(256, Math.floor(2.5 * fine) + 1)), mixed: true };
+  if (mixed && contrast && all > 1.8 * fine) {
     // (as dark as the thick ink: a page's faint printed lines or the paper's grain are thin
     // too, and no drawing's)
     const cut = 2.5 * fine, ct = new Uint32Array(256), ck = new Uint32Array(256);
@@ -307,7 +310,8 @@ function strokeInfo(ink, w, h, { mixed = true, contrast = null } = {}) {
       if (r > thin[labels[i]]) continue;
       (r <= cut ? ct : ck)[contrast[i]]++;
     }
-    if (median(ct, 256) >= 0.95 * median(ck, 256)) return { sw: median(hist, Math.min(256, Math.floor(cut) + 1)), mixed: true };
+    // (a book's thin lines printed fine come out a little paler than its bold ones)
+    if (median(ct, 256) >= 0.75 * median(ck, 256)) return { sw: median(hist, Math.min(256, Math.floor(cut) + 1)), mixed: true };
   }
   return { sw: all, mixed: false };
 }
@@ -539,7 +543,7 @@ export function prepare(img, { target = 4.5, maxSide = 3200 } = {}) {
   }
   // (measured again at the new size the same way: the bits of a page's lines left after they
   // are erased are no thin lines of the drawing's)
-  const sw = strokeInfo(ink, W, H, { mixed: first0.mixed, contrast }).sw;
+  const sw = strokeInfo(ink, W, H, { mixed: first0.mixed, contrast, known: first0.mixed && k !== 1 }).sw;
   // the sharper of the two images for reading text: the source (when the working image is a
   // reduction of it) or the working image itself
   const src = k < 1 ? { d, w, h, k } : { d: dd, w: W, h: H, k: 1 };

@@ -11,7 +11,13 @@ const KIND = {
   unknown: () => 'resistor',
   switch: () => 'open_switch',
   opamp: () => 'opamp',
+  diode: (p) => (p.zener ? 'zener' : 'diode'),
+  npn: () => 'npn',
+  pnp: () => 'pnp',
+  njfet: () => 'njfet',
+  pjfet: () => 'pjfet',
 };
+const TRANSISTOR = new Set(['npn', 'pnp', 'njfet', 'pjfet']);
 
 /**
  * Grid positions for the structure's vertices. Rows join vertices tied by horizontal wires and
@@ -132,6 +138,8 @@ export function gridOf(S, sw, { slants = false } = {}) {
     const m = new Set();
     const add = (u, v) => { const a = uf.f(u), b = uf.f(v); m.add(`${a},${b}`); m.add(`${b},${a}`); };
     for (const p of parts) if (p.out != null && p.axis === axis) add(p.a, p.out);
+    // (a transistor's base on a line of its own, between its collector's and its emitter's)
+    for (const p of parts) if (p.out != null && p.type !== 'opamp' && p.axis !== axis && p.axis !== 'd') { add(p.a, p.out); add(p.b, p.out); }
     if (slants) {
       for (const p of parts) if (p.axis === 'd') add(p.a, p.b);
       for (const wv of S.wires) if (wv.dir === 'd' && used[wv.a] && used[wv.b] && wv.len >= 3 * sw) add(wv.a, wv.b);
@@ -173,6 +181,15 @@ function lay(S, sw, labels, slants) {
       return;
     }
     const L = labels.get(k) || {};
+    // a transistor: from its collector (a FET's drain), to its emitter (source), and its base
+    // (gate); its value is its β (a FET's IDSS, with its pinch-off voltage vp)
+    if (TRANSISTOR.has(kind)) {
+      const O = at[p.out];
+      if (!O || (O.x === A.x && O.y === A.y) || (O.x === B.x && O.y === B.y)) { notes.push('A transistor whose base could not be placed was left out.'); return; }
+      index.set(k, parts.length);
+      parts.push({ kind, text: L.text || '', value: L.value ?? 0, ...(L.vp != null ? { vp: L.vp } : {}), from: { ...A }, to: { ...B }, out: { ...O }, polarity: 'none', control: '', a: p.a, b: p.b, o: p.out, d: false });
+      return;
+    }
     let polarity = 'none';
     if (/voltage_source/.test(kind)) polarity = p.plus === 'b' ? 'to' : 'from';
     if (/current_source/.test(kind)) polarity = p.arrow === 'b' ? 'to' : 'from';
@@ -194,7 +211,7 @@ function lay(S, sw, labels, slants) {
  * The drawing for buildFromDrawing: { title, parts, wires, ground, quantities, asked }, plus
  * notes on what was unsure. `labels` (optional) gives each part's text, value and control.
  */
-export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Map(), quantities = [], asked = [] } = {}) {
+export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Map(), quantities = [], asked = [], supplies = [] } = {}) {
   // what was drawn slanting stays so (the board has slanted parts and wires) when, its ends kept
   // on different rows and columns, every such line can run straight; else all is laid along
   // the grid, the slanting lines led round
@@ -206,6 +223,7 @@ export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Ma
   const { at, parts, wires, notes, index } = L;
   for (const x of [...parts, ...wires]) { delete x.a; delete x.b; delete x.o; delete x.d; }
   const ground = S.grounds.map((g) => at[g.v]).filter(Boolean).map((p) => ({ ...p }));
+  const rails = supplies.filter((s) => at[s.v]).map((s) => ({ at: { ...at[s.v] }, value: s.value, text: s.text }));
   const qs = quantities.map((q) => {
     if (q.kind === 'node_voltage') {
       // (a name read next to a crumb of wire marks the nearest point of the circuit)
@@ -221,7 +239,7 @@ export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Ma
     const d = parts[i];
     return { name: q.name, kind: q.kind, at: d ? { ...d.from } : { x: 0, y: 0 }, part: i ?? -1, positive: q.positive || 'none' };
   }).filter((q) => q.kind === 'node_voltage' || q.part >= 0);
-  return { title, parts, wires, ground, quantities: qs, asked, notes, index };
+  return { title, parts, wires, ground, supplies: rails, quantities: qs, asked, notes, index };
 }
 
 /**
@@ -411,6 +429,7 @@ function straightSlants(parts, wires) {
 }
 
 function defaultValue(kind) {
+  if (kind === 'diode' || kind === 'zener') return 0;
   if (kind === 'resistor') return 1000;
   if (kind === 'capacitor') return 1e-6;
   if (kind === 'inductor') return 1e-3;

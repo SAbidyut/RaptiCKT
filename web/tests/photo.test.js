@@ -267,3 +267,33 @@ test('a side drawn straight but bent by the grid comes out as one straight line'
   assert.ok(R.getPosts().every(([x, y]) => x % 20 === 0 && y % 20 === 0), 'its terminals on grid points');
   near(Math.abs(R.i), 2, 'and it still solves: 10 V across 5 Ω');
 });
+
+test('a transistor is set as drawn, its base on either side; a diode points as drawn; a supply terminal is a rail', () => {
+  // +10 V at a terminal, 1 kΩ to the collector, 100 kΩ from the supply to the base, the emitter
+  // through a diode (anode at the emitter) to ground: IB = (10 − 0.7 − 0.65) / 100 kΩ, IC = β·IB
+  for (const side of [-1, 1]) {
+    const B = P(2 + side * 2, 1);
+    const c = circuit({
+      parts: [
+        part('resistor', '1 kΩ', 1000, P(2, -1), P(2, 0)),
+        { ...part('npn', 'β = 50', 50, P(2, 0), P(2, 2)), out: B },
+        part('resistor', '100 kΩ', 1e5, P(B.x, -1), B),
+        part('diode', '', 0, P(2, 2), P(2, 3)),
+      ],
+      wires: [wire(P(B.x, -1), P(2, -1))],
+      ground: [P(2, 3)],
+      supplies: [{ at: P(2, -1), value: 10 }],
+    });
+    const r = solve(c);
+    assert.deepEqual(r.warnings, [], `base on the ${side < 0 ? 'left' : 'right'}`);
+    const q = r.doc.elements.find((e) => e.constructor.type === 'npn');
+    assert.equal(q.p.bf, 50);
+    const [vb, vc, ve] = q.nodes.map((n) => r.sim.v(n));
+    assert.ok(vb - ve > 0.55 && vb - ve < 0.8, `VBE ${vb - ve}`);
+    assert.ok(ve > 0.5 && ve < 0.8, `the diode conducts: VE ${ve}`);
+    const ib = (10 - vb) / 1e5, ic = (10 - vc) / 1000;
+    assert.ok(ic / ib > 45 && ic / ib < 65, `IC/IB ${ic / ib}`);
+    // the base pin is on the side its point was drawn
+    assert.ok(Math.sign(q.getPosts()[0][0] - q.getPosts()[1][0]) === side, 'base side');
+  }
+});
