@@ -42,6 +42,35 @@ function dotLeft(bm) {
   return rest && rest.w >= 0.35 * bm.h && rest.h >= 0.8 * bm.h ? { rest, apart: top(x) === bm.h } : null;
 }
 
+/**
+ * A decimal point run into the character before it ("1.67" written tight): a round blot low at
+ * the glyph's right, joined to the rest by a neck (a pixel or two, or the end of a stroke
+ * thinner than the blot and well inside its rows: a 1's foot run into it; a stroke's own end,
+ * bent down a little, is no blot). Returns the rest (the character), or null.
+ */
+function dotRight(bm) {
+  const at = (x, y) => bm.data[y * bm.w + x];
+  // (from the right: the blot grows column by column until the neck is reached)
+  let x0 = bm.w, x1 = -1, y0 = bm.h, y1 = -1, area = 0;
+  for (let x = bm.w - 1; x >= 0.4 * bm.w; x--) {
+    let n = 0, c0 = bm.h, c1 = -1;
+    for (let y = 0; y < bm.h; y++) if (at(x, y)) { n++; if (y < c0) c0 = y; if (y > c1) c1 = y; }
+    const dw = x1 - x0 + 1, dh = y1 - y0 + 1;
+    if (x1 >= 0 && bm.w - 1 - x >= 0.12 * bm.h) {
+      const neck = n <= Math.max(1, 0.04 * bm.h) || (n <= 0.4 * dh && c0 >= y0 + 0.25 * dh && c1 <= y1 - 0.2 * dh);
+      if (neck && dw >= 0.12 * bm.h && dw <= 0.4 * bm.h && dh >= 0.15 * bm.h && dh <= 0.5 * bm.h && y1 >= 0.65 * bm.h &&
+        Math.max(dw, dh) <= 1.8 * Math.min(dw, dh) && area >= 0.5 * dw * dh) {
+        const rest = slice(bm, 0, x + 1);
+        return rest && rest.w >= 0.15 * bm.h && rest.h >= 0.8 * bm.h ? rest : null;
+      }
+    }
+    if (n) { area += n; x0 = x; if (x1 < 0) x1 = x; y0 = Math.min(y0, c0); y1 = Math.max(y1, c1); }
+    // (ink in the line's upper part: no decimal point)
+    if (y0 < 0.4 * bm.h) return null;
+  }
+  return null;
+}
+
 /** Where a wide blot may be two (or three) touching characters: cut columns, best first. */
 function cuts(bm) {
   const col = new Float32Array(bm.w);
@@ -521,6 +550,11 @@ export function readWord(word, mainH, img, hand = false) {
       const two = Object.assign([{ ranked: [{ c: '.', lp: 0 }], sub: false, small: true }, rank(cut.rest, false, false)], { pen: Math.log(0.4) });
       if (cut.apart) alts.unshift(two); else alts.push(two);
     }
+    // (or one run into the character before it, "1.67" written tight: a round blot low at its
+    // right, the word going on after it; a character has no such blot, so the two are first
+    // read apart)
+    const cut2 = !cut && k < glyphs.length - 1 && band && !low(g) && !g.small && gw >= 0.6 * gh ? dotRight(g.bitmap) : null;
+    if (cut2) alts.unshift(Object.assign([rank(cut2, false, false), { ranked: [{ c: '.', lp: 0 }], sub: false, small: true }], { pen: 0 }));
     return { tiny, speck, dot, alts };
   });
   // two neighbours that may be one broken character (an Ω whose arch did not print; a decimal

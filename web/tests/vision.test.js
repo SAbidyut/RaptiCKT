@@ -410,6 +410,15 @@ for (const name of ['sketch-bjt.png', 'sketch-bjt-photo.jpg']) {
     near(vb - ve, 0.7, 0.1, 'VBE');
   });
 }
+for (const name of ['sketch-decimal.png', 'sketch-decimal-photo.jpg']) {
+  test(`${name}: a decimal point written run into the 1 before it — 24 V through 1.67 Ω and 10 Ω ∥ 5 Ω, 16 V across the pair`, async () => {
+    const r = await solve(name);
+    assert.deepEqual(r.texts, ['1.67 Ω', '10 Ω', '24 V', '5 Ω']);
+    const ends = r.doc.elements.filter((e) => e.constructor.type === 'resistor' && [5, 10].includes(e.p.r)).map((e) => Math.abs(r.sim.v(e.nodes[0]) - r.sim.v(e.nodes[1])));
+    assert.equal(ends.length, 2);
+    for (const v of ends) near(v, 16, 0.1, 'across 10 Ω ∥ 5 Ω');
+  });
+}
 
 test('the middle of a big solid shape is ink, though the paper level rose into it', () => {
   const w = 300, h = 200, data = new Uint8ClampedArray(w * h * 4).fill(255);

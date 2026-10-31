@@ -1,11 +1,12 @@
 """Hand-written characters for the offline circuit reader's glyph classifier.
 
-Every class is drawn as pen strokes, in the few ways people write it (a 4 open or closed, an
-ohm as "_∩_" with short or long feet, a 1 with or without its flag), and every copy is written
-differently: slant, turn, width, wobble, strokes a little too long or too short, pen from a fine
-liner to a marker. Each copy is then spoiled like a phone photo (render.degrade). Same output
-as render.py (OUT_DIR/glyphs.bin, per sample [class u8][w u8][h u8][w*h bytes 0/1]), so
-features.mjs reads it alike and train.py takes both folders.
+Every class is drawn as pen strokes, in the few ways people write it (a 4 open or closed, or
+open with its bar ending at the stem, an ohm as "_∩_" with short or long feet, a 1 with or
+without its flag), and every copy is written differently: slant, turn, width, wobble, strokes a
+little too long or too short, pen from a fine liner to a marker. Each copy is then spoiled like
+a phone photo (render.degrade). Same output as render.py (OUT_DIR/glyphs.bin, per sample
+[class u8][w u8][h u8][w*h bytes 0/1]), so features.mjs reads it alike and train.py takes both
+folders.
 
     python3 hand.py OUT_DIR [PREVIEW.png]
 
@@ -47,7 +48,10 @@ HAND = {
           [arc(.28, .24, .26, .22, 200, 380) + [(.3, .44), (.06, .49), (.3, .51)] + arc(.28, .74, .28, .25, 290, 520)],
           [arc(.3, .22, .26, .2, 215, 395) + [(.14, .47), (.36, .5)] + arc(.3, .74, .27, .25, 280, 515)],
           [[(.05, 0), (.5, 0), (.22, .42)] + arc(.27, .72, .27, .28, 250, 520)]],
-    '4': [[[(.42, 1), (.42, 0), (0, .66), (.6, .66)]], [[(.12, 0), (0, .62), (.6, .62)], [(.45, .25), (.45, 1)]]],
+    '4': [[[(.42, 1), (.42, 0), (0, .66), (.6, .66)]], [[(.12, 0), (0, .62), (.6, .62)], [(.45, .25), (.45, 1)]],
+          # open at the top, the stem no longer than its arm, the bar ending at the stem (a "Ч")
+          [[(.04, 0), (0, .45), (.5, .45)], [(.5, 0), (.5, 1)]],
+          [[(.04, 0), (.03, .3), (.12, .43), (.3, .45), (.52, .4)], [(.52, 0), (.54, 1)]]],
     '5': [[[(.5, 0), (.1, 0), (.06, .45)] + arc(.27, .7, .27, .3, 220, 500)],
           [[(.1, 0), (.06, .45)] + arc(.27, .7, .27, .3, 220, 500), [(.1, 0), (.52, 0)]]],
     '6': [[arc(.32, .5, .3, .5, 290, 90) + arc(.3, .72, .27, .28, 90, -180)],

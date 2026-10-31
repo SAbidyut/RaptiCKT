@@ -7,7 +7,8 @@ e.g. the printed characters (render.py) alone for glyph-model.js, with the hand-
 (hand.py, hasy.py) and the run-together pairs (pairs.py) for glyph-model-hand.js; WHAT names
 the model in the file's header. FEATURES=hand (environment) trains on features-hand.f32
 (features.mjs DIR hand) instead of features.f32; EXTRA=pair adds classes after the shared ones
-(pairs.py's 'pair': two characters run together, no one character).
+(pairs.py's 'pair': two characters run together, no one character); SEED (environment) seeds the
+weights and the order the samples are taken in (default 1).
 """
 import base64, json, os, sys
 import numpy as np
@@ -35,7 +36,7 @@ def main():
     D = Xs[0].shape[1]
     X, y, src = np.concatenate(Xs), np.concatenate(ys), np.concatenate(src)
     C = len(CLASSES)
-    rng = np.random.default_rng(1)
+    rng = np.random.default_rng(int(os.environ.get('SEED', '1')))
     idx = rng.permutation(len(y))
     nv = len(y) // 12
     Xv, yv, sv, Xt, yt = X[idx[:nv]], y[idx[:nv]], src[idx[:nv]], X[idx[nv:]], y[idx[nv:]]

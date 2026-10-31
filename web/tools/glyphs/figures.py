@@ -369,12 +369,16 @@ class Fig:
 
 
 # what to write for a character: its class in hand.HAND and the ways of writing it that fit
-# (a capital V is a v drawn full height)
+# (a capital V is a v drawn full height; a 4 closed or open, a "ч" open with its bar ending at the
+# stem)
 WRITE = {'V': ('v', [0, 3]), 'v': ('v', [1, 2]), 'X': ('x', [1]), 'x': ('x', [0, 2]), 'O': ('o', [1]), 'o': ('o', [0]),
          'C': ('c', [1]), 'c': ('c', [0]), 'S': ('s', [1]), 's': ('s', [0]), 'K': ('k', [0]), 'k': ('k', [1, 2]),
-         'l': ('I', [0, 2]), '−': ('-', None)}
+         'l': ('I', [0, 2]), '−': ('-', None), '4': ('4', [0, 1]), 'ч': ('4', [2, 3])}
+# (a "‿" before a character: written run into the one before it, as "1.67" written tight)
 # letters of a caption that the reader has no class for
-EXTRA = {'d': [[hand.arc(.22, .71, .22, .29, 330, -30) + [(.44, .5)], [(.44, 0), (.44, 1)]]]}
+EXTRA = {'d': [[hand.arc(.22, .71, .22, .29, 330, -30) + [(.44, .5)], [(.44, 0), (.44, 1)]]],
+         # a fat decimal point, pressed on, a little over the line
+         '•': [[hand.arc(.08, .8, .08, .09, 0, 360), hand.arc(.08, .8, .04, .045, 0, 360), [(.06, .8), (.1, .8)]]]}
 
 
 class SketchDraw:
@@ -485,6 +489,9 @@ class SketchDraw:
         for ch in s:
             if ch == ' ':
                 x += h * rnd.uniform(0.2, 0.6)
+                continue
+            if ch == '‿':
+                x = items[-1][0] + items[-1][1].shape[1] - 0.3 * style['pen'] * k
                 continue
             cls, ways = WRITE.get(ch, (ch, None))
             opts = hand.HAND.get(cls) or EXTRA[ch]
@@ -967,6 +974,17 @@ def main():
     f.wire((0, 2), (4, 2))
     f.ground((1, 2))
     f.save(out, 'zener-led', random.Random(171))
+
+    # 23. a decimal point written run into the 1 before it, and a 4 open at the top (a "ч"): 24 V
+    # through 1.67 Ω and 10 Ω ∥ 5 Ω, 4.8 A
+    f = SketchFig(3, 2, sk)
+    f.vsource((0, 0), (0, 2), '2ч V', plus_at_a=True, side=1)
+    f.resistor((0, 0), (1.5, 0), '1‿•67 Ω', side=-1)
+    f.wire((1.5, 0), (3, 0))
+    f.resistor((1.5, 0), (1.5, 2), '10 Ω', side=-1)
+    f.resistor((3, 0), (3, 2), '5 Ω', side=-1)
+    f.wire((0, 2), (3, 2))
+    f.save(out, 'sketch-decimal', BLUE)
     print('ok')
 
 
