@@ -74,12 +74,14 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           ls -la out
 
-      # the Release below is where the APK is downloaded from: a full artifact quota must not block it
+      # the Release below is where the APK is downloaded from: a full artifact quota must not block it.
+      # Kept one day only: the account's Actions storage is 0.5 GB, and 90 days of APKs filled it.
       - uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
           name: RaptiCKT-apk-build${{ github.run_number }}
           path: out/*.apk
+          retention-days: 1
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
