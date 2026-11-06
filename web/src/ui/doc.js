@@ -129,7 +129,19 @@ export class CircuitDoc {
       if (Array.isArray(w) && w.length >= 2) d.addWire(w);
       else if (w && Array.isArray(w.p) && w.p.length >= 2) d.addWire(w.p, { cable: w.c, burnt: w.b });
     }
-    d.probes = arr(o.probes).filter((p) => p && typeof p === 'object').map((p) => ({ ...p, el: p.el != null && d.elements[p.el] ? d.elements[p.el].id : undefined })).filter((p) => p.kind === 'node' || p.el != null);
+    // a probe's colour and unit go into the page as they are: only well-formed ones are taken from a
+    // file, so a crafted circuit cannot slip HTML or script into the app
+    const COLOR = /^#[0-9a-f]{3,8}$/i, PALETTE = ['#facc15', '#22d3ee', '#f472b6', '#4ade80', '#fb923c', '#a78bfa'];
+    d.probes = arr(o.probes).filter((p) => p && typeof p === 'object' && ['node', 'cur', 'volt'].includes(p.kind))
+      .map((p, i) => ({
+        ...p,
+        id: String(p.id ?? 'p' + i), label: String(p.label ?? ''),
+        color: COLOR.test(String(p.color)) ? p.color : PALETTE[i % PALETTE.length],
+        unit: p.kind === 'cur' ? 'A' : 'V',
+        pos: Array.isArray(p.pos) && p.pos.length === 2 && p.pos.every(Number.isFinite) ? [...p.pos] : undefined,
+        el: p.el != null && d.elements[p.el] ? d.elements[p.el].id : undefined,
+      }))
+      .filter((p) => (p.kind === 'node' ? !!p.pos : p.el != null));
     d.simSettings = o.sim && typeof o.sim === 'object' ? o.sim : {};
     d.bigLabels = !!o.bl;
     d.assignNames();

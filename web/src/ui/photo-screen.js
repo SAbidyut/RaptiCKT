@@ -379,7 +379,12 @@ export class PhotoScreen {
     });
     body.querySelectorAll('[data-c]').forEach((x) => x.addEventListener('click', () => { this.pick = +x.dataset.c; this.hi = -1; this.render(); }));
     body.querySelector('[data-x=undo]')?.addEventListener('click', () => { this.answer.circuits = JSON.parse(this.original); this.hi = -1; this.refresh(); });
-    body.querySelector('[data-x=open]').addEventListener('click', () => this.app.openFromPhoto(this.built().doc));
+    body.querySelector('[data-x=open]').addEventListener('click', () => {
+      const { doc } = this.built();
+      // every part removed: nothing to put on the board (it saved an empty "Photo circuit")
+      if (!doc.elements.length) { alert('No parts are left in this circuit — read the photo again or keep at least one part.'); return; }
+      this.app.openFromPhoto(doc);
+    });
     body.querySelector('[data-x=again]').addEventListener('click', () => { this.stage = 'start'; this.render(); });
   }
 

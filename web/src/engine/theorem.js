@@ -1026,7 +1026,7 @@ function maxPower(c) {
   for (let i = 0; i <= 80; i++) { const x = Math.pow(10, lo + ((hi - lo) * i) / 80); curve.push([x, (Vth * Vth * x) / (Rth + x) ** 2]); }
   steps.push(step(`Step 4 — ${c.T.name} as it is now`, [
     P(`With the present ${c.T.name} = ${fR(RL)} the load takes:`),
-    F(`I_L = ${fr('V_{th}', 'R_{th} + R_L')}`, `   = ${fr(fV(Vth), `${fR(Rth)} + ${fR(RL)}`)} = ${fI(I)}`, `P_L = I_L^{2} R_L = ${fP(Pnow)} = ${pct(Pnow / Pmax)} ${tx('of')} P_{max}`),
+    F(`I_L = ${fr('V_{th}', 'R_{th} + R_L')}`, `   = ${fr(fV(Vth), `${fR(Rth)} + ${fR(RL)}`)} = ${fI(I)}`, Pmax > 0 ? `P_L = I_L^{2} R_L = ${fP(Pnow)} = ${pct(Pnow / Pmax)} ${tx('of')} P_{max}` : `P_L = I_L^{2} R_L = ${fP(Pnow)}  ${tx('(the Thévenin voltage is 0: no power reaches the load, whatever its value)')}`),
     { t: 'curve', pts: curve, now: [RL, Pnow], best: [Rth, Pmax], xl: 'R_L', yl: 'P_L' },
     F([0.25, 0.5, 1, 2, 4].map((m) => { const x = m * Rth; return `R_L = ${m === 1 ? '' : m}R_{th} = ${fR(x)}  →  P_L = ${fP((Vth * Vth * x) / (Rth + x) ** 2)}`; })),
     ...answerBlocks(c, I, V),
@@ -1161,7 +1161,7 @@ function reciprocity(c) {
     steps.push(step('Step 3 — Compare', [
       F(`${tx(`Step 1 — ${ms(S.name)} in its own branch, current in`)} ${ms(T.name)} = ${fI(one.I)}`, `${tx(`Step 2 — ${ms(S.name)} in ${ms(T.name)}’s branch, current where it was`)} = ${fI(Ix)}`),
       P(Math.abs(Ix - one.I) <= 1e-6 * Math.max(Math.abs(one.I), 1e-9) + 1e-12
-        ? `The two currents are equal: **reciprocity holds**. The ratio E / I = ${fR(S.val / one.I)} (the transfer resistance) is the same both ways.`
+        ? `The two currents are equal: **reciprocity holds**.${one.I && S.val ? ` The ratio E / I = ${fR(S.val / one.I)} (the transfer resistance) is the same both ways.` : ''}`
         : 'The two currents differ — this circuit is not reciprocal.'),
       ...answerBlocks(c, c.full.I, c.full.V),
     ], null, [['I (Step 1)', fI(one.I)], ['I (Step 2)', fI(Ix)]]));
@@ -1179,7 +1179,7 @@ function reciprocity(c) {
   ], boardFig(c, { highlight: [T.src], ab: true, arrow: `${S.name} here`, meter: { src: S.src, type: 'voltmeter', text: 'V = ?' } }), [['V', fV(Vx)]]));
   steps.push(step('Step 3 — Compare', [
     F(`${tx(`Step 1 — ${ms(S.name)} in place, voltage across`)} ${ms(T.name)} = ${fV(one.V)}`, `${tx(`Step 2 — ${ms(S.name)} across ${ms(T.name)}, voltage where it was`)} = ${fV(Vx)}`),
-    P(Math.abs(Vx - one.V) <= 1e-6 * Math.max(Math.abs(one.V), 1e-9) + 1e-12 ? `The two voltages are equal: **reciprocity holds** (transfer resistance V / I = ${fR(one.V / S.val)}).` : 'The two voltages differ — this circuit is not reciprocal.'),
+    P(Math.abs(Vx - one.V) <= 1e-6 * Math.max(Math.abs(one.V), 1e-9) + 1e-12 ? `The two voltages are equal: **reciprocity holds**${one.V && S.val ? ` (transfer resistance V / I = ${fR(one.V / S.val)})` : ''}.` : 'The two voltages differ — this circuit is not reciprocal.'),
     ...answerBlocks(c, c.full.I, c.full.V),
   ], null, [['V (Step 1)', fV(one.V)], ['V (Step 2)', fV(Vx)]]));
   return done(c, 'reciprocity', steps, c.full.I, c.full.V);

@@ -3,8 +3,11 @@
 // sweep, Monte-Carlo tolerance analysis, power / efficiency table and SPICE
 // netlist export.
 
-import { fmtSI, parseSI } from '../engine/units.js';
+import { fmtSI, parseSI, csvRow } from '../engine/units.js';
 import { icon } from './icons.js';
+
+/** The longest transient an analysis runs (steps). */
+const MAX_STEPS = 400000;
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const SOURCE_TYPES = new Set(['dcv', 'acv', 'square', 'pulse', 'triangle', 'sawtooth', 'noise', 'sweep', 'dci', 'aci', 'rail', 'mic']);
@@ -197,7 +200,7 @@ export class Analysis {
     const fillPar = () => {
       const e = this.ed.doc.elements.find((x) => x.id === +elSel.value);
       if (!e) return;
-      const ps = e.constructor.props.filter((p) => !p.type && !p.hidden);
+      const ps = e.constructor.props.filter((p) => !p.type && !p.hidden && (!p.when || p.when(e.p)));
       const k = e.knobProp();
       parSel.innerHTML = ps.map((p) => `<option value="${p.key}" ${k && k.key === p.key ? 'selected' : ''}>${esc(p.label)}${p.unit ? ' (' + esc(p.unit) + ')' : ''}</option>`).join('');
       fillRange();
@@ -335,7 +338,7 @@ export class Analysis {
     const out = { t: [], y: probes.map(() => []), ok: true };
     if (!sim || !sim.ready || !sim.start()) { out.ok = false; out.err = sim?.error || 'Circuit cannot be solved'; }
     else {
-      const n = Math.min(400000, Math.ceil(tEnd / dt - 1e-9));
+      const n = Math.min(MAX_STEPS, Math.ceil(tEnd / dt - 1e-9));
       for (let i = 0; i < n; i++) {
         if (!sim.step(dt)) { out.ok = false; out.err = sim.error; break; }
         each?.(sim);
@@ -380,8 +383,11 @@ export class Analysis {
     if (!probe) return this.ed.toast('Probe the signal first (select it → Scope)');
     if (!(f > 0)) return this.ed.toast('Enter the fundamental frequency');
     const T = 1 / f, dt = T / spc, t0 = performance.now(), tStart = ns * T;
+    // the transient stops at its step limit: settling plus measuring must fit in it, or nothing is measured
+    if ((ns + nm) * spc > MAX_STEPS) return this.ed.toast(`Too many steps (${Math.round((ns + nm) * spc).toLocaleString()}): use fewer cycles or samples per cycle`);
     const r = this.transient((ns + nm) * T, dt, [probe], (t) => t > tStart + dt * 0.5);
     if (!r.ok) return this.ed.toast(r.err || 'Simulation failed');
+    if (r.y[0].length < 2) return this.ed.toast('Nothing measured: use fewer cycles or samples per cycle');
     const x = r.y[0], N = Math.min(x.length, nm * spc), xs = x.slice(x.length - N), ts = r.t.slice(r.t.length - N);
     const harm = [];
     let dc = 0, sq = 0, pk = 0;
@@ -492,7 +498,7 @@ export class Analysis {
     const fill = () => {
       const e = this.ed.doc.elements.find((x) => x.id === +elSel.value);
       if (!e) return;
-      const ps = e.constructor.props.filter((p) => !p.type && !p.hidden), k = e.knobProp();
+      const ps = e.constructor.props.filter((p) => !p.type && !p.hidden && (!p.when || p.when(e.p))), k = e.knobProp();
       parSel.innerHTML = ps.map((p) => `<option value="${p.key}" ${k && k.key === p.key ? 'selected' : ''}>${esc(p.label)}${p.unit ? ' (' + esc(p.unit) + ')' : ''}</option>`).join('');
       fillV();
     };
@@ -516,7 +522,7 @@ export class Analysis {
     const T = parseSI(body.querySelector('#pa-t').value), dt = parseSI(body.querySelector('#pa-dt').value);
     if (!el || !key || !vals.length) return this.ed.toast('Choose a component, a parameter and some values');
     if (!probe) return this.ed.toast('Probe the signal first (select it → Scope)');
-    if (!(T > 0 && dt > 0 && T / dt <= 400000)) return this.ed.toast('Check the duration and time step');
+    if (!(T > 0 && dt > 0 && T / dt <= MAX_STEPS)) return this.ed.toast('Check the duration and time step');
     const orig = el.p[key], pdef = el.propDef(key), cols = ['#facc15', '#22d3ee', '#f472b6', '#4ade80', '#fb923c', '#a78bfa', '#f87171', '#e2e8f0'];
     const every = Math.max(1, Math.round(T / dt / 1500)), t0 = performance.now(), series = [];
     try {
@@ -569,7 +575,8 @@ export class Analysis {
     const wasRunning = ed.running, wasMode = ed.mode;
     if (wasRunning) ed.setRunning(false);
     const vals = [], t0 = performance.now();
-    const solve = () => { ed.rebuildNow(true); const sim = ed.sim; sim.opt.initialDC = true; return sim.start() ? ed.probeValue(probe, sim) : NaN; };
+    let res = null;
+    const solve = () => { ed.rebuildNow(true); const sim = ed.sim; sim.opt.initialDC = true; return sim.start() && !sim.opFallback ? ed.probeValue(probe, sim) : NaN; };
     try {
       const nominal = solve();
       for (let i = 0; i < n; i++) {
@@ -579,13 +586,14 @@ export class Analysis {
       }
       for (const q of parts) { q.e.p[q.k] = q.v; q.e.onParamChange(q.k); }
       const mean = vals.reduce((a, b) => a + b, 0) / vals.length, sd = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, vals.length - 1));
-      this.last = { kind: 'mc', vals, nominal, mean, sd, min: Math.min(...vals), max: Math.max(...vals), unit: probe.unit, label: probe.label, parts: parts.length, ms: performance.now() - t0 };
+      res = { kind: 'mc', vals, nominal, mean, sd, min: Math.min(...vals), max: Math.max(...vals), unit: probe.unit, label: probe.label, parts: parts.length, ms: performance.now() - t0 };
     } finally {
       for (const q of parts) { q.e.p[q.k] = q.v; q.e.onParamChange(q.k); }
       ed.rebuildNow(true);
       if (wasRunning) { ed.setRunning(true); ed.setMode(wasMode); } // keep the board mode the user had
     }
-    if (!vals.length) return ed.toast('No run converged');
+    if (!vals.length) return ed.toast('No run converged'); // no empty result kept for the tab
+    this.last = res;
     this.plotMC(this.last);
   }
 
@@ -625,7 +633,7 @@ export class Analysis {
   runPW() {
     const body = this.host.querySelector('.an-body'), ed = this.ed;
     const T = parseSI(body.querySelector('#pw-t').value), frac = +body.querySelector('#pw-f').value, dt = parseSI(body.querySelector('#pw-dt').value);
-    if (!(T > 0 && dt > 0 && T / dt <= 400000)) return ed.toast('Check the duration and time step');
+    if (!(T > 0 && dt > 0 && T / dt <= MAX_STEPS)) return ed.toast('Check the duration and time step');
     const els = ed.doc.elements.filter((e) => e.localPosts().length >= 1 && !e.isGround?.());
     const acc = new Map(els.map((e) => [e, 0]));
     let tAcc = 0;
@@ -661,12 +669,12 @@ export class Analysis {
     if (!d) return this.ed.toast('Run an analysis first');
     let csv = '';
     if (d.kind === 'bode') csv = (d.z ? 'frequency_Hz,impedance_ohm,phase_deg\n' : 'frequency_Hz,magnitude_dB,phase_deg\n') + d.pts.map((p) => `${p.f},${d.z ? Math.pow(10, p.db / 20) : p.db},${p.ph}`).join('\n');
-    if (d.kind === 'dc' && !d.par) csv = [`${d.xlabel},${d.series.map((s) => s.label).join(',')}`, ...d.series[0].pts.map((p, i) => [p[0], ...d.series.map((s) => s.pts[i][1])].join(','))].join('\n');
+    if (d.kind === 'dc' && !d.par) csv = [csvRow([d.xlabel, ...d.series.map((s) => s.label)]), ...d.series[0].pts.map((p, i) => [p[0], ...d.series.map((s) => s.pts[i][1])].join(','))].join('\n');
     if (d.kind === 'thd') csv = 'harmonic,frequency_Hz,rms,percent_of_fundamental,phase_deg\n' + d.harm.map((h) => `${h.n},${h.f},${h.rms},${(h.rms / (d.harm[0].rms || 1)) * 100},${h.ph}`).join('\n') + `\n\nTHD_percent,${d.thd * 100}\nRMS,${d.rms}`;
     if (d.kind === 'mc') csv = 'run,value\n' + d.vals.map((v, i) => `${i + 1},${v}`).join('\n');
-    if (d.kind === 'pw') csv = 'ref,type,average_power_W\n' + d.rows.map((x) => `${x.name},${x.title},${x.p}`).join('\n');
-    if (d.kind === 'dc' && d.par) csv = ['time_s,' + d.series.map((s) => s.label).join(','), ...d.series[0].pts.map((p, i) => [p[0], ...d.series.map((s) => s.pts[i]?.[1] ?? '')].join(','))].join('\n');
-    if (d.kind === 'op') csv = 'node,voltage_V\n' + d.rowsN.map((r) => r.join(',')).join('\n') + '\n\nref,type,V,I,P\n' + d.rowsE.map((r) => r.join(',')).join('\n');
+    if (d.kind === 'pw') csv = 'ref,type,average_power_W\n' + d.rows.map((x) => csvRow([x.name, x.title, x.p])).join('\n');
+    if (d.kind === 'dc' && d.par) csv = [csvRow(['time_s', ...d.series.map((s) => s.label)]), ...d.series[0].pts.map((p, i) => [p[0], ...d.series.map((s) => s.pts[i]?.[1] ?? '')].join(','))].join('\n');
+    if (d.kind === 'op') csv = 'node,voltage_V\n' + d.rowsN.map(csvRow).join('\n') + '\n\nref,type,V,I,P\n' + d.rowsE.map(csvRow).join('\n');
     this.ed.app.bridge.saveFile(`${this.ed.doc.name.replace(/\W+/g, '_')}_${d.kind}.csv`, 'text/csv', csv);
   }
 }

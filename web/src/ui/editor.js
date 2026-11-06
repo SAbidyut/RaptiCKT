@@ -181,6 +181,11 @@ export class Editor {
     this.inspector.show(null);
     this.setMulti(false);
     this.scope.userWindow = false;
+    // nothing of the circuit before: its analysis result and its scope traces (channel ids repeat
+    // from circuit to circuit, so the old buffers were taken for the new probes)
+    this.analysis.last = null;
+    this.scope.channels = [];
+    this.scope.reset();
     this.rebuildNow(true);
     for (const p of this.doc.probes) if (!p.label) this.labelProbe(p);
     this.scope.setProbes(this.doc.probes);

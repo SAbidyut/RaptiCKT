@@ -12,41 +12,46 @@ const WAVE_OPTIONS = [
 ];
 
 function makeWaveProps(wave, unit, amp, freq) {
+  // Every source has the settings of every waveform, shown only while its Waveform needs them
+  // (`when`): a DC source switched to Sine gets a frequency to set, instead of running with none
+  // (NaN, "Solution diverged").
+  const uses = (...w) => (p) => w.includes(p.wave);
+  const not = (...w) => (p) => !w.includes(p.wave);
   const props = [];
   if (wave === 'dc') {
     props.push({ key: 'amp', label: unit === 'V' ? 'Voltage' : 'Current', unit, def: amp, min: -1e4, max: 1e4, knob: true });
     props.push({ key: 'rint', label: 'Internal resistance', unit: 'Ω', def: 0, min: 0, max: 1e6, hidden: unit !== 'V' });
   } else {
     props.push({ key: 'amp', label: 'Amplitude (peak)', unit, def: amp, min: 0, max: 1e4, knob: wave !== 'sweep' });
-    props.push({ key: 'freq', label: wave === 'sweep' ? 'Start frequency' : 'Frequency', unit: 'Hz', def: freq, min: 1e-3, max: 1e9, log: true, knob: wave === 'sweep' });
-    if (wave === 'sweep') {
-      props.push({ key: 'f2', label: 'Stop frequency', unit: 'Hz', def: freq * 100, min: 1e-3, max: 1e9, log: true });
-      props.push({ key: 'tsweep', label: 'Sweep time', unit: 's', def: 0.1, min: 1e-6, max: 1e3, log: true });
-    }
-    props.push({ key: 'offset', label: 'DC offset', unit, def: 0, min: -1e4, max: 1e4 });
-    if (wave !== 'noise' && wave !== 'sweep') props.push({ key: 'phase', label: 'Phase', unit: '°', def: 0, min: -360, max: 360 });
-    if (wave === 'square' || wave === 'pulse') props.push({ key: 'duty', label: 'Duty cycle', unit: '%', def: 50, min: 0.1, max: 99.9 });
-    if (unit === 'V') props.push({ key: 'rint', label: 'Internal resistance', unit: 'Ω', def: 0, min: 0, max: 1e6 });
   }
+  props.push({ key: 'freq', label: wave === 'sweep' ? 'Start frequency' : 'Frequency', unit: 'Hz', def: freq, min: 1e-3, max: 1e9, log: true, knob: wave === 'sweep', when: not('dc', 'noise') });
+  props.push({ key: 'f2', label: 'Stop frequency', unit: 'Hz', def: freq * 100, min: 1e-3, max: 1e9, log: true, when: uses('sweep') });
+  props.push({ key: 'tsweep', label: 'Sweep time', unit: 's', def: 0.1, min: 1e-6, max: 1e3, log: true, when: uses('sweep') });
+  props.push({ key: 'offset', label: 'DC offset', unit, def: 0, min: -1e4, max: 1e4, when: not('dc') });
+  props.push({ key: 'phase', label: 'Phase', unit: '°', def: 0, min: -360, max: 360, when: not('dc', 'noise', 'sweep') });
+  props.push({ key: 'duty', label: 'Duty cycle', unit: '%', def: 50, min: 0.1, max: 99.9, when: uses('square', 'pulse') });
+  if (wave !== 'dc' && unit === 'V') props.push({ key: 'rint', label: 'Internal resistance', unit: 'Ω', def: 0, min: 0, max: 1e6 });
   props.push({ key: 'wave', label: 'Waveform', type: 'select', def: wave, options: WAVE_OPTIONS });
   return props;
 }
 
 /** Evaluate waveform value at time t (without srcScale). */
 export function waveValue(p, t, el) {
+  // a part without every waveform's settings (a rail switched to Sweep) gets the usual ones
   const A = p.amp, off = p.offset || 0;
   const ph = ((p.phase || 0) / 360);
-  const f = p.freq;
+  const f = p.freq > 0 ? p.freq : 1000;
+  const duty = Number.isFinite(p.duty) ? p.duty : 50;
   switch (p.wave) {
     case 'dc': return A;
     case 'sine': return off + A * Math.sin(TAU * (f * t + ph));
     case 'square': {
       const fr = frac(f * t + ph);
-      return off + (fr < p.duty / 100 ? A : -A);
+      return off + (fr < duty / 100 ? A : -A);
     }
     case 'pulse': {
       const fr = frac(f * t + ph);
-      return off + (fr < p.duty / 100 ? A : 0);
+      return off + (fr < duty / 100 ? A : 0);
     }
     case 'triangle': {
       const fr = frac(f * t + ph + 0.25);
@@ -55,7 +60,7 @@ export function waveValue(p, t, el) {
     case 'sawtooth': return off + A * (2 * frac(f * t + ph + 0.5) - 1);
     case 'noise': return off + A * (el ? el.noiseVal : 0);
     case 'sweep': {
-      const T = p.tsweep, f1 = p.freq, f2 = p.f2;
+      const T = p.tsweep > 0 ? p.tsweep : 0.1, f1 = f, f2 = p.f2 > 0 ? p.f2 : f * 100;
       const tt = t % T;
       const k = Math.log(f2 / f1) / T;
       const phase = Math.abs(k) < 1e-12 ? f1 * tt : (f1 * (Math.exp(k * tt) - 1)) / k;

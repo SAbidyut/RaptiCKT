@@ -1,6 +1,6 @@
 // Multichannel oscilloscope with measurements, FFT spectrum and XY mode.
 
-import { fmtSI } from '../engine/units.js';
+import { fmtSI, csvRow } from '../engine/units.js';
 import { icon } from './icons.js';
 
 export const CH_COLORS = ['#facc15', '#22d3ee', '#f472b6', '#4ade80', '#fb923c', '#a78bfa'];
@@ -700,7 +700,7 @@ export class Scope {
 
   exportCSV() {
     if (!this.count) { this.ed.toast('No scope data yet'); return; }
-    const rows = [['time_s', ...this.channels.map((c) => `${c.probe.label}_${c.probe.unit}`)].join(',')];
+    const rows = [csvRow(['time_s', ...this.channels.map((c) => `${c.probe.label}_${c.probe.unit}`)])];
     for (let k = this.count; k >= 1; k--) {
       const i = (this.head - k + N) % N;
       rows.push([this.tbuf[i].toExponential(6), ...this.channels.map((c) => c.buf[i].toExponential(6))].join(','));

@@ -231,8 +231,8 @@ class App {
     if (this.current === 'loadflow') { if (!this.loadflow.back()) this.closeLoadFlow(); return true; }
     if (this.current === 'photo') { if (!this.photo.back()) this.closePhoto(); return true; }
     if (this.current === 'editor') { if (!this.editor.back()) this.goHome(); return true; }
-    if (this.current === 'home' && this.home.tab === 'library' && this.home.upOne()) return true;
-    if (this.current === 'home' && this.home.tab === 'manual' && this.manual.back()) return true; // up one manual page // leave select mode, then folders
+    if (this.current === 'home' && this.home.tab === 'library' && this.home.upOne()) return true; // leave select mode, then folders
+    if (this.current === 'home' && this.home.tab === 'manual' && this.manual.back()) return true; // up one manual page
     if (this.current === 'home' && this.home.tab !== 'home') { this.home.tab = 'home'; this.home.render(); return true; }
     return false;
   }
@@ -307,6 +307,14 @@ class App {
       }
       alert(`Restored ${n} circuit${n === 1 ? '' : 's'}.` + (failed ? ` ${failed} could not be restored${n ? ' (damaged, or the storage is full)' : ''}.` : ''));
       if (this.current === 'home') this.home.render();
+      return;
+    }
+    // a load-flow system exported by the app: open it in Load Flow Analysis
+    const lf = o && typeof o === 'object' ? o.loadflow || o : null;
+    if (lf && !Array.isArray(o.elements) && Array.isArray(lf.buses) && Array.isArray(lf.branches)) {
+      if (this.current === 'editor') { const old = this.editor.doc; if (old.elements.length && !old.isExample) this.saveToLibrary(old, true); }
+      this.openLoadFlow();
+      try { this.loadflow.importSystem(lf, name); } catch (e) { alert('Could not import: ' + e.message); }
       return;
     }
     if (!o || typeof o !== 'object' || !Array.isArray(o.elements)) { alert('This file is not a RaptiCKT circuit.'); return; }

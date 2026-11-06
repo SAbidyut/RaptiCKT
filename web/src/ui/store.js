@@ -176,7 +176,8 @@ export const bridge = {
     return new Promise((resolve, reject) => {
       if (A()) {
         window.__raptiFileOpened = (name, b64) => {
-          try { resolve({ name, text: decodeURIComponent(escape(atob(b64))) }); } catch (e) { reject(e); }
+          // UTF-8, with a byte that is not (a file saved as Windows-1252) read as � instead of failing
+          try { resolve({ name, text: new TextDecoder('utf-8').decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))) }); } catch (e) { reject(e); }
         };
         window.__raptiFileError = (msg) => reject(new Error(msg));
         try { A().openFile(accept); } catch (e) { reject(e); }

@@ -193,7 +193,10 @@ export class CCCVCharger extends withChip(Element) {
     let vb = s.v(bat) - s.v(gnd);
     // limit the Newton step: the CV knee is a few mV wide
     const lim = Math.max(0.3, 0.05 * this.p.vcv);
-    if (this.vl != null && Math.abs(vb - this.vl) > lim) { vb = this.vl + Math.sign(vb - this.vl) * lim; s.limited = true; }
+    // (only where the current depends on the voltage: pre-charge, off and done are a fixed current, and
+    // limiting there kept a resistive load from ever converging)
+    const shaped = this.st !== 'pre' && this.st !== 'off' && this.st !== 'done';
+    if (shaped && this.vl != null && Math.abs(vb - this.vl) > lim) { vb = this.vl + Math.sign(vb - this.vl) * lim; s.limited = true; }
     this.vl = vb;
     const c = this.curve(vb);
     s.addNLCurrent(gnd, bat, c.i, [[bat, gnd, c.g, vb]]);

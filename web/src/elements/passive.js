@@ -4,6 +4,10 @@
 import { Element, TwoTerm, register, GRID } from './base.js';
 import { fmtShort } from '../engine/units.js';
 
+// how firmly the DC operating point holds a capacitor's initial voltage (1 mΩ) and an inductor's
+// initial current (1 nS across it)
+const IC_HOLD = 1e3, IC_HOLD_G = 1e-9;
+
 const G = GRID;
 
 export class Ground extends Element {
@@ -141,12 +145,14 @@ export class Capacitor extends TwoTerm {
   static description = 'Ideal capacitor: i = C·dv/dt. Plates show accumulated charge while simulating.';
   reset() { this.vPrev = this.p.ic; this.iPrev = 0; this.setCurrent(0); this.J = 0; }
   geq(s) { return (s.method === 'be' ? 1 : 2) * this.p.c / s.dt; }
+  // DC operating point: open, unless an initial voltage is set; then it is held at it (as SPICE's
+  // IC=), or the operating point overwrote the initial voltage with the circuit's own
   stamp(s) {
-    if (s.mode === 'dc') return;
+    if (s.mode === 'dc') { if (this.p.ic) s.addG(this.nodes[0], this.nodes[1], IC_HOLD); return; }
     s.addG(this.nodes[0], this.nodes[1], this.geq(s));
   }
   stampStep(s) {
-    if (s.mode === 'dc') return;
+    if (s.mode === 'dc') { if (this.p.ic) s.addI(this.nodes[0], this.nodes[1], -IC_HOLD * this.p.ic); return; }
     const g = this.geq(s);
     this.J = s.method === 'be' ? -g * this.vPrev : -g * this.vPrev - this.iPrev;
     s.addI(this.nodes[0], this.nodes[1], this.J);
@@ -236,7 +242,8 @@ export class Inductor extends TwoTerm {
   get Rs() { return Math.max(this.p.rs, 1e-9); }
   reset() { this.iPrev = this.p.ic; this.vlPrev = 0; this.setCurrent(this.p.ic); }
   req(s) {
-    if (s.mode === 'dc') return this.Rs;
+    // DC operating point: a short, unless an initial current is set; then it drives that current
+    if (s.mode === 'dc') return this.p.ic ? 1 / IC_HOLD_G : this.Rs;
     return this.Rs + (s.method === 'be' ? 1 : 2) * this.p.l / s.dt;
   }
   stamp(s) {
@@ -246,7 +253,7 @@ export class Inductor extends TwoTerm {
     s.addA(k, k, -this.req(s));
   }
   stampStep(s) {
-    if (s.mode === 'dc') return;
+    if (s.mode === 'dc') { if (this.p.ic) s.b[this.branches[0]] += -this.p.ic / IC_HOLD_G; return; }
     const k = this.branches[0];
     const rhs = s.method === 'be' ? -(this.p.l / s.dt) * this.iPrev : -(2 * this.p.l / s.dt) * this.iPrev - this.vlPrev;
     s.b[k] += rhs;

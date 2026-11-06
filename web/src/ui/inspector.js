@@ -111,7 +111,7 @@ export class Inspector {
   render() {
     if (this.wires) { this.renderWires(); return; }
     const e = this.el, C = e.constructor;
-    const props = C.props.filter((p) => !p.hidden);
+    const props = C.props.filter((p) => !p.hidden && (!p.when || p.when(e.p))); // `when`: only for some settings of the part (a waveform's)
     const posts = e.localPosts().length;
     this.host.innerHTML = `
       <div class="sheet-grip" data-a="close"></div>

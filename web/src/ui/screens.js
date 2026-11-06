@@ -2,7 +2,7 @@
 
 import { icon, LOGO_SVG } from './icons.js';
 import { APP, RAPTI } from './brand.js';
-import { EXAMPLES, exampleCategories, buildExample } from './examples.js';
+import { EXAMPLES, exampleCategories } from './examples.js';
 import { store, DEFAULT_SETTINGS } from './store.js';
 import { allTypes, CATEGORIES } from '../elements/index.js';
 import { THEMES } from './theme.js';
@@ -552,6 +552,8 @@ export class HomeScreen {
     this.warming = true;
     const todo = EXAMPLES.filter((e) => !this.app.hasExampleThumb(e.id));
     const step = () => {
+      // only while Home is shown: not behind a running circuit, where it took frames from it
+      if (this.app.current !== 'home') { this.warming = false; return; }
       const ex = todo.shift();
       if (!ex) { this.warming = false; return; }
       this.app.exampleThumb(ex);
@@ -693,8 +695,10 @@ export function renderSettings(app, root) {
     if (!confirm('Reset all settings to defaults?')) return;
     Object.assign(s, DEFAULT_SETTINGS);
     app.saveSettings(); app.applyTheme();
+    // the settings that act on the phone go back too: rotation unlocked, motion decided again
+    app.bridge.setOrientation(s.orientation);
+    motion.reset(); motion.decide(s.animations);
     renderSettings(app, root);
   });
 }
 
-export { buildExample };

@@ -403,7 +403,9 @@ export class Simulator {
   /** Solve the MNA system at the current time point. Returns true on convergence. */
   solvePoint(maxIter) {
     const m = this.size;
-    if (m === 0) return true;
+    // nothing to solve (every part on ground): the parts still take their step values (a source's
+    // current), or their readings stay undefined
+    if (m === 0) { this.buildStepRHS(); return true; }
     if (this.dirty) this.buildLinear();
     this.buildStepRHS();
     if (this.nonlinear.length === 0) {
@@ -554,6 +556,10 @@ export class Simulator {
       }
       if (!changed) break;
     }
+    // A node with no DC path (a current source charging a capacitor) is only held by gmin, at
+    // I / gmin: gigavolts that would burst every part at t = 0. No real operating point is that
+    // far out: start from zero instead, as the circuit would at power-on.
+    if (ok) for (let i = 0; i < this.size; i++) if (Math.abs(this.x[i]) > 1e7) { ok = false; this.opNoDcPath = true; break; }
     if (ok) {
       for (const e of this.elements) if (e.accept) e.accept(this);
       this.xPrev.set(this.x);
@@ -593,21 +599,25 @@ export class Simulator {
   /** Initialise transient analysis at t = 0. */
   start() {
     this.reset();
-    this.error = null;
     let ok = true;
+    this.opFallback = false; this.opNoDcPath = false;
     if (this.opt.initialDC) ok = this.dcOperatingPoint();
     if (!ok) {
       if (this.fatal) return false;
-      // DC operating point did not converge: fall back to a power-on (zero state) start
+      // DC operating point did not converge: fall back to a power-on (zero state) start, which runs
+      // (so the start succeeded; opFallback says it is not an operating point)
       this.error = null;
       this.reset();
-      this.warnings.push('DC operating point did not converge; starting from zero initial conditions.');
+      this.opFallback = true;
+      this.warnings.push(this.opNoDcPath
+        ? 'A node has no DC path to ground (a capacitor fed by a current source?); starting from zero initial conditions.'
+        : 'DC operating point did not converge; starting from zero initial conditions.');
     }
     this.mode = 'tran';
     this.dirty = true;
     this.started = true;
     this.beSteps = 2; // start with backward Euler: initial capacitor currents are unknown
-    return ok;
+    return true;
   }
 
   /** Advance one timestep dt (with automatic step halving on non-convergence). */
@@ -633,7 +643,9 @@ export class Simulator {
         this.error = null;
         if (!this.stepInner(dt / 2, depth + 1)) return false;
         const r = this.stepInner(dt / 2, depth + 1);
-        this.dt = -1; // force re-stamp at original dt
+        // the step taken is dt (as the meters and the power table count it); the matrix was stamped
+        // for dt / 2, so stamp it again
+        this.dt = dt; this.dirty = true;
         return r;
       }
       if (!this.error) this.error = 'Simulation failed to converge. Try a smaller timestep.';
