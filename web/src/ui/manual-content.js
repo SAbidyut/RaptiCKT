@@ -44,15 +44,15 @@ export const CHAPTERS = [
       H('What you can do with it'),
       L([
         'Build analog, digital and mixed circuits on an unlimited canvas.',
-        'Pick from **521 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
+        'Pick from **522 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.',
         'Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.',
         'Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.',
         'Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).',
         'Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.',
-        'Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**).',
+        'Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**). AC circuits are solved in **phasors**, the textbook way, and can be shown in the **phasor domain** (20∠0° V, j4 Ω, −j2.5 Ω) — see {{ch:phasors}}.',
         'Take a **photo of a circuit diagram** — a textbook figure, an exam question, a neat sketch — and it is redrawn on the board with its values, dependent sources included, ready to run (**Circuit from photo**). Printed diagrams and neat hand sketches are read on the phone itself, offline.',
         'Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.',
-        'Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
+        'Learn from **110 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.',
         'Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).',
       ]),
       H('Who it is for'),
@@ -219,7 +219,7 @@ export const CHAPTERS = [
       ]),
       TIP('The **Recent** tab remembers the parts you used last, so common parts are one tap away.'),
       TIP('Always add a **Ground** to your circuit (see {{ch:wiring}}). Many examples show where it goes.'),
-      P('The complete list of all 521 components, with what each one does and which values you can change, is in the chapter **Component library**.'),
+      P('The complete list of all 522 components, with what each one does and which values you can change, is in the chapter **Component library**.'),
     ],
   },
 
@@ -609,11 +609,45 @@ export const CHAPTERS = [
       P('The ends of the load are named **a** and **b**: a is the end at the higher voltage, so the load current flows from a to b. Other nodes used in the equations are tagged c, d, e … on the drawings. The last step always checks the answer against a direct solution of the whole circuit.'),
       L([
         '**Works with:** resistors, DC voltage sources (with their internal resistance), DC current sources, voltage rails, ground, switches and push buttons (closed = wire, open = gap), ammeters (wire) and voltmeters (open). In DC a capacitor is open and an inductor is a wire.',
-        '**Not for:** transistors, diodes, op-amps, AC sources and other non-linear or time-varying parts: the theorems are for linear DC circuits. The first screen lists any such parts.',
+        '**Not for:** transistors, diodes, op-amps and other non-linear parts. A circuit with sine or cosine sources (or shown in the phasor domain) is an **AC circuit**: it gets the phasor theorems of {{ch:phasors}} instead. The first screen lists any part that cannot be handled.',
         'If the resistors form a **bridge** (not simply series or parallel), R_th is found with a **delta → star (Δ–Y)** or star → delta swap, each new resistor worked out — or, when no single swap opens the bridge, with a 1 A test current. Source transformation stops when no step applies and says so.',
         'If R_th is infinite (only a current source feeds the load) there is no Thevenin equivalent; if R_N is 0 (a voltage source sits right across the load) there is no Norton equivalent. The solution says which theorem to use instead.',
       ]),
       TIP('Superposition adds currents and voltages, not powers: the last step shows the difference.'),
+    ],
+  },
+
+  // ------------------------------------------------------------------ 11b
+  {
+    id: 'phasors', icon: 'wave',
+    title: 'AC circuits: phasor domain and time domain',
+    blocks: [
+      P('An AC circuit can be shown and solved the way a circuits textbook does it (Alexander & Sadiku, *Fundamentals of Electric Circuits*, chapters 9, 10 and 13): the circuit is **transformed to the phasor (frequency) domain**, solved there with complex numbers, and the phasor turned back into a sinusoid.'),
+      H('AC circuit: phasor domain'),
+      S([
+        'Build an AC circuit — sources set to **Cosine** (A cos(ωt + φ), the book’s reference) or **Sine**, resistors, inductors, capacitors, dependent sources, coupled coils — or open one of the **AC Circuits (Phasors)** examples.',
+        'Tap **⋮ → AC circuit: phasor domain**. Every part is now labelled as in the book’s frequency-domain drawing: a source as its phasor (**20∠0° V**: peak value ∠ angle), a resistor in ohms, an inductor as **jωL** (j4 Ω), a capacitor as **1/(jωC)** (−j2.5 Ω), a mutual inductance as **jωM**. ω is that of the circuit’s sources.',
+        'Press **Run**: the live readings are phasors — every node voltage (13.91∠−161.6° V) and every part’s current with its direction (→ 7.589∠108.4° A). Select a part to see its V and I phasors and its complex power S = ½VI* in its properties.',
+        'In the phasor domain the properties take values the book’s way: a source’s **Phasor** (type 10∠30, 10<-45 or 3 + j4) and **ω** (rad/s), an inductor’s or capacitor’s **Impedance** (j4, -j2.5), a mutual inductance’s **jωM** (j2). The henries and farads follow from ω.',
+        '**⋮ → AC circuit: time domain** goes back to the usual values. The choice is saved with the circuit.',
+      ]),
+      TIP('A circuit drawn straight in the phasor domain (j4 Ω, −j2 Ω, no ω given) is built at ω = 1 rad/s, where X ohms is X henries or 1/X farads: the phasors come out the same at any ω.'),
+      H('Theorems with phasors'),
+      P('On an AC circuit, **⋮ → Run with theorem** offers **Thevenin**, **Norton**, **Superposition**, **Maximum power transfer**, **Nodal analysis** and **Mesh analysis** in phasors. The part asked for can be a resistor, an inductor or a capacitor. The solution is written as the book does:'),
+      L([
+        '**Step 1 — Transform to the phasor domain:** each source V_m cos(ωt + φ) ⇒ V_m∠φ, each 1 H ⇒ jωL, each 0.1 F ⇒ 1/(jωC), each M ⇒ jωM.',
+        '**Nodal analysis:** KCL at each node with the phasor terms ((V1 − 20∠0°)/10 + V1/(−j2.5) + …), a dependent source’s control written out, then the matrix [Y][V] = [I] and **Cramer’s rule** (Δ, Δ1, Δ2) — the node voltages V1, V2.',
+        '**Mesh analysis:** KVL round each mesh with the impedances, (4 − j3 + j6)I1 − (j6 + j2)I2 = 100, then simplified, the matrix [Z][I] = [V] and Cramer’s rule — the mesh currents I1, I2. A coupled coil adds ±jωM × the other coil’s current.',
+        '**Thevenin / Norton:** Z_th as series–parallel steps ((−j6 ∥ 8) + (4 ∥ j12) = 6.48 − j2.64 Ω), or with a 1∠0° A test source when there is a dependent source; V_th (or I_N); the equivalent drawn with the load.',
+        '**Superposition:** one source at a time. Sources at **different frequencies** (a DC source, 10 cos 2t V and 2 sin 5t A) each get their own phasor domain, and their responses are added **in the time domain**: vo = −1 + 2.498 cos(2t − 30.78°) + 2.328 cos(5t − 77.91°) V.',
+        '**Maximum average power:** the best load is the conjugate Z_L = Z_th*, with P_max = |V_th|² / (8·R_th) (peak phasors).',
+        '**Last step:** the answer as a phasor and as a sinusoid — I_L = 7.589∠108.43° A ⇒ i_L(t) = 7.589 cos(4t + 108.43°) A.',
+      ]),
+      H('Magnetically coupled circuits'),
+      P('Two coils coupled by a **mutual inductance** are drawn as in the book: two **Inductors** anywhere in the circuit, each with a **dot** (its properties → Dot: at terminal 1 or 2), and a **Mutual Inductance (M)** part (Transformers) placed between them — the curved double arrow marked M. It couples the two coils nearest it (or the two named in its properties). With both currents entering the dotted ends the mutual voltage M·di/dt (jωM·I) adds; otherwise it subtracts. It runs in the time domain too.'),
+      H('From a photo'),
+      P('**Circuit from photo** reads AC figures printed the book’s way: phasors with their angle sign (20∠60° V), reactances (j4 Ω for a coil, −j2.5 Ω for a capacitor), time functions (20 cos 4t V, 10 sin 2t A), coupled coils with their dots and the curved arrow’s jωM. A figure drawn in the phasor domain opens in the phasor domain.'),
+      TIP('The examples **AC Circuits (Phasors)** are the book’s worked examples 10.1, 10.3, 10.6, 10.8, 13.1 and 13.2, each with the answer the app reaches in its description.'),
     ],
   },
 
@@ -813,7 +847,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 15 (library: generated)
   {
     id: 'library', icon: 'chip', generated: 'library',
-    title: 'Component library (all 521)',
+    title: 'Component library (all 522)',
     blocks: [
       P('Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.'),
     ],
@@ -822,7 +856,7 @@ export const CHAPTERS = [
   // ------------------------------------------------------------------ 16 (examples: generated)
   {
     id: 'examples', icon: 'book', generated: 'examples',
-    title: 'Examples (all 104)',
+    title: 'Examples (all 110)',
     blocks: [
       P('Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.'),
     ],
@@ -953,6 +987,7 @@ export const SUMMARY = {
   meter: 'Voltage, current, resistance and power',
   analysis: 'AC sweep, DC sweep, operating point, SPICE',
   theorems: 'Thevenin, Norton, superposition, source transformation',
+  phasors: 'Phasor domain, jωL, Cramer’s rule, coupled coils',
   photo: 'Snap a circuit diagram, get a circuit you can run',
   loadflow: 'Power-system load flow: NR, GS, FDLF, DC, IEEE cases',
   saving: 'Autosave, files, sharing and backup',
