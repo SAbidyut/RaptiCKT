@@ -5,11 +5,11 @@
 
 import { fmtSI, parseSI, csvRow } from '../engine/units.js';
 import { icon } from './icons.js';
+import { esc } from './html.js';
 
 /** The longest transient an analysis runs (steps). */
 const MAX_STEPS = 400000;
 
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const SOURCE_TYPES = new Set(['dcv', 'acv', 'square', 'pulse', 'triangle', 'sawtooth', 'noise', 'sweep', 'dci', 'aci', 'rail', 'mic']);
 
 export class Analysis {

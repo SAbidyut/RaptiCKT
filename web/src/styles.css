@@ -373,6 +373,29 @@ input.toggle:checked::after { transform: translateX(18px); }
 .editor.sheet-open .scrim { opacity: 1; pointer-events: auto; }
 /* the component menu leaves the board visible and usable: parts can be added one after another */
 .pal-item.added { animation: palAdded 0.45s ease; }
+.pal-item.sel { border-color: var(--accent); background: rgba(34, 211, 238, 0.1); }
+/* the details of the tapped part, under the grid */
+.palette.has-detail { max-height: min(78%, 560px); }
+.palette.has-detail .pal-grid { flex: 0 0 auto; height: 148px; }
+.pal-detail { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0 10px 10px; padding: 10px 12px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--border); -webkit-overflow-scrolling: touch; }
+.pal-detail[hidden] { display: none; }
+.pd-head { display: flex; align-items: center; gap: 10px; }
+.pd-head img { width: 40px; height: 40px; flex: none; }
+.pd-head > div { flex: 1; min-width: 0; }
+.pd-head b { display: block; font-size: 15px; }
+.pd-head small { color: var(--muted); font-size: 11.5px; }
+.pd-add { flex: none; height: 36px; padding: 0 12px; font-size: 13px; }
+.pd-desc { margin: 8px 0 4px; font-size: 13px; line-height: 1.45; color: var(--text2); }
+.pal-detail h5 { margin: 10px 0 4px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.pd-props { list-style: none; margin: 0; padding: 0; }
+.pd-props li { display: flex; align-items: baseline; gap: 8px; padding: 3px 0; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+.pd-props li span { flex: 1; color: var(--text2); }
+.pd-props li b { font-weight: 600; }
+.pd-props li em { color: var(--muted); font-style: normal; font-size: 11px; }
+.pd-pins { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.pd-pins span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; border-radius: 12px; background: var(--surface2); font-size: 12px; }
+.pd-pins i { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 9px; background: var(--grad); color: #fff; font-style: normal; font-size: 10.5px; font-weight: 700; }
+.pd-tip { margin: 10px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
 @keyframes palAdded { 0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.7); } 100% { box-shadow: 0 0 0 10px rgba(34, 211, 238, 0); } }
 .sheet-grip { width: 42px; height: 5px; border-radius: 3px; background: var(--border2); margin: 8px auto 2px; flex: none; cursor: pointer; }
 .inspector { max-height: 70%; }

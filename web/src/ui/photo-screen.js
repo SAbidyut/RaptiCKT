@@ -9,8 +9,8 @@ import { fmtSI, parseSI } from '../engine/units.js';
 import { drawFigure } from './theorem-figs.js';
 import { buildFromDrawing } from './photo-circuit.js';
 import { readPicture } from '../vision/index.js';
+import { esc } from './html.js';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // the picture's long side (px): detail enough for small labels
 const SIZE = 2600;
 

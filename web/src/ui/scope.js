@@ -2,6 +2,7 @@
 
 import { fmtSI, csvRow } from '../engine/units.js';
 import { icon } from './icons.js';
+import { esc } from './html.js';
 
 export const CH_COLORS = ['#facc15', '#22d3ee', '#f472b6', '#4ade80', '#fb923c', '#a78bfa'];
 const N = 4096;
@@ -80,7 +81,6 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TRIG_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h6l6-12h6"/><path d="M9.5 10.5L12 8l2.5 2.5" stroke-width="1.6"/></svg>';
 
 export class Scope {

@@ -19,6 +19,8 @@ await page.evaluate(() => app.newCircuit()); await sleep(500);
 // --- 1. menu stays open
 await page.evaluate(() => app.editor.palette.open()); await sleep(700);
 await page.evaluate(() => document.querySelector('.pal-tabs button[data-t="Passive"]').click()); await sleep(300);
+// (a first tap opens the part's details; each tap after it adds one, the menu staying open)
+await page.tap('.pal-item[data-type="resistor"]'); await sleep(400);
 for (let k = 0; k < 5; k++) { await page.tap('.pal-item[data-type="resistor"]'); await sleep(350); }
 const r1 = await page.evaluate(() => {
   const ed = app.editor, R = ed.renderer, palTop = ed.palette.host.getBoundingClientRect().top - ed.canvas.getBoundingClientRect().top;

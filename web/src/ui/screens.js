@@ -9,10 +9,10 @@ import { THEMES } from './theme.js';
 import { fmtSI, parseSI } from '../engine/units.js';
 import { iosScroll } from './scroller.js';
 import { motion } from './motion.js';
+import { esc } from './html.js';
 
 // 01617-345534 style, as printed by RAPTI
 const fmtPhone = (p) => p.replace(/^\+880/, '0').replace(/^(\d{5})(\d+)$/, '$1-$2');
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function ago(ts) {
   const s = (Date.now() - ts) / 1000;

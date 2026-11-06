@@ -5,8 +5,8 @@ import { icon } from './icons.js';
 import { Renderer } from './render.js';
 import { CABLE_TYPES, SIZES, SHAPES, INSTALL, WIRE_PRESETS, normSpec, cableInfo, cableLabel } from '../elements/cables.js';
 import { phasorFields, phasorReadings, docOmega } from './phasor-view.js';
+import { esc } from './html.js';
 
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function toSlider(pr, v) {
   const lo = pr.min ?? 0, hi = pr.max ?? 1;

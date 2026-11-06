@@ -435,7 +435,20 @@ function nodalWork(c, elems, w, { ref = c.ref, only = null, extra = [], nm = c.n
     for (const e of all) if ((e.kind === 'V' || e.kind === 'DV') && inG.has(e.n[0]) && inG.has(e.n[1])) lines.push(`${tx('and')}  ${V(e.n[0])} − ${V(e.n[1])} = ${e.kind === 'V' ? fV(on(e) ? e.ph : [0, 0]) : `${num(e.gain)}${symOf(e)}`}`);
   }
   for (const d of [...new Set(defs)]) lines.push(`${tx('where')}  ${d}`);
-  return { sol, lines, unknown, known, V };
+  // coupled coils: each coil's current is an unknown, its voltage is jωL·I plus the mutual term
+  const coupled = [...new Set(c.muts.filter((m) => all.includes(m.a) && all.includes(m.b)).flatMap((m) => [m.a, m.b]))];
+  if (coupled.length) {
+    lines.push(tx('Each coupled coil has its current as an unknown, its voltage from the dot convention:'));
+    for (const e of coupled) {
+      const terms = [`${rect([0, w * e.L])}I_{${e.name}}`];
+      for (const m of c.muts) {
+        const other = m.a === e ? m.b : m.b === e ? m.a : null;
+        if (other && all.includes(other)) terms.push(`${m.M < 0 ? '−' : '+'} j${num(Math.abs(w * m.M))}I_{${other.name}}`);
+      }
+      lines.push(`${diff(e.n[0], e.n[1])} = ${terms.join(' ').replace(/^(\S+)/, '$1')}${e.R ? ` + ${num(e.R)}I_{${e.name}}` : ''}`);
+    }
+  }
+  return { sol, lines, unknown, known, V, coupled };
 }
 
 /** The node equations collected as [Y][V] = [I] over the unknown nodes, solved; book's matrix form. */
@@ -448,7 +461,10 @@ function nodalMatrix(c, work, elems, w, { only = null, extra = [] } = {}) {
   // build by probing: equations are linear, so evaluate each KCL row with unit node voltages
   const all = [...elems, ...extra], idx = new Map(unknown.map((u, k) => [u, k]));
   const hasBranch = all.some((e) => e.kind === 'DV' || (e.kind === 'V' && !(work.known.has(e.n[0]) || work.known.has(e.n[1]))) || (e.kind === 'Z' && e.coil && c.muts.some((m) => m.a === e || m.b === e)));
-  if (hasBranch) return [F(`${tx('Solving these together:')}  ${unknown.map((u) => `${V(u)} = ${fV(sol.v[u])}`).join(',   ')}`)];
+  if (hasBranch) {
+    const coils = (work.coupled || []).map((e) => `I_{${e.name}} = ${fI(sol.cur(e))}`);
+    return [F(`${tx('Solving these together:')}  ${[...unknown.map((u) => `${V(u)} = ${fV(sol.v[u])}`), ...coils].join(',   ')}`)];
+  }
   const on = (x) => (x.kind === 'V' || x.kind === 'I') && (only ? x === only : true) && Math.abs((x.w || 0) - w) <= 1e-9 * Math.max(1, w);
   const A = Array.from({ length: n }, () => Array.from({ length: n }, () => [0, 0])), b = Array.from({ length: n }, () => [0, 0]);
   const kv = (m) => (work.known.has(m) ? work.known.get(m) : null);
@@ -503,7 +519,7 @@ function meshWork(c, elems, w, { only = null } = {}) {
   if (!m) return { error: 'This circuit has no closed loop, so it has no mesh currents.' };
   if (m > 4) return { error: `This circuit has ${m} meshes; mesh analysis is written out for up to 4. Use nodal analysis.` };
   const on = (x) => (x.kind === 'V' || x.kind === 'I') && (only ? x === only : true) && Math.abs((x.w || 0) - w) <= 1e-9 * Math.max(1, w);
-  for (const e of br) if ((e.kind === 'I' || e.kind === 'DI') && co(e).size > 1) return { error: `${e.name} is a current source shared by two meshes (a supermesh): use nodal analysis for this circuit.` };
+  for (const e of br) if ((e.kind === 'I' || e.kind === 'DI') && co(e).size > 2) return { error: `${e.name} is a current source shared by more than two meshes: use nodal analysis for this circuit.` };
   for (const e of br) if ((e.kind === 'DI' || e.kind === 'DV') && e.ctl && e.ctl.type === 'node') return { error: `${e.name} is controlled by a node voltage: use nodal analysis for this circuit.` };
   const Ik = (k) => `I_{${k + 1}}`;
   // an element's current as mesh-current coefficients
@@ -511,6 +527,7 @@ function meshWork(c, elems, w, { only = null } = {}) {
   const A = Array.from({ length: m }, () => Array.from({ length: m }, () => [0, 0])), b = Array.from({ length: m }, () => [0, 0]);
   const termsTxt = Array.from({ length: m }, () => Array.from({ length: m }, () => []));
   const fixed = new Map(); // mesh → its current set by a current source on its outer branch
+  const shared = []; // current sources between two meshes
   const muts = c.muts.filter((mm) => br.includes(mm.a) && br.includes(mm.b));
   meshes.forEach((mesh, j) => {
     for (const { e, o } of mesh.edges) {
@@ -530,12 +547,47 @@ function meshWork(c, elems, w, { only = null } = {}) {
         if (ct.type === 'i') cf = curCo(ct.el).map((k) => [k, 0]);
         else if (ct.type === 'v') { const z = zAt(ct.el, w); cf = curCo(ct.el).map((k) => C.scale(z, k)); }
         cf.forEach((z, kk) => { if (!isZero(z)) { A[j][kk] = C.add(A[j][kk], C.scale(z, -o * e.gain)); termsTxt[j][kk].push(`${-o * e.gain < 0 ? '−' : ''}${num(Math.abs(e.gain))}${tx(`(${e.name})`)}`); } });
-      } else if (e.kind === 'I') fixed.set(j, { e, val: on(e) ? C.scale(e.ph, curCo(e)[j] || 1) : [0, 0] });
-      else if (e.kind === 'DI') fixed.set(j, { e, dep: true });
+      } else if (e.kind === 'I' || e.kind === 'DI') {
+        if (co(e).size > 1) { if (!shared.includes(e)) shared.push(e); } // between two meshes: a supermesh
+        else fixed.set(j, e.kind === 'I' ? { e, val: on(e) ? C.scale(e.ph, curCo(e)[j] || 1) : [0, 0] } : { e, dep: true });
+      }
     }
   });
+  // a current source shared by two meshes: the two meshes become a supermesh — KVL round the outside
+  // of both (the source's own voltage unknown, so left out), and the source fixes the difference of
+  // the two mesh currents
+  const superOf = new Map(), consOf = new Map();
+  for (const e of shared) {
+    const [j, k] = [...co(e).keys()].sort((x, y) => x - y);
+    if (fixed.has(j) || fixed.has(k) || superOf.has(j) || consOf.has(j) || superOf.has(k) || consOf.has(k)) return { error: `${e.name} shares two meshes that also meet another current source: use nodal analysis for this circuit.` };
+    for (let q = 0; q < m; q++) A[j][q] = C.add(A[j][q], A[k][q]);
+    b[j] = C.add(b[j], b[k]);
+    for (let q = 0; q < m; q++) A[k][q] = [0, 0];
+    b[k] = [0, 0];
+    const ct = e.ctl;
+    for (const [mm, o] of co(e)) A[k][mm] = C.add(A[k][mm], [o, 0]);
+    if (e.kind === 'I') b[k] = on(e) ? e.ph : [0, 0];
+    else if (ct && (ct.type === 'i' || ct.type === 'v')) {
+      const cf = ct.type === 'i' ? curCo(ct.el).map((x) => [x, 0]) : curCo(ct.el).map((x) => C.scale(zAt(ct.el, w), x));
+      cf.forEach((z, q) => { A[k][q] = C.sub(A[k][q], C.scale(z, e.gain)); });
+    }
+    superOf.set(j, { k, e }); consOf.set(k, { j, e });
+  }
   const lines = [];
   for (let j = 0; j < m; j++) {
+    if (superOf.has(j)) {
+      const { k, e } = superOf.get(j);
+      const simp = A[j].map((z, q) => (isZero(z) ? null : `${par(z)}${Ik(q)}`)).filter(Boolean).join(' + ').replace(/\+ −/g, '− ');
+      lines.push(`${tx(`Supermesh (meshes ${j + 1} and ${k + 1}, with ${e.name} between them):`)}  ${tx('KVL round the outside of both')}`, `   ${simp} = ${rect(b[j])}`);
+      continue;
+    }
+    if (consOf.has(j)) {
+      const { e } = consOf.get(j);
+      const lhs = [...co(e)].map(([mm, o]) => `${o < 0 ? '−' : '+'} ${Ik(mm)}`).join(' ').replace(/^\+ /, '');
+      const rhs = e.kind === 'I' ? rect(b[j]) : `${num(e.gain)}${e.sym || 'x'}`;
+      lines.push(`${tx(`Constraint (${e.name} fixes the difference of the two mesh currents):`)}  ${lhs} = ${rhs}`);
+      continue;
+    }
     if (fixed.has(j)) {
       const f = fixed.get(j);
       A[j] = Array.from({ length: m }, () => [0, 0]); A[j][j] = [1, 0];
@@ -646,7 +698,6 @@ const done = (c, theorem, steps, I, V, w, extra = {}) => ({ ok: true, ac: true, 
 
 function nodalMethod(c) {
   const bad = single(c); if (bad) return { ok: false, error: bad.error };
-  if (c.muts.length) return { ok: false, error: 'With coupled coils (mutual inductance) the book uses mesh analysis: the mutual voltage jωM·I needs the coil currents. Pick Mesh analysis.' };
   const w = c.w, steps = [transformStep(c, 'Step 1 — Transform to the phasor domain', w)];
   const work = nodalWork(c, c.elems, w);
   if (!work) return { ok: false, error: 'This circuit has no single solution.' };

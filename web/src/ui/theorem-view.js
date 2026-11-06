@@ -8,8 +8,8 @@ import { fmtSI } from '../engine/units.js';
 import { boardFigure, ladderFigure, drawFigure, acEquivalentFigure } from './theorem-figs.js';
 import { THEMES } from './theme.js';
 import { icon } from './icons.js';
+import { esc } from './html.js';
 
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 /** **bold** and X_sub → X<sub>sub</sub> */
 const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\b([A-Za-z])_([A-Za-z0-9]+)/g, '$1<sub>$2</sub>');
 const BADGE = { thevenin: 'V_th', norton: 'I_N', superposition: 'Σ', source: 'V⇄I', maxpower: 'P_max', millman: 'V_M', reciprocity: 'x⇄y', tellegen: 'Σp=0', nodal: 'KCL', mesh: 'KVL' };

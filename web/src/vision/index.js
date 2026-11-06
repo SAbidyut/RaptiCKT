@@ -78,6 +78,9 @@ export async function readPicture(picture, { onProgress, signal } = {}) {
     const A = assignLabels(S, words, T.arrows, T.height, fig);
     const D = toDrawing(S, p.sw, { title: A.title || `Circuit ${circuits.length + 1}`, labels: A.labels, quantities: A.quantities, asked: A.quantities.map((q) => q.name), supplies: A.supplies, mutuals: A.mutuals });
     D.notes = [...A.notes, ...D.notes];
+    // the page's own marks (the crosshair circles of a printer's crop marks) read as sources: a
+    // "circuit" of nothing but sources none of which has a value is no circuit
+    if (D.parts.every((q) => /source/.test(q.kind) && !q.text)) continue;
     circuits.push(D);
   }
   await step(1, 'Done');

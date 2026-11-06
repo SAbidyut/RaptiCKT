@@ -536,7 +536,6 @@ export function toMatpower(sys) {
 
 // ------------------------------------------------------------ per-unit helpers
 /** Ohms → per unit on (kV, MVA) base. */
-export const ohmToPu = (ohm, kV, mva) => ohm / ((kV * kV) / mva);
 /** Per unit from one base to another: Z_new = Z_old · (kV_old/kV_new)² · (MVA_new/MVA_old). */
 export const changeBase = (z, kVold, MVAold, kVnew, MVAnew) => z * (kVold / kVnew) ** 2 * (MVAnew / MVAold);
 /** Base current (A) and impedance (Ω) of a 3-phase base. */

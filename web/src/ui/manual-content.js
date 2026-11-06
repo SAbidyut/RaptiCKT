@@ -73,7 +73,7 @@ export const CHAPTERS = [
       S([
         'On the **Home** screen tap **New circuit**. An empty board opens.',
         'Tap the round **+** button (bottom right). The component menu opens.',
-        'Type `dc` in the search box and tap **DC Voltage**. A battery symbol appears on the board. Then search `resistor` and tap **Resistor**, then search `led` and tap **LED**, then search `ground` and tap **Ground**. The menu stays open so you can add several parts in a row. Tap **✕** to close it.',
+        'Type `dc` in the search box and tap **DC Voltage**: its **details** open under the list (what it is, how it works, its settings, its terminals). Tap it again, or **Add to board**, and a battery symbol appears on the board. Then search `resistor` and tap **Resistor**, then search `led` and tap **LED**, then search `ground` and tap **Ground**. The menu stays open so you can add several parts in a row. Tap **✕** to close it.',
         'Drag the parts with your finger to arrange them in a row. Pinch with two fingers to zoom, drag on empty space to move the board.',
         '**Draw the wires.** Every part has small circles at its ends: these are the **terminals**. Tap one terminal, then tap a terminal of the next part: the wire is drawn and routed for you. Connect: battery **+** → resistor → LED anode (the flat-triangle side) → LED cathode → ground, and battery **−** → ground.',
         'Tap the battery and use the **knob** that appears (or open its properties) to set the voltage to **9 V**. Tap the resistor and set it to **470 Ω**. You can type values like `470`, `4.7k`, `10u`.',
@@ -214,7 +214,7 @@ export const CHAPTERS = [
         'Tap the round **+** button. The component menu slides up.',
         'Choose a category tab: **Recent**, **Sources**, **Batteries**, **Passive**, **Transformers**, **Protection**, **Switches & Relays**, **Electrical**, **Power Systems**, **Machines**, **Diodes**, **Transistors**, **Thyristors & Power**, **Analog ICs**, **Control & Math**, **Logic Gates**, **Digital ICs**, **Sensors**, **Output**, **Vacuum Tubes**, **Meters**. Swipe the tab row sideways to see them all.',
         'Or type in the **search box**. It searches names, keywords and categories, for example `thermistor`, `555`, `3 phase`, `fuse`.',
-        'Tap a component. It is placed in a free spot in the middle of the visible board. The menu stays open, so tap more parts if you need them.',
+        'Tap a component: its **details** open under the list — a description of what it is and how it works, the settings you can change (with their usual values and ranges) and its numbered terminals. Tap the same component again, or **Add to board**, to place it in a free spot in the middle of the visible board. The details stay open when you change tab, and the menu stays open, so tap more parts if you need them.',
         'Tap **✕** (or the Back button) to close the menu.',
       ]),
       TIP('The **Recent** tab remembers the parts you used last, so common parts are one tap away.'),
@@ -636,8 +636,8 @@ export const CHAPTERS = [
       P('On an AC circuit, **⋮ → Run with theorem** offers **Thevenin**, **Norton**, **Superposition**, **Maximum power transfer**, **Nodal analysis** and **Mesh analysis** in phasors. The part asked for can be a resistor, an inductor or a capacitor. The solution is written as the book does:'),
       L([
         '**Step 1 — Transform to the phasor domain:** each source V_m cos(ωt + φ) ⇒ V_m∠φ, each 1 H ⇒ jωL, each 0.1 F ⇒ 1/(jωC), each M ⇒ jωM.',
-        '**Nodal analysis:** KCL at each node with the phasor terms ((V1 − 20∠0°)/10 + V1/(−j2.5) + …), a dependent source’s control written out, then the matrix [Y][V] = [I] and **Cramer’s rule** (Δ, Δ1, Δ2) — the node voltages V1, V2.',
-        '**Mesh analysis:** KVL round each mesh with the impedances, (4 − j3 + j6)I1 − (j6 + j2)I2 = 100, then simplified, the matrix [Z][I] = [V] and Cramer’s rule — the mesh currents I1, I2. A coupled coil adds ±jωM × the other coil’s current.',
+        '**Nodal analysis:** KCL at each node with the phasor terms ((V1 − 20∠0°)/10 + V1/(−j2.5) + …), a dependent source’s control written out, then the matrix [Y][V] = [I] and **Cramer’s rule** (Δ, Δ1, Δ2) — the node voltages V1, V2. With coupled coils each coil’s current is an extra unknown and its voltage follows the dot convention (V = jωL·I ± jωM·I′).',
+        '**Mesh analysis:** KVL round each mesh with the impedances, (4 − j3 + j6)I1 − (j6 + j2)I2 = 100, then simplified, the matrix [Z][I] = [V] and Cramer’s rule — the mesh currents I1, I2. A coupled coil adds ±jωM × the other coil’s current. A current source shared by two meshes makes them a **supermesh**: one KVL round the outside of both, and the source fixes the difference of the two mesh currents.',
         '**Thevenin / Norton:** Z_th as series–parallel steps ((−j6 ∥ 8) + (4 ∥ j12) = 6.48 − j2.64 Ω), or with a 1∠0° A test source when there is a dependent source; V_th (or I_N); the equivalent drawn with the load.',
         '**Superposition:** one source at a time. Sources at **different frequencies** (a DC source, 10 cos 2t V and 2 sin 5t A) each get their own phasor domain, and their responses are added **in the time domain**: vo = −1 + 2.498 cos(2t − 30.78°) + 2.328 cos(5t − 77.91°) V.',
         '**Maximum average power:** the best load is the conjugate Z_L = Z_th*, with P_max = |V_th|² / (8·R_th) (peak phasors).',

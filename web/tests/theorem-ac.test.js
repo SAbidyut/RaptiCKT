@@ -96,9 +96,31 @@ test('Example 10.1: nodal analysis names the nodes V1, V2 as the book does', () 
   assert.match(txt, /V_\{2\} = .*13\.91∠−161\.57° V/);
 });
 
-test('nodal analysis with coupled coils points to mesh analysis; one source refuses superposition', () => {
-  assert.match(solve('ex132', 'nodal').error, /mesh analysis/);
+test('nodal analysis with coupled coils: the coil currents are unknowns, the answer the same as mesh', () => {
+  const r = solve('ex132', 'nodal');
+  assert.ok(r.ok, r.error);
+  near(r.answer.I, [8.693, 19.03], 'I');
+  const txt = JSON.stringify(r.steps);
+  assert.match(txt, /Each coupled coil has its current as an unknown/);
+  assert.match(txt, /j8I_\{L2\} − j2I_\{L1\}/);
+});
+
+test('one source refuses superposition', () => {
   assert.match(solve('ex101', 'superposition').error, /two or more/);
+});
+
+test('a current source shared by two meshes is a supermesh; mesh and nodal agree', () => {
+  const W1 = 1 / (2 * Math.PI);
+  const d = board({ name: 'supermesh', pts: { a: [0, 0], b: [1, 0], c: [2, 0], z0: [0, 1], z1: [1, 1], z2: [2, 1] },
+    parts: [['acv', 'a', 'z0', { wave: 'cos', amp: 10, freq: W1 }], ['resistor', 'a', 'b', { r: 2 }], ['aci', 'z1', 'b', { wave: 'cos', amp: 3, freq: W1 }], ['resistor', 'b', 'c', { r: 4 }], ['inductor', 'c', 'z2', { l: 2 }]],
+    wires: [['z0', 'z1'], ['z1', 'z2']] });
+  const prep = prepareAC(d), T = prep.targets.find((t) => t.name === 'R2');
+  const m = runACTheorem(prep, 'mesh', T.src), n = runACTheorem(prep, 'nodal', T.src);
+  assert.ok(m.ok, m.error);
+  near(m.answer.I, [2.53, -18.43], 'mesh');
+  near(n.answer.I, [2.53, -18.43], 'nodal');
+  assert.match(JSON.stringify(m.steps[1].blocks), /Supermesh/);
+  assert.match(JSON.stringify(m.steps[1].blocks), /Constraint/);
 });
 
 test('sources at different frequencies: superposition adds the time functions', () => {

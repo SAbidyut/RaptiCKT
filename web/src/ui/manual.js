@@ -9,8 +9,8 @@ import { APP } from './brand.js';
 import {
   CHAPTERS, UI_TEXT, SUMMARY, expandRefs, libraryData, exampleData, chapterParts,
 } from './manual-content.js';
+import { esc } from './html.js';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const plain = (s) => String(s).replace(/\*\*|`|\{\{ch:[a-z]+\}\}/g, '');
 const chev = () => icon('back', 18, 'flipx man-chev');
 

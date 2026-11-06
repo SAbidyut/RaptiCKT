@@ -20,10 +20,10 @@ import { WIRE_PRESETS, cableLabel } from '../elements/cables.js';
 import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore, straightClear, partsHit, freeRoute } from './autoroute.js';
 import { VIEW } from '../elements/base.js';
 import { docOmega, sourceOmegas } from './phasor-view.js';
+import { esc } from './html.js';
 
 // two-terminal parts outside the Sources / Batteries / Diodes / Meters categories that still have a polarity
 const POLAR_TYPES = new Set(['ecap', 'tantalum', 'supercap', 'photodiode', 'solar', 'pvmodule', 'thermocouple', 'led', 'irled', 'laser', 'piezosens', 'tacho', 'ph', 'varactor', 'lm4040', 'buzzer', 'piezobuzz', 'motor', 'dcgen', 'dcsep', 'dcshunt', 'dcseries', 'dualpsu', 'benchpsu']);
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const same = (a, b) => a[0] === b[0] && a[1] === b[1];
 let probeSeq = 1;
 

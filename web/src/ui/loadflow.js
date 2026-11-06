@@ -13,8 +13,8 @@ import {
 } from '../engine/loadflow.js';
 import { LF_CASES, loadCase, newBus, newBranch } from '../engine/loadflow-cases.js';
 import { LF_THEORY } from './loadflow-theory.js';
+import { esc } from './html.js';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fx = (v, d = 3) => (Number.isFinite(v) ? (Math.abs(v) < 0.5 * 10 ** -d ? 0 : v).toFixed(d) : '—');
 const numIn = (v, def = 0) => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : def; };
 const optNum = (v) => (String(v).trim() === '' ? '' : numIn(v, ''));

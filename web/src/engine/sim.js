@@ -273,7 +273,6 @@ export class Simulator {
   }
 
   // --------------------------------------------------------------- stamping
-  idx(node) { return node - 1; }
   addA(r, c, v) { if (r >= 0 && c >= 0) this.A[r * this.size + c] += v; }
   addB(r, v) { if (r >= 0) this.b[r] += v; }
   /** conductance between two nodes */
@@ -318,7 +317,6 @@ export class Simulator {
     this.addI(nFrom, nTo, ieq);
   }
   v(node) { return node > 0 ? this.x[node - 1] : 0; }
-  vPrev(node) { return node > 0 ? this.xPrev[node - 1] : 0; }
 
   // ---------------------------------------------------------------- solving
   buildLinear() {
