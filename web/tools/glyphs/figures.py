@@ -213,6 +213,40 @@ class Fig:
         self.d.polygon([tuple(tip + t * 12), tuple(tip - t * 9 + n * 10), tuple(tip - t * 9 - n * 10)], fill=0)
         self.label((x, y), name, sub)
 
+    def phasor(self, xy, mag, ang, unit, anchor='rm'):
+        """a phasor the way the book prints it: 20∠60° V — the angle sign a stroke rising from the
+        left end of a line drawn under the angle"""
+        f = self.f
+        ws = [self.d.textlength(t, font=f) for t in (mag, ang + '°', ' ' + unit)]
+        slash = 26
+        total = ws[0] + 4 + slash + ws[1] + ws[2]
+        x, y = xy
+        x0 = x - total if anchor == 'rm' else x - total / 2 if anchor == 'mm' else x
+        self.d.text((x0, y), mag, font=f, fill=0, anchor='lm')
+        sx = x0 + ws[0] + 4
+        base = y + 17
+        self.d.line([(sx, base), (sx + slash, y - 18)], fill=0, width=3)
+        self.d.line([(sx, base), (sx + slash + ws[1] + 2, base)], fill=0, width=3)
+        self.d.text((sx + slash, y), ang + '°', font=f, fill=0, anchor='lm')
+        self.d.text((sx + slash + ws[1], y), ' ' + unit, font=f, fill=0, anchor='lm')
+
+    def coil_dot(self, xy):
+        """the dot of the dot convention, beside a coil's end"""
+        x, y = xy
+        self.d.ellipse([x - 7, y - 7, x + 7, y + 7], fill=0)
+
+    def mutual(self, p, q, label, bend, label_xy):
+        """the curved double arrow marked with M (or jωM) between two coupled coils, bowed by
+        `bend` (pixels, from the middle of p–q), its label at label_xy"""
+        (x0, y0), (x1, y1) = p, q
+        cx, cy = (x0 + x1) / 2 + bend[0], (y0 + y1) / 2 + bend[1]
+        pts = [((1 - t) ** 2 * x0 + 2 * t * (1 - t) * cx + t * t * x1, (1 - t) ** 2 * y0 + 2 * t * (1 - t) * cy + t * t * y1) for t in (k / 40 for k in range(41))]
+        self.d.line(pts, fill=0, width=3)
+        for tip, prev in ((pts[0], pts[3]), (pts[-1], pts[-4])):
+            u = np.array(tip) - np.array(prev); u = u / (np.linalg.norm(u) or 1); n = np.array([-u[1], u[0]])
+            self.d.polygon([tuple(np.array(tip)), tuple(np.array(tip) - u * 16 + n * 7), tuple(np.array(tip) - u * 16 - n * 7)], fill=0)
+        self.text(label_xy, label)
+
     def name(self, xy, s, sub):
         """an upright bold name with a capital subscript (I_A), as some books print it"""
         x, y = xy
@@ -236,12 +270,13 @@ class Fig:
             self.d.line([tuple(sp - n * 14), tuple(sp + n * 14)], fill=0, width=LW + 3)
         if label: self.text(tuple(c + n * 56 * side), label)
 
-    def inductor(self, a, b, label, side=1):
-        c, u, n = self._ends(a, b, 72)
-        start = c - u * 36
+    def inductor(self, a, b, label, side=1, r=9):
+        """a coil of four half turns of radius r (a book's coils are drawn a little bigger: r = 13)"""
+        c, u, n = self._ends(a, b, 8 * r)
+        start = c - u * 4 * r
         for k in range(4):
-            cc = start + u * (9 + 18 * k)
-            box = [cc[0] - 9, cc[1] - 9, cc[0] + 9, cc[1] + 9]
+            cc = start + u * (r + 2 * r * k)
+            box = [cc[0] - r, cc[1] - r, cc[0] + r, cc[1] + r]
             # half circles bulging to -n
             ang = math.degrees(math.atan2(u[1], u[0]))
             self.d.arc(box, start=ang + 180, end=ang + 360, fill=0, width=LW)
@@ -985,6 +1020,53 @@ def main():
     f.resistor((3, 0), (3, 2), '5 Ω', side=-1)
     f.wire((0, 2), (3, 2))
     f.save(out, 'sketch-decimal', BLUE)
+
+    # 24. coupled coils in the phasor domain, as in a book's chapter on magnetically coupled
+    # circuits: 10∠30° V, 4 Ω, j3 Ω (dot at its left), j5 Ω shared by both meshes (dot at its
+    # foot), −j2 Ω and 6 Ω, M: j2 Ω
+    f = Fig(5, 2)
+    f.vsource((1, 0), (1, 2), '', plus_at_a=True)
+    f.phasor((f.P(1, 1)[0] - 48, f.P(1, 1)[1]), '10', '30', 'V')
+    f.resistor((1, 0), (2, 0), '4 Ω', side=-1)
+    f.inductor((2, 0), (3, 0), 'j3 Ω', side=-1, r=13)
+    f.coil_dot((f.P(2, 0)[0] + 28, f.P(2, 0)[1] + 24))
+    f.inductor((3, 0), (3, 2), None, side=1, r=13)
+    f.text((f.P(3, 1)[0] + 62, f.P(3, 1)[1] + 6), 'j5 Ω')
+    f.coil_dot((f.P(3, 1)[0] - 28, f.P(3, 1)[1] + 64))
+    f.mutual((f.P(2.55, 0)[0], f.P(2.55, 0)[1] + 26), (f.P(3, 1)[0] - 20, f.P(3, 1)[1] - 6), 'j2 Ω', (-34, 10), (f.P(2.42, 0.62)[0], f.P(2.42, 0.62)[1]))
+    f.capacitor((3, 0), (5, 0), '−j2 Ω', side=-1)
+    f.resistor((5, 0), (5, 2), '6 Ω', side=1)
+    f.wire((1, 2), (5, 2))
+    f.mesh((1.75, 1.3), 'I', '1'); f.mesh((4.0, 1.15), 'I', '2')
+    f.save(out, 'phasor-coupled', random.Random(181), random.Random(182))
+
+    # 25. a circuit drawn in the phasor domain for nodal analysis: 2∠0° A into a node with 5 Ω
+    # and −j4 Ω to ground, j3 Ω to a second node with 8 Ω to 6∠−45° V
+    f = Fig(6, 2)
+    f.isource((1, 2), (1, 0), '', to_b=True)
+    f.phasor((f.P(1, 1)[0] - 48, f.P(1, 1)[1]), '2', '0', 'A')
+    f.wire((1, 0), (3, 0))
+    f.resistor((2, 0), (2, 2), '5 Ω', side=-1)
+    f.capacitor((3, 0), (3, 2), '−j4 Ω', side=-1)
+    f.inductor((3, 0), (4, 0), 'j3 Ω', side=-1, r=13)
+    f.resistor((4, 0), (5, 0), '8 Ω', side=-1)
+    f.vsource((5, 0), (5, 2), '', plus_at_a=True)
+    f.phasor((f.P(5, 1)[0] + 48, f.P(5, 1)[1]), '6', '−45', 'V', anchor='lm')
+    f.wire((1, 2), (5, 2))
+    f.ground((3.5, 2))
+    f.save(out, 'phasor-nodal', random.Random(191), random.Random(192))
+
+    # 26. a time-domain AC circuit the book's way: 12 cos 2t V, 4 Ω, 0.25 F, 2 H
+    f = Fig(4, 2)
+    f.vsource((1, 0), (1, 2), '', plus_at_a=True)
+    f.text((f.P(1, 1)[0] - 130, f.P(1, 1)[1]), '12 cos 2t V')
+    f.resistor((1, 0), (2.5, 0), '4 Ω', side=-1)
+    f.capacitor((2.5, 0), (2.5, 2), '0.25 F', side=-1)
+    f.wire((2.5, 0), (4, 0))
+    f.inductor((4, 0), (4, 2), '2 H', side=1, r=13)
+    f.wire((1, 2), (4, 2))
+    f.ground((3.2, 2))
+    f.save(out, 'cos-source', random.Random(201))
     print('ok')
 
 

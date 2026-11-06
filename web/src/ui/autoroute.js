@@ -11,6 +11,7 @@
 //  - prefers few bends and short length; crossing another wire is allowed.
 
 import { GRID } from '../elements/index.js';
+import { simplify } from './doc.js';
 
 const DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]];
 const key = (x, y) => x + ',' + y;
@@ -193,16 +194,6 @@ export function autoRoute(doc, a, b, opts = {}) {
 // false connection, and then only if it is not a long detour.
 
 const snapG = (v) => Math.round(v / GRID) * GRID;
-/** Drop repeated and collinear points (a shape with a zero-length leg is the same route). */
-function simplifyPts(pts) {
-  const out = [];
-  for (const p of pts) { const q = out[out.length - 1]; if (!q || q[0] !== p[0] || q[1] !== p[1]) out.push([p[0], p[1]]); }
-  for (let i = out.length - 2; i >= 1; i--) {
-    const [a, b, c] = [out[i - 1], out[i], out[i + 1]];
-    if ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) === 0) out.splice(i, 1);
-  }
-  return out;
-}
 const horiz = (d) => d === 0 || d === 2;
 
 /** The route a draughtsman would use: leave and enter each terminal along its lead. */
@@ -571,7 +562,7 @@ export function pickRoute(doc, candidates, opts = {}) {
   let best = null, bestHard = Infinity, bestScore = Infinity;
   for (const raw of candidates) {
     if (!raw || raw.length < 2) continue;
-    const c = simplifyPts(raw);
+    const c = simplify(raw);
     // both ends on one point (a drag brought them together): no shape to score — the caller
     // keeps a zero-length wire. Scoring it used to crash the drag (reading pts[1] of one point).
     if (c.length < 2) continue;

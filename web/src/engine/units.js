@@ -10,22 +10,33 @@ const PARSE_MUL = {
   m: 1e-3, u: 1e-6, 'µ': 1e-6, 'μ': 1e-6, n: 1e-9, p: 1e-12, f: 1e-15,
 };
 
-/** Parse a value such as "4.7k", "10uF", "2.2 MΩ", "1e-3", "4k7". Returns NaN on failure. */
+/**
+ * Parse a value such as "4.7k", "10uF", "2.2 MΩ", "1e-3", "4k7", "4u7", "1,5". Returns NaN on
+ * failure (and for a value too big to be a number, "1e999").
+ */
 export function parseSI(input) {
   if (typeof input === 'number') return input;
   if (input == null) return NaN;
-  let s = String(input).trim().replace(/,/g, '').replace(/\s+/g, '');
+  let s = String(input).trim().replace(/\s+/g, '');
+  // a decimal comma, as many phone keyboards give it ("1,5", "0,47", "4,7k"); a comma grouping
+  // thousands ("1,000", "12,500,000") is dropped
+  if (/^[-+]?\d{1,3}(,\d{3})+(?!\d)/.test(s) && !s.includes('.')) s = s.replace(/,/g, '');
+  else if (!s.includes('.')) s = s.replace(',', '.');
+  s = s.replace(/,/g, '');
   if (!s) return NaN;
-  // "4k7" resistor notation
-  const rkm = s.match(/^(-?\d+)([kKmMRr])(\d+)/);
+  // "4k7", "4u7", "2M2", "3p3", "1R5": the prefix stands for the decimal point
+  const rkm = s.match(/^([-+]?\d+)(meg|MEG|[TGMkKmuµμnpfRr])(\d+)/);
+  let v;
   if (rkm && !/[eE]/.test(s)) {
     const m = rkm[2] === 'R' || rkm[2] === 'r' ? 1 : PARSE_MUL[rkm[2]];
-    return parseFloat(rkm[1] + '.' + rkm[3]) * m;
+    v = parseFloat(rkm[1] + '.' + rkm[3]) * m;
+  } else {
+    const m = s.match(/^([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(meg|MEG|[TGMkKmuµμnpf])?/);
+    if (!m) return NaN;
+    v = parseFloat(m[1]);
+    if (m[2]) v *= PARSE_MUL[m[2]];
   }
-  const m = s.match(/^([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(meg|MEG|[TGMkKmuµμnpf])?/);
-  if (!m) return NaN;
-  const v = parseFloat(m[1]);
-  return m[2] ? v * PARSE_MUL[m[2]] : v;
+  return Number.isFinite(v) ? v : NaN;
 }
 
 /** Format a number with SI prefix and unit, e.g. fmtSI(4700,'Ω') -> "4.7 kΩ". */
@@ -34,8 +45,9 @@ export function fmtSI(v, unit = '', digits = 3) {
   if (!Number.isFinite(v)) return (v > 0 ? '∞ ' : '-∞ ') + unit;
   const a = Math.abs(v);
   if (a < 1e-15) return '0 ' + unit;
+  // the prefix is chosen after rounding to the digits shown: 0.996 at 2 digits is "1", not "1000 m"
   for (const [mul, p] of PREFIX) {
-    if (a >= mul * 0.9995) return trimNum(v / mul, digits) + ' ' + p + unit;
+    if (+(a / mul).toPrecision(digits) >= 1) return trimNum(v / mul, digits) + ' ' + p + unit;
   }
   return trimNum(v / 1e-15, digits) + ' f' + unit;
 }
@@ -67,4 +79,7 @@ export function fmtQty(v, unit = '') {
   return unit === '%' || unit === '°' || unit === '°C' || unit === '%RH' ? num + unit : num + ' ' + unit;
 }
 
-export function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
+/** One CSV line: a cell with a comma, a quote or a line break is quoted (part titles have commas). */
+export function csvRow(cells) {
+  return cells.map((c) => { const t = String(c ?? ''); return /[",\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; }).join(',');
+}

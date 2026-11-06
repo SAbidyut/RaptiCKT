@@ -89,7 +89,7 @@ export function acFrequency(elements) {
   for (const e of elements) {
     const p = e.p, cat = e.constructor.category;
     if (cat !== 'Sources' || !(p.freq > 0)) continue;
-    if (p.wave !== undefined && p.wave !== 'sine') continue; // square/pulse/sweep/noise are not "AC supplies"
+    if (p.wave !== undefined && p.wave !== 'sine' && p.wave !== 'cos') continue; // square/pulse/sweep/noise are not "AC supplies"
     f = Math.min(f, p.freq);
   }
   return f < Infinity ? f : 0;

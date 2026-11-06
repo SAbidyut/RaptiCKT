@@ -4,8 +4,9 @@ import { fmtSI, parseSI, fmtQty, isPlainUnit } from '../engine/units.js';
 import { icon } from './icons.js';
 import { Renderer } from './render.js';
 import { CABLE_TYPES, SIZES, SHAPES, INSTALL, WIRE_PRESETS, normSpec, cableInfo, cableLabel } from '../elements/cables.js';
+import { phasorFields, phasorReadings, docOmega } from './phasor-view.js';
+import { esc } from './html.js';
 
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function toSlider(pr, v) {
   const lo = pr.min ?? 0, hi = pr.max ?? 1;
@@ -67,7 +68,7 @@ export class Inspector {
       ${dmg}
       <button class="qb-main" data-q="edit">
         <img src="${this.icon(C)}" alt="">
-        <div><b>${esc(e.name)} <small>${esc(C.title)}</small></b><span class="qb-read"></span></div>
+        <div><b>${esc(e.name)} <small>${esc(C.title)}</small></b></div>
       </button>
       ${!e.damaged && this.ed.constructor.isPolar(e) ? `<button data-q="reverse" title="Reverse polarity">${icon('polarity', 19)}</button>` : ''}
       ${e.damaged ? '' : `<button data-q="rotate" title="Rotate">${icon('rotate', 19)}</button>`}
@@ -96,7 +97,6 @@ export class Inspector {
     this.host.classList.add('open');
     this.ed.root.classList.add('sheet-open');
     this.ed.knob.hide();
-    this.ed.overlayOpen('inspector');
   }
 
   closeSheet() {
@@ -105,7 +105,6 @@ export class Inspector {
     this.wires = null;
     this.host.classList.remove('open');
     this.ed.root.classList.remove('sheet-open');
-    this.ed.overlayClosed('inspector');
     const kp = this.el && this.el.knobProp();
     if (kp) this.ed.knob.show(this.el, kp);
   }
@@ -113,7 +112,7 @@ export class Inspector {
   render() {
     if (this.wires) { this.renderWires(); return; }
     const e = this.el, C = e.constructor;
-    const props = C.props.filter((p) => !p.hidden);
+    const props = C.props.filter((p) => !p.hidden && (!p.when || p.when(e.p))); // `when`: only for some settings of the part (a waveform's)
     const posts = e.localPosts().length;
     this.host.innerHTML = `
       <div class="sheet-grip" data-a="close"></div>
@@ -136,13 +135,15 @@ export class Inspector {
         </div>
         <div class="insp-body">
           ${e.canSlant() && !e.damaged ? `<div class="prop num insp-angle"><span>Angle</span><div class="num-in"><button data-ang="-15" title="15° back">−15°</button><input type="text" inputmode="decimal" value="${esc(this.ed.angleText(e).replace('°', ''))}"><em>°</em><button data-ang="15" title="15° on">+15°</button></div></div>` : ''}
+          ${this.phasorRows()}
           ${props.map((p) => this.propRow(p)).join('')}
           ${this.faultRows()}
-          <p class="insp-desc">${esc(C.description || '')}</p>
+          ${this.aboutRows()}
         </div>
       </div>`;
     this.host.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this.action(b.dataset.a)));
     this.host.querySelectorAll('.prop[data-k]').forEach((row) => this.bindRow(row));
+    this.host.querySelectorAll('.prop[data-pk]').forEach((row) => this.bindPhasorRow(row));
     // any angle: typed (to the nearest the grid allows, within a few degrees), or ±15°
     const ang = this.host.querySelector('.insp-angle');
     if (ang) {
@@ -165,6 +166,47 @@ export class Inspector {
     }));
     this.readKey = null;
     this.updateReadings();
+  }
+
+  /**
+   * Everything about the part, at the bottom of its sheet (scroll down): what it is and how it
+   * works, the settings with their usual values, ranges and choices, its numbered terminals.
+   */
+  aboutRows() {
+    const e = this.el, C = e.constructor;
+    const pins = e.localPosts().length, names = e.pinNames ? e.pinNames() : null;
+    const val = (pr, v) => (pr.type === 'select' ? (pr.options.find(([k]) => String(k) === String(v)) || [v, v])[1] : pr.type === 'bool' ? (v ? 'on' : 'off') : pr.type === 'text' ? String(v) : fmtSI(v, pr.unit && pr.unit !== '%' ? pr.unit : '', 3).trim() + (pr.unit === '%' ? ' %' : ''));
+    const props = (C.props || []).filter((pr) => !pr.hidden && (!pr.when || pr.when(e.p)));
+    const range = (pr) => (pr.type === 'select' ? pr.options.slice(0, 6).map(([, t]) => t).join(' · ') + (pr.options.length > 6 ? ' …' : '') : pr.min !== undefined && pr.max !== undefined && !pr.type ? `${fmtSI(pr.min, pr.unit || '', 2).trim()} … ${fmtSI(pr.max, pr.unit || '', 2).trim()}` : '');
+    return `<div class="insp-about">
+      <h5>About this part</h5>
+      <p class="insp-desc">${esc(C.description || 'No description yet.')}</p>
+      <p class="about-meta"><span>${esc(C.category)}</span>${pins ? `<span>${pins} terminal${pins > 1 ? 's' : ''}</span>` : '<span>no terminals</span>'}</p>
+      ${props.length ? `<h5>Settings</h5><ul class="about-props">${props.map((pr) => `<li><b>${esc(pr.label)}</b><span>usual: ${esc(val(pr, pr.def))}</span>${range(pr) ? `<em>${esc(range(pr))}</em>` : ''}</li>`).join('')}</ul>` : ''}
+      ${pins > 1 ? `<h5>Terminals</h5><p class="about-pins">${Array.from({ length: pins }, (_, i) => `<span><i>${i + 1}</i>${esc((names && names[i]) || (pins === 2 ? `Terminal ${i + 1}` : `Pin ${i + 1}`))}</span>`).join('')}</p>` : ''}
+      <p class="about-tip">Press <b>Run</b> to see it work: its live voltage, current and power are shown above.</p>
+    </div>`;
+  }
+
+  /** In the phasor domain: the part's phasor / impedance, typed the book's way (20∠30, j4, −j2.5). */
+  phasorRows() {
+    if (this.ed.doc.domain !== 'phasor') return '';
+    this.pfields = phasorFields(this.el, docOmega(this.ed.doc));
+    if (!this.pfields.length) return '';
+    return `<div class="insp-phasor">${this.pfields.map((f) => `<div class="prop num" data-pk="${f.key}"><span>${esc(f.label)}</span><div class="num-in"><input type="text" value="${esc(f.text)}"><em>${esc(f.unit)}</em></div></div>`).join('')}</div>`;
+  }
+
+  bindPhasorRow(row) {
+    const f = (this.pfields || []).find((x) => x.key === row.dataset.pk), inp = row.querySelector('input');
+    if (!f) return;
+    inp.addEventListener('change', () => {
+      const out = f.apply(inp.value);
+      if (typeof out === 'string') { this.ed.toast(out); inp.value = f.text; return; }
+      this.ed.checkpoint(); // one undo step for all the values it sets
+      for (const [k, v] of Object.entries(out)) this.ed.setParam(this.el, k, v, true);
+      this.ed.computeTiming?.();
+      this.render();
+    });
   }
 
   /** terminal names for the fault selector */
@@ -227,14 +269,15 @@ export class Inspector {
   bindRow(row) {
     const key = row.dataset.k, p = this.el.propDef(key);
     const commit = (val) => this.ed.setParam(this.el, key, val);
+    // one undo step for a change that sets several values (a model preset, a value marking the model
+    // custom): the step is taken first, then the values go in without more steps
+    const commitOne = (val) => { this.ed.checkpoint(); this.markCustom(key); this.ed.setParam(this.el, key, val, true); };
     if (p.type === 'select') {
       row.querySelector('select').addEventListener('change', (ev) => {
         const v = ev.target.value;
-        if (p.preset && p.preset[v]) {
-          this.ed.checkpoint();
-          Object.assign(this.el.p, p.preset[v]);
-        }
-        commit(v);
+        this.ed.checkpoint();
+        if (p.preset && p.preset[v]) Object.assign(this.el.p, p.preset[v]);
+        this.ed.setParam(this.el, key, v, true);
         this.render();
       });
       return;
@@ -247,18 +290,21 @@ export class Inspector {
       if (Number.isNaN(v)) { this.ed.toast('Invalid number: ' + txt.value); txt.value = fmtSI(this.el.p[key], '', 4).trim(); return; }
       if (p.min !== undefined) v = Math.max(p.min, v);
       if (p.max !== undefined) v = Math.min(p.max, v);
-      this.markCustom(key);
-      commit(v);
+      commitOne(v);
       txt.value = fmtSI(v, '', 4).trim();
       if (rng) rng.value = Math.round(toSlider(p, v) * 1000);
     });
     if (rng) {
+      // one undo step per slide, not one per movement (60 of them pushed the rest of the history out)
+      let sliding = false;
       rng.addEventListener('input', () => {
         const v = fromSlider(p, rng.value / 1000);
+        if (!sliding) { sliding = true; this.ed.checkpoint(); }
         this.markCustom(key);
-        commit(v);
+        this.ed.setParam(this.el, key, v, true);
         txt.value = fmtSI(v, '', 4).trim();
       });
+      rng.addEventListener('change', () => { sliding = false; });
     }
   }
 
@@ -287,15 +333,10 @@ export class Inspector {
     const live = this.ed.running && sim && sim.ready;
     let r = [];
     if (live) { try { r = this.el.readings(sim); } catch { r = []; } }
+    // the phasor domain: the part's voltage and current phasors first
+    if (live && this.ed.doc.domain === 'phasor') { const ph = this.ed.phasorNow(); if (ph) r = [...phasorReadings(this.el, ph).map(([k, t]) => [k, t, '']), ...r]; }
     const fmt = ([, v, u]) => (typeof v !== 'number' ? String(v) : isPlainUnit(u) ? fmtQty(v, u) : fmtSI(v, u, 4));
-    // quick bar: value label + first two readings, updated via textContent (no relayout of the bar)
-    const q = this.quick.querySelector('.qb-read');
-    if (q) {
-      const val = this.el.valueLabel();
-      // compact: values of the first two readings (e.g. "3.837 V · 816 µA")
-      const nums = r.filter((x) => typeof x[1] === 'number').slice(0, 2).map(fmt);
-      q.textContent = this.el.damaged ? 'Burnt out — tap Replace' : live && r.length ? (nums.length ? nums.join(' · ') : fmt(r[0])) : val || 'Tap ⚙ to edit';
-    }
+    // (the quick bar shows the part's name only: its value and readings are on the board and in its sheet)
     if (!this.sheetOpen) return;
     const box = this.host.querySelector('.insp-read');
     if (!box) return;
@@ -342,7 +383,6 @@ export class Inspector {
     this.render();
     this.host.classList.add('open');
     this.ed.root.classList.add('sheet-open');
-    this.ed.overlayOpen('inspector');
   }
 
   renderWires() {
@@ -480,7 +520,7 @@ export class Knob {
       ev.preventDefault(); ev.stopPropagation();
       this.dial.setPointerCapture(ev.pointerId);
       last = ang(ev); acc = 0; moved = 0;
-      this.ed.checkpoint();
+      this.gesture = true; // the undo step is taken by the first change the turn makes (apply)
       this.host.classList.add('active');
     });
     this.dial.addEventListener('pointermove', (ev) => {
@@ -504,13 +544,14 @@ export class Knob {
         const d = t && t.dataset && t.dataset.d;
         if (d) this.pickDigit(+d);
       }
+      this.gesture = false;
     };
     this.dial.addEventListener('pointerup', up);
-    this.dial.addEventListener('pointercancel', () => { last = null; this.host.classList.remove('active'); });
-    this.dial.addEventListener('wheel', (ev) => { ev.preventDefault(); this.ed.checkpoint(); this.step(ev.deltaY < 0 ? 1 : -1); }, { passive: false });
+    this.dial.addEventListener('pointercancel', () => { last = null; this.gesture = false; this.host.classList.remove('active'); });
+    this.dial.addEventListener('wheel', (ev) => { ev.preventDefault(); this.gesture = true; this.step(ev.deltaY < 0 ? 1 : -1); this.gesture = false; }, { passive: false });
     host.querySelectorAll('.knob-btn').forEach((b) => {
       b.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-      b.addEventListener('click', (ev) => { ev.stopPropagation(); this.ed.checkpoint(); this.bump(b.dataset.k === '+' ? 1 : -1); });
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); this.gesture = true; this.bump(b.dataset.k === '+' ? 1 : -1); this.gesture = false; });
     });
   }
 
@@ -530,16 +571,11 @@ export class Knob {
   digit() { const v = this.el.p[this.prop.key]; return v > 0 ? Math.min(9, Math.max(1, Math.round(this.parts(v)[0]))) : 1; }
   digitAngle(d) { return ((d - 0.5) * 40 * Math.PI) / 180; }
   /**
-   * Steps of a linear knob, from the size of the value itself (not the allowed
-   * range, which can be ±10 kV): one significant digit below 10 (5 V → 6 V,
-   * 0.5 → 0.6), two from 10 up (12 V → 13 V, 230 V → 240 V). − / + move a tenth
-   * of that; whole-number quantities (counts, β…) always move by whole numbers.
-   */
-  /**
-   * Steps follow the value as it is shown (with its m / k prefix): 1–99 of a
-   * unit move one at a time, 100–999 ten at a time — 5 V → 6 V, 230 V → 240 V,
-   * 10 mA → 11 mA. Going down from 100 (or 1 k) uses the smaller step, so the
-   * dial gives 100 → 99 and not 100 → 90.
+   * Steps of a linear knob follow the value as it is shown (with its m / k prefix),
+   * not the allowed range: 1–99 of a unit move one at a time, 100–999 ten at a
+   * time — 5 V → 6 V, 230 V → 240 V, 10 mA → 11 mA. Going down from 100 (or 1 k)
+   * uses the smaller step, so the dial gives 100 → 99 and not 100 → 90. − / + move
+   * a tenth of that; whole-number quantities (counts, β…) move by whole numbers.
    */
   linSteps(n = 1) {
     const p = this.prop, v = this.el.p[p.key];
@@ -559,6 +595,8 @@ export class Knob {
     const p = this.prop, lo = p.min ?? -Infinity, hi = p.max ?? Infinity;
     v = Math.min(hi, Math.max(lo, v));
     if (v === this.el.p[p.key]) return false;
+    // one undo step per turn, tap or press, and none when the value stays as it was
+    if (this.gesture) { this.gesture = false; this.ed.checkpoint(); }
     this.ed.setParam(this.el, p.key, v, true);
     this.ed.haptic(4);
     this.update();
@@ -600,7 +638,6 @@ export class Knob {
   }
 
   pickDigit(d) {
-    this.ed.checkpoint();
     const [, e] = this.parts(this.el.p[this.prop.key]);
     this.apply(+(d * Math.pow(10, e)).toPrecision(6));
     this.update();

@@ -41,27 +41,39 @@ function read(k, def) {
 function write(k, v) {
   try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; }
 }
+/** A stored list, without entries a damaged or hand-edited store may hold (null, numbers, no id). */
+function list(k, def, ok) {
+  const v = read(k, def);
+  return Array.isArray(v) ? v.filter(ok) : def;
+}
+const isCircuit = (c) => !!c && typeof c === 'object' && typeof c.id === 'string' && !!c.data && typeof c.data === 'object';
+const isFolder = (f) => !!f && typeof f === 'object' && typeof f.id === 'string';
 
 export const store = {
   settings() {
-    const s = read(K.settings, {});
+    let s = read(K.settings, {});
+    if (!s || typeof s !== 'object' || Array.isArray(s)) s = {};
     // photos are read on the phone only: an API key an older version kept for them goes
     if ('claudeKey' in s || 'photoReader' in s) { delete s.claudeKey; delete s.photoReader; write(K.settings, s); }
     return { ...DEFAULT_SETTINGS, ...s };
   },
   saveSettings(s) { write(K.settings, s); },
-  circuits() { return read(K.circuits, []); },
+  circuits() { return list(K.circuits, [], isCircuit); },
+  /**
+   * Save (or replace) one circuit, newest first. Nothing is ever dropped to make room: when the
+   * storage is full, the circuit is kept without its preview picture before giving up.
+   */
   saveCircuit(entry) {
-    const list = this.circuits().filter((c) => c.id !== entry.id);
-    list.unshift(entry);
-    return write(K.circuits, list.slice(0, 200));
+    const all = this.circuits().filter((c) => c.id !== entry.id);
+    if (write(K.circuits, [entry, ...all])) return true;
+    return !!entry.thumb && write(K.circuits, [{ ...entry, thumb: null }, ...all]);
   },
   deleteCircuit(id) { write(K.circuits, this.circuits().filter((c) => c.id !== id)); },
   deleteAllCircuits() { write(K.circuits, []); write(K.folders, []); },
   deleteCircuits(ids) { const s = new Set(ids); write(K.circuits, this.circuits().filter((c) => !s.has(c.id))); },
 
   // ---- folders (My Circuits): [{ id, name, parent }]; a circuit's `folder` is a folder id or null (top level)
-  folders() { return read(K.folders, []); },
+  folders() { return list(K.folders, [], isFolder); },
   saveFolders(list) { return write(K.folders, list); },
   addFolder(id, name, parent = null) { const f = { id, name, parent, created: Date.now() }; this.saveFolders([...this.folders(), f]); return f; },
   renameFolder(id, name) { this.saveFolders(this.folders().map((f) => (f.id === id ? { ...f, name } : f))); },
@@ -82,7 +94,7 @@ export const store = {
   moveCircuits(ids, folder) { const s = new Set(ids); write(K.circuits, this.circuits().map((c) => (s.has(c.id) ? { ...c, folder: folder || null } : c))); },
   moveFolders(ids, parent) { const s = new Set(ids); this.saveFolders(this.folders().map((f) => (s.has(f.id) ? { ...f, parent: parent || null } : f))); },
   getCircuit(id) { return this.circuits().find((c) => c.id === id); },
-  recent() { return read(K.recent, ['resistor', 'capacitor', 'dcv', 'ground', 'led', 'npn', 'switch', 'opamp']); },
+  recent() { return list(K.recent, ['resistor', 'capacitor', 'dcv', 'ground', 'led', 'npn', 'switch', 'opamp'], (t) => typeof t === 'string'); },
   pushRecent(type) {
     const r = [type, ...this.recent().filter((t) => t !== type)].slice(0, 12);
     write(K.recent, r);
@@ -91,11 +103,11 @@ export const store = {
   // Load Flow section: the system being worked on and the user's saved systems
   lfState() { return read(K.lf, null); },
   saveLfState(s) { return write(K.lf, s); },
-  lfSaved() { return read(K.lfSaved, []); },
+  lfSaved() { return list(K.lfSaved, [], (x) => !!x && typeof x === 'object'); },
   saveLfSaved(list) { return write(K.lfSaved, list); },
-  loadAutosave() { return read(K.autosave, null); },
-  flag(name) { return !!read(K.flags, {})[name]; },
-  setFlag(name, v = true) { const f = read(K.flags, {}); f[name] = v; write(K.flags, f); },
+  loadAutosave() { const a = read(K.autosave, null); return a && typeof a === 'object' && Array.isArray(a.elements) ? a : null; },
+  flag(name) { return !!read(K.flags, {})?.[name]; },
+  setFlag(name, v = true) { let f = read(K.flags, {}); if (!f || typeof f !== 'object') f = {}; f[name] = v; write(K.flags, f); },
 };
 
 /** A picture ({ data: base64, mediaType }) → its pixels (ImageData), on white. */
@@ -164,7 +176,8 @@ export const bridge = {
     return new Promise((resolve, reject) => {
       if (A()) {
         window.__raptiFileOpened = (name, b64) => {
-          try { resolve({ name, text: decodeURIComponent(escape(atob(b64))) }); } catch (e) { reject(e); }
+          // UTF-8, with a byte that is not (a file saved as Windows-1252) read as � instead of failing
+          try { resolve({ name, text: new TextDecoder('utf-8').decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))) }); } catch (e) { reject(e); }
         };
         window.__raptiFileError = (msg) => reject(new Error(msg));
         try { A().openFile(accept); } catch (e) { reject(e); }

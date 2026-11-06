@@ -30,6 +30,37 @@ function longestRuns(ink, labels, w, h, count) {
 }
 
 /**
+ * Is component c the angle sign ∠ of a phasor (20∠60° V, as a book prints it): a straight base
+ * along its bottom, most of its width, and above it one thin stroke rising to the right from the
+ * base's left end?
+ */
+export function angleSign(c, labels, w, sw) {
+  const bw = c.x1 - c.x0 + 1, bh = c.y1 - c.y0 + 1;
+  if (bh < 2.5 * sw || bw < 1.1 * bh) return false;
+  const row = (y) => { const xs = []; for (let x = c.x0; x <= c.x1; x++) if (labels[y * w + x] === c.id) xs.push(x); return xs; };
+  // the base: a full row near the bottom
+  let base = -1;
+  for (let y = c.y1; y >= c.y1 - Math.max(2, Math.round(1.6 * sw)); y--) if (row(y).length >= 0.8 * bw) { base = y; break; }
+  if (base < 0) return false;
+  // above it (clear of the base's own thickness): a thin run per row, further right the higher
+  const top = c.y0, low = base - Math.max(2, Math.round(1.5 * sw));
+  if (low - top < 1.5 * sw) return false;
+  const mids = [];
+  let ink = 0;
+  for (let y = top; y <= low; y++) {
+    const xs = row(y);
+    if (!xs.length) continue;
+    if (xs[xs.length - 1] - xs[0] > 3.5 * sw) return false; // one stroke only
+    ink += xs.length;
+    mids.push([y, (xs[0] + xs[xs.length - 1]) / 2]);
+  }
+  if (mids.length < 0.6 * (low - top + 1)) return false;
+  const [yt, xt] = mids[0], [yb, xb] = mids[mids.length - 1];
+  // rising to the right, from near the base's left end, and not reaching its right end
+  return yb > yt && xt - xb >= 0.25 * (yb - yt) && xb - c.x0 <= 0.3 * bw && xt <= c.x0 + 0.75 * bw && ink <= 0.3 * bw * bh;
+}
+
+/**
  * Split the ink into figures. Returns { labels, comps, figures: [{ box, parts: [component ids],
  * near: [component ids of the other ink in its label area] }] }.
  */
@@ -44,6 +75,9 @@ export function findFigures(ink, w, h, sw) {
     c.lineArt = Math.max(c.hrun, c.vrun) >= 9 * sw && Math.max(bw, bh) >= 12 * sw && c.fill < 0.3 && c.area >= 40 * sw;
     // (but a current arrow drawn long, by hand, marks a current: it goes with the labels)
     if (c.lineArt && Math.max(bw, bh) <= 25 * sw && Math.max(bw, bh) >= 2 * Math.min(bw, bh) && arrowOf({ labels, w, sw }, { ids: [c.id], ...c })) c.lineArt = false;
+    // (nor is the angle sign of a phasor, 20∠60° V: a stroke rising from the left end of a
+    // line drawn under the angle, letter high — writing, read with its label)
+    if (bh <= 30 * sw && bw <= 7 * bh && angleSign(c, labels, w, sw)) { c.lineArt = false; c.angle = true; }
   }
   // figures: line-art pieces close to each other (a capacitor's two halves, a broken wire)
   const art = comps.filter((c) => c.lineArt);

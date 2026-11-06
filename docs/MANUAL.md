@@ -20,15 +20,16 @@ Everything in the app, explained step by step.
 12. [Multimeter](#ch-meter)
 13. [Analysis: Bode, sweeps, harmonics, Monte Carlo, SPICE](#ch-analysis)
 14. [Network theorems, step by step](#ch-theorems)
-15. [Circuit from photo](#ch-photo)
-16. [Load Flow Analysis (power systems)](#ch-loadflow)
-17. [Saving, opening and sharing](#ch-saving)
-18. [Settings reference](#ch-settings)
-19. [Component library (all 521)](#ch-library)
-20. [Examples (all 104)](#ch-examples)
-21. [Quick reference: formulas and units](#ch-formulas)
-22. [Troubleshooting and FAQ](#ch-troubleshooting)
-23. [About RAPTI and contact](#ch-about)
+15. [AC circuits: phasor domain and time domain](#ch-phasors)
+16. [Circuit from photo](#ch-photo)
+17. [Load Flow Analysis (power systems)](#ch-loadflow)
+18. [Saving, opening and sharing](#ch-saving)
+19. [Settings reference](#ch-settings)
+20. [Component library (all 522)](#ch-library)
+21. [Examples (all 110)](#ch-examples)
+22. [Quick reference: formulas and units](#ch-formulas)
+23. [Troubleshooting and FAQ](#ch-troubleshooting)
+24. [About RAPTI and contact](#ch-about)
 
 <a id="ch-welcome"></a>
 
@@ -39,15 +40,15 @@ Everything in the app, explained step by step.
 #### What you can do with it
 
 - Build analog, digital and mixed circuits on an unlimited canvas.
-- Pick from **521 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
+- Pick from **522 components in 22 categories**: sources, batteries, solar and wind, resistors, capacitors, transformers, protection devices, switches, contactors, house-wiring parts, motors and drives, diodes, transistors, power electronics, op-amps, logic ICs, communication blocks, sensors, meters and more.
 - Watch the circuit work: green wires are positive, red wires are negative, yellow dots move with the current.
 - Tap switches and push buttons in **✋ Operate** mode (it comes on by itself when you press Run), draw and move in **Wire** mode, and turn a knob to change any value live.
 - Measure with a **6-channel oscilloscope** (with FFT and XY) and a **multimeter** (V, A, Ω, W).
 - Run **AC sweep (Bode plot)**, **DC sweep**, **Operating point**, **Harmonics (THD)**, **Impedance**, **Parametric**, **Monte Carlo** and **Power / efficiency** analyses, and export a **SPICE netlist**.
-- Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**).
+- Solve a circuit **step by step with a network theorem** — Thevenin, Norton, superposition, source transformation, maximum power transfer, Millman, reciprocity or Tellegen — or by **nodal** or **mesh analysis**, with every intermediate circuit drawn (**⋮ → Run with theorem**). AC circuits are solved in **phasors**, the textbook way, and can be shown in the **phasor domain** (20∠0° V, j4 Ω, −j2.5 Ω) — see chapter 15.
 - Take a **photo of a circuit diagram** — a textbook figure, an exam question, a neat sketch — and it is redrawn on the board with its values, dependent sources included, ready to run (**Circuit from photo**). Printed diagrams and neat hand sketches are read on the phone itself, offline.
 - Inject **faults** into any part (open terminal, short circuit, leakage) to practise troubleshooting and to test protection.
-- Learn from **104 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
+- Learn from **110 ready-made examples**, including 8 big build-along **projects** (a 2-storey house wired from the service main to the earth pits, a 2-room flat, 16-bit RAM, mains to 5 V supply, traffic lights, 4-bit adder, seconds counter, automatic street light): LED, RC filter, rectifier, amplifier, 555 timer, tube light, staircase wiring, house wiring, DOL and **star-delta** motor starters, forward/reverse and pump control, **VFD**, inverters, SMPS, solar and wind systems, RS-485, I²C, SPI, radio and more.
 - Save circuits on the phone, share them as `.rckt` files, and export a picture (PNG).
 
 #### Who it is for
@@ -191,7 +192,7 @@ As in RaptiAuto, the board has two modes. The switch at the top right of the boa
 - The round **+** button (bottom right) adds a component.
 - The **✋ Operate | Wire** switch at the top right of the board picks what a finger does (chapter 4, *Operate and Wire mode*).
 - The chip at the top of the board shows the simulation time and speed, for example `t = 12.5 ms · 5 ms/s`. Tap it to change the speed (chapter 9). When the phone cannot keep up it shows, in amber, the speed actually reached, for example `1.5 s/s max`.
-- A red or yellow bar appears at the top when the circuit has a problem (chapter 22).
+- A red or yellow bar appears at the top when the circuit has a problem (chapter 23).
 - When you select a part, a **quick bar** appears (name, current reading, rotate, scope, edit, delete) and, for parts with a main value, the **knob**.
 - Messages (toasts) appear briefly at the bottom to confirm what happened.
 
@@ -229,7 +230,7 @@ On a computer browser you can also use: **Delete** (remove), **R** (rotate), **T
 
 > **Tip:** Always add a **Ground** to your circuit (see chapter 7). Many examples show where it goes.
 
-The complete list of all 521 components, with what each one does and which values you can change, is in the chapter **Component library**.
+The complete list of all 522 components, with what each one does and which values you can change, is in the chapter **Component library**.
 
 <a id="ch-editing"></a>
 
@@ -255,7 +256,7 @@ Hold a part for half a second, or tap its name in the quick bar. A sheet slides 
 - Action buttons: **Rotate**, **Slant up** / **Slant down** (15° each way), **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.
 - **Angle** (parts that can slant): type any angle in degrees (0° points right, 90° down, −30° up and to the right), or step it with **−15°** / **+15°**. The part takes the nearest angle that keeps its terminals on grid points, within a few degrees.
 - Every adjustable property: a text box and a slider for numbers, a drop-down for choices (for example the **model** of a transistor or op-amp), a switch for yes/no.
-- A short description of the part.
+- **About this part** (scroll to the bottom): what the part is and how it works, its category and number of terminals, every setting with its usual value, range or choices, and its numbered terminals.
 - Tap the **✓** to close.
 
 Choosing a **model** (for example `2N3904`, `LM741`, `1N4148`) fills in all the matching numbers at once. If you then change one number by hand, the model switches to **custom**.
@@ -669,15 +670,53 @@ Where a theorem has to solve a circuit — V_th, I_N, Tellegen, a superposition 
 The ends of the load are named **a** and **b**: a is the end at the higher voltage, so the load current flows from a to b. Other nodes used in the equations are tagged c, d, e … on the drawings. The last step always checks the answer against a direct solution of the whole circuit.
 
 - **Works with:** resistors, DC voltage sources (with their internal resistance), DC current sources, voltage rails, ground, switches and push buttons (closed = wire, open = gap), ammeters (wire) and voltmeters (open). In DC a capacitor is open and an inductor is a wire.
-- **Not for:** transistors, diodes, op-amps, AC sources and other non-linear or time-varying parts: the theorems are for linear DC circuits. The first screen lists any such parts.
+- **Not for:** transistors, diodes, op-amps and other non-linear parts. A circuit with sine or cosine sources (or shown in the phasor domain) is an **AC circuit**: it gets the phasor theorems of chapter 15 instead. The first screen lists any part that cannot be handled.
 - If the resistors form a **bridge** (not simply series or parallel), R_th is found with a **delta → star (Δ–Y)** or star → delta swap, each new resistor worked out — or, when no single swap opens the bridge, with a 1 A test current. Source transformation stops when no step applies and says so.
 - If R_th is infinite (only a current source feeds the load) there is no Thevenin equivalent; if R_N is 0 (a voltage source sits right across the load) there is no Norton equivalent. The solution says which theorem to use instead.
 
 > **Tip:** Superposition adds currents and voltages, not powers: the last step shows the difference.
 
+<a id="ch-phasors"></a>
+
+## 15. AC circuits: phasor domain and time domain
+
+An AC circuit can be shown and solved the way a circuits textbook does it (Alexander & Sadiku, *Fundamentals of Electric Circuits*, chapters 9, 10 and 13): the circuit is **transformed to the phasor (frequency) domain**, solved there with complex numbers, and the phasor turned back into a sinusoid.
+
+#### AC circuit: phasor domain
+
+1. Build an AC circuit — sources set to **Cosine** (A cos(ωt + φ), the book’s reference) or **Sine**, resistors, inductors, capacitors, dependent sources, coupled coils — or open one of the **AC Circuits (Phasors)** examples.
+2. Tap **⋮ → AC circuit: phasor domain**. Every part is now labelled as in the book’s frequency-domain drawing: a source as its phasor (**20∠0° V**: peak value ∠ angle), a resistor in ohms, an inductor as **jωL** (j4 Ω), a capacitor as **1/(jωC)** (−j2.5 Ω), a mutual inductance as **jωM**. ω is that of the circuit’s sources.
+3. Press **Run**: the live readings are phasors — every node voltage (13.91∠−161.6° V) and every part’s current with its direction (→ 7.589∠108.4° A). Select a part to see its V and I phasors and its complex power S = ½VI* in its properties.
+4. In the phasor domain the properties take values the book’s way: a source’s **Phasor** (type 10∠30, 10<-45 or 3 + j4) and **ω** (rad/s), an inductor’s or capacitor’s **Impedance** (j4, -j2.5), a mutual inductance’s **jωM** (j2). The henries and farads follow from ω.
+5. **⋮ → AC circuit: time domain** goes back to the usual values. The choice is saved with the circuit.
+
+> **Tip:** A circuit drawn straight in the phasor domain (j4 Ω, −j2 Ω, no ω given) is built at ω = 1 rad/s, where X ohms is X henries or 1/X farads: the phasors come out the same at any ω.
+
+#### Theorems with phasors
+
+On an AC circuit, **⋮ → Run with theorem** offers **Thevenin**, **Norton**, **Superposition**, **Maximum power transfer**, **Nodal analysis** and **Mesh analysis** in phasors. The part asked for can be a resistor, an inductor or a capacitor. The solution is written as the book does:
+
+- **Step 1 — Transform to the phasor domain:** each source V_m cos(ωt + φ) ⇒ V_m∠φ, each 1 H ⇒ jωL, each 0.1 F ⇒ 1/(jωC), each M ⇒ jωM.
+- **Nodal analysis:** KCL at each node with the phasor terms ((V1 − 20∠0°)/10 + V1/(−j2.5) + …), a dependent source’s control written out, then the matrix [Y][V] = [I] and **Cramer’s rule** (Δ, Δ1, Δ2) — the node voltages V1, V2. With coupled coils each coil’s current is an extra unknown and its voltage follows the dot convention (V = jωL·I ± jωM·I′).
+- **Mesh analysis:** KVL round each mesh with the impedances, (4 − j3 + j6)I1 − (j6 + j2)I2 = 100, then simplified, the matrix [Z][I] = [V] and Cramer’s rule — the mesh currents I1, I2. A coupled coil adds ±jωM × the other coil’s current. A current source shared by two meshes makes them a **supermesh**: one KVL round the outside of both, and the source fixes the difference of the two mesh currents.
+- **Thevenin / Norton:** Z_th as series–parallel steps ((−j6 ∥ 8) + (4 ∥ j12) = 6.48 − j2.64 Ω), or with a 1∠0° A test source when there is a dependent source; V_th (or I_N); the equivalent drawn with the load.
+- **Superposition:** one source at a time. Sources at **different frequencies** (a DC source, 10 cos 2t V and 2 sin 5t A) each get their own phasor domain, and their responses are added **in the time domain**: vo = −1 + 2.498 cos(2t − 30.78°) + 2.328 cos(5t − 77.91°) V.
+- **Maximum average power:** the best load is the conjugate Z_L = Z_th*, with P_max = |V_th|² / (8·R_th) (peak phasors).
+- **Last step:** the answer as a phasor and as a sinusoid — I_L = 7.589∠108.43° A ⇒ i_L(t) = 7.589 cos(4t + 108.43°) A.
+
+#### Magnetically coupled circuits
+
+Two coils coupled by a **mutual inductance** are drawn as in the book: two **Inductors** anywhere in the circuit, each with a **dot** (its properties → Dot: at terminal 1 or 2), and a **Mutual Inductance (M)** part (Transformers) placed between them — the curved double arrow marked M. It couples the two coils nearest it (or the two named in its properties). With both currents entering the dotted ends the mutual voltage M·di/dt (jωM·I) adds; otherwise it subtracts. It runs in the time domain too.
+
+#### From a photo
+
+**Circuit from photo** reads AC figures printed the book’s way: phasors with their angle sign (20∠60° V), reactances (j4 Ω for a coil, −j2.5 Ω for a capacitor), time functions (20 cos 4t V, 10 sin 2t A), coupled coils with their dots and the curved arrow’s jωM. A figure drawn in the phasor domain opens in the phasor domain.
+
+> **Tip:** The examples **AC Circuits (Phasors)** are the book’s worked examples 10.1, 10.3, 10.6, 10.8, 13.1 and 13.2, each with the answer the app reaches in its description.
+
 <a id="ch-photo"></a>
 
-## 15. Circuit from photo
+## 16. Circuit from photo
 
 Take a photo of a circuit diagram — a figure in your textbook, an exam question, a neat sketch on paper — or choose a picture or a screenshot, and the circuit is redrawn on the board with every value, ready to run. Independent and **dependent sources** (the diamonds: 0.1vₓ, 4iₓ, 0.5V₀ …), resistors, capacitors, batteries, coils and grounds are read, and so are the voltages and currents the drawing marks.
 
@@ -729,7 +768,7 @@ Reading handwriting was learned in part from **HASYv2**, a set of hand-written s
 
 <a id="ch-loadflow"></a>
 
-## 16. Load Flow Analysis (power systems)
+## 17. Load Flow Analysis (power systems)
 
 A separate section for **power-system load flow (power flow) studies**: the bus voltages |V|∠δ, the real and reactive power in every line and transformer, the slack-bus generation and the losses of a transmission network. Open it from the **Load Flow Analysis** card on Home, or from **⋮ → Load flow analysis** in the editor. Back returns to where you came from.
 
@@ -779,7 +818,7 @@ It works on bus and branch data (like MATPOWER or the IEEE common data format), 
 
 <a id="ch-saving"></a>
 
-## 17. Saving, opening and sharing
+## 18. Saving, opening and sharing
 
 #### Automatic saving
 
@@ -821,7 +860,7 @@ You never need to press Save. The circuit is saved a moment after every change, 
 
 <a id="ch-settings"></a>
 
-## 18. Settings reference
+## 19. Settings reference
 
 Open Settings from the sliders icon on Home or from **⋮ → Settings** in the editor. Every change is saved at once.
 
@@ -884,7 +923,7 @@ These are the same defaults SPICE uses. Change them only if you know why; **Rese
 
 <a id="ch-library"></a>
 
-## 19. Component library (all 521)
+## 20. Component library (all 522)
 
 Every component in the app, grouped as in the **+** menu. For each part you see what it does and which settings you can change. Use the search box at the top of the manual to find a part quickly.
 
@@ -894,8 +933,8 @@ Every circuit needs a source. **DC Voltage** is a battery-like source; **AC Volt
 
 | | |
 | --- | --- |
-| **DC Voltage** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Voltage (V), Internal resistance (Ω), Waveform |
-| **AC Voltage** | Sinusoidal voltage source v = Voff + A·sin(2πft + φ). <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), DC offset (V), Phase (°), Internal resistance (Ω), Waveform |
+| **DC Voltage** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Voltage (V), Internal resistance (Ω), Frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (V), Phase (°), Duty cycle (%), Waveform |
+| **AC Voltage** | Sinusoidal voltage source v = Voff + A·sin(2πft + φ). <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (V), Phase (°), Duty cycle (%), Internal resistance (Ω), Waveform |
 | **AC Mains (1-phase)** | Single-phase mains supply between L (left) and N (right). The value is RMS (peak = √2·Vrms). Neutral is bonded to earth at the source, so earth faults return through ground — needed for RCD/RCCB tests. <br>*Settings:* Standard, Voltage (RMS) (V), Frequency (Hz), Source impedance (Ω), Neutral earthed at source (TN) |
 | **3-Phase Supply (4-wire)** | Balanced star-connected three-phase supply: phases R, Y, B and neutral N. Phase voltage = V_line/√3, displaced by 120°. <br>*Settings:* Line voltage (RMS) (V), Frequency (Hz), Source impedance per phase (Ω), Phase sequence, Neutral earthed |
 | **3-Phase Supply (3-wire)** | Balanced three-phase supply without neutral (R, Y, B). Line voltages are 120° apart; use it for delta loads and motors. <br>*Settings:* Line voltage (RMS) (V), Frequency (Hz), Source impedance per phase (Ω), Phase sequence |
@@ -907,15 +946,15 @@ Every circuit needs a source. **DC Voltage** is a battery-like source; **AC Volt
 | **Bench Power Supply (CV/CC)** | Laboratory supply: constant voltage until the load demands more than the current limit, then constant current (smooth CV→CC crossover). <br>*Settings:* Voltage set (V), Current limit (A), Output resistance (CV) (Ω) |
 | **Dual Supply ±V** | Split supply: +V between + and COM, −V between COM and −. Typical for op-amp circuits. <br>*Settings:* Voltage (each rail) (V), Internal resistance (Ω) |
 | **Solar Panel (PV Module)** | 36-cell photovoltaic module (≈22 V open circuit, 5.8 A short circuit at 1000 W/m²). Single-diode model; power peaks at the maximum power point (~17.5 V). <br>*Settings:* Irradiance (W/m²), Isc @1000 W/m² (A), Voc (per cell) (V), Cells in series |
-| **DC Current** | Ideal current source. Current flows in the direction of the arrow. <br>*Settings:* Current (A), Waveform |
-| **AC Current** | Ideal current source. Current flows in the direction of the arrow. <br>*Settings:* Amplitude (peak) (A), Frequency (Hz), DC offset (A), Phase (°), Waveform |
-| **Square Wave** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), DC offset (V), Phase (°), Duty cycle (%), Internal resistance (Ω), Waveform |
-| **Pulse / PWM** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), DC offset (V), Phase (°), Duty cycle (%), Internal resistance (Ω), Waveform |
+| **DC Current** | Ideal current source. Current flows in the direction of the arrow. <br>*Settings:* Current (A), Frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (A), Phase (°), Duty cycle (%), Waveform |
+| **AC Current** | Ideal current source. Current flows in the direction of the arrow. <br>*Settings:* Amplitude (peak) (A), Frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (A), Phase (°), Duty cycle (%), Waveform |
+| **Square Wave** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (V), Phase (°), Duty cycle (%), Internal resistance (Ω), Waveform |
+| **Pulse / PWM** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (V), Phase (°), Duty cycle (%), Internal resistance (Ω), Waveform |
 | **PWM Generator** | Rectangular PWM signal with the duty cycle on the knob — for driving MOSFET/IGBT gates, motors and LEDs. <br>*Settings:* Duty cycle (%), Frequency (Hz), High level (V), Low level (V), Internal resistance (Ω) |
-| **Triangle Wave** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), DC offset (V), Phase (°), Internal resistance (Ω), Waveform |
-| **Sawtooth** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), DC offset (V), Phase (°), Internal resistance (Ω), Waveform |
-| **Sweep (Chirp)** | Logarithmic frequency sweep – ideal for looking at filter responses on the oscilloscope. <br>*Settings:* Amplitude (peak) (V), Start frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (V), Internal resistance (Ω), Waveform |
-| **Noise** | Gaussian white noise (bandwidth set by the timestep). <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), DC offset (V), Internal resistance (Ω), Waveform |
+| **Triangle Wave** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (V), Phase (°), Duty cycle (%), Internal resistance (Ω), Waveform |
+| **Sawtooth** | Ideal voltage source. Terminal marked + is the positive side. Optional internal resistance. <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (V), Phase (°), Duty cycle (%), Internal resistance (Ω), Waveform |
+| **Sweep (Chirp)** | Logarithmic frequency sweep – ideal for looking at filter responses on the oscilloscope. <br>*Settings:* Amplitude (peak) (V), Start frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (V), Phase (°), Duty cycle (%), Internal resistance (Ω), Waveform |
+| **Noise** | Gaussian white noise (bandwidth set by the timestep). <br>*Settings:* Amplitude (peak) (V), Frequency (Hz), Stop frequency (Hz), Sweep time (s), DC offset (V), Phase (°), Duty cycle (%), Internal resistance (Ω), Waveform |
 | **AM Signal Generator** | Amplitude modulation: v = A·(1 + m·sin 2πfm·t)·sin 2πfc·t. <br>*Settings:* Carrier amplitude (V), Carrier frequency (Hz), Modulating frequency (Hz), Modulation index, Internal resistance (Ω) |
 | **FM Signal Generator** | Frequency modulation: v = A·sin(2πfc·t + (Δf/fm)·sin 2πfm·t). <br>*Settings:* Amplitude (V), Carrier frequency (Hz), Modulating frequency (Hz), Frequency deviation (Hz), Internal resistance (Ω) |
 | **Step Source** | Step input V0 → V1 at t0 with a linear rise time — for step-response measurements. <br>*Settings:* Final value (V), Initial value (V), Step time (s), Rise time (s), Internal resistance (Ω) |
@@ -990,7 +1029,7 @@ Resistors, capacitors and inductors, plus variable and real-world versions. The 
 | **Polyester (PET) Capacitor** | Polyester (PET, “Mylar”) film capacitor: small and cheap, good for general coupling, bypass and timing; a little more loss (tan δ ≈ 0.5 %) than polypropylene. <br>*Settings:* Capacitance (F), ESR (Ω), ESL (H), Leakage resistance (Ω), Voltage rating (V) |
 | **Polypropylene (PP) Capacitor** | Polypropylene film capacitor (MKP): the lowest dielectric loss (tan δ ≈ 0.02 %) — used in resonant converters, snubbers, X2 mains filters and precision timing. <br>*Settings:* Capacitance (F), ESR (Ω), ESL (H), Leakage resistance (Ω), Voltage rating (V) |
 | **Silver-Mica Capacitor** | Silver-mica capacitor: picofarad values with excellent stability and very high Q — used in RF oscillators and filters. <br>*Settings:* Capacitance (F), ESR (Ω), ESL (H), Leakage resistance (Ω), Voltage rating (V) |
-| **Inductor** | Ideal inductor v = L·di/dt with optional winding resistance. <br>*Settings:* Inductance (H), Series resistance (Ω), Initial current (A) |
+| **Inductor** | Ideal inductor v = L·di/dt with optional winding resistance. Coupled to another coil by a Mutual Inductance (M) part; the dot marks the end where current entering gives a positive mutual voltage. <br>*Settings:* Inductance (H), Series resistance (Ω), Initial current (A), Dot (for a mutual inductance M) |
 | **Variable Inductor** | Slug-tuned inductor: L = setting × Lmax (minimum 1 % of Lmax). <br>*Settings:* Setting (%), Maximum inductance (H), Series resistance (Ω) |
 | **Iron-Core Inductor (saturating)** | Nonlinear inductor: ψ(i) = Lsat·i + (L0 − Lsat)·Isat·tanh(i/Isat). Above Isat the core saturates and the current peaks sharply — see inrush and distorted magnetising current. <br>*Settings:* Unsaturated inductance (H), Saturation current (A), Saturated inductance (H), Winding resistance (Ω) |
 | **Ferrite Bead** | Ferrite bead: nearly a short at DC and low frequency, lossy (resistive) at high frequency — model Rdc + (L ∥ R). <br>*Settings:* Impedance at 100 MHz (Ω), DC resistance (Ω) |
@@ -999,7 +1038,7 @@ Resistors, capacitors and inductors, plus variable and real-world versions. The 
 | **Transmission Line (lossless)** | Ideal lossless line (Branin method of characteristics). Port 1 on the left, port 2 on the right, returns at the bottom. Mismatched terminations produce reflections after 2·Td. <br>*Settings:* Characteristic impedance Z0 (Ω), Delay Td (s) |
 | **Memristor (HP model)** | HP TiO₂ memristor (Strukov 2008) with a Joglekar window: R = Ron·w + Roff·(1 − w), dw/dt = k·i·(1 − (2w − 1)^(2p)). A sine drive gives the pinched I–V hysteresis loop. <br>*Settings:* R_on (Ω), R_off (Ω), Mobility factor µv·Ron/D² (1/C), Initial state w0, Joglekar window exponent p |
 
-### Transformers — 11
+### Transformers — 12
 
 Coupled-coil models with a turns ratio. Use them for isolation and for stepping voltage up or down. The 3-phase transformers have standard vector groups (Dyn11, Yyn0, Yd1, Dd0). CT and PT are instrument transformers for metering.
 
@@ -1016,6 +1055,7 @@ Coupled-coil models with a turns ratio. Use them for isolation and for stepping 
 | **Potential Transformer (PT)** | Voltage (potential) transformer, 11 kV → 110 V, for measuring high voltages with a standard voltmeter. <br>*Settings:* Primary inductance (H), Turns ratio (Ns/Np), Coupling k, Primary resistance (Ω), Secondary resistance (Ω) |
 | **3-Phase Transformer** | Three single-phase windings pairs (one per limb) connected per the vector group. Primary A, B, C on the left; secondary a, b, c and neutral n on the right. Dyn11: secondary leads primary by 30°. <br>*Settings:* Vector group, Primary line voltage (V), Secondary line voltage (V), Magnetising inductance (per phase, primary) (H), Coupling k, Primary winding resistance (Ω), Secondary winding resistance (Ω) |
 | **Coupled Inductors (M)** | Two inductors with mutual inductance M = k·√(L1·L2) (dots mark the in-phase ends). Loosely coupled coils, wireless power, tuned transformers. <br>*Settings:* L1 (H), L2 (H), Coupling coefficient k, R1 (Ω), R2 (Ω) |
+| **Mutual Inductance (M)** | Couples two inductors magnetically, like the curved arrow marked M in a textbook: place it between the two coils (it couples the two nearest, or the ones named) and set M. The dot on each inductor (its properties) gives the sign: with both currents entering the dotted ends the mutual voltage M·di/dt adds, otherwise it subtracts. In the phasor domain it is the impedance jωM. <br>*Settings:* Mutual inductance M (H), First coil (empty: the nearest), Second coil (empty: the next nearest) |
 
 ### Protection — 24
 
@@ -1565,7 +1605,7 @@ Meters that stay in the circuit: voltmeter, ammeter (use **Auto** for RMS in AC)
 
 <a id="ch-examples"></a>
 
-## 20. Examples (all 104)
+## 21. Examples (all 110)
 
 Open any example, press **Run** (it starts by itself), then experiment: tap switches, turn knobs, add scope probes, run an analysis. You cannot damage the original.
 
@@ -1724,9 +1764,18 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 - **RFID door lock (125 kHz reader)**: An RDM6300-style 125 kHz RFID reader: bring the tag closer than 5 cm (select the reader and turn the tag-distance knob down) and its TAG output goes high while the tag ID is sent as 9600-baud UART text — shown on the terminal. TAG drives an NPN transistor that energises the 12 V door-lock solenoid; the diode across the solenoid absorbs the inductive kick when the transistor switches off. Move the tag away and the lock closes again.
 - **Fibre-optic serial link**: A UART message travels as light through a 20 m plastic optical fibre: an LED transmitter, the fibre and a photodiode receiver with a comparator. It is immune to electrical noise and isolates the two ends. The link budget decides whether it works: received power = −3 dBm − 0.2 dB/m × length − 2 × connector loss. Lengthen the fibre past ≈ 100 m (or switch to multimode glass and back) and see when the received power drops below the −25 dBm sensitivity and the text stops.
 
+### AC Circuits (Phasors)
+
+- **Nodal analysis in phasors (book Ex. 10.1)**: Find ix: 20 cos 4t V through 10 Ω, a 0.1 F capacitor (ix), a 1 H coil, a dependent current source 2ix and 0.5 H. ⋮ → AC circuit: phasor domain shows it as the book’s Fig. 10.2 (20∠0° V, −j2.5 Ω, j4 Ω, j2 Ω); ⋮ → Run with theorem → Nodal analysis → C1 gives V1 = 18.97∠18.43° V and ix = 7.59∠108.4° A, i.e. ix = 7.59 cos(4t + 108.4°) A.
+- **Mesh analysis in phasors (book Ex. 10.3)**: Drawn in the phasor domain (ω = 1 rad/s): 5∠0° A, 20∠90° V, j10 Ω, two −j2 Ω, 4 Ω and 8 Ω. ⋮ → Run with theorem → Mesh analysis → R2 (4 Ω): the current source fixes I3 = 5 A, two KVL equations, Cramer’s rule — I2 = 6.12∠−35.22° A, so the book’s Io = −I2 = 6.12∠144.78° A.
+- **Superposition at three frequencies (book Ex. 10.6)**: A 5 V DC source, 10 cos 2t V and 2 sin 5t A in one circuit: each frequency needs its own phasor domain. ⋮ → Run with theorem → Superposition → R1 (1 Ω), Voltage: one source at a time (at DC the coil is a short and the capacitor an open), then the three added in the time domain — vo = −1 + 2.498 cos(2t − 30.78°) + 2.328 cos(5t − 77.91°) V (the book prints the last as 2.328 sin(5t + 10°), its angle rounded; worked exactly, −j2 ∥ 4 = 0.8 − j1.6 Ω gives 12.09°).
+- **Thevenin equivalent in phasors (book Ex. 10.8)**: The bridge of Fig. 10.22 (120∠75° V, −j6 Ω, 8 Ω, 4 Ω, j12 Ω) with a 10 Ω load across a–b. ⋮ → Run with theorem → Thevenin → R3: Z_th = (−j6 ∥ 8) + (4 ∥ j12) = 6.48 − j2.64 Ω, V_th = 37.95∠220.3° V, as in the book; Maximum power transfer gives Z_L = Z_th* = 6.48 + j2.64 Ω.
+- **Coupled coils, two loops (book Ex. 13.1)**: Two loops joined only by the coupling of their coils: 12∠0° V, −j4 Ω and j5 Ω; j6 Ω and 12 Ω; jωM = j3 Ω, both dots at the top. ⋮ → Run with theorem → Mesh analysis → R1 (12 Ω): (−j4 + j5)I1 − j3I2 = 12 and −j3I1 + (12 + j6)I2 = 0 give I1 = 13.01∠−49.39° A and I2 = 2.91∠14.04° A.
+- **Coupled coils, mesh analysis (book Ex. 13.2)**: Fig. 13.11: 100∠0° V, 4 Ω, −j3 Ω, coils j6 Ω and j8 Ω with jωM = j2 Ω, and 5 Ω. Mesh 2 runs through both coils the same way into their dots (+2·j2). ⋮ → Run with theorem → Mesh analysis → R2: (4 + j3)I1 − j8I2 = 100, −j8I1 + (5 + j18)I2 = 0, Δ = 30 + j87, I1 = 20.3∠3.5° A, I2 = 8.693∠19.03° A.
+
 <a id="ch-formulas"></a>
 
-## 21. Quick reference: formulas and units
+## 22. Quick reference: formulas and units
 
 #### Ohm's law and power
 
@@ -1777,7 +1826,7 @@ Open any example, press **Run** (it starts by itself), then experiment: tap swit
 
 <a id="ch-troubleshooting"></a>
 
-## 22. Troubleshooting and FAQ
+## 23. Troubleshooting and FAQ
 
 #### Nothing happens when I press Run
 
@@ -1855,7 +1904,7 @@ The engine follows SPICE methods and has been checked against textbook answers (
 
 <a id="ch-about"></a>
 
-## 23. About RAPTI and contact
+## 24. About RAPTI and contact
 
 **Resonance Automation Professional Training Institute** (RAPTI) was established in 2019. Established in 2019 with one goal: developing skilled manpower for the automation industry. Courses at RAPTI are designed by experienced, competent engineers so that every student can work independently in any industry after completing a course — with the knowledge and skills that real job positions demand.
 

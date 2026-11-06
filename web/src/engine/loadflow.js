@@ -212,6 +212,8 @@ function gaussSeidel(Y, st, opts) {
       const ar = (Psp[i] * vr[i] + q * vi[i]) / m2 - sr; // (P - jQ)/conj(V) = (P - jQ) V / |V|²
       const ai = (Psp[i] * vi[i] - q * vr[i]) / m2 - si;
       const d = Gi[i] * Gi[i] + Bi[i] * Bi[i];
+      // Y_ii = 0 (a line's charging cancelling its reactance): Gauss–Seidel cannot divide by it
+      if (!(d > 1e-20)) throw new Error(`Gauss–Seidel cannot solve this system: the self-admittance Y_ii of bus number ${i + 1} is zero (the line charging cancels the line reactance)`);
       let nr = (ar * Gi[i] + ai * Bi[i]) / d, ni = (ai * Gi[i] - ar * Bi[i]) / d;
       if (type[i] === 'pv') { const m = Math.hypot(nr, ni) || 1; nr *= vSpec[i] / m; ni *= vSpec[i] / m; } else { nr = vr[i] + alpha * (nr - vr[i]); ni = vi[i] + alpha * (ni - vi[i]); }
       dV = Math.max(dV, Math.hypot(nr - vr[i], ni - vi[i]));
@@ -477,7 +479,9 @@ export function parseMatpower(text) {
   const mat = (name) => {
     const m = src.match(new RegExp(`mpc\\.${name}\\s*=\\s*\\[([\\s\\S]*?)\\]`));
     if (!m) return null;
-    return m[1].split(/;|\n/).map((r) => r.trim().split(/[\s,]+/).filter(Boolean).map(Number)).filter((r) => r.length && r.every(Number.isFinite));
+    // MATPOWER writes an unlimited value as Inf (a generator's Qmax): a number, not a broken row
+    const tok = (t) => (/^[+-]?inf$/i.test(t) ? (t[0] === '-' ? -Infinity : Infinity) : Number(t));
+    return m[1].split(/;|\n/).map((r) => r.trim().split(/[\s,]+/).filter(Boolean).map(tok)).filter((r) => r.length && r.every((x) => !Number.isNaN(x)));
   };
   const baseM = src.match(/mpc\.baseMVA\s*=\s*([\d.eE+-]+)/);
   const bus = mat('bus'), gen = mat('gen') || [], branch = mat('branch');
@@ -493,10 +497,12 @@ export function parseMatpower(text) {
     const b = byId.get(g[0]);
     if (!b || g[7] === 0) continue;
     b.Pg += g[1]; b.Qg += g[2];
-    b.Qmax = (b.Qmax === '' ? 0 : b.Qmax) + g[3];
-    b.Qmin = (b.Qmin === '' ? 0 : b.Qmin) + g[4];
+    // an infinite limit is no limit ('')
+    b.Qmax = !Number.isFinite(g[3]) || b.Qmax === null ? null : (b.Qmax === '' ? 0 : b.Qmax) + g[3];
+    b.Qmin = !Number.isFinite(g[4]) || b.Qmin === null ? null : (b.Qmin === '' ? 0 : b.Qmin) + g[4];
     if (g[5]) b.V = g[5];
   }
+  for (const b of buses) { if (b.Qmax === null) b.Qmax = ''; if (b.Qmin === null) b.Qmin = ''; }
   const branches = branch.map((r) => ({ from: r[0], to: r[1], R: r[2], X: r[3], B: r[4], rate: r[5] || 0, tap: r[8] || 0, shift: r[9] || 0, on: r[10] !== 0 }));
   return { name: nameM ? nameM[1] : 'Imported case', baseMVA: baseM ? +baseM[1] : 100, buses, branches };
 }
@@ -530,7 +536,6 @@ export function toMatpower(sys) {
 
 // ------------------------------------------------------------ per-unit helpers
 /** Ohms → per unit on (kV, MVA) base. */
-export const ohmToPu = (ohm, kV, mva) => ohm / ((kV * kV) / mva);
 /** Per unit from one base to another: Z_new = Z_old · (kV_old/kV_new)² · (MVA_new/MVA_old). */
 export const changeBase = (z, kVold, MVAold, kVnew, MVAnew) => z * (kVold / kVnew) ** 2 * (MVAnew / MVAold);
 /** Base current (A) and impedance (Ω) of a 3-phase base. */

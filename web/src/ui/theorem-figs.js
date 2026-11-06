@@ -10,7 +10,7 @@ import { Renderer, WireGraph, measureRich, fillRich } from './render.js';
 
 const C = 6 * GRID; // one ladder cell: an 80-unit part with a short lead at each end
 /** The theorems' quantities written with their subscripts: Vth → V_th, IN → I_N, Req1 → R_eq1, RL → R_L. */
-const sym = (t) => t.replace(/\b([VIRP])(th|max|eq\d*|s\d+|N|M|L)\b/g, '$1_{$2}');
+const sym = (t) => t.replace(/\b([VIRPZ])(th|max|eq\d*|s\d+|N|M|L)\b/g, '$1_{$2}');
 
 // ------------------------------------------------------------------ board figures
 /**
@@ -243,7 +243,7 @@ export function drawFigure(cv, built, theme, settings, maxH = 320, { fill = fals
 function drawingBox(doc, lk = 1) {
   let b = doc.bounds() || [0, 0, 100, 100];
   for (const e of doc.elements) {
-    const val = e.valueLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
+    const val = e.shownLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
     const q = e.labelRect(txt, undefined, lk);
     if (q) b = [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.max(b[2], q[2]), Math.max(b[3], q[3])];
   }
@@ -348,7 +348,7 @@ function blockers(doc, k, out) {
   if (doc) {
     for (const e of doc.elements) {
       add(e.worldBox(), 2);
-      const val = e.valueLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
+      const val = e.shownLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
       const q = e.labelRect(txt);
       if (q) add([q[0] - 2, q[1] - 2, q[2] + 2, q[3] + 2], 4);
     }
@@ -414,4 +414,49 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+// ------------------------------------------------------------------ AC equivalents
+/**
+ * The equivalent an AC theorem ends with, in the phasor domain: V_th in series with Z_th (or I_N
+ * in parallel with Z_N) and the load, a copy of the user's part.
+ */
+export function acEquivalentFigure(fig, src) {
+  const doc = new CircuitDoc('equivalent');
+  doc.domain = 'phasor'; doc.forceOmega = fig.w || 0;
+  const w = fig.w || 0, mag = Math.hypot(fig.src[0], fig.src[1]), ph = (Math.atan2(fig.src[1], fig.src[0]) * 180) / Math.PI;
+  const source = (kindV) => {
+    const t = w > 0 ? (kindV ? 'acv' : 'aci') : (kindV ? 'dcv' : 'dci');
+    const e = new (getType(t))(0, 80);
+    if (w > 0) Object.assign(e.p, { wave: 'cos', amp: mag, phase: ph, freq: w / (2 * Math.PI) });
+    else e.p.amp = fig.src[0];
+    e.onParamChange?.();
+    return e;
+  };
+  const zEl = (x, y, rot) => {
+    const e = new (getType('resistor'))(x, y);
+    e.rot = rot; e.p.style = 'box';
+    const z = fig.z, re = Math.abs(z[0]) < 1e-9 ? 0 : z[0], im = Math.abs(z[1]) < 1e-9 ? 0 : z[1];
+    const n = (v) => +v.toPrecision(4);
+    e.zText = `${re || !im ? n(re) : ''}${im ? `${re ? (im < 0 ? ' − ' : ' + ') : im < 0 ? '−' : ''}j${n(Math.abs(im))}` : ''} Ω`;
+    return e;
+  };
+  const s0 = source(!fig.norton);
+  s0.rot = fig.norton ? 3 : 1; // + (or the arrow) at the top
+  s0.name = sym(fig.srcName === 'IN' ? 'IN' : 'Vth'); s0.richName = true;
+  doc.elements.push(s0);
+  const o = src.elements[fig.load];
+  const load = new (getType(o.constructor.type))(160, 80);
+  Object.assign(load.p, o.p); load.rot = 1; load.name = fig.loadName; load.onParamChange?.();
+  if (fig.norton) {
+    const z = zEl(80, 80, 1); z.name = sym('ZN'); z.richName = true;
+    doc.elements.push(z, load);
+    doc.addWire([[0, 40], [160, 40]]); doc.addWire([[0, 120], [160, 120]]);
+  } else {
+    const z = zEl(80, 40, 0); z.name = sym('Zth'); z.richName = true;
+    doc.elements.push(z, load);
+    doc.addWire([[0, 40], [40, 40]]); doc.addWire([[120, 40], [160, 40]]); doc.addWire([[0, 120], [160, 120]]);
+  }
+  const notes = [{ t: 'term', at: [160, 40], other: [160, 120], out: [1, 0], text: 'a' }, { t: 'term', at: [160, 120], other: [160, 40], out: [1, 0], text: 'b' }];
+  return { doc, hi: new Set([load]), notes, load };
 }

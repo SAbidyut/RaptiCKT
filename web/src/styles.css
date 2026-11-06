@@ -243,6 +243,13 @@ input.toggle:checked::after { transform: translateX(18px); }
 .tb.on { color: var(--accent); background: rgba(34, 211, 238, 0.1); }
 .tb.run { background: var(--grad); color: #fff; min-width: 58px; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4); }
 .tb.run.on { background: linear-gradient(135deg, #f59e0b, #ef4444); box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35); }
+/* phones held upright: the nine tools share the row evenly, so Fit and Full are never cut off at the edge */
+@media (max-width: 600px) {
+  .toolbar { gap: 0; padding-left: 4px; padding-right: 4px; }
+  .tb { flex: 1 0 auto; min-width: 40px; padding: 5px 2px; font-size: 10px; }
+  .tb.run { min-width: 50px; }
+  .toolbar .sep { margin: 0 2px; }
+}
 
 .scope-panel { flex: none; height: 0; overflow: hidden; background: #04070d; border-bottom: 1px solid var(--border); position: relative; box-shadow: inset 0 -12px 24px -18px rgba(0, 0, 0, 0.9); }
 .editor.with-scope .scope-panel { height: 24vh; min-height: 150px; max-height: 260px; } /* a quarter of the screen: the board keeps the rest */
@@ -402,6 +409,21 @@ input.toggle:checked::after { transform: translateX(18px); }
 .num-in em { font-style: normal; color: var(--muted); font-size: 13px; min-width: 16px; }
 .prop input[type=range] { width: 100%; accent-color: var(--accent); height: 26px; }
 .insp-desc { color: var(--muted); font-size: 12.5px; margin: 12px 0 0; }
+/* about this part: description, settings, terminals — at the bottom of the sheet */
+.insp-about { margin-top: 16px; padding-top: 4px; border-top: 1px solid var(--border); }
+.insp-about h5 { margin: 14px 0 4px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.insp-about .insp-desc { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--text2); }
+.about-meta { display: flex; gap: 6px; margin: 8px 0 0; }
+.about-meta span { padding: 2px 9px; border-radius: 10px; background: var(--surface2); font-size: 11.5px; color: var(--text2); }
+.about-props { list-style: none; margin: 0; padding: 0; }
+.about-props li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.about-props li b { font-weight: 600; flex: 1 1 100%; }
+.about-props li span { color: var(--text2); }
+.about-props li em { color: var(--muted); font-style: normal; font-size: 11.5px; }
+.about-pins { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.about-pins span { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; border-radius: 12px; background: var(--surface2); font-size: 12px; }
+.about-pins i { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 9px; background: var(--grad); color: #fff; font-style: normal; font-size: 10.5px; font-weight: 700; }
+.about-tip { margin: 14px 0 6px; font-size: 11.5px; color: var(--muted); line-height: 1.4; }
 .insp-fault { margin-top: 10px; padding: 2px 10px; border-radius: 10px; border: 1px dashed rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.06); }
 .insp-fault .prop > span { color: #f87171; }
 
@@ -511,7 +533,6 @@ input.toggle:checked::after { transform: translateX(18px); }
 .quickbar .qb-main div { min-width: 0; }
 .quickbar .qb-main b { display: block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .quickbar .qb-main b small { font-weight: 500; color: var(--muted); font-size: 11.5px; }
-.quickbar .qb-read { display: block; font: 11.5px var(--mono); color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .editor.sheet-open .quickbar { opacity: 0; pointer-events: none; }
 .knob { bottom: calc(92px + var(--safe-b)); }
 @media (max-width: 520px) { .quickbar .qb-main img { display: none; } .quickbar .qb-main b small { display: none; } }
@@ -596,7 +617,6 @@ input.toggle:checked::after { transform: translateX(18px); }
   .quickbar > button { width: 34px; }
   .quickbar .qb-main { padding: 0 4px; gap: 4px; min-width: 48px; }
   .quickbar .qb-main b { font-size: 13px; }
-  .quickbar .qb-read { font-size: 10.5px; }
   .knob { right: 8px; bottom: calc(84px + var(--safe-b)); }
   .knob-label { min-width: 96px; padding: 4px 8px; }
   .pal-inner { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; padding: 2px 10px 0; }
@@ -1181,6 +1201,12 @@ p.man-b { margin: 0 0 10px; line-height: inherit; }
 /* formulas typeset like a textbook */
 .th-math { margin: 10px 0; padding: 6px 14px; border-radius: 12px; background: var(--surface2); border: 1px solid var(--border); color: var(--text); font: 16.5px/1.3 'Cambria Math', 'STIX Two Text', 'Noto Serif', Georgia, 'Times New Roman', serif; overflow-x: auto; user-select: text; -webkit-user-select: text; }
 .th-math .ml { padding: 7px 0; }
+/* a matrix equation [A][x] = [b] with brackets, as the book prints it */
+.th-mx { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+.th-mx .mx { position: relative; flex: none; padding: 0 7px; border-left: 1.6px solid currentColor; border-right: 1.6px solid currentColor; border-radius: 5px; }
+.th-mx table { border-collapse: collapse; }
+.th-mx td { padding: 3px 7px; text-align: center; white-space: nowrap; }
+.th-mx .mx-eq { flex: none; }
 .th-math .ml.cont { padding: 0 0 7px 1.5em; }
 .th-math .mf { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; margin: 0 0.12em; line-height: 1.2; }
 .th-math .mf .mf { font-size: 0.9em; }

@@ -184,8 +184,11 @@ export class CCCVCharger extends withChip(Element) {
   rcv() { return Math.max(1e-3, this.p.vcv * 0.002); }
   curve(vb) {
     if (this.st === 'off' || this.st === 'done') return { i: 0, g: 0 };
-    if (this.st === 'pre') return { i: this.p.icc / 10, g: 0 };
-    const w = 0.01 * this.p.icc, a = smin(this.p.icc, (this.p.vcv - vb) / this.rcv(), w), b = smax(a.y, 0, w);
+    // pre-charge trickles at a tenth of the set current; like the constant-current stage it is
+    // held back by the charge voltage (a battery of high resistance would otherwise be driven
+    // to 10 V by the trickle, and the stages chatter)
+    const lim = this.st === 'pre' ? this.p.icc / 10 : this.p.icc;
+    const w = 0.01 * lim, a = smin(lim, (this.p.vcv - vb) / this.rcv(), w), b = smax(a.y, 0, w);
     return { i: b.y, g: -b.da * a.db / this.rcv() };
   }
   stampNL(s) {
@@ -193,7 +196,10 @@ export class CCCVCharger extends withChip(Element) {
     let vb = s.v(bat) - s.v(gnd);
     // limit the Newton step: the CV knee is a few mV wide
     const lim = Math.max(0.3, 0.05 * this.p.vcv);
-    if (this.vl != null && Math.abs(vb - this.vl) > lim) { vb = this.vl + Math.sign(vb - this.vl) * lim; s.limited = true; }
+    // (only where the current depends on the voltage: off and done are a fixed 0 A, and limiting
+    // there kept a resistive load from ever converging)
+    const shaped = this.st !== 'off' && this.st !== 'done';
+    if (shaped && this.vl != null && Math.abs(vb - this.vl) > lim) { vb = this.vl + Math.sign(vb - this.vl) * lim; s.limited = true; }
     this.vl = vb;
     const c = this.curve(vb);
     s.addNLCurrent(gnd, bat, c.i, [[bat, gnd, c.g, vb]]);

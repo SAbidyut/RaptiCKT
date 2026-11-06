@@ -340,7 +340,7 @@ export class StepperMotor extends Element {
   stampAC(ac) {
     for (let k = 0; k < 2; k++) { const a = this.nodes[2 * k], b = this.nodes[2 * k + 1], br = this.branches[k]; ac.addBranchKCL(a, b, br); ac.addA(br, a - 1, 1); ac.addA(br, b - 1, -1); ac.addA(br, br, -this.p.r, -ac.omega * this.p.l); }
   }
-  position() { return (this.th * 180) / Math.PI; }
+  position() { return ((this.th || 0) * 180) / Math.PI; } // 0° as placed, before the first run
   valueLabel() { return `${this.position().toFixed(1)}°`; }
   readings() {
     return [['Shaft angle', this.position(), '°'], ['Full steps from start', Math.round(this.position() / (360 / this.p.steps)), ''], ['Speed', rpm(this.wm || 0), 'rpm'], ['Torque', this.te || 0, 'N·m'], ['I(A)', this.il?.[0] || 0, 'A'], ['I(B)', this.il?.[1] || 0, 'A']];

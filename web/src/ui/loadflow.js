@@ -6,14 +6,15 @@
 import { icon } from './icons.js';
 import { store } from './store.js';
 import { motion } from './motion.js';
+import { csvRow } from '../engine/units.js';
 import {
   solveLoadFlow, contingencies, buildYbus, validate, METHODS, DEFAULT_OPTIONS,
   parseMatpower, toMatpower, baseValues, changeBase,
 } from '../engine/loadflow.js';
 import { LF_CASES, loadCase, newBus, newBranch } from '../engine/loadflow-cases.js';
 import { LF_THEORY } from './loadflow-theory.js';
+import { esc } from './html.js';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fx = (v, d = 3) => (Number.isFinite(v) ? (Math.abs(v) < 0.5 * 10 ** -d ? 0 : v).toFixed(d) : '—');
 const numIn = (v, def = 0) => { const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : def; };
 const optNum = (v) => (String(v).trim() === '' ? '' : numIn(v, ''));
@@ -40,12 +41,37 @@ function prep(cv) {
   return { ctx, w, h };
 }
 
+/**
+ * A system from a file, a paste or the store, made safe to show and solve: numbers are numbers,
+ * a bus type is slack / pv / pq, names are text (values go into the page, so a crafted file
+ * could otherwise put HTML there), missing fields get their usual defaults.
+ */
+function normSystem(sys) {
+  const num = (v, d = 0) => (Number.isFinite(+v) && v !== '' && v !== null ? +v : d);
+  const lim = (v) => (v === '' || v === null || v === undefined || !Number.isFinite(+v) ? '' : +v); // '' = no limit
+  const text = (v, d = '') => (v === undefined || v === null ? d : String(v));
+  const buses = sys.buses.filter((b) => b && typeof b === 'object').map((b, i) => ({
+    ...b,
+    id: typeof b.id === 'number' ? b.id : text(b.id, String(i + 1)), name: text(b.name, `Bus ${b.id ?? i + 1}`),
+    type: ['slack', 'pv', 'pq'].includes(b.type) ? b.type : 'pq',
+    V: num(b.V, 1), ang: num(b.ang), Pg: num(b.Pg), Qg: num(b.Qg), Pd: num(b.Pd), Qd: num(b.Qd),
+    Gs: num(b.Gs), Bs: num(b.Bs), kV: num(b.kV), Qmin: lim(b.Qmin), Qmax: lim(b.Qmax),
+  }));
+  const branches = sys.branches.filter((l) => l && typeof l === 'object').map((l) => ({
+    ...l,
+    from: typeof l.from === 'number' ? l.from : text(l.from), to: typeof l.to === 'number' ? l.to : text(l.to),
+    R: num(l.R), X: num(l.X), B: num(l.B), tap: num(l.tap), shift: num(l.shift), rate: num(l.rate),
+    ...(l.kind !== undefined ? { kind: l.kind === 'xf' ? 'xf' : 'line' } : {}),
+  }));
+  return { ...sys, name: text(sys.name, 'Imported system'), baseMVA: num(sys.baseMVA, 100) || 100, buses, branches };
+}
+
 export class LoadFlowScreen {
   constructor(app, root) {
     this.app = app;
     this.root = root;
     const s = store.lfState();
-    this.sys = s?.sys && Array.isArray(s.sys.buses) ? s.sys : loadCase('ieee14');
+    this.sys = s?.sys && Array.isArray(s.sys.buses) && Array.isArray(s.sys.branches) ? normSystem(s.sys) : loadCase('ieee14');
     this.caseId = s?.caseId || 'ieee14';
     this.opts = { ...DEFAULT_OPTIONS, ...(s?.opts || {}) };
     this.tab = 'system';
@@ -309,14 +335,8 @@ export class LoadFlowScreen {
             sys = o.loadflow || o;
             if (!Array.isArray(sys.buses) || !Array.isArray(sys.branches)) throw new Error('not a load-flow system');
           } else sys = parseMatpower(t);
-          if (!sys.name && name) sys.name = name.replace(/\.\w+$/, '');
-          this.sys = sys;
-          this.caseId = 'custom';
-          this.changed();
           close();
-          this.solve(true);
-          this.render();
-          this.toast(`Imported ${sys.buses.length} buses, ${sys.branches.length} branches`);
+          this.importSystem(sys, name);
         } catch (e) { alert('Could not import: ' + e.message); }
       };
       b.querySelector('[data-x=file]').addEventListener('click', async () => {
@@ -324,6 +344,17 @@ export class LoadFlowScreen {
       });
       b.querySelector('[data-x=paste]').addEventListener('click', () => take(b.querySelector('.lf-paste').value));
     });
+  }
+
+  /** A system read from a file (also one opened from Home or shared into the app) becomes the one worked on. */
+  importSystem(sys, name) {
+    if (!sys.name && name) sys.name = name.replace(/\.\w+$/, '');
+    this.sys = normSystem(sys);
+    this.caseId = 'custom';
+    this.changed();
+    this.solve(true);
+    this.render();
+    this.toast(`Imported ${this.sys.buses.length} buses, ${this.sys.branches.length} branches`);
   }
 
   exportSheet() {
@@ -536,10 +567,10 @@ export class LoadFlowScreen {
 
   csv() {
     const r = this.res, rows = [];
-    rows.push(`Load flow,${this.sys.name},${METHODS.find((m) => m.id === r.method).name},${r.converged ? 'converged' : 'not converged'},${r.iterations} iterations,base ${this.sys.baseMVA} MVA`);
+    rows.push(csvRow(['Load flow', this.sys.name, METHODS.find((m) => m.id === r.method).name, r.converged ? 'converged' : 'not converged', `${r.iterations} iterations`, `base ${this.sys.baseMVA} MVA`]));
     rows.push('');
     rows.push('Bus,Name,Type,V (pu),Angle (deg),Pg (MW),Qg (Mvar),Pd (MW),Qd (Mvar)');
-    for (const b of r.buses) rows.push([b.id, `"${b.name}"`, TYPE_LABEL[b.type], b.V.toFixed(6), b.ang.toFixed(4), b.Pg.toFixed(4), b.Qg.toFixed(4), b.Pd, b.Qd].join(','));
+    for (const b of r.buses) rows.push(csvRow([b.id, b.name, TYPE_LABEL[b.type], b.V.toFixed(6), b.ang.toFixed(4), b.Pg.toFixed(4), b.Qg.toFixed(4), b.Pd, b.Qd]));
     rows.push('');
     rows.push('From,To,P from (MW),Q from (Mvar),P to (MW),Q to (Mvar),Loss P (MW),Loss Q (Mvar),Rating (MVA),Loading (%)');
     for (const l of r.branches) rows.push([l.from, l.to, l.Pf.toFixed(4), l.Qf.toFixed(4), l.Pt.toFixed(4), l.Qt.toFixed(4), l.lossP.toFixed(4), l.lossQ.toFixed(4), l.rate || '', l.rate ? l.loading.toFixed(2) : ''].join(','));

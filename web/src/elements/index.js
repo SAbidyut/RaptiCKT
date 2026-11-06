@@ -36,6 +36,7 @@ import './semis3.js';
 import './passive3.js';
 import './ladder.js';
 import './cables.js';
+import './mutual.js';
 
 import { getType } from './base.js';
 export { getType, allTypes, Element, GRID, slantFor, slantAlong } from './base.js';
@@ -45,7 +46,7 @@ export const CATEGORIES = [
   { id: 'Batteries', icon: 'battery', items: ['cellaa', 'bat9v', 'coincell', 'nimh', 'nicd', 'liion', 'lipo2s', 'lifepo4', 'lifepo12', 'leadacid', 'agm', 'gel', 'batpack', 'supercap', 'bms', 'cccv'] },
   { id: 'Renewables', icon: 'sun', items: ['pvarray', 'mpptcc', 'pwmcc', 'invoff', 'invgrid', 'windgen', 'fuelcell'] },
   { id: 'Passive', icon: 'wave', items: ['resistor', 'shuntr', 'fusibler', 'rheostat', 'pot', 'trimpot', 'capacitor', 'ecap', 'npecap', 'tantalum', 'varcap', 'realcap', 'ceramiccap', 'filmcap', 'polyestercap', 'ppcap', 'micacap', 'inductor', 'varind', 'coreind', 'ferrite', 'crystal', 'ceramicres', 'tline', 'memristor'] },
-  { id: 'Transformers', icon: 'coil', items: ['transformer', 'txstepdown', 'txstepup', 'isotx', 'xfmrct', 'xfmr2s', 'autotx', 'ct', 'pt', 'tx3ph', 'coupledl'] },
+  { id: 'Transformers', icon: 'coil', items: ['transformer', 'txstepdown', 'txstepup', 'isotx', 'xfmrct', 'xfmr2s', 'autotx', 'ct', 'pt', 'tx3ph', 'coupledl', 'mutual'] },
   { id: 'Protection', icon: 'shield', items: ['fuse', 'hrcfuse', 'tco', 'polyfuse', 'mcb', 'mcb2p', 'mcb3p', 'mccb', 'acb', 'rccb', 'rcbo', 'olr', 'olr3', 'phaserelay', 'voltrelay', 'idmt', 'mov', 'arrester', 'gdt', 'tvs', 'tvsbi', 'lolr', 'lphase', 'lmpcb'] },
   { id: 'Switches & Relays', icon: 'switch', items: ['switch', 'togglesw', 'slidesw', 'rockersw', 'keysw', 'oneway', 'twoway', 'threeway', 'intermediate', 'spdt', 'dpst', 'dpdt', 'pushno', 'pushnc', 'footsw', 'latchbtn', 'estop', 'limitsw', 'rotary4', 'dipsw', 'selector3', 'isolator', 'changeover', 'reed', 'floatsw', 'pressw', 'thermostat', 'vcsw', 'ccsw', 'relay', 'relayspst', 'relaydpst', 'relaydpdt', 'reedrelay', 'latchrelay', 'auxrelay', 'contactor', 'contactor2', 'tdr', 'ssr', 'lcoil', 'ltimer', 'lno', 'lnc', 'lmain3', 'lcounter', 'lcreset', 'llevel', 'llsno', 'llsnc', 'lcart', 'ltank'] },
   { id: 'Electrical', icon: 'home', items: ['bulb', 'lamp', 'halogen', 'tube', 'ballast', 'starter', 'ledbulb', 'cfl', 'ledstrip', 'leddriver', 'ledpanel', 'neon', 'fan', 'heater', 'socket', 'dimmer', 'fanregres', 'fanregcap', 'bell', 'earthrod', 'photocell', 'pirsw', 'emerg'] },

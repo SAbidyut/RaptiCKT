@@ -65,8 +65,17 @@ export function buildFromDrawing(c) {
   for (const q of quantities) if (q.kind === 'node_voltage' && q.at) mark(q.at);
   for (const w of c.wires || []) { mark(w.from); mark(w.to); }
 
+  // AC: the book's time domain (20 cos 4t V gives ω = 4 rad/s) or phasor domain (20∠60° V, j4 Ω,
+  // −j2.5 Ω): a drawing with reactances or angles but no ω is solved at ω = 1 rad/s (any ω gives
+  // the same phasors), and opens in the phasor domain, labelled as it was drawn
+  const omega = parts.find((p) => p.omega > 0)?.omega || c.omega || 1;
+  const phasorDrawn = parts.some((p) => p.reactance || p.phase != null) || (c.mutuals || []).some((m) => m.reactance);
+  const acDrawn = phasorDrawn || parts.some((p) => p.wave);
+  if (phasorDrawn) { doc.domain = 'phasor'; if (!parts.some((p) => p.omega > 0)) doc.omega = omega; }
   parts.forEach((p) => {
-    const type = TYPE[p.kind];
+    let type = TYPE[p.kind];
+    // (a source with an angle or a cos / sin is an AC source)
+    if (acDrawn && (p.phase != null || p.wave) && (type === 'dcv' || type === 'dci')) type = type === 'dcv' ? 'acv' : 'aci';
     const C = getType(type);
     if (type === 'opamp') { made.push(placeOpAmp(doc, p, C, count)); return; }
     if (THREE.has(type)) { made.push(placeTransistor(doc, p, C, count)); return; }
@@ -77,9 +86,17 @@ export function buildFromDrawing(c) {
     el.name = `${PREFIX[type]}${count[PREFIX[type]]}`;
     const v = Number.isFinite(p.value) ? p.value : 0;
     if (type === 'resistor') el.p.r = v > 0 ? v : 1;
-    else if (type === 'dcv' || type === 'dci' || type === 'acv' || type === 'aci') el.p.amp = v;
-    else if (type === 'capacitor') el.p.c = v > 0 ? v : 1e-6;
-    else if (type === 'inductor') el.p.l = v > 0 ? v : 1e-3;
+    else if (type === 'dcv' || type === 'dci' || type === 'acv' || type === 'aci') {
+      el.p.amp = v;
+      if ((type === 'acv' || type === 'aci') && acDrawn) {
+        // the book's cosine reference: 20∠60° is 20 cos(ωt + 60°); 10 sin 2t is a sine
+        Object.assign(el.p, { wave: p.wave === 'sin' ? 'sine' : 'cos', amp: Math.abs(v), phase: (p.phase || 0) + (v < 0 ? 180 : 0), freq: (p.omega || omega) / (2 * Math.PI), offset: 0 });
+      }
+    } else if (type === 'capacitor') el.p.c = p.reactance && v ? 1 / (omega * Math.abs(v)) : v > 0 ? v : 1e-6; // −jX: C = 1/(ωX)
+    else if (type === 'inductor') {
+      el.p.l = p.reactance && v ? Math.abs(v) / omega : v > 0 ? v : 1e-3; // jX: L = X/ω
+      if (acDrawn) el.p.rs = 0;
+    }
     else if (type === 'switch') el.p.closed = p.kind === 'closed_switch';
     else if (type === 'zener' && v > 0) el.p.bv = v;
     // the first terminal goes at: + of a voltage source, the tail of a current source's arrow
@@ -103,8 +120,22 @@ export function buildFromDrawing(c) {
       doc.addWire(slant || from[0] === post[0] || from[1] === post[1] ? [from, post] : [from, [post[0], from[1]], post]);
     };
     lead(H, p0); lead(T, p1);
+    // a coupled coil's dot, at the end it was drawn at (its first terminal is at `head`)
+    if (type === 'inductor' && p.dot) el.p.dot = (p.dot === 'from') === (head === p.from) ? 'a' : 'b';
     made.push({ part: p, el, head, tail });
   });
+  // mutual inductances: the curved arrow marked M (or jωM) between two coils
+  for (const m of c.mutuals || []) {
+    const A = made.find((x) => x.part === c.parts[m.a])?.el, B = made.find((x) => x.part === c.parts[m.b])?.el;
+    if (!A || !B || A.constructor.type !== 'inductor' || B.constructor.type !== 'inductor') { warnings.push('A mutual inductance whose two coils could not both be placed was left out.'); continue; }
+    const [ax, ay] = A.toWorld(0, 0), [bx, by] = B.toWorld(0, 0);
+    const M = new (getType('mutual'))(Math.round((ax + bx) / 2 / G) * G, Math.round((ay + by) / 2 / G) * G);
+    M.p.m = m.reactance ? Math.abs(m.value) / omega : Math.abs(m.value) || 1;
+    M.p.l1 = A.name; M.p.l2 = B.name;
+    count.M = (count.M || 0) + 1;
+    M.name = `M${count.M}`;
+    doc.elements.push(M);
+  }
 
   // plain wires, split at every connection point on them so each junction is explicit
   for (const w of c.wires || []) {

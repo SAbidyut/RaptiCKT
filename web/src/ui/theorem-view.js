@@ -3,12 +3,13 @@
 // with its own circuit drawn — down to the final equivalent and the answer.
 
 import { prepareTheorem, runTheorem, THEOREMS } from '../engine/theorem.js';
+import { isACDoc, prepareAC, runACTheorem, AC_THEOREMS } from '../engine/theorem-ac.js';
 import { fmtSI } from '../engine/units.js';
-import { boardFigure, ladderFigure, drawFigure } from './theorem-figs.js';
+import { boardFigure, ladderFigure, drawFigure, acEquivalentFigure } from './theorem-figs.js';
 import { THEMES } from './theme.js';
 import { icon } from './icons.js';
+import { esc } from './html.js';
 
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 /** **bold** and X_sub → X<sub>sub</sub> */
 const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\b([A-Za-z])_([A-Za-z0-9]+)/g, '$1<sub>$2</sub>');
 const BADGE = { thevenin: 'V_th', norton: 'I_N', superposition: 'Σ', source: 'V⇄I', maxpower: 'P_max', millman: 'V_M', reciprocity: 'x⇄y', tellegen: 'Σp=0', nodal: 'KCL', mesh: 'KVL' };
@@ -28,17 +29,18 @@ export class TheoremView {
 
   open() {
     const doc = this.ed.doc;
-    this.prep = prepareTheorem(doc);
+    // an AC circuit (sine / cosine sources, or the phasor domain on): the theorems in phasors
+    this.ac = isACDoc(doc);
+    this.prep = this.ac ? prepareAC(doc) : prepareTheorem(doc);
     const sel = this.ed.selected();
     const pre = sel && this.prep.targets.find((t) => doc.elements[t.src] === sel);
     this.target = pre ? pre.src : this.target != null && this.prep.targets.some((t) => t.src === this.target) ? this.target : null;
     this.stage = 'pick';
     this.host.classList.add('open');
-    this.ed.overlayOpen('theorem');
     this.render();
   }
 
-  close() { this.host.classList.remove('open'); this.ed.overlayClosed('theorem'); }
+  close() { this.host.classList.remove('open'); }
 
   /** Android back: a zoomed drawing first, then one stage back, then close. */
   back() {
@@ -141,7 +143,7 @@ export class TheoremView {
 
   render() {
     this.unzoom();
-    const th = THEOREMS.find((t) => t.id === this.theorem);
+    const th = this.list().find((t) => t.id === this.theorem);
     const title = this.stage === 'pick' ? 'Run with theorem' : th.title;
     this.host.innerHTML = `
       <div class="an-head">
@@ -162,16 +164,20 @@ export class TheoremView {
     const { prep } = this;
     const issues = [];
     if (!this.ed.doc.elements.length) issues.push('The board is empty. Build a circuit with resistors and DC sources first.');
-    else {
+    else if (this.ac) {
+      if (prep.bad.length) issues.push(`AC theorems work on <b>linear circuits in the sinusoidal steady state</b>: R, L, C, mutual inductances, sine / cosine / DC sources, dependent sources, switches and meters. These parts can't be handled: ${esc(prep.bad.join(', '))}.`);
+      if (!prep.targets.length) issues.push('Add a resistor, inductor or capacitor: the theorem finds the current or voltage of one of them (the load).');
+      else if (!prep.sources.length) issues.push('There is no independent source, so every current is zero.');
+    } else {
       if (prep.bad.length) issues.push(`Network theorems work on <b>linear DC circuits</b>: resistors, DC voltage and current sources, switches and meters. These parts can't be handled: ${esc(prep.bad.join(', '))}.`);
       if (!prep.targets.length) issues.push('Add a resistor: the theorem finds the current or voltage of a resistor (the load).');
       else if (!prep.sources.length) issues.push('There is no DC voltage or current source, so every current is zero.');
     }
     const blocked = !this.ed.doc.elements.length || prep.bad.length > 0 || !prep.targets.length;
     body.innerHTML = `
-      <p class="an-help">Solve this circuit by hand, the way it is done in class: pick a network theorem, pick the resistor you want, and follow every step — each one with its circuit drawn — to the final equivalent circuit and the answer.</p>
+      <p class="an-help">${this.ac ? 'This is an <b>AC circuit</b>: it is solved in the <b>phasor domain</b>, the way Alexander &amp; Sadiku do it — transform the circuit (V<sub>m</sub>∠φ, jωL, 1/(jωC)), solve it, and turn the phasor back into a sinusoid. Pick a method and the part you want.' : 'Solve this circuit by hand, the way it is done in class: pick a network theorem, pick the resistor you want, and follow every step — each one with its circuit drawn — to the final equivalent circuit and the answer.'}</p>
       ${issues.map((t) => `<div class="th-warn">${icon('info', 16)}<span>${t}</span></div>`).join('')}
-      ${[['Network theorems', THEOREMS.filter((t) => !t.method)], ['Analysis methods', THEOREMS.filter((t) => t.method)]].map(([head, list]) => `
+      ${[['Network theorems', this.list().filter((t) => !t.method)], ['Analysis methods', this.list().filter((t) => t.method)]].map(([head, list]) => `
       <h4 class="th-group">${head}</h4>
       <div class="th-cards">${list.map((t) => `
         <button class="th-card" data-th="${t.id}" ${blocked ? 'disabled' : ''}>
@@ -189,9 +195,9 @@ export class TheoremView {
     const els = this.ed.doc.elements;
     if (this.target == null || !prep.targets.some((t) => t.src === this.target)) this.target = prep.targets[prep.targets.length - 1].src;
     body.innerHTML = `
-      <p class="th-q">Which resistor? <span>Tap it on the drawing or in the list.</span></p>
+      <p class="th-q">${this.ac ? 'Which part?' : 'Which resistor?'} <span>Tap it on the drawing or in the list.</span></p>
       <canvas class="th-fig th-pick"></canvas>
-      <div class="th-chips">${prep.targets.map((t) => `<button class="chip2 ${t.src === this.target ? 'on' : ''}" data-t="${t.src}">${esc(t.name)} · ${esc(fmtSI(t.val, 'Ω', 4))}</button>`).join('')}</div>
+      <div class="th-chips">${prep.targets.map((t) => `<button class="chip2 ${t.src === this.target ? 'on' : ''}" data-t="${t.src}">${esc(t.name)} · ${esc(t.valText ?? fmtSI(t.val, 'Ω', 4))}</button>`).join('')}</div>
       <p class="th-q">Find its</p>
       <div class="th-seg">
         <button data-w="I" class="${this.want === 'I' ? 'on' : ''}">Current I</button>
@@ -200,7 +206,8 @@ export class TheoremView {
       <div class="btn-row"><button class="btn primary big th-go">${icon('play', 18)} Solve step by step</button></div>`;
     const cv = body.querySelector('.th-pick');
     const draw = () => {
-      const built = boardFigure(this.ed.doc, { target: this.target, highlight: [this.target], a: -1 }, prep.net);
+      const built = this.ac ? this.figure({ kind: 'board', phasor: true, omega: prep.omegas.length === 1 ? prep.omegas[0] : null, target: this.target, highlight: [this.target], a: -1 })
+        : boardFigure(this.ed.doc, { target: this.target, highlight: [this.target], a: -1 }, prep.net);
       this.pickView = drawFigure(cv, built, this.theme(), this.ed.settings, 300);
     };
     requestAnimationFrame(draw);
@@ -229,10 +236,10 @@ export class TheoremView {
     const prep = this.prep;
     const t = prep.targets.find((x) => x.src === this.target);
     prep.style = this.ed.doc.elements[this.target]?.p.style;
-    const res = runTheorem(prep, this.theorem, this.target, this.want);
+    const res = this.ac ? runACTheorem(prep, this.theorem, this.target, this.want) : runTheorem(prep, this.theorem, this.target, this.want);
     if (!res.ok) {
       body.innerHTML = `<div class="th-warn">${icon('info', 16)}<span>${esc(res.error)}</span></div>
-        <div class="btn-row"><button class="btn" data-x="target">${icon('back', 16)} Choose another resistor</button></div>`;
+        <div class="btn-row"><button class="btn" data-x="target">${icon('back', 16)} ${this.ac ? 'Choose another part' : 'Choose another resistor'}</button></div>`;
       body.querySelector('[data-x=target]').addEventListener('click', () => this.go('target'));
       return;
     }
@@ -244,7 +251,7 @@ export class TheoremView {
         <small>I<sub>L</sub> = ${esc(fmtSI(res.answer.I, 'A', 4))} · V<sub>L</sub> = ${esc(fmtSI(res.answer.V, 'V', 4))} · P<sub>L</sub> = ${esc(fmtSI(res.answer.P, 'W', 4))}</small>`;
     body.innerHTML = `
       <div class="th-answer">
-        <span>${esc(THEOREMS.find((x) => x.id === this.theorem).short)} · ${esc(t.name)} (${esc(fmtSI(t.val, 'Ω', 4))})</span>
+        <span>${esc(this.list().find((x) => x.id === this.theorem).short)} · ${esc(t.name)} (${esc(t.valText ?? fmtSI(t.val, 'Ω', 4))})</span>
         ${head}
       </div>
       ${res.steps.map((s) => {
@@ -260,7 +267,7 @@ export class TheoremView {
       }).join('')}
       <div class="btn-row th-end">
         <button class="btn" data-x="pick">${icon('layers', 16)} Another theorem</button>
-        <button class="btn" data-x="target">${icon('target', 16)} Another resistor</button>
+        <button class="btn" data-x="target">${icon('target', 16)} ${this.ac ? 'Another part' : 'Another resistor'}</button>
         <button class="btn primary" data-x="run">${icon('play', 16)} Run the circuit</button>
       </div>`;
     body.querySelector('[data-x=pick]').addEventListener('click', () => this.go('pick'));
@@ -270,7 +277,7 @@ export class TheoremView {
     const draw = (i) => {
       const s = res.steps[i], cv = cvs[i].querySelector('canvas');
       if (!cv) return;
-      const built = s.fig.kind === 'board' ? boardFigure(this.ed.doc, s.fig, prep.net, this.method) : ladderFigure(s.fig);
+      const built = this.figure(s.fig);
       if (!built) { cv.remove(); return; }
       drawFigure(cv, built, this.theme(), this.ed.settings);
       // a tap shows it on the whole screen
@@ -298,6 +305,10 @@ export class TheoremView {
         <tbody>${b.rows.map((r, i) => `<tr class="${i === b.mark ? 'mark' : ''}">${r.map((x) => `<td>${esc(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
     }
     if (b.t === 'curve') return curveSVG(b);
+    if (b.t === 'matrix') {
+      const col = (cells) => `<span class="mx"><table>${cells.map((r) => `<tr>${(Array.isArray(r) ? r : [r]).map((x) => `<td>${mathHTML(x)}</td>`).join('')}</tr>`).join('')}</table></span>`;
+      return `<div class="th-math th-mx">${col(b.A)}${col(b.x)}<span class="mx-eq">=</span>${col(b.b)}</div>`;
+    }
     if (b.t === 'alt') {
       return `<div class="th-alt"><div class="th-seg th-mseg">${b.opts.map((o) => `<button data-m="${o.id}" class="${o.id === this.method ? 'on' : ''}">${esc(o.label)}</button>`).join('')}</div>
         ${b.opts.map((o) => `<div class="th-alt-b" data-b="${o.id}" ${o.id === this.method ? '' : 'hidden'}>${o.blocks.map((x) => this.block(x)).join('')}</div>`).join('')}</div>`;
@@ -306,6 +317,23 @@ export class TheoremView {
   }
 
   theme() { return THEMES[this.ed.settings.theme] || THEMES.dark; }
+
+  /** the theorems for this circuit: the DC ones, or the phasor ones for an AC circuit */
+  list() { return this.ac ? AC_THEOREMS : THEOREMS; }
+
+  /** a step's drawing: the board changed (in the phasor domain for an AC step), or an equivalent */
+  figure(fig) {
+    const prep = this.prep;
+    if (fig.kind === 'equiv') return acEquivalentFigure(fig, this.ed.doc);
+    if (fig.kind !== 'board') return ladderFigure(fig);
+    if (!prep.ac) return boardFigure(this.ed.doc, fig, prep.net, this.method);
+    // the AC network seen as boardFigure expects it: the load and the drawing's points
+    const T = prep.net.elems.find((e) => e.src === fig.target && e.kind === 'Z');
+    const net = { posts: prep.net.posts, nodePos: prep.net.nodePos, elems: T ? [{ src: T.src, kind: 'R', n: T.n }] : [] };
+    const built = boardFigure(this.ed.doc, fig, net, this.method);
+    if (fig.phasor) { built.doc.domain = 'phasor'; built.doc.forceOmega = fig.omega ?? null; }
+    return built;
+  }
 
   /** Back to the board, running, with the load selected so its live reading shows. */
   runCircuit() {

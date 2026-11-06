@@ -421,8 +421,9 @@ export class UARTTx extends Chip {
   makeBits() {
     const bits = [1, 1], txt = String(this.p.text ?? '');
     for (const ch of txt) bits.push(...frame(ch.charCodeAt(0) & 255, this.p.parity, Math.round(this.p.stops)));
-    const idle = Math.ceil(this.p.gap * this.p.baud);
-    for (let k = 0; k < idle; k++) bits.push(1);
+    // the pause after the message is a count of idle (high) bits, not a list of them: a long pause at
+    // a fast baud rate (10 s at 10 Mbaud) was 10⁸ entries and froze the app
+    this.idle = Math.max(0, Math.ceil(this.p.gap * this.p.baud) || 0);
     this.bits = bits;
   }
   // EN has a 100 kΩ pull-up to 5 V: unconnected means enabled
@@ -440,9 +441,10 @@ export class UARTTx extends Chip {
     if (!en) { this.t0 = null; if (!this.out[0]) { this.out = [true]; s.event = true; } return; }
     this.t0 ??= s.tNext;
     let k = Math.floor((s.tNext - this.t0) * this.p.baud);
-    if (k >= this.bits.length) k = this.p.repeat ? k % this.bits.length : this.bits.length - 1;
+    const n = this.bits.length + this.idle;
+    if (k >= n) k = this.p.repeat ? k % n : n - 1;
     this.k = k;
-    const o = !!this.bits[k];
+    const o = k >= this.bits.length || !!this.bits[k];
     if (o !== this.out[0]) { this.out = [o]; s.event = true; }
   }
   accept(s) { super.accept(s); this.postCurrents[0] = (s.v(this.nodes[0]) - 5) * 1e-5; }

@@ -1,7 +1,10 @@
 // Canvas renderer: grid, wires, components, animated current, overlays.
 
 import { GRID } from '../elements/index.js';
-import { fmtShort, fmtSI } from '../engine/units.js';
+import { fmtSI } from '../engine/units.js';
+import { VIEW } from '../elements/base.js';
+import { isPhasorDoc, docOmega } from './phasor-view.js';
+import { fmtPhasor } from '../engine/phasor.js';
 
 const key = (x, y) => Math.round(x) + ',' + Math.round(y);
 
@@ -382,7 +385,7 @@ function sideLayout(doc, settings, lk) {
   };
   const out = [];
   doc.elements.forEach((e, i) => {
-    const val = e.valueLabel();
+    const val = e.shownLabel();
     const txt = settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
     if (!txt) { out.push({ e, side: null, r: null }); return; }
     const [sx, sy] = e.labelSide();
@@ -450,6 +453,8 @@ export class Renderer {
   draw(st) {
     const { ctx, dpr } = this;
     const th = st.theme;
+    // AC circuit in the phasor domain: parts labelled as the book's frequency-domain drawing
+    VIEW.omega = isPhasorDoc(st.doc) ? docOmega(st.doc) : null;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = th.bg;
     ctx.fillRect(0, 0, this.cw, this.ch);
@@ -616,8 +621,9 @@ export class Renderer {
       this.g.line(x - 4, y - 4, x + 4, y + 4, '#ef4444', 1.4);
       this.g.line(x - 4, y + 4, x + 4, y - 4, '#ef4444', 1.4);
       const age = t - (w.burntWall || -99);
-      if (age < 8) drawSmoke(ctx, x, y, t, 1 - age / 8, w.id);
-      if (age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, x + k * 9, y, 7 * (1 - age / 3), t, w.id * 3 + k);
+      // age < 0: a picture drawn on another clock (a thumbnail at t = 0): only the burnt wire, no fire
+      if (age >= 0 && age < 8) drawSmoke(ctx, x, y, t, 1 - age / 8, w.id);
+      if (age >= 0 && age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, x + k * 9, y, 7 * (1 - age / 3), t, w.id * 3 + k);
       break;
     }
   }
@@ -647,10 +653,11 @@ export class Renderer {
       const [x1, y1, x2, y2] = e.worldBox(), cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, r = Math.max(x2 - x1, y2 - y1) / 2;
       if (e.damaged) {
         g.glow(cx, cy, r * 1.1, '30,20,12', 0.75); // soot
+        // age < 0: a picture drawn on another clock (a thumbnail at t = 0) shows the burnt part, no fire
         const age = t - (e.damaged.wall ?? -99);
-        if (age < 0.35) g.glow(cx, cy, r * 2.4, '255,240,180', 1 - age / 0.35); // the flash as it goes
-        if (age < 6) drawSmoke(ctx, cx, cy - r * 0.3, t, 1 - age / 6, e.id);
-        if (age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, cx + k * r * 0.4, cy, (e.fire !== undefined ? 9 : 7) * (1 - age / 3), t, e.id * 3 + k);
+        if (age >= 0 && age < 0.35) g.glow(cx, cy, r * 2.4, '255,240,180', 1 - age / 0.35); // the flash as it goes
+        if (age >= 0 && age < 6) drawSmoke(ctx, cx, cy - r * 0.3, t, 1 - age / 6, e.id);
+        if (age >= 0 && age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, cx + k * r * 0.4, cy, (e.fire !== undefined ? 9 : 7) * (1 - age / 3), t, e.id * 3 + k);
         this.badge(cx + r * 0.7, y1 - 2, '#ef4444');
         continue;
       }
@@ -785,10 +792,10 @@ export class Renderer {
   chooseLabelSides(st) {
     const doc = st.doc;
     const lk = this.lk || 1;
-    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0) + '|' + lk;
+    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0) + '|' + lk + (st.phasor && VIEW.omega != null ? '|ph' : '');
     for (const w of doc.wires) sig += '|' + w.pts.join(';');
     // only the label's length counts (labelRect): a fan's rpm ticking over must not redo this every frame
-    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + (e.sv || '') + e.valueLabel().length;
+    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + (e.sv || '') + e.shownLabel().length;
     if (this._sidesSig === sig) return;
     this._sidesSig = sig;
     for (const { e, side } of sideLayout(doc, st.settings, lk)) e.chosenSide = side;
@@ -798,7 +805,7 @@ export class Renderer {
     const th = st.theme;
     this.chooseLabelSides(st);
     for (const e of st.doc.elements) {
-      const val = e.valueLabel();
+      const val = e.shownLabel();
       const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
       if (!txt) continue;
       const o = e.labelAnchor();
@@ -821,6 +828,25 @@ export class Renderer {
       ctx.strokeText(txt, x, y); // halo keeps text legible over wires and grid
       ctx.fillStyle = col; ctx.fillText(txt, x, y);
     };
+    // phasor domain: every node voltage and part current as its phasor (peak∠angle, as the book)
+    if (st.phasor && VIEW.omega != null) {
+      const ph = st.phasor, mag = (z) => Math.hypot(z[0], z[1]);
+      let vmax = 0, imax = 0;
+      for (const L of lay.volts) vmax = Math.max(vmax, mag(ph.node(L.node)));
+      const cur = new Map();
+      for (const L of lay.amps) { const z = ph.current(L.el); cur.set(L, z); if (Number.isFinite(z[0])) imax = Math.max(imax, mag(z)); }
+      if (volts) for (const L of lay.volts) {
+        const z = ph.node(L.node);
+        put(mag(z) < 1e-8 * vmax + 1e-12 ? '0 V' : fmtPhasor(z, 'V', 4, 1), L.x, L.y, L.align, L.base, th.vLabel);
+      }
+      if (amps) for (const L of lay.amps) {
+        const z = cur.get(L);
+        if (!Number.isFinite(z[0])) continue;
+        const zero = mag(z) < 1e-8 * imax + 1e-12;
+        put(zero ? '0 A' : `${L.fwd} ${fmtPhasor(z, 'A', 4, 1)}`, L.x, L.y, L.align, L.base, th.iLabel);
+      }
+      return;
+    }
     // AC circuits: show the RMS over one supply cycle (what a meter reads), marked with "~"
     const rms = st.rms && st.rms.ready && set.acReadings !== 'inst' ? st.rms : null;
     if (volts) {
@@ -879,10 +905,10 @@ export class Renderer {
   /** Placement of live labels; recomputed only when the circuit geometry or the solver changes. */
   liveLayout(st, sim) {
     const doc = st.doc, lk = this.lk || 1;
-    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0) + '|' + lk;
+    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0) + '|' + lk + (st.phasor && VIEW.omega != null ? '|ph' : '');
     // value-label length and side matter too: turning a knob changes the label's length (its
     // text does not: a running fan's rpm changes every frame and must not redo the layout)
-    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + (e.sv || '') + e.valueLabel().length + (e.chosenSide ? e.chosenSide.join(':') : '');
+    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + (e.sv || '') + e.shownLabel().length + (e.chosenSide ? e.chosenSide.join(':') : '');
     for (const p of st.probes || []) if (p.pos) sig += '|p' + p.pos[0] + ',' + p.pos[1];
     if (this._live && this._live.sim === sim && this._live.sig === sig) return this._live;
     // as big as the labels are drawn, or smaller where readings that big would land on each other
@@ -900,7 +926,9 @@ export class Renderer {
   /** liveLayout with readings lk times their usual size: { volts, amps, lk, bad (how many land on something) }. */
   liveLayoutAt(st, sim, lk) {
     const doc = st.doc, vk = this.lk || 1; // (vk: the size the value labels are drawn at)
-    const VW = 58 * lk, VH = 13 * lk, AW = 66 * lk; // text extents for layout (widest typical reading, e.g. "→ 188.5 mA~")
+    // text extents for layout (widest typical reading, e.g. "→ 188.5 mA~"; a phasor "→ 7.59∠108.4° A")
+    const ph = !!(st.phasor && VIEW.omega != null);
+    const VW = (ph ? 74 : 58) * lk, VH = 13 * lk, AW = (ph ? 88 : 66) * lk;
     const obs = [];
     // bad: readings that land on another label or on a part's body (a wire under one is fine)
     let bad = 0;
@@ -932,7 +960,7 @@ export class Renderer {
 
     for (const e of doc.elements) {
       box(e.worldBox(), 2);
-      const val = e.valueLabel();
+      const val = e.shownLabel();
       const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
       const r = e.labelRect(txt, undefined, vk);
       if (r) { box(r, 9, 1); texts.push(r); } // a clear gap so two readings on one line never run together
@@ -949,7 +977,7 @@ export class Renderer {
     for (const e of doc.elements) {
       if (e.liveCurrent() == null) continue;
       const [sx, sy] = e.chosenSide || e.labelSide();
-      const val = e.valueLabel();
+      const val = e.shownLabel();
       const cands = [];
       const push = (x, y, align, base, pen) => cands.push({ x, y, align, base: base === 'alphabetic' ? 'bottom' : base, pen });
       const [ox, oy, oa, ob] = e.labelAnchor([-sx, -sy]);
@@ -1092,5 +1120,3 @@ export class Renderer {
   }
 }
 
-export function labelFor(e) { return e.name + (e.valueLabel() ? ' · ' + e.valueLabel() : ''); }
-export { fmtShort };

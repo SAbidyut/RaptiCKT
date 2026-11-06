@@ -2,7 +2,11 @@
 // expressions to the dependent sources, "+ vₓ −" to the voltage across a part, an arrow with its
 // "i" to the current through one, a lone "vₓ" to the node it marks, and the figure's caption.
 
-const UNIT_FOR = { resistor: ['Ω', 'S', ''], unknown: ['Ω', 'S', ''], capacitor: ['F'], inductor: ['H'], battery: ['V', ''], switch: [], opamp: [] };
+// (a coil or a capacitor in the phasor domain carries its reactance: j4 Ω, −j2.5 Ω)
+const UNIT_FOR = { resistor: ['Ω', 'S', ''], unknown: ['Ω', 'S', ''], capacitor: ['F', '-jΩ'], inductor: ['H', '+jΩ'], battery: ['V', ''], switch: [], opamp: [] };
+/** a value's unit as matched to parts: an imaginary ohm value is +jΩ (a coil) or −jΩ (a capacitor) */
+// (a j value is an impedance: its Ω may be left off or not read)
+const unitKey = (r) => (r.imag && (r.unit === 'Ω' || !r.unit) ? (r.value >= 0 ? '+jΩ' : '-jΩ') : r.unit);
 
 /** Gap between two boxes [x0, y0, x1, y1] (0 when they overlap). */
 function gap(a, b) {
@@ -30,6 +34,24 @@ function unitsFor(p) {
 export function assignLabels(S, words, arrows, H, fig) {
   const notes = [];
   const parts = S.parts.map((p, k) => ({ ...p, k })).filter((p) => p.a != null && p.b != null && p.type !== 'loose');
+  // the dots of coupled coils (the dot convention): small solid round marks on their own, by a
+  // coil's end — no label
+  const coils = parts.filter((p) => p.type === 'inductor');
+  const dots = new Map();
+  if (coils.length >= 2) {
+    words = words.filter((w) => {
+      const bw = w.x1 - w.x0 + 1, bh = w.y1 - w.y0 + 1;
+      if (w.glyphs.length !== 1 || bw > 0.85 * H || bh > 0.85 * H || Math.max(bw, bh) > 1.6 * Math.min(bw, bh) || (w.glyphs[0].area ?? bw * bh) < 0.55 * bw * bh) return true;
+      let best = null, bd = 2.2 * H;
+      for (const p of coils) for (const end of ['a', 'b']) {
+        const V = S.vertices[p[end]], d = Math.hypot(V.x - w.cx, V.y - w.cy);
+        if (d < bd) { bd = d; best = [p, end]; }
+      }
+      if (!best) return true;
+      if (!dots.has(best[0].k)) dots.set(best[0].k, best[1]);
+      return false;
+    });
+  }
   // the caption names the figure; what is written under it is the problem text, not labels
   // a number like 4.89 with no unit under the drawing is a caption whose "Figure" did not read
   for (const w of words) {
@@ -92,16 +114,26 @@ export function assignLabels(S, words, arrows, H, fig) {
     const units = unitsFor(p);
     for (const w of live) {
       if (w.read.type !== 'value') continue;
-      if (!units.includes(w.read.unit) || taken.has(w)) continue;
+      if (!units.includes(unitKey(w.read)) || taken.has(w)) continue;
       const d = gap(p.box, boxOf(w)) / H;
       if (d > 4.5) continue;
+      // a coil's value sits beside it, level with its middle; one far along its axis is more
+      // likely the mutual inductance between two coils (j3 Ω by the curved arrow)
+      const along = p.type === 'inductor' ? Math.max(0, (p.axis === 'v' ? Math.abs(w.cy - (p.box[1] + p.box[3]) / 2) - (p.box[3] - p.box[1]) / 2 : Math.abs(w.cx - (p.box[0] + p.box[2]) / 2) - (p.box[2] - p.box[0]) / 2)) / H : 0;
       // a value without its unit fits less well; a value across a wire from the part less still
-      pairs.push({ p, w, cost: d + (w.read.unit ? 0 : 0.6) - 0.1 * w.read.score });
+      pairs.push({ p, w, cost: d + 0.8 * along + (w.read.unit ? 0 : 0.6) - 0.1 * w.read.score });
     }
   }
   pairs.sort((a, b) => a.cost - b.cost);
   // (a conductance gives the resistance 1/G)
-  const valueOf = (w) => ({ text: w.read.text, value: w.read.unit === 'S' && w.read.value > 0 ? +(1 / w.read.value).toPrecision(12) : w.read.value });
+  const valueOf = (w) => {
+    const r = w.read;
+    return {
+      text: r.text, value: r.unit === 'S' && r.value > 0 ? +(1 / r.value).toPrecision(12) : r.value,
+      // phasor-domain and time-domain readings: a reactance (j4 Ω), a phasor's angle, cos 4t
+      ...(r.imag ? { reactance: true } : {}), ...(r.phase != null ? { phase: r.phase } : {}), ...(r.wave ? { wave: r.wave, omega: r.omega } : {}),
+    };
+  };
   const owner = new Map(); // word → the part it went to
   for (const { p, w } of pairs) {
     if (labels.has(p.k) || taken.has(w)) continue;
@@ -327,10 +359,39 @@ export function assignLabels(S, words, arrows, H, fig) {
       labels.get(p.k).text = `${+read.coef.toPrecision(4)}${name}`;
     } else notes.push(`What controls the dependent source "${read.text}" is not marked on the drawing: set its control on the board.`);
   }
-  // parts left without a value
-  const bare = parts.filter((p) => !labels.has(p.k) && p.type !== 'depsource' && p.type !== 'opamp' && p.out == null && !(p.type === 'diode' && !p.zener));
+  // a capacitor's −j4 Ω whose thin minus did not read (j4 Ω beside a capacitor, nearer it than
+  // to any coil): a capacitor is never +jX, so it is its −j4 Ω
+  for (const p of parts) {
+    if (p.type !== 'capacitor' || labels.has(p.k)) continue;
+    let best = null, bd = 2.5;
+    for (const w of live) {
+      if (taken.has(w) || w.read.type !== 'value' || unitKey(w.read) !== '+jΩ') continue;
+      const d = gap(p.box, boxOf(w)) / H;
+      if (d >= bd || coils.some((q) => gap(q.box, boxOf(w)) / H <= d)) continue;
+      bd = d; best = w;
+    }
+    if (!best) continue;
+    taken.add(best);
+    labels.set(p.k, { text: '−' + best.read.text.replace(/^[−-]/, ''), value: -Math.abs(best.read.value), reactance: true });
+  }
+  // coupled coils: a reactance (or an M in henries) left over between two coils is their mutual
+  // inductance, the two coils nearest it; the dots say which ends are in phase
+  const mutuals = [];
+  if (coils.length >= 2) {
+    for (const w of live) {
+      if (taken.has(w) || w.read.type !== 'value' || !(unitKey(w.read) === '+jΩ' || w.read.unit === 'H')) continue;
+      const near = coils.map((p) => ({ p, d: gap(p.box, boxOf(w)) / H })).sort((a, b) => a.d - b.d);
+      if (near[1].d > 9) continue; // (its label is printed by the curved arrow, which may arc well out)
+      taken.add(w);
+      mutuals.push({ a: near[0].p.k, b: near[1].p.k, value: w.read.value, reactance: !!w.read.imag, text: w.read.text });
+    }
+    for (const [k, end] of dots) labels.set(k, { ...(labels.get(k) || {}), dot: end });
+    if (mutuals.length && dots.size < 2) notes.push('The dots of the coupled coils could not all be seen: check their ends (each coil’s Dot setting) — they set the sign of M.');
+  }
+  // parts left without a value (a dot alone is no value)
+  const bare = parts.filter((p) => !(labels.has(p.k) && labels.get(p.k).value != null) && p.type !== 'depsource' && p.type !== 'opamp' && p.out == null && !(p.type === 'diode' && !p.zener));
   if (bare.length) notes.push(`${bare.length} part${bare.length > 1 ? 's have' : ' has'} no readable value; a default was used — tap ${bare.length > 1 ? 'them' : 'it'} on the board to set ${bare.length > 1 ? 'their values' : 'its value'}.`);
-  return { labels, quantities, title, notes, supplies };
+  return { labels, quantities, title, notes, supplies, mutuals };
 }
 
 function subDist(a, b) {

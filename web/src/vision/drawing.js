@@ -169,8 +169,16 @@ function lay(S, sw, labels, slants) {
   const notes = [];
   const parts = [];
   const index = new Map(); // structure part → drawing part index
+  // a two-terminal "part" joined to nothing else — no wire, no other part, at either end — is no
+  // part of the circuit: a mesh current's round arrow drawn inside its mesh, taken for a coil
+  const root = S.vertices.map((_, v) => v), find = (v) => { while (root[v] !== v) v = root[v] = root[root[v]]; return v; };
+  for (const w of S.wires) root[find(w.a)] = find(w.b);
+  const ends = new Map();
+  for (const p of S.parts) if (p.a != null && p.b != null && KIND[p.type]) for (const v of [p.a, p.b, ...(p.out != null ? [p.out] : [])]) { const r = find(v); ends.set(r, (ends.get(r) || 0) + 1); }
+  const alone = (p) => p.out == null && ends.get(find(p.a)) === 1 && ends.get(find(p.b)) === 1;
   S.parts.forEach((p, k) => {
     if (p.a == null || p.b == null || !KIND[p.type]) return;
+    if (alone(p)) return;
     const kind = KIND[p.type](p);
     const A = at[p.a], B = at[p.b];
     if (!A || !B || (A.x === B.x && A.y === B.y)) { notes.push('A part with both ends on one point was left out.'); return; }
@@ -199,7 +207,12 @@ function lay(S, sw, labels, slants) {
     if (p.unsure) notes.push(`The + of the source at ${describe(p, S)} could not be seen; + was put at its ${polarity === 'from' ? 'first' : 'second'} end.`);
     if (p.type === 'unknown') notes.push(`A part ${describe(p, S)} could not be recognised and was read as a resistor.`);
     index.set(k, parts.length);
-    parts.push({ kind, text: L.text || '', value: L.value ?? defaultValue(kind), from: { ...A }, to: { ...B }, polarity, control: L.control || '', a: p.a, b: p.b, d: p.axis === 'd' });
+    parts.push({
+      kind, text: L.text || '', value: L.value ?? defaultValue(kind), from: { ...A }, to: { ...B }, polarity, control: L.control || '', a: p.a, b: p.b, d: p.axis === 'd',
+      // the phasor and time domains: a reactance (j4 Ω), a source's angle and its cos / sin at ω, a coil's dot
+      ...(L.reactance ? { reactance: true } : {}), ...(L.phase != null ? { phase: L.phase } : {}), ...(L.wave ? { wave: L.wave, omega: L.omega } : {}),
+      ...(L.dot ? { dot: L.dot === 'a' ? 'from' : 'to' } : {}),
+    });
   });
   let wires = [];
   for (const wv of S.wires) {
@@ -214,7 +227,7 @@ function lay(S, sw, labels, slants) {
  * The drawing for buildFromDrawing: { title, parts, wires, ground, quantities, asked }, plus
  * notes on what was unsure. `labels` (optional) gives each part's text, value and control.
  */
-export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Map(), quantities = [], asked = [], supplies = [] } = {}) {
+export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Map(), quantities = [], asked = [], supplies = [], mutuals = [] } = {}) {
   // what was drawn slanting stays so (the board has slanted parts and wires) when, its ends kept
   // on different rows and columns, every such line can run straight; else all is laid along
   // the grid, the slanting lines led round
@@ -242,7 +255,9 @@ export function toDrawing(S, sw, { title = 'Circuit from photo', labels = new Ma
     const d = parts[i];
     return { name: q.name, kind: q.kind, at: d ? { ...d.from } : { x: 0, y: 0 }, part: i ?? -1, positive: q.positive || 'none' };
   }).filter((q) => q.kind === 'node_voltage' || q.part >= 0);
-  return { title, parts, wires, ground, supplies: rails, quantities: qs, asked, notes, index };
+  // mutual inductances between two coils (parts' indices), M in henries or its reactance jωM
+  const ms = mutuals.map((m) => ({ a: index.get(m.a), b: index.get(m.b), value: m.value, reactance: m.reactance, text: m.text })).filter((m) => m.a != null && m.b != null);
+  return { title, parts, wires, ground, supplies: rails, quantities: qs, asked, notes, index, mutuals: ms };
 }
 
 /**

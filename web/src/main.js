@@ -74,13 +74,15 @@ class App {
   show(name) {
     this.current = name;
     for (const s of this.el.querySelectorAll('.screen')) s.classList.toggle('active', s.classList.contains(name));
+    if (name === 'editor') this.editor.wake(); // it waited while another screen was over it
   }
 
   // ------------------------------------------------------------ navigation
   goHome() {
     const doc = this.editor.doc;
     this.editor.close();
-    if (doc.elements.length && !doc.isExample) this.saveToLibrary(doc, true);
+    // not silent: when the storage is full the user must hear that this circuit was not saved
+    if (doc.elements.length && !doc.isExample) this.saveToLibrary(doc);
     if (doc.elements.length) store.autosave(doc.toJSON());
     this.show('home');
     this.home.render();
@@ -122,7 +124,8 @@ class App {
   resume() {
     const a = store.loadAutosave();
     if (!a) return;
-    const d = CircuitDoc.fromJSON(a);
+    let d;
+    try { d = CircuitDoc.fromJSON(a); } catch (e) { alert('Could not open the last circuit: ' + e.message); return; }
     const match = store.circuits().find((c) => c.name === d.name && JSON.stringify(c.data.elements) === JSON.stringify(a.elements));
     d.id = match ? match.id : this.uid();
     d.folder = match ? match.folder || null : null;
@@ -228,8 +231,8 @@ class App {
     if (this.current === 'loadflow') { if (!this.loadflow.back()) this.closeLoadFlow(); return true; }
     if (this.current === 'photo') { if (!this.photo.back()) this.closePhoto(); return true; }
     if (this.current === 'editor') { if (!this.editor.back()) this.goHome(); return true; }
-    if (this.current === 'home' && this.home.tab === 'library' && this.home.upOne()) return true;
-    if (this.current === 'home' && this.home.tab === 'manual' && this.manual.back()) return true; // up one manual page // leave select mode, then folders
+    if (this.current === 'home' && this.home.tab === 'library' && this.home.upOne()) return true; // leave select mode, then folders
+    if (this.current === 'home' && this.home.tab === 'manual' && this.manual.back()) return true; // up one manual page
     if (this.current === 'home' && this.home.tab !== 'home') { this.home.tab = 'home'; this.home.render(); return true; }
     return false;
   }
@@ -286,27 +289,47 @@ class App {
   loadText(name, text) {
     let o;
     try { o = JSON.parse(text); } catch { alert('This file is not a RaptiCKT circuit.'); return; }
-    if (o.backup && Array.isArray(o.circuits)) {
+    if (o && o.backup && Array.isArray(o.circuits)) {
       let n = 0;
       // recreate the folders first (new ids, so a restore never overwrites what is already there)
       const map = new Map();
       const olds = Array.isArray(o.folders) ? o.folders : [];
       for (const f of olds) map.set(f.id, this.uid());
       for (const f of olds) store.addFolder(map.get(f.id), String(f.name || 'Folder'), map.get(f.parent) || null);
+      let failed = 0;
       for (const [i, c] of o.circuits.entries()) {
-        try { const d = CircuitDoc.fromJSON(c); d.id = this.uid(); d.folder = (o.placement && map.get(o.placement[i])) || null; this.saveToLibrary(d, true); n++; } catch { /* skip */ }
+        if (!c || typeof c !== 'object' || !Array.isArray(c.elements)) { failed++; continue; } // not a circuit
+        try {
+          const d = CircuitDoc.fromJSON(c);
+          d.id = this.uid(); d.folder = (o.placement && map.get(o.placement[i])) || null;
+          if (this.saveToLibrary(d, true)) n++; else failed++;
+        } catch { failed++; }
       }
-      alert(`Restored ${n} circuit${n === 1 ? '' : 's'}.`);
+      alert(`Restored ${n} circuit${n === 1 ? '' : 's'}.` + (failed ? ` ${failed} could not be restored${n ? ' (damaged, or the storage is full)' : ''}.` : ''));
       if (this.current === 'home') this.home.render();
       return;
     }
-    if (!o.elements) { alert('This file is not a RaptiCKT circuit.'); return; }
-    const d = CircuitDoc.fromJSON(o);
+    // a load-flow system exported by the app: open it in Load Flow Analysis
+    const lf = o && typeof o === 'object' ? o.loadflow || o : null;
+    if (lf && !Array.isArray(o.elements) && Array.isArray(lf.buses) && Array.isArray(lf.branches)) {
+      if (this.current === 'editor') { const old = this.editor.doc; if (old.elements.length && !old.isExample) this.saveToLibrary(old, true); }
+      this.openLoadFlow();
+      try { this.loadflow.importSystem(lf, name); } catch (e) { alert('Could not import: ' + e.message); }
+      return;
+    }
+    if (!o || typeof o !== 'object' || !Array.isArray(o.elements)) { alert('This file is not a RaptiCKT circuit.'); return; }
+    let d;
+    try { d = CircuitDoc.fromJSON(o); } catch (e) { alert('This circuit file is damaged and could not be opened (' + e.message + ').'); return; }
     if (!o.name && name) d.name = name.replace(/\.(rckt|json)$/i, '');
     d.id = this.uid();
     d.folder = this.current === 'home' && this.home.tab === 'library' ? this.home.folder : null; // imported into the folder being viewed
     this.saveToLibrary(d, true);
-    if (this.current === 'editor') this.editor.close();
+    if (this.current === 'editor') {
+      // the circuit being edited is kept, as when a photo or an example from the manual is opened
+      const old = this.editor.doc;
+      this.editor.close();
+      if (old.elements.length && !old.isExample) this.saveToLibrary(old, true);
+    }
     this.openEditor(d);
   }
 
