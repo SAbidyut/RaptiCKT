@@ -55,6 +55,8 @@ export class CircuitDoc {
     this.description = '';
     this.folder = null; // My Circuits folder id (not part of the saved file)
     this.bigLabels = false; // values drawn a third bigger (a circuit read from a photo)
+    this.domain = 'time';   // AC circuits: 'time' (the usual values) or 'phasor' (20∠0° V, j4 Ω)
+    this.omega = 0;         // ω in rad/s for the phasor domain when no source gives one
   }
 
   add(e) { this.elements.push(e); return e; }
@@ -87,7 +89,7 @@ export class CircuitDoc {
     const grow = ([a, b, c, d]) => { x1 = Math.min(x1, a); y1 = Math.min(y1, b); x2 = Math.max(x2, c); y2 = Math.max(y2, d); };
     for (const e of this.elements) {
       grow(e.worldBox());
-      const r = e.labelRect(e.valueLabel());
+      const r = e.labelRect(e.shownLabel());
       if (r) grow(r);
       // room for the live current reading on the opposite side
       if (e.liveCurrent() != null) { const [sx, sy] = e.labelSide(); grow(e.labelRect('↓ 000.0 mA', [-sx, -sy])); }
@@ -112,6 +114,8 @@ export class CircuitDoc {
       }),
       sim: this.simSettings,
       bl: this.bigLabels ? 1 : undefined,
+      dm: this.domain === 'phasor' ? 'p' : undefined, // AC circuit shown in the phasor domain
+      om: this.omega > 0 ? this.omega : undefined,      // its ω when no source gives one
     };
   }
 
@@ -144,6 +148,8 @@ export class CircuitDoc {
       .filter((p) => (p.kind === 'node' ? !!p.pos : p.el != null));
     d.simSettings = o.sim && typeof o.sim === 'object' ? o.sim : {};
     d.bigLabels = !!o.bl;
+    d.domain = o.dm === 'p' ? 'phasor' : 'time';
+    d.omega = +o.om > 0 ? +o.om : 0;
     d.assignNames();
     return d;
   }

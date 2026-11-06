@@ -243,7 +243,7 @@ export function drawFigure(cv, built, theme, settings, maxH = 320, { fill = fals
 function drawingBox(doc, lk = 1) {
   let b = doc.bounds() || [0, 0, 100, 100];
   for (const e of doc.elements) {
-    const val = e.valueLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
+    const val = e.shownLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
     const q = e.labelRect(txt, undefined, lk);
     if (q) b = [Math.min(b[0], q[0]), Math.min(b[1], q[1]), Math.max(b[2], q[2]), Math.max(b[3], q[3])];
   }
@@ -348,7 +348,7 @@ function blockers(doc, k, out) {
   if (doc) {
     for (const e of doc.elements) {
       add(e.worldBox(), 2);
-      const val = e.valueLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
+      const val = e.shownLabel(), txt = !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
       const q = e.labelRect(txt);
       if (q) add([q[0] - 2, q[1] - 2, q[2] + 2, q[3] + 2], 4);
     }

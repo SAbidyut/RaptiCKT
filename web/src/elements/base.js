@@ -2,6 +2,12 @@
 
 import { fmtQty } from '../engine/units.js';
 
+/**
+ * How parts are labelled on the board: omega != null shows the phasor domain at that ω
+ * (label(e, omega) gives the text, set by ui/phasor-view.js); null the usual values.
+ */
+export const VIEW = { omega: null, label: null };
+
 export const GRID = 20;
 
 const REGISTRY = new Map();
@@ -74,6 +80,9 @@ export class Element {
   }
 
   get cls() { return this.constructor; }
+
+  /** The value written beside the part: its own label, or the phasor-domain one (VIEW). */
+  shownLabel() { return VIEW.omega != null && VIEW.label ? VIEW.label(this, VIEW.omega) : this.valueLabel(); }
 
   // ----------------------------------------------------------- geometry
   /** posts in local coordinates (unrotated) */

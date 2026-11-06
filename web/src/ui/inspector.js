@@ -4,6 +4,7 @@ import { fmtSI, parseSI, fmtQty, isPlainUnit } from '../engine/units.js';
 import { icon } from './icons.js';
 import { Renderer } from './render.js';
 import { CABLE_TYPES, SIZES, SHAPES, INSTALL, WIRE_PRESETS, normSpec, cableInfo, cableLabel } from '../elements/cables.js';
+import { phasorFields, phasorReadings, docOmega } from './phasor-view.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -134,6 +135,7 @@ export class Inspector {
         </div>
         <div class="insp-body">
           ${e.canSlant() && !e.damaged ? `<div class="prop num insp-angle"><span>Angle</span><div class="num-in"><button data-ang="-15" title="15° back">−15°</button><input type="text" inputmode="decimal" value="${esc(this.ed.angleText(e).replace('°', ''))}"><em>°</em><button data-ang="15" title="15° on">+15°</button></div></div>` : ''}
+          ${this.phasorRows()}
           ${props.map((p) => this.propRow(p)).join('')}
           ${this.faultRows()}
           <p class="insp-desc">${esc(C.description || '')}</p>
@@ -141,6 +143,7 @@ export class Inspector {
       </div>`;
     this.host.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this.action(b.dataset.a)));
     this.host.querySelectorAll('.prop[data-k]').forEach((row) => this.bindRow(row));
+    this.host.querySelectorAll('.prop[data-pk]').forEach((row) => this.bindPhasorRow(row));
     // any angle: typed (to the nearest the grid allows, within a few degrees), or ±15°
     const ang = this.host.querySelector('.insp-angle');
     if (ang) {
@@ -163,6 +166,27 @@ export class Inspector {
     }));
     this.readKey = null;
     this.updateReadings();
+  }
+
+  /** In the phasor domain: the part's phasor / impedance, typed the book's way (20∠30, j4, −j2.5). */
+  phasorRows() {
+    if (this.ed.doc.domain !== 'phasor') return '';
+    this.pfields = phasorFields(this.el, docOmega(this.ed.doc));
+    if (!this.pfields.length) return '';
+    return `<div class="insp-phasor">${this.pfields.map((f) => `<div class="prop num" data-pk="${f.key}"><span>${esc(f.label)}</span><div class="num-in"><input type="text" value="${esc(f.text)}"><em>${esc(f.unit)}</em></div></div>`).join('')}</div>`;
+  }
+
+  bindPhasorRow(row) {
+    const f = (this.pfields || []).find((x) => x.key === row.dataset.pk), inp = row.querySelector('input');
+    if (!f) return;
+    inp.addEventListener('change', () => {
+      const out = f.apply(inp.value);
+      if (typeof out === 'string') { this.ed.toast(out); inp.value = f.text; return; }
+      this.ed.checkpoint(); // one undo step for all the values it sets
+      for (const [k, v] of Object.entries(out)) this.ed.setParam(this.el, k, v, true);
+      this.ed.computeTiming?.();
+      this.render();
+    });
   }
 
   /** terminal names for the fault selector */
@@ -289,11 +313,13 @@ export class Inspector {
     const live = this.ed.running && sim && sim.ready;
     let r = [];
     if (live) { try { r = this.el.readings(sim); } catch { r = []; } }
+    // the phasor domain: the part's voltage and current phasors first
+    if (live && this.ed.doc.domain === 'phasor') { const ph = this.ed.phasorNow(); if (ph) r = [...phasorReadings(this.el, ph).map(([k, t]) => [k, t, '']), ...r]; }
     const fmt = ([, v, u]) => (typeof v !== 'number' ? String(v) : isPlainUnit(u) ? fmtQty(v, u) : fmtSI(v, u, 4));
     // quick bar: value label + first two readings, updated via textContent (no relayout of the bar)
     const q = this.quick.querySelector('.qb-read');
     if (q) {
-      const val = this.el.valueLabel();
+      const val = this.el.shownLabel();
       // compact: values of the first two readings (e.g. "3.837 V · 816 µA")
       const nums = r.filter((x) => typeof x[1] === 'number').slice(0, 2).map(fmt);
       q.textContent = this.el.damaged ? 'Burnt out — tap Replace' : live && r.length ? (nums.length ? nums.join(' · ') : fmt(r[0])) : val || 'Tap ⚙ to edit';

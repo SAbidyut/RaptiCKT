@@ -31,19 +31,19 @@ export function num(v, digits = 4) {
   return s.replace(/^-/, '−');
 }
 /** an angle in degrees, between −180 and 180, the way the book prints it */
-export function ang(deg, digits = 4) {
+export function ang(deg, digits = 4, dec = null) {
   let a = ((deg + 180) % 360 + 360) % 360 - 180;
   if (Math.abs(a + 180) < 1e-9) a = 180;
-  const s = Math.abs(a) >= 100 ? +a.toFixed(digits > 3 ? 2 : 1) : +a.toPrecision(digits);
+  const s = dec != null ? +a.toFixed(dec) : Math.abs(a) >= 100 ? +a.toFixed(digits > 3 ? 2 : 1) : +a.toPrecision(digits);
   return num(s, 6) + DEG;
 }
 
 /** "20∠30° V" — magnitude with an SI prefix when it needs one, angle in degrees. */
-export function fmtPhasor(z, unit = '', digits = 4) {
+export function fmtPhasor(z, unit = '', digits = 4, angDec = null) {
   const m = C.abs(z);
   if (m < 1e-12) return `0 ${unit}`.trim();
   const mag = m >= 1e-3 && m < 1e4 ? num(m, digits) : fmtSI(m, '', digits).replace(/\s+/g, '');
-  return `${mag}∠${ang(C.arg(z), digits)}${unit ? ' ' + unit : ''}`;
+  return `${mag}∠${ang(C.arg(z), digits, angDec)}${unit ? ' ' + unit : ''}`;
 }
 
 /** "4 − j3", "j8", "−j2.5", "12" — a complex number in rectangular form. */

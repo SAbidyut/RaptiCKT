@@ -18,6 +18,8 @@ import { RmsTracker, acFrequency } from './rms.js';
 import { WireHeat } from './wireheat.js';
 import { WIRE_PRESETS, cableLabel } from '../elements/cables.js';
 import { pickRoute, simpleRoutes, stretchWire, exitAt, wireContext, routeCost, routeScore, straightClear, partsHit, freeRoute } from './autoroute.js';
+import { VIEW } from '../elements/base.js';
+import { docOmega, sourceOmegas } from './phasor-view.js';
 
 // two-terminal parts outside the Sources / Batteries / Diodes / Meters categories that still have a polarity
 const POLAR_TYPES = new Set(['ecap', 'tantalum', 'supercap', 'photodiode', 'solar', 'pvmodule', 'thermocouple', 'led', 'irled', 'laser', 'piezosens', 'tacho', 'ph', 'varactor', 'lm4040', 'buzzer', 'piezobuzz', 'motor', 'dcgen', 'dcsep', 'dcshunt', 'dcseries', 'dualpsu', 'benchpsu']);
@@ -176,6 +178,8 @@ export class Editor {
     this.wireFrom = null;
     this.setMode('wire');
     this.renderer.maxDpr = undefined;
+    VIEW.omega = doc.domain === 'phasor' ? docOmega(doc) : null; // labels as this circuit shows them
+    this.phasorCache = null;
     this.q('.doc-name').textContent = doc.name;
     this.q('.doc-sub').textContent = doc.description ? doc.description.slice(0, 60) : `${doc.elements.length} components`;
     this.inspector.show(null);
@@ -708,6 +712,7 @@ export class Editor {
       probes: this.doc.probes, hoverPost: this.hoverPost, wireFrom: this.wireFrom, marquee: this.marquee, meterProbes: this.meter.open ? this.meterProbes : null,
       vScale: this.vScale, iScale: this.iScale, iMin: this.iScale * 1e-3 + 1e-12, errorEl: this.errorEl, rms: this.running ? this.rms : null,
       handles: this.stretchHandles(),
+      phasor: this.phasorNow(),
     };
   }
 
@@ -1549,6 +1554,8 @@ export class Editor {
     if (m.classList.contains('open')) { this.closeMenu(); return; }
     const items = [
       ['book', 'theorem', 'Run with theorem'],
+      [this.doc.domain === 'phasor' ? 'check' : 'wave', 'phasor', 'AC circuit: phasor domain'],
+      [this.doc.domain === 'phasor' ? 'wave' : 'check', 'timedomain', 'AC circuit: time domain'],
       ['save', 'save', 'Save to My Circuits'], ['copy', 'saveas', 'Save as copy'], ['edit', 'info', 'Circuit name & notes'],
       ['download', 'export', 'Export file (.rckt)'], ['upload', 'import', 'Open file…'], ['camera', 'photo', 'Circuit from photo'], ['share', 'share', 'Share circuit'],
       ['code', 'netlist', 'SPICE netlist'], ['camera', 'shot', 'Export image (PNG)'], ['table', 'op', 'Operating point'],
@@ -1579,6 +1586,8 @@ export class Editor {
       case 'netlist': this.analysis.open('net'); break;
       case 'op': this.analysis.open('op'); break;
       case 'theorem': this.theorem.open(); break;
+      case 'phasor': this.setDomain('phasor'); break;
+      case 'timedomain': this.setDomain('time'); break;
       case 'repair': this.replaceAll(); break;
       case 'loadflow': app.openLoadFlow(); break;
       case 'shot': app.bridge.saveFile(this.doc.name.replace(/\W+/g, '_') + '.png', 'image/png', this.screenshot(), true); break;
@@ -1594,6 +1603,37 @@ export class Editor {
         break;
       default:
     }
+  }
+
+  /**
+   * AC circuit in the phasor domain (as the book's frequency-domain drawing: 20∠0° V, j4 Ω,
+   * −j2.5 Ω; running, the readings are phasors) or the time domain (the usual values).
+   */
+  setDomain(d) {
+    if ((this.doc.domain || 'time') === d) { this.toast(d === 'phasor' ? 'Already in the phasor domain' : 'Already in the time domain'); return; }
+    this.checkpoint();
+    this.doc.domain = d;
+    VIEW.omega = d === 'phasor' ? docOmega(this.doc) : null;
+    this.phasorSol = null;
+    this.inspector.show(this.selected());
+    this.dirtyDraw = true;
+    this.renderer._live = null;
+    if (d === 'phasor') {
+      const ws = sourceOmegas(this.doc).filter((w) => w > 0);
+      this.toast(ws.length > 1 ? `Phasor domain at ω = ${+docOmega(this.doc).toPrecision(4)} rad/s — the sources run at ${ws.length} frequencies: solve with superposition (Run with theorem)`
+        : `Phasor domain, ω = ${+docOmega(this.doc).toPrecision(4)} rad/s: values as phasors and impedances${this.running ? '' : ' — press Run for the phasor readings'}`, 4200);
+    } else this.toast('Time domain: values as they are set');
+  }
+
+  /** The phasor solution shown while running in the phasor domain (redone a few times a second). */
+  phasorNow() {
+    if (!this.running || !this.sim || !this.sim.ready || this.doc.domain !== 'phasor') return null;
+    const c = this.phasorCache;
+    if (c && c.sim === this.sim && this.frameCount - c.frame < 10) return c.sol;
+    let sol = null;
+    try { sol = this.sim.phasorSolve(docOmega(this.doc)); } catch { sol = null; }
+    this.phasorCache = { sim: this.sim, frame: this.frameCount || 0, sol };
+    return sol;
   }
 
   editInfo() {
