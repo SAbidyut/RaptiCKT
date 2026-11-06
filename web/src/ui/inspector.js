@@ -96,7 +96,6 @@ export class Inspector {
     this.host.classList.add('open');
     this.ed.root.classList.add('sheet-open');
     this.ed.knob.hide();
-    this.ed.overlayOpen('inspector');
   }
 
   closeSheet() {
@@ -105,7 +104,6 @@ export class Inspector {
     this.wires = null;
     this.host.classList.remove('open');
     this.ed.root.classList.remove('sheet-open');
-    this.ed.overlayClosed('inspector');
     const kp = this.el && this.el.knobProp();
     if (kp) this.ed.knob.show(this.el, kp);
   }
@@ -227,14 +225,15 @@ export class Inspector {
   bindRow(row) {
     const key = row.dataset.k, p = this.el.propDef(key);
     const commit = (val) => this.ed.setParam(this.el, key, val);
+    // one undo step for a change that sets several values (a model preset, a value marking the model
+    // custom): the step is taken first, then the values go in without more steps
+    const commitOne = (val) => { this.ed.checkpoint(); this.markCustom(key); this.ed.setParam(this.el, key, val, true); };
     if (p.type === 'select') {
       row.querySelector('select').addEventListener('change', (ev) => {
         const v = ev.target.value;
-        if (p.preset && p.preset[v]) {
-          this.ed.checkpoint();
-          Object.assign(this.el.p, p.preset[v]);
-        }
-        commit(v);
+        this.ed.checkpoint();
+        if (p.preset && p.preset[v]) Object.assign(this.el.p, p.preset[v]);
+        this.ed.setParam(this.el, key, v, true);
         this.render();
       });
       return;
@@ -247,18 +246,21 @@ export class Inspector {
       if (Number.isNaN(v)) { this.ed.toast('Invalid number: ' + txt.value); txt.value = fmtSI(this.el.p[key], '', 4).trim(); return; }
       if (p.min !== undefined) v = Math.max(p.min, v);
       if (p.max !== undefined) v = Math.min(p.max, v);
-      this.markCustom(key);
-      commit(v);
+      commitOne(v);
       txt.value = fmtSI(v, '', 4).trim();
       if (rng) rng.value = Math.round(toSlider(p, v) * 1000);
     });
     if (rng) {
+      // one undo step per slide, not one per movement (60 of them pushed the rest of the history out)
+      let sliding = false;
       rng.addEventListener('input', () => {
         const v = fromSlider(p, rng.value / 1000);
+        if (!sliding) { sliding = true; this.ed.checkpoint(); }
         this.markCustom(key);
-        commit(v);
+        this.ed.setParam(this.el, key, v, true);
         txt.value = fmtSI(v, '', 4).trim();
       });
+      rng.addEventListener('change', () => { sliding = false; });
     }
   }
 
@@ -342,7 +344,6 @@ export class Inspector {
     this.render();
     this.host.classList.add('open');
     this.ed.root.classList.add('sheet-open');
-    this.ed.overlayOpen('inspector');
   }
 
   renderWires() {
@@ -480,7 +481,7 @@ export class Knob {
       ev.preventDefault(); ev.stopPropagation();
       this.dial.setPointerCapture(ev.pointerId);
       last = ang(ev); acc = 0; moved = 0;
-      this.ed.checkpoint();
+      this.gesture = true; // the undo step is taken by the first change the turn makes (apply)
       this.host.classList.add('active');
     });
     this.dial.addEventListener('pointermove', (ev) => {
@@ -504,13 +505,14 @@ export class Knob {
         const d = t && t.dataset && t.dataset.d;
         if (d) this.pickDigit(+d);
       }
+      this.gesture = false;
     };
     this.dial.addEventListener('pointerup', up);
-    this.dial.addEventListener('pointercancel', () => { last = null; this.host.classList.remove('active'); });
-    this.dial.addEventListener('wheel', (ev) => { ev.preventDefault(); this.ed.checkpoint(); this.step(ev.deltaY < 0 ? 1 : -1); }, { passive: false });
+    this.dial.addEventListener('pointercancel', () => { last = null; this.gesture = false; this.host.classList.remove('active'); });
+    this.dial.addEventListener('wheel', (ev) => { ev.preventDefault(); this.gesture = true; this.step(ev.deltaY < 0 ? 1 : -1); this.gesture = false; }, { passive: false });
     host.querySelectorAll('.knob-btn').forEach((b) => {
       b.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-      b.addEventListener('click', (ev) => { ev.stopPropagation(); this.ed.checkpoint(); this.bump(b.dataset.k === '+' ? 1 : -1); });
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); this.gesture = true; this.bump(b.dataset.k === '+' ? 1 : -1); this.gesture = false; });
     });
   }
 
@@ -530,16 +532,11 @@ export class Knob {
   digit() { const v = this.el.p[this.prop.key]; return v > 0 ? Math.min(9, Math.max(1, Math.round(this.parts(v)[0]))) : 1; }
   digitAngle(d) { return ((d - 0.5) * 40 * Math.PI) / 180; }
   /**
-   * Steps of a linear knob, from the size of the value itself (not the allowed
-   * range, which can be ±10 kV): one significant digit below 10 (5 V → 6 V,
-   * 0.5 → 0.6), two from 10 up (12 V → 13 V, 230 V → 240 V). − / + move a tenth
-   * of that; whole-number quantities (counts, β…) always move by whole numbers.
-   */
-  /**
-   * Steps follow the value as it is shown (with its m / k prefix): 1–99 of a
-   * unit move one at a time, 100–999 ten at a time — 5 V → 6 V, 230 V → 240 V,
-   * 10 mA → 11 mA. Going down from 100 (or 1 k) uses the smaller step, so the
-   * dial gives 100 → 99 and not 100 → 90.
+   * Steps of a linear knob follow the value as it is shown (with its m / k prefix),
+   * not the allowed range: 1–99 of a unit move one at a time, 100–999 ten at a
+   * time — 5 V → 6 V, 230 V → 240 V, 10 mA → 11 mA. Going down from 100 (or 1 k)
+   * uses the smaller step, so the dial gives 100 → 99 and not 100 → 90. − / + move
+   * a tenth of that; whole-number quantities (counts, β…) move by whole numbers.
    */
   linSteps(n = 1) {
     const p = this.prop, v = this.el.p[p.key];
@@ -559,6 +556,8 @@ export class Knob {
     const p = this.prop, lo = p.min ?? -Infinity, hi = p.max ?? Infinity;
     v = Math.min(hi, Math.max(lo, v));
     if (v === this.el.p[p.key]) return false;
+    // one undo step per turn, tap or press, and none when the value stays as it was
+    if (this.gesture) { this.gesture = false; this.ed.checkpoint(); }
     this.ed.setParam(this.el, p.key, v, true);
     this.ed.haptic(4);
     this.update();
@@ -600,7 +599,6 @@ export class Knob {
   }
 
   pickDigit(d) {
-    this.ed.checkpoint();
     const [, e] = this.parts(this.el.p[this.prop.key]);
     this.apply(+(d * Math.pow(10, e)).toPrecision(6));
     this.update();

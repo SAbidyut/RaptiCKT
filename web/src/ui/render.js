@@ -1,7 +1,7 @@
 // Canvas renderer: grid, wires, components, animated current, overlays.
 
 import { GRID } from '../elements/index.js';
-import { fmtShort, fmtSI } from '../engine/units.js';
+import { fmtSI } from '../engine/units.js';
 
 const key = (x, y) => Math.round(x) + ',' + Math.round(y);
 
@@ -616,8 +616,9 @@ export class Renderer {
       this.g.line(x - 4, y - 4, x + 4, y + 4, '#ef4444', 1.4);
       this.g.line(x - 4, y + 4, x + 4, y - 4, '#ef4444', 1.4);
       const age = t - (w.burntWall || -99);
-      if (age < 8) drawSmoke(ctx, x, y, t, 1 - age / 8, w.id);
-      if (age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, x + k * 9, y, 7 * (1 - age / 3), t, w.id * 3 + k);
+      // age < 0: a picture drawn on another clock (a thumbnail at t = 0): only the burnt wire, no fire
+      if (age >= 0 && age < 8) drawSmoke(ctx, x, y, t, 1 - age / 8, w.id);
+      if (age >= 0 && age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, x + k * 9, y, 7 * (1 - age / 3), t, w.id * 3 + k);
       break;
     }
   }
@@ -647,10 +648,11 @@ export class Renderer {
       const [x1, y1, x2, y2] = e.worldBox(), cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, r = Math.max(x2 - x1, y2 - y1) / 2;
       if (e.damaged) {
         g.glow(cx, cy, r * 1.1, '30,20,12', 0.75); // soot
+        // age < 0: a picture drawn on another clock (a thumbnail at t = 0) shows the burnt part, no fire
         const age = t - (e.damaged.wall ?? -99);
-        if (age < 0.35) g.glow(cx, cy, r * 2.4, '255,240,180', 1 - age / 0.35); // the flash as it goes
-        if (age < 6) drawSmoke(ctx, cx, cy - r * 0.3, t, 1 - age / 6, e.id);
-        if (age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, cx + k * r * 0.4, cy, (e.fire !== undefined ? 9 : 7) * (1 - age / 3), t, e.id * 3 + k);
+        if (age >= 0 && age < 0.35) g.glow(cx, cy, r * 2.4, '255,240,180', 1 - age / 0.35); // the flash as it goes
+        if (age >= 0 && age < 6) drawSmoke(ctx, cx, cy - r * 0.3, t, 1 - age / 6, e.id);
+        if (age >= 0 && age < 3) for (let k = -1; k <= 1; k++) drawFlames(ctx, cx + k * r * 0.4, cy, (e.fire !== undefined ? 9 : 7) * (1 - age / 3), t, e.id * 3 + k);
         this.badge(cx + r * 0.7, y1 - 2, '#ef4444');
         continue;
       }
@@ -1092,5 +1094,3 @@ export class Renderer {
   }
 }
 
-export function labelFor(e) { return e.name + (e.valueLabel() ? ' · ' + e.valueLabel() : ''); }
-export { fmtShort };

@@ -74,6 +74,7 @@ class App {
   show(name) {
     this.current = name;
     for (const s of this.el.querySelectorAll('.screen')) s.classList.toggle('active', s.classList.contains(name));
+    if (name === 'editor') this.editor.wake(); // it waited while another screen was over it
   }
 
   // ------------------------------------------------------------ navigation

@@ -47,11 +47,10 @@ export class Palette {
     this.scroll = iosScroll(this.host.querySelector('.pal-grid'), this.host.querySelector('.pal-inner'));
     this.host.classList.add('open');
     this.ed.root.classList.add('pal-open');
-    this.ed.overlayOpen('palette');
     requestAnimationFrame(() => requestAnimationFrame(() => this.fill()));
   }
 
-  close() { this.host.classList.remove('open'); this.ed.root.classList.remove('pal-open'); this.ed.overlayClosed('palette'); }
+  close() { this.host.classList.remove('open'); this.ed.root.classList.remove('pal-open'); }
 
   /** Render all component icons ahead of time during idle frames. */
   prewarm() {

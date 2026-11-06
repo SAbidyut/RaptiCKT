@@ -34,11 +34,10 @@ export class TheoremView {
     this.target = pre ? pre.src : this.target != null && this.prep.targets.some((t) => t.src === this.target) ? this.target : null;
     this.stage = 'pick';
     this.host.classList.add('open');
-    this.ed.overlayOpen('theorem');
     this.render();
   }
 
-  close() { this.host.classList.remove('open'); this.ed.overlayClosed('theorem'); }
+  close() { this.host.classList.remove('open'); }
 
   /** Android back: a zoomed drawing first, then one stage back, then close. */
   back() {

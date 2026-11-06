@@ -18,7 +18,7 @@ export class Analysis {
   }
 
   get isOpen() { return this.host.classList.contains('open'); }
-  close() { this.host.classList.remove('open'); this.ed.overlayClosed('analysis'); }
+  close() { this.host.classList.remove('open'); }
 
   open(tab) {
     if (tab) this.tab = tab;
@@ -43,7 +43,6 @@ export class Analysis {
     this.host.querySelector('[data-close]').addEventListener('click', () => this.close());
     this.host.querySelectorAll('.an-tabs button').forEach((b) => b.addEventListener('click', () => { this.tab = b.dataset.t; this.renderTab(); }));
     this.host.classList.add('open');
-    this.ed.overlayOpen('analysis');
     this.renderTab();
   }
 

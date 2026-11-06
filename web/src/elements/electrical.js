@@ -742,7 +742,9 @@ class RatedLoad extends TwoTerm {
   zparts() {
     const pf = this.constructor.kind === 'R' ? 1 : this.p.pf, S = this.p.p / pf, Z = (this.p.v * this.p.v) / S;
     const R = Z * pf, X = Z * Math.sqrt(Math.max(0, 1 - pf * pf)), w = TAU * this.p.freq;
-    return { R, L: X / w, C: X > 0 ? 1 / (w * X) : Infinity };
+    // pf = 1 on the capacitive load: its capacitor is a short (a huge C, 1 ppm of Z), not an infinite
+    // one, which made every reading NaN
+    return { R, L: X / w, C: 1 / (w * Math.max(X, Z * 1e-6)) };
   }
   branchCount() { return this.constructor.kind === 'RL' ? 1 : 0; }
   internalNodeCount() { return this.constructor.kind === 'RC' ? 1 : 0; }

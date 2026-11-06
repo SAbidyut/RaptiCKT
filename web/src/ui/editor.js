@@ -37,7 +37,6 @@ export class Editor {
     this.running = false;
     this.paused = false;
     this.multi = false;
-    this.overlays = new Set();
     this.vScale = 5; this.iScale = 0.01;
     this.buildDOM();
     this.renderer = new Renderer(this.canvas);
@@ -166,6 +165,7 @@ export class Editor {
 
   // -------------------------------------------------------------- lifecycle
   open(doc, { autoRun = false, note = '' } = {}) {
+    if (this.active) this.close(); // another circuit opened over this one (a shared file, say): end it first
     this.stopSound();
     this.doc = doc;
     this.doc.assignNames();
@@ -199,13 +199,21 @@ export class Editor {
     if (!store.flag('editorTips')) setTimeout(() => this.showTips(), 400);
   }
 
+  /** Back on the editor from a screen opened over it: carry on. */
+  wake() {
+    if (this.active && !this.raf) this.raf = requestAnimationFrame(this.loop);
+  }
+
   close() {
     this.active = false;
     if (this.fullscreen) this.setFullscreen(false);
     this.setRunning(false);
     this.stopSound();
-    this.palette.close(); this.analysis.close();
+    this.palette.close(); this.analysis.close(); this.theorem.close();
     this.closeMenu();
+    this.q('.speed-pop').classList.remove('open'); // it would set the speed of the next circuit
+    // the meter's probes belong to this circuit (open() forgets them): close it with the circuit
+    if (this.meter.open) this.meter.show(false);
   }
 
   onResize() {
@@ -456,7 +464,8 @@ export class Editor {
     if (this.sim) this.sim.discontinuity();
     if (ws.length && this.running) this.hotRebuild(); else if (ws.length) this.topologyChanged();
     this.toast(`Replaced ${els.length} part${els.length === 1 ? '' : 's'}${ws.length ? ` and ${ws.length} wire${ws.length === 1 ? '' : 's'}` : ''}`);
-    this.inspector.renderQuick?.();
+    // nothing selected: the inspector has no part to show
+    if (this.inspector.el) { this.inspector.renderQuick(); if (this.inspector.sheetOpen) this.inspector.render(); }
     this.renderSelBar();
     this.dirtyDraw = true;
   }
@@ -577,7 +586,7 @@ export class Editor {
     let n = 0, burnt = null;
     while (sim.t < target - this.dt * 1e-6) {
       const t0s = sim.t;
-      const ok = sim.step(Math.min(this.dt, target - sim.t) > this.dt * 0.01 ? this.dt : this.dt);
+      const ok = sim.step(this.dt);
       n++;
       if (!ok) { this.showError(); this.paused = true; this.updateToolbar(); break; }
       if (this.rms) this.rms.sample(sim, sim.t - t0s);
@@ -615,7 +624,9 @@ export class Editor {
   loop(ts) {
     // closed (Home, a photo, the load flow): stop asking for frames, so the phone can rest;
     // open() starts the loop again
-    if (!this.active) { this.raf = 0; return; }
+    // and while another screen (the manual, Settings, the load flow, a photo) is shown over the
+    // circuit, it waits: no sound, bangs or buzzing from a board nobody sees; wake() goes on
+    if (!this.active || this.app.current !== 'editor') { this.raf = 0; if (this.active) this.stopSound(); return; }
     this.raf = requestAnimationFrame(this.loop);
     const dtReal = Math.min(0.05, Math.max(0, (ts - this.last) / 1000));
     this.adaptResolution(ts - this.last - (this.simMs || 0)); // drawing speed only: a busy simulation is not a reason to blur the board
@@ -742,17 +753,24 @@ export class Editor {
 
   // ------------------------------------------------------------ undo/redo
   snapshot() { return JSON.stringify(this.doc.toJSON()); }
+  /** An undo step; the oldest go beyond 120, so a long session does not keep growing. */
+  pushUndo(json) {
+    this.undoStack.push(json);
+    if (this.undoStack.length > 120) this.undoStack.shift();
+  }
   checkpoint() {
     this.doc.isExample = false;
-    this.undoStack.push(this.snapshot());
-    if (this.undoStack.length > 120) this.undoStack.shift();
+    this.pushUndo(this.snapshot());
     this.redoStack = [];
     this.updateToolbar();
     this.scheduleAutosave();
   }
   restoreFrom(json) {
     const d = CircuitDoc.fromJSON(JSON.parse(json));
-    d.id = this.doc.id;
+    // undo / redo change the board, not what the circuit is: its name, notes, folder and whether it is
+    // an example stay (an undone example was saved into My Circuits, a rename was silently reverted)
+    const o = this.doc;
+    d.id = o.id; d.folder = o.folder; d.isExample = o.isExample; d.name = o.name; d.description = o.description;
     this.doc = d;
     this.selection.clear(); this.selWires.clear();
     this.inspector.show(null);
@@ -769,7 +787,7 @@ export class Editor {
   }
   redo() {
     if (!this.redoStack.length) return;
-    this.undoStack.push(this.snapshot());
+    this.pushUndo(this.snapshot());
     this.restoreFrom(this.redoStack.pop());
     this.updateToolbar();
     this.haptic(6);
@@ -1203,7 +1221,7 @@ export class Editor {
         this.updateToolbar();
         this.selection = new Set(keep.map((i) => this.doc.elements[i]).filter(Boolean));
         this.afterSelect();
-        this.blockedToast(why);
+        this.blockedToast();
         return;
       }
       this.safeTidy(follow);
@@ -1391,10 +1409,16 @@ export class Editor {
   }
 
   resolveProbes() {
+    let renamed = false;
     for (const p of this.doc.probes) {
       if (p.kind === 'node') p._node = this.sim ? this.sim.pointNode(p.pos[0], p.pos[1]) : -1;
       else p._el = this.doc.elements.find((e) => e.id === p.el);
+      // parts are renumbered when one is deleted (R2 becomes R1): the channel follows its part
+      const was = p.label;
+      this.labelProbe(p);
+      if (p.label !== was) renamed = true;
     }
+    if (renamed && this.scope.channels?.length) this.scope.renderChips();
   }
 
   probePos(p) {
@@ -1610,8 +1634,6 @@ export class Editor {
     });
   }
 
-  overlayOpen(n) { this.overlays.add(n); }
-  overlayClosed(n) { this.overlays.delete(n); }
 
   /** Android back button. returns true if handled */
   back() {
@@ -1674,7 +1696,7 @@ export class Editor {
     }, { passive: false });
     cv.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('keydown', (e) => {
-      if (!this.active || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
+      if (!this.active || this.app.current !== 'editor' || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
       if (e.key === 'Delete' || e.key === 'Backspace') this.deleteSelection();
       else if (e.key === 'r') this.rotateSelection();
       else if (e.key === 't' || e.key === 'T') this.slantSelection(e.key === 'T' ? -15 : 15);
@@ -1818,9 +1840,24 @@ export class Editor {
     clearTimeout(this.lpT);
     const g = this.gesture;
     if (g && g.pressed) { g.pressed.onRelease(); this.pressChanged(g.pressed); }
-    if (g && (g.type === 'move' || g.type === 'stretch') && g.moved) this.topologyChanged();
-    this.preview = null; this.marquee = null; this.marqueePick = null; this.drag = false;
+    // a second finger (a pinch) or the system took over a drag: the part stays where it was dragged,
+    // so finish the move as a lift would (wires tidied, one undo step)
+    if (g && (g.type === 'move' || g.type === 'stretch')) this.commitMove(g);
+    this.preview = null; this.marquee = null; this.marqueePick = null; this.hoverPost = null; this.drag = false;
     this.gesture = null;
+  }
+
+  /** The end of a part drag or stretch. */
+  commitMove(g) {
+    // a bridge wire whose part came back to where it was is not needed
+    for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
+    if (!g.moved) return;
+    this.safeTidy(g.follow || []);
+    this.doc.isExample = false; // edited, as checkpoint() marks every other change
+    this.pushUndo(g.undoSnap); this.redoStack = []; this.updateToolbar();
+    this.topologyChanged();
+    // dropped under the knob it opened: it could not be picked up again
+    if (this.selected()) this.clearOfKnob(this.selected());
   }
 
   onMove(ev) {
@@ -2010,7 +2047,7 @@ export class Editor {
     };
     for (let i = 1; i < pts.length - 1; i++) pts[i] = square(pts[i - 1], pts[i]);
     const n = pts.length;
-    if (n > 2) pts[n - 2] = (() => { const back = square(pts[n - 1], pts[n - 2]); return back; })();
+    if (n > 2) pts[n - 2] = square(pts[n - 1], pts[n - 2]);
     const out = simplify(pts);
     return out.length >= 2 ? out : [g.from, end];
   }
@@ -2118,7 +2155,7 @@ export class Editor {
         if (why) {
           // the part stops at the last free spot until the finger reaches free space again
           this.applyMove(g, g.okDx, g.okDy, g.okAuto);
-          if (g.blocked !== why) { g.blocked = why; this.blockedToast(why); }
+          if (g.blocked !== why) { g.blocked = why; this.blockedToast(); }
         } else { g.okDx = dx; g.okDy = dy; g.okAuto = auto; g.blocked = null; }
         break;
       }
@@ -2147,7 +2184,7 @@ export class Editor {
         const why = this.placementBlocked(g.place, g.bridges.map((b) => b.w), g.follow || []);
         if (why) {
           this.applyStretch(g, g.ok);
-          if (g.blocked !== why) { g.blocked = why; this.blockedToast(why); }
+          if (g.blocked !== why) { g.blocked = why; this.blockedToast(); }
         } else {
           g.ok = st; g.blocked = null;
           this.toast(`${e.name}: ${this.angleText(e)}`, 1200);
@@ -2203,15 +2240,7 @@ export class Editor {
         break;
       case 'stretch':
       case 'move':
-        // a bridge wire whose part came back to where it was is not needed
-        for (const b of g.bridges || []) if (b.w.pts.length < 2 || same(b.w.pts[0], b.w.pts[b.w.pts.length - 1])) this.doc.wires = this.doc.wires.filter((w) => w !== b.w);
-        if (g.moved) {
-          this.safeTidy(g.follow || []);
-          this.undoStack.push(g.undoSnap); this.redoStack = []; this.updateToolbar();
-          this.topologyChanged();
-          // dropped under the knob it opened: it could not be picked up again
-          if (this.selected()) this.clearOfKnob(this.selected());
-        }
+        this.commitMove(g);
         break;
       case 'marquee': {
         const pick = this.pickInBox(this.marquee || [0, 0, 0, 0]);

@@ -103,7 +103,13 @@ export class CircuitDoc {
       app: 'RaptiCKT', v: 1, name: this.name, description: this.description || undefined,
       elements: this.elements.map((e) => e.toJSON()),
       wires: this.wires.map((w) => w.toJSON()),
-      probes: this.probes.map((p) => ({ ...p, el: p.el != null ? idx.get(p.el) : undefined })),
+      // without what the editor works out while drawing (_el is a whole copy of the part, _node, ang)
+      probes: this.probes.map((p) => {
+        const q = {};
+        for (const k in p) if (k[0] !== '_' && k !== 'ang') q[k] = p[k];
+        q.el = p.el != null ? idx.get(p.el) : undefined;
+        return q;
+      }),
       sim: this.simSettings,
       bl: this.bigLabels ? 1 : undefined,
     };
@@ -111,8 +117,8 @@ export class CircuitDoc {
 
   static fromJSON(o) {
     if (typeof o === 'string') o = JSON.parse(o);
-    const d = new CircuitDoc(o.name || 'Imported circuit');
-    d.description = o.description || '';
+    const d = new CircuitDoc(o.name ? String(o.name) : 'Imported circuit');
+    d.description = o.description ? String(o.description) : '';
     // a damaged or hand-edited file: whatever is not a part, a wire or a probe is left out
     const arr = (a) => (Array.isArray(a) ? a : []);
     for (const eo of arr(o.elements)) {
@@ -131,11 +137,6 @@ export class CircuitDoc {
   }
 
   clone() { const c = CircuitDoc.fromJSON(JSON.parse(JSON.stringify(this.toJSON()))); c.id = this.id; c.folder = this.folder; return c; }
-}
-
-/** Serialise a selection (elements + wires) for copy/paste. */
-export function serializeSelection(elements, wires) {
-  return { elements: elements.map((e) => e.toJSON()), wires: wires.map((w) => (w.cable ? { p: w.pts.map((p) => [...p]), c: { ...w.cable } } : w.pts.map((p) => [...p]))) };
 }
 
 export function makeElement(type, x, y) {
