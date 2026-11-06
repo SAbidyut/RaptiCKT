@@ -613,8 +613,10 @@ export class Editor {
 
   // ----------------------------------------------------------------- loop
   loop(ts) {
+    // closed (Home, a photo, the load flow): stop asking for frames, so the phone can rest;
+    // open() starts the loop again
+    if (!this.active) { this.raf = 0; return; }
     this.raf = requestAnimationFrame(this.loop);
-    if (!this.active) return;
     const dtReal = Math.min(0.05, Math.max(0, (ts - this.last) / 1000));
     this.adaptResolution(ts - this.last - (this.simMs || 0)); // drawing speed only: a busy simulation is not a reason to blur the board
     this.last = ts;

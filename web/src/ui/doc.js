@@ -113,16 +113,18 @@ export class CircuitDoc {
     if (typeof o === 'string') o = JSON.parse(o);
     const d = new CircuitDoc(o.name || 'Imported circuit');
     d.description = o.description || '';
-    for (const eo of o.elements || []) {
-      const e = Element.fromJSON(eo);
+    // a damaged or hand-edited file: whatever is not a part, a wire or a probe is left out
+    const arr = (a) => (Array.isArray(a) ? a : []);
+    for (const eo of arr(o.elements)) {
+      const e = eo && typeof eo === 'object' ? Element.fromJSON(eo) : null;
       if (e) d.elements.push(e);
     }
-    for (const w of o.wires || []) {
-      if (Array.isArray(w)) d.addWire(w);
-      else if (w && w.p) d.addWire(w.p, { cable: w.c, burnt: w.b });
+    for (const w of arr(o.wires)) {
+      if (Array.isArray(w) && w.length >= 2) d.addWire(w);
+      else if (w && Array.isArray(w.p) && w.p.length >= 2) d.addWire(w.p, { cable: w.c, burnt: w.b });
     }
-    d.probes = (o.probes || []).map((p) => ({ ...p, el: p.el != null && d.elements[p.el] ? d.elements[p.el].id : undefined })).filter((p) => p.kind === 'node' || p.el != null);
-    d.simSettings = o.sim || {};
+    d.probes = arr(o.probes).filter((p) => p && typeof p === 'object').map((p) => ({ ...p, el: p.el != null && d.elements[p.el] ? d.elements[p.el].id : undefined })).filter((p) => p.kind === 'node' || p.el != null);
+    d.simSettings = o.sim && typeof o.sim === 'object' ? o.sim : {};
     d.bigLabels = !!o.bl;
     d.assignNames();
     return d;

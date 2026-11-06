@@ -157,9 +157,13 @@ public class MainActivity extends Activity {
             }
         });
 
-        if (savedInstanceState != null) web.restoreState(savedInstanceState);
-        else web.loadUrl("file:///android_asset/www/index.html");
-        handleIntent(getIntent());
+        // restoreState gives nothing back when the saved state is missing or too old (after the app was
+        // killed in the background): load the page then, instead of leaving an empty screen
+        if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
+            web.loadUrl("file:///android_asset/www/index.html");
+        }
+        // a file shared into the app is opened once: not again when the activity is re-created
+        if (savedInstanceState == null) handleIntent(getIntent());
     }
 
     @Override
