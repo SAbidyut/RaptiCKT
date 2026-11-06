@@ -15,10 +15,12 @@ const median = (a) => { const b = [...a].sort((x, y) => x - y); return b.length 
 export function findText(img, fig, S) {
   const { sw, comps } = img;
   const skip = new Set(S.usedBars || []);
-  const cands = [];
+  const cands = [], angles = [];
   for (const id of fig.near) {
     if (skip.has(id)) continue;
     const c = comps[id - 1];
+    // a phasor's angle sign (∠) is no character the reader knows: kept apart, joined later
+    if (c.angle) { angles.push({ x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1 }); continue; }
     const cw = c.x1 - c.x0 + 1, ch = c.y1 - c.y0 + 1;
     // grain (a decimal point can be as small as the line is thick: keep that)
     if (c.area < 0.3 * sw * sw || Math.max(cw, ch) < 0.6 * sw) continue;
@@ -139,7 +141,7 @@ export function findText(img, fig, S) {
     for (const g of list) g.bitmap = cutGlyph(img, g);
     words.push(word(list, H, tilt));
   }
-  return { words, arrows, height: H, tilt };
+  return { words, arrows, angles, height: H, tilt };
 }
 
 /**

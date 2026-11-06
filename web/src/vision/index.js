@@ -6,7 +6,7 @@ import { prepare } from './image.js';
 import { findFigures } from './figures.js';
 import { readStructure, plateGap } from './circuit.js';
 import { findText } from './text.js';
-import { readWords } from './labels.js';
+import { readWords, joinPhasors } from './labels.js';
 import { assignLabels } from './assign.js';
 import { slantedWords } from './slant.js';
 import { toDrawing } from './drawing.js';
@@ -72,10 +72,11 @@ export async function readPicture(picture, { onProgress, signal } = {}) {
     const parts = S.parts.filter((q) => q.a != null && q.type !== 'loose');
     if (parts.length < 2) continue;
     const T = findText(img, fig, S);
-    const R = readWords(T.words, T.height, img, T.tilt);
+    const R0 = readWords(T.words, T.height, img, T.tilt);
+    const R = joinPhasors(R0.words, R0.reads, T.angles, T.height, img, T.tilt); // 20∠60° V
     const words = slantedWords(img, fig, S, R.words.map((w, k) => ({ ...w, read: R.reads[k] })), T.height);
     const A = assignLabels(S, words, T.arrows, T.height, fig);
-    const D = toDrawing(S, p.sw, { title: A.title || `Circuit ${circuits.length + 1}`, labels: A.labels, quantities: A.quantities, asked: A.quantities.map((q) => q.name), supplies: A.supplies });
+    const D = toDrawing(S, p.sw, { title: A.title || `Circuit ${circuits.length + 1}`, labels: A.labels, quantities: A.quantities, asked: A.quantities.map((q) => q.name), supplies: A.supplies, mutuals: A.mutuals });
     D.notes = [...A.notes, ...D.notes];
     circuits.push(D);
   }

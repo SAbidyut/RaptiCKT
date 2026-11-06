@@ -236,6 +236,13 @@ export function parseLabel(chars) {
     const unit = m[5] ? UNIT[m[5]] : '';
     return { type: 'value', value: num, unit, prefix: m[4] || '', imag: !!m[2], text: `${m[1] ? '−' : ''}${m[2] ? 'j' : ''}${m[3]}${m[4] ? ' ' + m[4] : unit ? ' ' : ''}${unit}`.replace(/ ([kMmμn])/, ' $1') };
   }
+  // a sinusoid in the time domain, the book's way: "20 cos 4t V", "10 sin 2t A", "5 cos t V"
+  m = /^(-)?([0-9]+(?:[.][0-9]+)?)(cos|c0s|sin)([0-9]+(?:[.][0-9]+)?)?t(v|A)?$/.exec(s);
+  if (m && !chars.slice(0, m[2].length).some((x) => x.sub || x.small)) {
+    const amp = parseFloat(m[2]) * (m[1] ? -1 : 1), w = m[4] ? parseFloat(m[4]) : 1, fn = m[3] === 'sin' ? 'sin' : 'cos';
+    const unit = m[5] ? UNIT[m[5]] : '';
+    return { type: 'value', value: amp, unit, prefix: '', imag: false, wave: fn, omega: w, text: `${m[1] ? '−' : ''}${m[2]} ${fn} ${m[4] || ''}t${unit ? ' ' + unit : ''}` };
+  }
   // a transistor's gain, "β = 90": the reader has no β (it reads as a μ or a b) and no "=" (two
   // short bars, read as minus signs)
   m = /^[μb]-{1,2}([0-9]+(?:[.][0-9]+)?)$/.exec(s);
@@ -354,6 +361,75 @@ export function readWords(all, mainH, img, tilt = 0, { named = false } = {}) {
   }
   const reads = handWritten ? hand.map((h, k) => (h && sc(h) >= sc(print[k]) - 0.5 ? h : print[k])) : print;
   return { ...joinUnits(words, reads, mainH, img, handWritten, tilt), hand: handWritten };
+}
+
+/**
+ * Phasors printed the book's way, 20∠60° V: the magnitude before the angle sign, the angle
+ * written over its base (its ° read as a small o, or as a 0 too many), the unit after it. Each
+ * angle sign (findText's `angles`) joins the two words into one value with its `phase`, in place.
+ * words / reads: from readWords. Returns the words and reads left.
+ */
+export function joinPhasors(words, reads, angles, mainH, img = null, tilt = 0) {
+  if (!angles || !angles.length) return { words, reads };
+  words = [...words]; reads = [...reads];
+  // a word run across the sign ("20" and "60°" read as one): cut at its stroke
+  for (const A of angles) {
+    const cut = A.x0 + 0.3 * (A.x1 - A.x0);
+    for (let k = 0; k < words.length; k++) {
+      const w = words[k];
+      if (w.cy < A.y0 - 0.6 * mainH || w.cy > A.y1 + 0.3 * mainH) continue;
+      const L = w.glyphs.filter((g) => (g.x0 + g.x1) / 2 < cut), R = w.glyphs.filter((g) => (g.x0 + g.x1) / 2 >= cut);
+      if (!L.length || !R.length) continue;
+      const a = word(L.map((g) => ({ ...g })), mainH, tilt), b = word(R.map((g) => ({ ...g })), mainH, tilt);
+      words.splice(k, 1, a, b);
+      reads.splice(k, 1, readWord(a, mainH, img, false), readWord(b, mainH, img, false));
+      k++;
+    }
+  }
+  const drop = new Set();
+  for (const A of angles) {
+    const line = (w) => w.cy > A.y0 - 0.6 * mainH && w.cy < A.y1 + 0.3 * mainH;
+    // the magnitude: a number just before the sign
+    let mi = -1, md = Infinity;
+    words.forEach((w, k) => {
+      const r = reads[k];
+      if (drop.has(k) || !line(w) || w.x1 > A.x0 + 0.4 * mainH || A.x0 - w.x1 > 1.5 * mainH) return;
+      if (!/^-?[0-9]+(\.[0-9]+)?[a-zA-Zμ]*$/.test(r.raw || r.text || '')) return;
+      const d = A.x0 - w.x1;
+      if (d < md) { md = d; mi = k; }
+    });
+    // the angle: written over the base, starting after the sign's stroke
+    let ai = -1, ad = Infinity;
+    words.forEach((w, k) => {
+      if (k === mi || drop.has(k) || !line(w) || w.x0 < A.x0 - 0.2 * mainH || w.x0 > A.x0 + 0.6 * (A.x1 - A.x0)) return;
+      const d = w.x0 - A.x0;
+      if (d < ad) { ad = d; ai = k; }
+    });
+    if (mi < 0 || ai < 0) continue;
+    const mag = /^(-?[0-9]+(?:\.[0-9]+)?)/.exec(reads[mi].raw || reads[mi].text || '');
+    const ang = /^(-?)([0-9]+(?:\.[0-9]+)?)([o0°]?)([vVA]?)/.exec(reads[ai].raw || '');
+    if (!mag || !ang) continue;
+    let deg = ang[2];
+    // (the ° read as a 0: an angle is within ±360°, so "600" is 60°)
+    if (!ang[3] && +deg > 360 && deg.endsWith('0')) deg = deg.slice(0, -1);
+    let unit = ang[4] ? (ang[4] === 'A' ? 'A' : 'V') : '';
+    // (the unit written apart after the angle: "60° V")
+    let ui = -1;
+    if (!unit) {
+      words.forEach((w, k) => {
+        if (k === ai || k === mi || drop.has(k) || !line(w)) return;
+        if (/^[vVA]$/.test(reads[k].raw || '') && w.x0 >= words[ai].x1 - 0.2 * mainH && w.x0 - words[ai].x1 < 1.6 * mainH) { ui = k; unit = reads[k].raw === 'A' ? 'A' : 'V'; }
+      });
+    }
+    const value = parseFloat(mag[1]), phase = (ang[1] ? -1 : 1) * parseFloat(deg);
+    if (!Number.isFinite(value) || !Number.isFinite(phase) || Math.abs(phase) > 360) continue;
+    const ks = [mi, ai, ...(ui >= 0 ? [ui] : [])], ws = ks.map((k) => words[k]);
+    const box = { x0: Math.min(...ws.map((w) => w.x0)), y0: Math.min(...ws.map((w) => w.y0)), x1: Math.max(...ws.map((w) => w.x1)), y1: Math.max(...ws.map((w) => w.y1)) };
+    words[mi] = { ...words[mi], ...box, cx: (box.x0 + box.x1) / 2, cy: (box.y0 + box.y1) / 2, glyphs: ws.flatMap((w) => w.glyphs) };
+    reads[mi] = { type: 'value', value, unit, prefix: '', imag: false, phase, text: `${mag[1]}∠${phase}°${unit ? ' ' + unit : ''}`, raw: `${mag[1]}∠${deg}°${unit}`, score: Math.min(reads[mi].score ?? -1, reads[ai].score ?? -1, -0.2) };
+    drop.add(ai); if (ui >= 0) drop.add(ui);
+  }
+  return { words: words.filter((_, k) => !drop.has(k)), reads: reads.filter((_, k) => !drop.has(k)) };
 }
 
 /**
