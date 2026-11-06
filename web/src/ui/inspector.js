@@ -68,7 +68,7 @@ export class Inspector {
       ${dmg}
       <button class="qb-main" data-q="edit">
         <img src="${this.icon(C)}" alt="">
-        <div><b>${esc(e.name)} <small>${esc(C.title)}</small></b><span class="qb-read"></span></div>
+        <div><b>${esc(e.name)} <small>${esc(C.title)}</small></b></div>
       </button>
       ${!e.damaged && this.ed.constructor.isPolar(e) ? `<button data-q="reverse" title="Reverse polarity">${icon('polarity', 19)}</button>` : ''}
       ${e.damaged ? '' : `<button data-q="rotate" title="Rotate">${icon('rotate', 19)}</button>`}
@@ -138,7 +138,7 @@ export class Inspector {
           ${this.phasorRows()}
           ${props.map((p) => this.propRow(p)).join('')}
           ${this.faultRows()}
-          <p class="insp-desc">${esc(C.description || '')}</p>
+          ${this.aboutRows()}
         </div>
       </div>`;
     this.host.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => this.action(b.dataset.a)));
@@ -166,6 +166,26 @@ export class Inspector {
     }));
     this.readKey = null;
     this.updateReadings();
+  }
+
+  /**
+   * Everything about the part, at the bottom of its sheet (scroll down): what it is and how it
+   * works, the settings with their usual values, ranges and choices, its numbered terminals.
+   */
+  aboutRows() {
+    const e = this.el, C = e.constructor;
+    const pins = e.localPosts().length, names = e.pinNames ? e.pinNames() : null;
+    const val = (pr, v) => (pr.type === 'select' ? (pr.options.find(([k]) => String(k) === String(v)) || [v, v])[1] : pr.type === 'bool' ? (v ? 'on' : 'off') : pr.type === 'text' ? String(v) : fmtSI(v, pr.unit && pr.unit !== '%' ? pr.unit : '', 3).trim() + (pr.unit === '%' ? ' %' : ''));
+    const props = (C.props || []).filter((pr) => !pr.hidden && (!pr.when || pr.when(e.p)));
+    const range = (pr) => (pr.type === 'select' ? pr.options.slice(0, 6).map(([, t]) => t).join(' · ') + (pr.options.length > 6 ? ' …' : '') : pr.min !== undefined && pr.max !== undefined && !pr.type ? `${fmtSI(pr.min, pr.unit || '', 2).trim()} … ${fmtSI(pr.max, pr.unit || '', 2).trim()}` : '');
+    return `<div class="insp-about">
+      <h5>About this part</h5>
+      <p class="insp-desc">${esc(C.description || 'No description yet.')}</p>
+      <p class="about-meta"><span>${esc(C.category)}</span>${pins ? `<span>${pins} terminal${pins > 1 ? 's' : ''}</span>` : '<span>no terminals</span>'}</p>
+      ${props.length ? `<h5>Settings</h5><ul class="about-props">${props.map((pr) => `<li><b>${esc(pr.label)}</b><span>usual: ${esc(val(pr, pr.def))}</span>${range(pr) ? `<em>${esc(range(pr))}</em>` : ''}</li>`).join('')}</ul>` : ''}
+      ${pins > 1 ? `<h5>Terminals</h5><p class="about-pins">${Array.from({ length: pins }, (_, i) => `<span><i>${i + 1}</i>${esc((names && names[i]) || (pins === 2 ? `Terminal ${i + 1}` : `Pin ${i + 1}`))}</span>`).join('')}</p>` : ''}
+      <p class="about-tip">Press <b>Run</b> to see it work: its live voltage, current and power are shown above.</p>
+    </div>`;
   }
 
   /** In the phasor domain: the part's phasor / impedance, typed the book's way (20∠30, j4, −j2.5). */
@@ -316,14 +336,7 @@ export class Inspector {
     // the phasor domain: the part's voltage and current phasors first
     if (live && this.ed.doc.domain === 'phasor') { const ph = this.ed.phasorNow(); if (ph) r = [...phasorReadings(this.el, ph).map(([k, t]) => [k, t, '']), ...r]; }
     const fmt = ([, v, u]) => (typeof v !== 'number' ? String(v) : isPlainUnit(u) ? fmtQty(v, u) : fmtSI(v, u, 4));
-    // quick bar: value label + first two readings, updated via textContent (no relayout of the bar)
-    const q = this.quick.querySelector('.qb-read');
-    if (q) {
-      const val = this.el.shownLabel();
-      // compact: values of the first two readings (e.g. "3.837 V · 816 µA")
-      const nums = r.filter((x) => typeof x[1] === 'number').slice(0, 2).map(fmt);
-      q.textContent = this.el.damaged ? 'Burnt out — tap Replace' : live && r.length ? (nums.length ? nums.join(' · ') : fmt(r[0])) : val || 'Tap ⚙ to edit';
-    }
+    // (the quick bar shows the part's name only: its value and readings are on the board and in its sheet)
     if (!this.sheetOpen) return;
     const box = this.host.querySelector('.insp-read');
     if (!box) return;

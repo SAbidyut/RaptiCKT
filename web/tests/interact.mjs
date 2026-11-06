@@ -20,7 +20,7 @@ await page.evaluate(() => localStorage.setItem('raptickt.flags.v1', JSON.stringi
 await page.waitForTimeout(2200);
 await page.click('[data-h=new]');
 await page.waitForTimeout(500);
-const add = async (type) => { await page.click(await page.locator('.fab').isVisible() && await page.evaluate(() => !document.querySelector('.editor').classList.contains('insp-open')) ? '.fab' : '.insp-head [data-a=add]'); await page.waitForTimeout(300); await page.fill('.search input', type); await page.waitForTimeout(200); await page.click('.pal-item'); await page.waitForTimeout(300); await page.click('.pal-item'); await page.waitForTimeout(300); await page.click('.palette [data-close]'); await page.waitForTimeout(300); }; // the menu stays open for more parts: close it
+const add = async (type) => { await page.click(await page.locator('.fab').isVisible() && await page.evaluate(() => !document.querySelector('.editor').classList.contains('insp-open')) ? '.fab' : '.insp-head [data-a=add]'); await page.waitForTimeout(300); await page.fill('.search input', type); await page.waitForTimeout(200); await page.click('.pal-item'); await page.waitForTimeout(300); await page.click('.palette [data-close]'); await page.waitForTimeout(300); }; // the menu stays open for more parts: close it
 const scr = (x, y) => page.evaluate(([x, y]) => { const r = app.editor.canvas.getBoundingClientRect(); const [sx, sy] = app.editor.renderer.toScreen(x, y); return [sx + r.left, sy + r.top]; }, [x, y]);
 const drag = async (a, b) => { await page.mouse.move(a[0], a[1]); await page.mouse.down(); for (let i = 1; i <= 8; i++) await page.mouse.move(a[0] + (b[0] - a[0]) * i / 8, a[1] + (b[1] - a[1]) * i / 8); await page.mouse.up(); await page.waitForTimeout(150); };
 await add('DC Voltage');

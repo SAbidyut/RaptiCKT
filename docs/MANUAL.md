@@ -72,7 +72,7 @@ Let us build the "hello world" of electronics: a battery, a resistor and an LED.
 
 1. On the **Home** screen tap **New circuit**. An empty board opens.
 2. Tap the round **+** button (bottom right). The component menu opens.
-3. Type `dc` in the search box and tap **DC Voltage**: its **details** open under the list (what it is, how it works, its settings, its terminals). Tap it again, or **Add to board**, and a battery symbol appears on the board. Then search `resistor` and tap **Resistor**, then search `led` and tap **LED**, then search `ground` and tap **Ground**. The menu stays open so you can add several parts in a row. Tap **✕** to close it.
+3. Type `dc` in the search box and tap **DC Voltage**. A battery symbol appears on the board. Then search `resistor` and tap **Resistor**, then search `led` and tap **LED**, then search `ground` and tap **Ground**. The menu stays open so you can add several parts in a row. Tap **✕** to close it.
 4. Drag the parts with your finger to arrange them in a row. Pinch with two fingers to zoom, drag on empty space to move the board.
 5. **Draw the wires.** Every part has small circles at its ends: these are the **terminals**. Tap one terminal, then tap a terminal of the next part: the wire is drawn and routed for you. Connect: battery **+** → resistor → LED anode (the flat-triangle side) → LED cathode → ground, and battery **−** → ground.
 6. Tap the battery and use the **knob** that appears (or open its properties) to set the voltage to **9 V**. Tap the resistor and set it to **470 Ω**. You can type values like `470`, `4.7k`, `10u`.
@@ -223,7 +223,7 @@ On a computer browser you can also use: **Delete** (remove), **R** (rotate), **T
 1. Tap the round **+** button. The component menu slides up.
 2. Choose a category tab: **Recent**, **Sources**, **Batteries**, **Passive**, **Transformers**, **Protection**, **Switches & Relays**, **Electrical**, **Power Systems**, **Machines**, **Diodes**, **Transistors**, **Thyristors & Power**, **Analog ICs**, **Control & Math**, **Logic Gates**, **Digital ICs**, **Sensors**, **Output**, **Vacuum Tubes**, **Meters**. Swipe the tab row sideways to see them all.
 3. Or type in the **search box**. It searches names, keywords and categories, for example `thermistor`, `555`, `3 phase`, `fuse`.
-4. Tap a component: its **details** open under the list — a description of what it is and how it works, the settings you can change (with their usual values and ranges) and its numbered terminals. Tap the same component again, or **Add to board**, to place it in a free spot in the middle of the visible board. The details stay open when you change tab, and the menu stays open, so tap more parts if you need them.
+4. Tap a component. It is placed in a free spot in the middle of the visible board. The menu stays open, so tap more parts if you need them.
 5. Tap **✕** (or the Back button) to close the menu.
 
 > **Tip:** The **Recent** tab remembers the parts you used last, so common parts are one tap away.
@@ -256,7 +256,7 @@ Hold a part for half a second, or tap its name in the quick bar. A sheet slides 
 - Action buttons: **Rotate**, **Slant up** / **Slant down** (15° each way), **Flip** (mirror), **Copy**, **Scope V** (voltage across the part), **Scope I** (current through it), **Delete**.
 - **Angle** (parts that can slant): type any angle in degrees (0° points right, 90° down, −30° up and to the right), or step it with **−15°** / **+15°**. The part takes the nearest angle that keeps its terminals on grid points, within a few degrees.
 - Every adjustable property: a text box and a slider for numbers, a drop-down for choices (for example the **model** of a transistor or op-amp), a switch for yes/no.
-- A short description of the part.
+- **About this part** (scroll to the bottom): what the part is and how it works, its category and number of terminals, every setting with its usual value, range or choices, and its numbered terminals.
 - Tap the **✓** to close.
 
 Choosing a **model** (for example `2N3904`, `LM741`, `1N4148`) fills in all the matching numbers at once. If you then change one number by hand, the model switches to **custom**.
