@@ -724,15 +724,11 @@ export class Simulator {
     return { re: ar - br, im: ai - bi };
   }
 
-  /** One complex MNA solve at angular frequency omega. */
-  acSolve(omega, inputEl, extra) {
-    const m = this.size;
-    const re = new Float64Array(m * m), im = new Float64Array(m * m);
-    const br = new Float64Array(m), bi = new Float64Array(m);
-    const ac = {
-      sim: this, size: m, input: inputEl, omega,
-      addA(r, c, a, b = 0) { if (r >= 0 && c >= 0) { re[r * m + c] += a; im[r * m + c] += b; } },
-      addB(r, a, b = 0) { if (r >= 0) { br[r] += a; bi[r] += b; } },
+  /** The stamping interface of a complex MNA system, writing through addA / addB. */
+  acStamper(omega, inputEl, addA, addB, phasor = null) {
+    return {
+      sim: this, size: this.size, input: inputEl, omega, phasor,
+      addA, addB,
       addY(n1, n2, g, bb = 0) {
         const a = n1 - 1, c = n2 - 1;
         this.addA(a, a, g, bb); this.addA(c, c, g, bb);
@@ -752,6 +748,21 @@ export class Simulator {
       addI(nFrom, nTo, mag) { this.addB(nFrom - 1, -mag); this.addB(nTo - 1, mag); },
       v: (n) => this.v(n),
     };
+  }
+
+  /**
+   * One complex MNA solve at angular frequency omega. inputEl: the one source driven with 1∠0°
+   * (a Bode plot); opts.phasor: every independent source at its own phasor instead (sinusoidal
+   * steady state, { only: el } for one source alone, as in superposition).
+   */
+  acSolve(omega, inputEl, extra, opts = {}) {
+    const m = this.size;
+    const re = new Float64Array(m * m), im = new Float64Array(m * m);
+    const br = new Float64Array(m), bi = new Float64Array(m);
+    const ac = this.acStamper(omega, inputEl,
+      (r, c, a, b = 0) => { if (r >= 0 && c >= 0) { re[r * m + c] += a; im[r * m + c] += b; } },
+      (r, a, b = 0) => { if (r >= 0) { br[r] += a; bi[r] += b; } },
+      opts.phasor || null);
     for (let k = 1; k < this.nodeCount; k++) re[(k - 1) * m + (k - 1)] += this.opt.gmin;
     for (const nd of this.groundTies) ac.addY(nd, 0, 1);
     for (const e of this.elements) {
@@ -760,6 +771,39 @@ export class Simulator {
     }
     if (extra) extra(ac);
     return complexSolve(m, re, im, br, bi);
+  }
+
+  /**
+   * Sinusoidal steady state at ω (rad/s; 0 = DC) with every independent source at its phasor
+   * (book convention: peak, cosine reference), or only `only`. Returns null when it has no
+   * solution, else { omega, node(n) → [re, im], current(e, k = 0) → the phasor current flowing
+   * into part e at its terminal k, voltage(e, a = 0, b = 1) → V across two of its terminals }.
+   */
+  phasorSolve(omega, only = null) {
+    const sol = this.acSolve(omega, null, null, { phasor: { only } });
+    if (!sol) return null;
+    const x = (k) => (k >= 0 ? [sol.re[k], sol.im[k]] : [0, 0]);
+    const node = (n) => (n > 0 ? x(n - 1) : [0, 0]);
+    const current = (e, k = 0) => {
+      const n = e.nodes?.[k];
+      if (n == null) return [0, 0];
+      if (n === 0) {
+        // on ground: what goes in at the others comes out here (two terminals: the other one)
+        if (e.nodes.length !== 2) return [NaN, NaN];
+        const o = current(e, 1 - k);
+        return [-o[0], -o[1]];
+      }
+      const row = n - 1;
+      let cr = 0, ci = 0;
+      const rec = this.acStamper(omega, null,
+        (r, c, a, b = 0) => { if (r === row && c >= 0) { const [xr, xi] = x(c); cr += a * xr - b * xi; ci += a * xi + b * xr; } },
+        (r, a, b = 0) => { if (r === row) { cr -= a; ci -= b; } },
+        { only });
+      if (e.stampAC) e.stampAC(rec);
+      return [cr, ci];
+    };
+    const voltage = (e, a = 0, b = 1) => { const p = node(e.nodes?.[a] ?? 0), q = node(e.nodes?.[b] ?? 0); return [p[0] - q[0], p[1] - q[1]]; };
+    return { omega, node, current, voltage, raw: sol };
   }
 
   /** DC sweep of an element parameter. Returns [{x, y}] measuring probe(sim). */

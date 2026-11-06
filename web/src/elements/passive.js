@@ -145,6 +145,8 @@ export class Capacitor extends TwoTerm {
   static description = 'Ideal capacitor: i = C·dv/dt. Plates show accumulated charge while simulating.';
   reset() { this.vPrev = this.p.ic; this.iPrev = 0; this.setCurrent(0); this.J = 0; }
   geq(s) { return (s.method === 'be' ? 1 : 2) * this.p.c / s.dt; }
+  /** the companion model's current source this step: i = geq·v + J (from the last accepted step) */
+  jNow(s) { const g = this.geq(s); return s.method === 'be' ? -g * this.vPrev : -g * this.vPrev - this.iPrev; }
   // DC operating point: open, unless an initial voltage is set; then it is held at it (as SPICE's
   // IC=), or the operating point overwrote the initial voltage with the circuit's own
   stamp(s) {
@@ -153,8 +155,7 @@ export class Capacitor extends TwoTerm {
   }
   stampStep(s) {
     if (s.mode === 'dc') { if (this.p.ic) s.addI(this.nodes[0], this.nodes[1], -IC_HOLD * this.p.ic); return; }
-    const g = this.geq(s);
-    this.J = s.method === 'be' ? -g * this.vPrev : -g * this.vPrev - this.iPrev;
+    this.J = this.jNow(s);
     s.addI(this.nodes[0], this.nodes[1], this.J);
   }
   accept(s) {
@@ -236,8 +237,11 @@ export class Inductor extends TwoTerm {
     { key: 'l', label: 'Inductance', unit: 'H', def: 1e-3, min: 1e-12, max: 1e4, log: true, knob: true },
     { key: 'rs', label: 'Series resistance', unit: 'Ω', def: 0, min: 0, max: 1e6 },
     { key: 'ic', label: 'Initial current', unit: 'A', def: 0, min: -1e3, max: 1e3 },
+    { key: 'dot', label: 'Dot (for a mutual inductance M)', type: 'select', def: 'none', options: [['none', 'No dot'], ['a', 'Dot at terminal 1'], ['b', 'Dot at terminal 2']] },
   ];
-  static description = 'Ideal inductor v = L·di/dt with optional winding resistance.';
+  static description = 'Ideal inductor v = L·di/dt with optional winding resistance. Coupled to another coil by a Mutual Inductance (M) part; the dot marks the end where current entering gives a positive mutual voltage.';
+  /** +1 when the dot is at terminal 1 (or there is none), −1 when it is at terminal 2 (dot convention) */
+  coilDot() { return this.p.dot === 'b' ? -1 : 1; }
   branchCount() { return 1; }
   get Rs() { return Math.max(this.p.rs, 1e-9); }
   reset() { this.iPrev = this.p.ic; this.vlPrev = 0; this.setCurrent(this.p.ic); }
@@ -282,6 +286,7 @@ export class Inductor extends TwoTerm {
     const n = 4, w = (2 * G) / n;
     for (let k = 0; k < n; k++) ctx.arc(-G + w * (k + 0.5), 0, w / 2, Math.PI, 0, false);
     ctx.strokeStyle = grad; ctx.lineWidth = g.lw; ctx.lineCap = 'round'; ctx.stroke();
+    if (this.p.dot === 'a' || this.p.dot === 'b') g.circle((this.p.dot === 'a' ? -1 : 1) * G * 0.95, -G * 0.62, 2.6, { fill: g.text1 || g.body });
     if (g.running) {
       const e = Math.min(1, Math.abs(this.i) / g.iScale);
       if (e > 0.1) g.glow(0, -G * 0.2, G, '120,160,255', e * 0.35);

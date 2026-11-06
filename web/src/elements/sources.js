@@ -1,13 +1,14 @@
 // Independent and controlled sources.
 
 import { Element, TwoTerm, register, GRID } from './base.js';
+import { sourcePhasor } from '../engine/phasor.js';
 import { fmtShort } from '../engine/units.js';
 
 const G = GRID;
 const TAU = Math.PI * 2;
 
 const WAVE_OPTIONS = [
-  ['dc', 'DC'], ['sine', 'Sine'], ['square', 'Square'], ['pulse', 'Pulse'], ['triangle', 'Triangle'],
+  ['dc', 'DC'], ['sine', 'Sine'], ['cos', 'Cosine (as in the book: A cos(ωt + φ))'], ['square', 'Square'], ['pulse', 'Pulse'], ['triangle', 'Triangle'],
   ['sawtooth', 'Sawtooth'], ['noise', 'Noise'], ['sweep', 'Sweep (chirp)'],
 ];
 
@@ -45,6 +46,7 @@ export function waveValue(p, t, el) {
   switch (p.wave) {
     case 'dc': return A;
     case 'sine': return off + A * Math.sin(TAU * (f * t + ph));
+    case 'cos': return off + A * Math.cos(TAU * (f * t + ph));
     case 'square': {
       const fr = frac(f * t + ph);
       return off + (fr < duty / 100 ? A : -A);
@@ -84,6 +86,7 @@ function drawWaveGlyph(g, wave, r, color) {
   const w = r * 0.62, h = r * 0.42;
   switch (wave) {
     case 'sine':
+    case 'cos':
     case 'sweep':
       for (let k = 0; k <= 24; k++) {
         const x = -w + (2 * w * k) / 24;
@@ -153,6 +156,7 @@ export class VoltageSource extends TwoTerm {
     ac.addA(k, a - 1, 1); ac.addA(k, b - 1, -1);
     if (this.p.rint > 0) ac.addA(k, k, -this.p.rint);
     if (ac.input === this) ac.addB(k, 1);
+    else if (ac.phasor && (!ac.phasor.only || ac.phasor.only === this)) { const [re, im] = sourcePhasor(this.p, ac.omega); ac.addB(k, re, im); }
   }
   readings(s) {
     const v = this.voltageDiff(s);
@@ -170,6 +174,7 @@ export class VoltageSource extends TwoTerm {
     let tran = '';
     const per = 1 / p.freq;
     if (p.wave === 'sine') tran = ` SIN(${p.offset} ${p.amp} ${p.freq} 0 0 ${p.phase})`;
+    else if (p.wave === 'cos') tran = ` SIN(${p.offset} ${p.amp} ${p.freq} 0 0 ${(+p.phase || 0) + 90})`;
     else if (p.wave === 'square') tran = ` PULSE(${p.offset - p.amp} ${p.offset + p.amp} 0 1n 1n ${per * p.duty / 100} ${per})`;
     else if (p.wave === 'pulse') tran = ` PULSE(${p.offset} ${p.offset + p.amp} 0 1n 1n ${per * p.duty / 100} ${per})`;
     else if (p.wave === 'triangle') tran = ` PULSE(${p.offset - p.amp} ${p.offset + p.amp} 0 ${per / 2} ${per / 2} 0 ${per})`;
@@ -219,14 +224,19 @@ export class CurrentSource extends TwoTerm {
     s.addI(this.nodes[0], this.nodes[1], this.cur);
   }
   accept() { this.setCurrent(this.cur); }
-  stampAC(ac) { if (ac.input === this) ac.addI(this.nodes[0], this.nodes[1], 1); }
+  stampAC(ac) {
+    if (ac.input === this) { ac.addI(this.nodes[0], this.nodes[1], 1); return; }
+    if (!ac.phasor || (ac.phasor.only && ac.phasor.only !== this)) return;
+    const [re, im] = sourcePhasor(this.p, ac.omega), [a, b] = this.nodes;
+    ac.addB(a - 1, -re, -im); ac.addB(b - 1, re, im); // pushes the phasor current out at its second terminal
+  }
   valueLabel() {
     const p = this.p;
     return p.wave === 'dc' ? fmtShort(p.amp, 'A') : `${fmtShort(p.amp, 'A')} ${fmtShort(p.freq, 'Hz')}`;
   }
   spice(n) {
     const p = this.p;
-    return `${this.name} ${n[0]} ${n[1]} DC ${p.wave === 'dc' ? p.amp : p.offset} AC 1${p.wave === 'sine' ? ` SIN(${p.offset} ${p.amp} ${p.freq})` : ''}`;
+    return `${this.name} ${n[0]} ${n[1]} DC ${p.wave === 'dc' ? p.amp : p.offset} AC 1${p.wave === 'sine' || p.wave === 'cos' ? ` SIN(${p.offset} ${p.amp} ${p.freq} 0 0 ${(+p.phase || 0) + (p.wave === 'cos' ? 90 : 0)})` : ''}`;
   }
   leads() { return [[0, -2 * G, 0, -G * 0.8, 0], [1, 2 * G, 0, G * 0.8, 0]]; }
   draw(g) {
@@ -287,6 +297,7 @@ export class Rail extends Element {
     const k = this.branches[0];
     ac.addBranchKCL(this.nodes[0], 0, k); ac.addA(k, this.nodes[0] - 1, 1);
     if (ac.input === this) ac.addB(k, 1);
+    else if (ac.phasor && (!ac.phasor.only || ac.phasor.only === this)) { const [re, im] = sourcePhasor(this.p, ac.omega); ac.addB(k, re, im); }
   }
   readings(s) { return [['Voltage', s.v(this.nodes[0]), 'V'], ['Current supplied', -this.i, 'A']]; }
   valueLabel() { return ''; }
@@ -464,8 +475,12 @@ export class DepSource extends TwoTerm {
   isCurrent() { return this.p.kind === 'vccs' || this.p.kind === 'cccs'; }
   branchCount() { return this.isCurrent() ? 0 : 1; }
   reset() { this.setCurrent(0); }
-  /** The control as { p, q, k }: a node pair scaled by k, or a branch unknown `br` scaled by k. */
-  control(s) {
+  /**
+   * The control as { p, q, k, ki, j }: a node pair scaled by k (+ j·ki in an AC solve) plus a
+   * constant j (a capacitor's companion current), or a branch unknown `br` scaled by k.
+   * ac: the AC stamper when this is a phasor solve.
+   */
+  control(s, ac = null) {
     const c = String(this.p.ctrl || '').trim(), m = /^(node|v|i):\s*(.+)$/.exec(c);
     if (!m) return null;
     const els = s.elements || [];
@@ -477,30 +492,45 @@ export class DepSource extends TwoTerm {
     if (!e || !e.nodes || e.nodes.length < 2) return null;
     if (m[1] === 'v') return { p: e.nodes[0], q: e.nodes[1], k: 1 };
     if (e.branches && e.branches.length) return { br: e.branches[0], k: 1 };
+    // a capacitor's current (the book's ix through a capacitor): jωC·v, or geq·v + J step by step
+    if (typeof e.jNow === 'function' && e.p.c > 0) {
+      if (ac) return { p: e.nodes[0], q: e.nodes[1], k: 0, ki: ac.omega * e.p.c };
+      if (s.mode === 'dc' || !(s.dt > 0)) return { p: e.nodes[0], q: e.nodes[1], k: 0 };
+      return { p: e.nodes[0], q: e.nodes[1], k: e.geq(s), j: e.jNow(s) };
+    }
     const R = e.R ?? e.p.r; // a resistor's current is its voltage over R
     return R > 0 ? { p: e.nodes[0], q: e.nodes[1], k: 1 / R } : null;
   }
   /** shared by the transient and the AC stamps (both expose addA / addVCCS / addBranchKCL) */
-  stampWith(m, s) {
-    const [a, b] = this.nodes, c = this.control(s), g = this.p.gain * (c ? c.k : 0);
+  stampWith(m, s, ac = null) {
+    const [a, b] = this.nodes, c = this.control(s, ac), g = this.p.gain;
     if (this.isCurrent()) {
       if (!c) return;
-      if (c.br != null) { m.addA(a - 1, c.br, g); m.addA(b - 1, c.br, -g); } else m.addVCCS(a, b, c.p, c.q, g);
+      if (c.br != null) { m.addA(a - 1, c.br, g * c.k); m.addA(b - 1, c.br, -g * c.k); } else m.addVCCS(a, b, c.p, c.q, g * c.k, g * (c.ki || 0));
       return;
     }
     const k = this.branches[0];
     m.addBranchKCL(a, b, k); m.addA(k, a - 1, 1); m.addA(k, b - 1, -1);
     if (!c) return;
-    if (c.br != null) m.addA(k, c.br, -g); else { m.addA(k, c.p - 1, -g); m.addA(k, c.q - 1, g); }
+    if (c.br != null) m.addA(k, c.br, -g * c.k);
+    else { m.addA(k, c.p - 1, -g * c.k, -g * (c.ki || 0)); m.addA(k, c.q - 1, g * c.k, g * (c.ki || 0)); }
+  }
+  /** a control's constant part (a capacitor's companion current) goes into the right-hand side */
+  stampStep(s) {
+    const c = this.control(s);
+    if (!c || !c.j) return;
+    const g = this.p.gain * c.j;
+    if (this.isCurrent()) s.addI(this.nodes[0], this.nodes[1], g);
+    else s.b[this.branches[0]] += g;
   }
   stamp(s) { this.stampWith(s, s); }
-  stampAC(ac) { this.stampWith(ac, ac.sim); }
+  stampAC(ac) { this.stampWith(ac, ac.sim, ac); }
   accept(s) {
     if (!this.isCurrent()) { this.setCurrent(s.x[this.branches[0]]); return; }
     const c = this.control(s);
     if (!c) { this.setCurrent(0); return; }
     const v = c.br != null ? s.x[c.br] : s.v(c.p) - s.v(c.q);
-    this.setCurrent(this.p.gain * c.k * v);
+    this.setCurrent(this.p.gain * (c.k * v + (c.j || 0)));
   }
   valueLabel() {
     const sym = String(this.p.sym || '').trim() || String(this.p.ctrl || '').replace(/^\w+:/, '');
