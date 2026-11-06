@@ -20,6 +20,7 @@ export const isPhasorDoc = (doc) => !!doc && doc.domain === 'phasor';
  * domain (j4 Ω, −j2.5 Ω) needs some ω to turn its impedances into henries and farads.
  */
 export function docOmega(doc) {
+  if (doc && doc.forceOmega != null) return doc.forceOmega; // a theorem step's drawing at its own ω
   for (const e of doc?.elements || []) {
     if (!isSource(e)) continue;
     const w = sourceOmega(e.p);
@@ -50,6 +51,7 @@ export function impedanceOf(e, omega) {
 
 /** The label of a part in the phasor domain (the book's frequency-domain drawing). */
 export function phasorLabel(e, omega) {
+  if (e.zText) return e.zText; // an equivalent's impedance (Z_th = 6.48 − j2.64 Ω)
   const t = e.constructor.type;
   if (t === 'resistor') return e.valueLabel();
   if (isCoil(e) || isCap(e)) return fmtRect(impedanceOf(e, omega), 'Ω', 4);

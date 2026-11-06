@@ -50,7 +50,7 @@ const names = (list) => list.map((e) => e.name).join(', ');
 const plural = (list, one, many) => (list.length === 1 ? one : many);
 
 // ------------------------------------------------------------------ union-find
-class UF {
+export class UF {
   constructor() { this.p = new Map(); }
   find(k) {
     if (!this.p.has(k)) { this.p.set(k, k); return k; }
@@ -101,6 +101,37 @@ function classify(e) {
  * Returns { elems, nodeCount, hasGround, nodePos, bad, notes, posts }.
  */
 export function extractNetwork(doc) {
+  const cls = doc.elements.map(classify);
+  const topo = topology(doc, cls);
+  const { node, posts } = topo;
+  const elems = [], bad = [], notes = [];
+  let hasGround = topo.hasGround;
+  cls.forEach((c, i) => {
+    const e = doc.elements[i], ps = posts[i];
+    if (c.note) notes.push(c.note);
+    if (c.k === 'R') elems.push({ kind: 'R', n: [node(ps[0]), node(ps[1])], val: c.v, name: e.name, src: i });
+    else if (c.k === 'I') elems.push({ kind: 'I', n: [node(ps[0]), node(ps[1])], val: c.v, name: e.name, src: i });
+    else if (c.k === 'rail') { hasGround = true; elems.push({ kind: 'V', n: [node(ps[0]), 0], val: c.v, name: e.name, src: i, rail: true }); }
+    else if (c.k === 'V') {
+      const p = node(ps[0]), q = node(ps[1]);
+      if (!c.r) { elems.push({ kind: 'V', n: [p, q], val: c.v, name: e.name, src: i }); return; }
+      const m = topo.newNode(); // the internal resistance sits between the ideal source and its − terminal
+      elems.push({ kind: 'V', n: [p, m], val: c.v, name: e.name, src: i });
+      elems.push({ kind: 'R', n: [m, q], val: c.r, name: `r(${e.name})`, src: i, internal: true });
+    } else if (c.k === 'bad') bad.push(`${e.name} (${c.why})`);
+  });
+  elems.forEach((x, i) => { x.id = i; });
+  const nodePos = topo.nodePos(); // (names every point's node: count after it)
+  return { elems, nodeCount: topo.count(), hasGround, nodePos, bad, notes, posts };
+}
+
+/**
+ * The nodes of a drawn circuit. Wires, T-junctions and net labels join points into nodes (node 0
+ * is ground); parts classified { k: 'short' } join their two ends, { k: 'gnd' } are ground.
+ * Returns { node(point) → number, posts, hasGround, newNode(), count(), nodePos() → Map node → the
+ * point to write its name at (its busiest one, a junction if it has one) }.
+ */
+export function topology(doc, cls) {
   const uf = new UF(), pts = [];
   const live = doc.wires.filter((w) => !w.burnt);
   for (const w of live) w.pts.forEach((p, i) => { uf.find(key(p)); pts.push(p); if (i) uf.union(key(w.pts[i - 1]), key(p)); });
@@ -114,7 +145,6 @@ export function extractNetwork(doc) {
     const k = key(posts[i][0]);
     if (nets.has(nm)) uf.union(nets.get(nm), k); else nets.set(nm, k);
   });
-  const cls = doc.elements.map(classify);
   cls.forEach((c, i) => { if (c.k === 'short') uf.union(key(posts[i][0]), key(posts[i][1])); });
   let gnd = null;
   cls.forEach((c, i) => {
@@ -131,34 +161,19 @@ export function extractNetwork(doc) {
     if (!ids.has(r)) ids.set(r, count++);
     return ids.get(r);
   };
-  const elems = [], bad = [], notes = [];
-  let hasGround = gnd !== null;
-  cls.forEach((c, i) => {
-    const e = doc.elements[i], ps = posts[i];
-    if (c.note) notes.push(c.note);
-    if (c.k === 'R') elems.push({ kind: 'R', n: [node(ps[0]), node(ps[1])], val: c.v, name: e.name, src: i });
-    else if (c.k === 'I') elems.push({ kind: 'I', n: [node(ps[0]), node(ps[1])], val: c.v, name: e.name, src: i });
-    else if (c.k === 'rail') { hasGround = true; elems.push({ kind: 'V', n: [node(ps[0]), 0], val: c.v, name: e.name, src: i, rail: true }); }
-    else if (c.k === 'V') {
-      const p = node(ps[0]), q = node(ps[1]);
-      if (!c.r) { elems.push({ kind: 'V', n: [p, q], val: c.v, name: e.name, src: i }); return; }
-      const m = count++; // the internal resistance sits between the ideal source and its − terminal
-      elems.push({ kind: 'V', n: [p, m], val: c.v, name: e.name, src: i });
-      elems.push({ kind: 'R', n: [m, q], val: c.r, name: `r(${e.name})`, src: i, internal: true });
-    } else if (c.k === 'bad') bad.push(`${e.name} (${c.why})`);
-  });
-  elems.forEach((x, i) => { x.id = i; });
-  // where to put a node's name on the drawing: its busiest point (a junction if it has one)
-  const deg = new Map();
-  const bump = (p, d = 1) => deg.set(key(p), (deg.get(key(p)) || 0) + d);
-  for (const w of live) w.pts.forEach((p, i) => bump(p, i === 0 || i === w.pts.length - 1 ? 1 : 2));
-  for (const ps of posts) for (const p of ps) bump(p, 1.5);
-  const nodePos = new Map(), best = new Map();
-  for (const p of pts) {
-    const n = node(p), d = deg.get(key(p)) || 0;
-    if (!best.has(n) || d > best.get(n)) { best.set(n, d); nodePos.set(n, [p[0], p[1]]); }
-  }
-  return { elems, nodeCount: count, hasGround, nodePos, bad, notes, posts };
+  const nodePos = () => {
+    const deg = new Map();
+    const bump = (p, d = 1) => deg.set(key(p), (deg.get(key(p)) || 0) + d);
+    for (const w of live) w.pts.forEach((p, i) => bump(p, i === 0 || i === w.pts.length - 1 ? 1 : 2));
+    for (const ps of posts) for (const p of ps) bump(p, 1.5);
+    const out = new Map(), best = new Map();
+    for (const p of pts) {
+      const n = node(p), d = deg.get(key(p)) || 0;
+      if (!best.has(n) || d > best.get(n)) { best.set(n, d); out.set(n, [p[0], p[1]]); }
+    }
+    return out;
+  };
+  return { node, posts, hasGround: gnd !== null, newNode: () => count++, count: () => count, nodePos };
 }
 
 // ------------------------------------------------------------------ solver
@@ -377,7 +392,7 @@ function nodalLines(elems, sol, ref, nm, max = 5) {
  * meshes [{ edges: [{ e, o }], at }] (o = +1 when the loop runs from e.n[0] to e.n[1]), and
  * co(e): Map mesh → ±1, the mesh currents that make up e's current.
  */
-function findMeshes(elems, geo) {
+export function findMeshes(elems, geo) {
   const E = elems.filter((e) => e.n[0] !== e.n[1]);
   const adj = new Map();
   const link = (n, k) => { if (!adj.has(n)) adj.set(n, []); adj.get(n).push(k); };

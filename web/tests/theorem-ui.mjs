@@ -117,7 +117,8 @@ check(!run.open && run.running && run.sel === 'R4', `Run the circuit: board runn
 await page.evaluate(() => { app.editor.setRunning(false); app.goHome(); app.openExample('ceamp'); }); await page.waitForTimeout(900);
 await page.evaluate(() => app.editor.theorem.open()); await page.waitForTimeout(300);
 const warn = await page.textContent('.th-warn').catch(() => '');
-check(/Q1/.test(warn) && (await page.$$eval('.th-card[disabled]', (x) => x.length)) === 10, 'a transistor circuit is refused, naming the part');
+// (an amplifier with a sine input is an AC circuit: the phasor theorems refuse it the same way)
+check(/Q1/.test(warn) && (await page.$$eval('.th-card[disabled]', (x) => x.length)) === (await page.$$eval('.th-card', (x) => x.length)), 'a transistor circuit is refused, naming the part');
 
 check(!errs.length, `no page errors ${errs.join(' | ')}`);
 await browser.close(); server.close();
