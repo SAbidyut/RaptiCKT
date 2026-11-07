@@ -40,6 +40,30 @@ export function sourceOmegas(doc) {
   return out;
 }
 
+/**
+ * The angle the circuit's currents are read against: the phase of its first source running at
+ * ω (the book's I = V/Z out of the + terminal), else 0°. A current label points its arrow the
+ * way that keeps the phasor within ±90° of it — the way a DC label points along a positive
+ * current — so a series loop driven by 100∠20° V through 30 + j40 Ω reads 2∠−33.1° A in the
+ * direction it flows out of +, not 2∠146.9° A the other way round.
+ */
+export function refAngle(doc, omega) {
+  for (const e of doc?.elements || []) {
+    if (!isSource(e) || e.constructor.type === 'rail') continue;
+    const z = sourcePhasor(e.p, omega);
+    if (C.abs(z) > 0 && sourceOmega(e.p) > 0) return C.arg(z);
+  }
+  return 0;
+}
+
+/** A current phasor and whether its arrow turns round: { z, flip } with z within ±90° of `ref`. */
+export function orientCurrent(z, ref = 0) {
+  const r = (ref * Math.PI) / 180;
+  const along = z[0] * Math.cos(r) + z[1] * Math.sin(r);
+  const scale = Math.hypot(z[0], z[1]);
+  return along < -1e-9 * scale ? { z: [-z[0], -z[1]], flip: true } : { z, flip: false };
+}
+
 /** A part's impedance at ω (R, jωL, 1/(jωC)), or null when it is not a plain R, L or C. */
 export function impedanceOf(e, omega) {
   const t = e.constructor.type;
@@ -132,10 +156,13 @@ export function phasorReadings(e, sol) {
   const out = [], V = sol.voltage(e), I = sol.current(e);
   const iu = 'A';
   if (Number.isFinite(V[0])) out.push(['V (phasor)', fmtPhasor(V, 'V')]);
-  if (Number.isFinite(I[0])) out.push([`I (phasor, terminal 1 → 2)`, fmtPhasor(I, iu)]);
+  // a voltage source: the current out of its + terminal (I = V/Z) and the power it delivers,
+  // as its DC readings give them; any other part: terminal 1 → 2 and the power it takes
+  const src = SRC_V.has(e.constructor.type), Iout = src ? C.neg(I) : I;
+  if (Number.isFinite(I[0])) out.push([src ? 'I (phasor, out of +)' : 'I (phasor, terminal 1 → 2)', fmtPhasor(Iout, iu)]);
   if (sol.omega > 0 && Number.isFinite(I[0]) && Number.isFinite(V[0])) {
-    const S = C.scale(C.mul(V, C.conj(I)), 0.5); // peak phasors: S = ½VI*
-    if (C.abs(S) > 1e-15) out.push(['S = ½VI*', fmtRect(S, 'VA', 4)]);
+    const S = C.scale(C.mul(V, C.conj(Iout)), 0.5); // peak phasors: S = ½VI*
+    if (C.abs(S) > 1e-15) out.push([src ? 'S delivered = ½VI*' : 'S = ½VI*', fmtRect(S, 'VA', 4)]);
   }
   return out;
 }
