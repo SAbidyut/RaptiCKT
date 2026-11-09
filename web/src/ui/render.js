@@ -3,7 +3,7 @@
 import { GRID } from '../elements/index.js';
 import { fmtSI } from '../engine/units.js';
 import { VIEW } from '../elements/base.js';
-import { isPhasorDoc, docOmega } from './phasor-view.js';
+import { isPhasorDoc, docOmega, refAngle, orientCurrent } from './phasor-view.js';
 import { fmtPhasor } from '../engine/phasor.js';
 
 const key = (x, y) => Math.round(x) + ',' + Math.round(y);
@@ -831,6 +831,7 @@ export class Renderer {
     // phasor domain: every node voltage and part current as its phasor (peak∠angle, as the book)
     if (st.phasor && VIEW.omega != null) {
       const ph = st.phasor, mag = (z) => Math.hypot(z[0], z[1]);
+      const ref = refAngle(st.doc, ph.omega);
       let vmax = 0, imax = 0;
       for (const L of lay.volts) vmax = Math.max(vmax, mag(ph.node(L.node)));
       const cur = new Map();
@@ -843,7 +844,10 @@ export class Renderer {
         const z = cur.get(L);
         if (!Number.isFinite(z[0])) continue;
         const zero = mag(z) < 1e-8 * imax + 1e-12;
-        put(zero ? '0 A' : `${L.fwd} ${fmtPhasor(z, 'A', 4, 1)}`, L.x, L.y, L.align, L.base, th.iLabel);
+        if (zero) { put('0 A', L.x, L.y, L.align, L.base, th.iLabel); continue; }
+        // the arrow the way the current flows (within ±90° of the source's phase), as on DC
+        const o = orientCurrent(z, ref);
+        put(`${o.flip ? L.back : L.fwd} ${fmtPhasor(o.z, 'A', 4, 1)}`, L.x, L.y, L.align, L.base, th.iLabel);
       }
       return;
     }
