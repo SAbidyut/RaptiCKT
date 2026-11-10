@@ -9,9 +9,10 @@ const android = path.resolve('../android/app/src/main/assets/www');
 
 function copyStatic() {
   fs.mkdirSync(out, { recursive: true });
-  for (const f of ['index.html', 'src/styles.css', 'public/icon.svg']) {
+  for (const f of ['index.html', 'src/styles.css', 'src/rapti-theme.css', 'public/icon.svg']) {
     if (fs.existsSync(f)) fs.copyFileSync(f, path.join(out, path.basename(f)));
   }
+  fs.cpSync('public/fonts', path.join(out, 'fonts'), { recursive: true }); // the typeface the theme uses
   if (fs.existsSync(path.resolve('../android/app'))) {
     fs.rmSync(android, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(android), { recursive: true });

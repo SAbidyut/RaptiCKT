@@ -4,7 +4,7 @@
 const K = { settings: 'raptickt.settings.v1', circuits: 'raptickt.circuits.v1', recent: 'raptickt.recent.v1', autosave: 'raptickt.autosave.v1', flags: 'raptickt.flags.v1', folders: 'raptickt.folders.v1', lf: 'raptickt.loadflow.v1', lfSaved: 'raptickt.loadflow.saved.v1' };
 
 export const DEFAULT_SETTINGS = {
-  theme: 'dark',
+  theme: 'light',
   grid: 'lines',
   currentDots: true,
   dotSpeed: 1,
@@ -217,6 +217,8 @@ export const bridge = {
     });
   },
   keepScreenOn(on) { try { A()?.keepScreenOn(!!on); } catch { /* ignore */ } },
+  /** Android: colour the system bars like the page ("#rrggbb" each); light = bright theme, dark bar icons. */
+  setBars(status, nav, light) { try { A()?.setBars?.(status, nav, !!light); } catch { /* ignore */ } },
   /** Full screen: Android hides the status and navigation bars; a browser uses the Fullscreen API. */
   setImmersive(on) {
     try { if (A()) { A().setImmersive(!!on); return; } } catch { /* fallthrough */ }

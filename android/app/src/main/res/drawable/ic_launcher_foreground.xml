@@ -9,6 +9,6 @@
         <path android:pathData="M61.0 66.0 L65.0 70.4 L61.9 78.8 L79.2 74.1 L72.8 90.9 L90.1 86.2 L87.0 94.6 L91.0 99.0" android:strokeColor="#FFFFFF" android:strokeWidth="7.5" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"/>
         <path android:pathData="M38.5,99.5a6.5,6.5 0 1,0 13.0,0a6.5,6.5 0 1,0 -13.0,0" android:strokeColor="#FFFFFF" android:strokeWidth="5" android:fillColor="#00000000"/>
         <path android:pathData="M89.0,103.5a6.5,6.5 0 1,0 13.0,0a6.5,6.5 0 1,0 -13.0,0" android:strokeColor="#FFFFFF" android:strokeWidth="5" android:fillColor="#00000000"/>
-        <path android:pathData="M89.5,30a8.5,8.5 0 1,0 17.0,0a8.5,8.5 0 1,0 -17.0,0" android:fillColor="#FBBF24"/>
+        <path android:pathData="M89.5,30a8.5,8.5 0 1,0 17.0,0a8.5,8.5 0 1,0 -17.0,0" android:fillColor="#FFD92E"/>
     </group>
 </vector>

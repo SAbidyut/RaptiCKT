@@ -93,7 +93,7 @@ export class PhotoScreen {
   }
 
   get settings() { return this.app.settings; }
-  theme() { return THEMES[this.settings.theme] || THEMES.dark; }
+  theme() { return THEMES[this.settings.theme] || THEMES.light; }
 
   open() {
     if (this.stage !== 'reading' && this.stage !== 'crop') this.stage = this.answer ? 'result' : 'start';

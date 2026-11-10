@@ -20,11 +20,15 @@
       window.addEventListener('resize', fit);
     })();
   </script>
-  <meta name="theme-color" content="#0b1120">
+  <meta name="theme-color" content="#fffaf0">
+  <meta name="color-scheme" content="light dark">
   <meta name="description" content="RaptiCKT – Resonance Automation circuit simulator: real-time analog, digital and mixed-signal simulation with oscilloscope, multimeter, Bode plots and SPICE export.">
   <title>RaptiCKT – Circuit Simulator</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="rapti-theme.css">
+  <!-- the splash is blue: nothing brighter may flash before it is up -->
+  <style>html:not(.booted), html:not(.booted) body { background: #1d4bff; }</style>
 </head>
 <body>
   <div id="app"></div>

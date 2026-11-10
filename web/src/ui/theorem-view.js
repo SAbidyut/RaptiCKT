@@ -316,7 +316,7 @@ export class TheoremView {
     return '';
   }
 
-  theme() { return THEMES[this.ed.settings.theme] || THEMES.dark; }
+  theme() { return THEMES[this.ed.settings.theme] || THEMES.light; }
 
   /** the theorems for this circuit: the DC ones, or the phasor ones for an AC circuit */
   list() { return this.ac ? AC_THEOREMS : THEOREMS; }

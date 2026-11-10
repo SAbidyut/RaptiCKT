@@ -1,0 +1,304 @@
+/* =====================================================================
+   RaptiCKT — RAPTI website theme
+   Loaded after styles.css. It changes how the simulator LOOKS only:
+   colours, type, buttons, cards. Nothing here moves or resizes the
+   working parts of the editor.
+
+   1. Typeface        2. Colours for the three themes
+   3. Type            4. Buttons        5. Home screen
+   6. Lists & cards   7. Bottom bar     8. Editor
+   9. Instruments (scope, meter, knob)  10. Sheets, menus, settings
+   11. Manual & about 12. Splash screen
+   13. Load flow, network theorems, circuit from photo
+   ===================================================================== */
+
+/* ---------- 1. Typeface (the same one the website uses) ---------- */
+@font-face { font-family: "Archivo"; src: url("fonts/archivo-latin.woff2") format("woff2"); font-weight: 100 900; font-stretch: 62% 125%; font-style: normal; font-display: swap; }
+
+/* ---------- 2. Colours ----------
+   "RAPTI Day" (the bright theme) is what a new visitor sees.
+   The names on the left are the simulator's own; the values are the
+   website's palette.                                                  */
+:root, :root[data-theme=light] {
+  /* website palette */
+  --ink: #0b1026; --blue: #1d4bff; --blue-700: #0e2ab3; --volt: #ffd92e; --volt-700: #c79600;
+  --hot: #ff5a3c; --hot-700: #c2360f; --mint: #14c796; --mint-700: #0b8f6b; --go: #1fc15e; --go-700: #128a40;
+
+  --bg: #fffaf0; --bg2: #ffffff; --surface: #ffffff; --surface2: #f6efdc; --surface3: #ece3c8;
+  --border: #e9e2cd; --border2: #d8cfb4; --edge: #d8cfb4;
+  --text: #0b1026; --text2: #3b4266; --muted: #5a6183;
+  --accent: #1d4bff; --accent2: #c2360f; --amber: #a86c00; --ok: #0b8f6b; --danger: #d6401d;
+  --grad: linear-gradient(#1d4bff, #1d4bff);
+  --glass: rgba(255, 255, 255, .97);
+  --shadow: 0 12px 30px rgba(11, 16, 38, .16);
+  --tint: rgba(29, 75, 255, .1);            /* soft fill behind a selected thing */
+  --on-bg: #0b1026; --on-fg: #ffffff; --on-edge: #000000;   /* a selected chip or tab */
+  --nav-bg: #0b1026;                        /* the bottom bar */
+  --pop-line: #0b1026; --pop-shadow: 5px 5px 0 #0b1026;     /* menus and pop-ups */
+  --r: 18px;
+  --font: "Archivo", "Inter", "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+:root[data-theme=dark], :root[data-theme=amoled] {
+  --bg: #0b1026; --bg2: #0f1533; --surface: #171e42; --surface2: #1f2853; --surface3: #2a3261;
+  --border: rgba(170, 185, 255, .15); --border2: rgba(170, 185, 255, .28); --edge: #05081a;
+  --text: #f4f6ff; --text2: #c5cbee; --muted: #8f98c8;
+  --accent: #ffd92e; --accent2: #6d8cff; --amber: #ffd92e; --ok: #3ddc97; --danger: #ff7a5f;
+  --grad: linear-gradient(#ffd92e, #ffd92e);
+  --glass: rgba(23, 30, 66, .97);
+  --shadow: 0 12px 30px rgba(0, 0, 0, .5);
+  --tint: rgba(255, 217, 46, .13);
+  --on-bg: #ffd92e; --on-fg: #0b1026; --on-edge: #c79600;
+  --nav-bg: #171e42;
+  --pop-line: rgba(170, 185, 255, .4); --pop-shadow: 0 14px 34px rgba(0, 0, 0, .55);
+  color-scheme: dark;
+}
+:root[data-theme=amoled] {
+  --bg: #000000; --bg2: #000000; --surface: #0c1024; --surface2: #141a36; --surface3: #1d2548;
+  --edge: #000000; --glass: rgba(10, 13, 30, .97); --nav-bg: #0c1024;
+}
+
+/* ---------- 3. Type ---------- */
+body { font-stretch: 100%; }
+.hero h1, .page-title, .about-hero h2, .splash h1, .man-hero h2 { font-weight: 900; font-stretch: 125%; letter-spacing: -.012em; }
+.brand b { font-weight: 900; font-stretch: 125%; letter-spacing: .01em; }
+.brand small { font-weight: 700; letter-spacing: .1em; }
+/* the "CKT" in the name: one flat colour instead of a gradient */
+.splash h1 span, .brand b span, .about-hero h2 span { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: var(--accent); }
+.sec-title { font-weight: 800; font-stretch: 110%; }
+.sec-title b, .modal-head b, .an-head b, .pal-head > b, .insp-title b { font-weight: 800; font-stretch: 108%; }
+.link { font-weight: 800; }
+.tag { font-weight: 800; letter-spacing: .08em; }
+mark { background: var(--volt); color: var(--ink); padding: .02em .16em .04em; border-radius: .14em; display: inline-block; transform: rotate(-1.5deg); }
+
+/* ---------- 4. Buttons: chunky, with a bottom edge that presses down ---------- */
+.btn { border: 0; border-radius: 14px; background: var(--surface); color: var(--text); font-weight: 800; box-shadow: 0 4px 0 var(--edge), inset 0 0 0 2px var(--border); transition: transform .12s ease, box-shadow .12s ease, filter .15s; }
+.btn:active { transform: translateY(4px); box-shadow: 0 0 0 var(--edge), inset 0 0 0 2px var(--border); }
+.btn.primary { background: var(--volt); color: var(--ink); box-shadow: 0 4px 0 var(--volt-700); }
+.btn.primary:active { box-shadow: 0 0 0 var(--volt-700); }
+.btn.glass { background: rgba(255, 255, 255, .12); color: #fff; box-shadow: 0 4px 0 rgba(6, 16, 90, .45), inset 0 0 0 2px rgba(255, 255, 255, .7); }
+.btn.glass:active { box-shadow: 0 0 0 rgba(6, 16, 90, .45), inset 0 0 0 2px #fff; }
+.btn.big { border-radius: 16px; }
+.btn.danger { color: var(--danger); box-shadow: 0 4px 0 var(--edge), inset 0 0 0 2px color-mix(in srgb, var(--danger) 45%, transparent); }
+.btn-row { gap: 10px; row-gap: 12px; }
+.icon-btn.on, .tb.on { color: var(--accent); background: var(--tint); }
+.icon-btn.add { background: var(--volt); color: var(--ink); }
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover { filter: brightness(1.05); }
+  .icon-btn:hover, .tb:hover:not(.run), .menu button:hover, .sheet-actions button:hover, .selbar button:hover, .quickbar > button:hover { background: var(--surface2); }
+  .feat:hover, .ex-item:hover, .lib-item:hover, .resume:hover, .pal-item:hover, .man-card:hover, .card:hover .thumb { border-color: var(--text); }
+}
+
+/* ---------- 5. Home screen ---------- */
+.home-head { background: var(--bg); }
+.hero {
+  border: 0; border-radius: 28px; padding: 30px 26px 24px; color: #fff; box-shadow: 0 6px 0 var(--blue-700);
+  background:
+    radial-gradient(60% 90% at 88% 10%, #456dff 0%, transparent 70%),
+    radial-gradient(50% 80% at 0% 100%, var(--blue-700) 0%, transparent 72%),
+    var(--blue);
+}
+:root[data-theme=dark] .hero, :root[data-theme=amoled] .hero { box-shadow: 0 6px 0 #071566; }
+/* the dotted pattern from the website's hero */
+.hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(rgba(255, 255, 255, .16) 1.3px, transparent 1.5px); background-size: 24px 24px; -webkit-mask-image: linear-gradient(110deg, transparent 40%, #000); mask-image: linear-gradient(110deg, transparent 40%, #000); }
+.hero > * { z-index: 1; }
+.hero h1 { font-size: clamp(25px, 4.6vw, 44px); line-height: 1; text-transform: uppercase; margin-bottom: 12px; }
+.hero p { color: #dbe2ff; font-size: 15.5px; }
+.hero-btns { gap: 12px; row-gap: 14px; }
+.hero-stats { gap: 26px; margin-top: 24px; }
+.hero-stats b { font-size: 26px; font-weight: 900; font-stretch: 122%; line-height: 1.1; }
+.hero-stats span { color: #c8d2ff; font-weight: 700; letter-spacing: .08em; }
+.hero-wave { opacity: .5; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 120'%3E%3Cpath d='M0 60 C25 0 50 0 75 60 S125 120 150 60 S200 0 225 60 S275 120 300 60' fill='none' stroke='%23ffd92e' stroke-width='3'/%3E%3Cpath d='M0 60 C25 20 50 20 75 60 S125 100 150 60 S200 20 225 60 S275 100 300 60' fill='none' stroke='%23ffffff' stroke-width='2'/%3E%3C/svg%3E"); }
+
+@media (max-width: 600px) { .hero-wave { display: none; } .hero { padding: 26px 20px 22px; border-radius: 24px; } }
+
+.resume { border: 2px solid var(--border); box-shadow: 0 4px 0 var(--edge); }
+.resume b { font-weight: 800; }
+
+.feat { border: 2px solid var(--border); border-radius: 20px; padding: 14px 12px 13px; box-shadow: 0 4px 0 var(--edge); }
+.feat:active { background: var(--surface); border-color: var(--text); }
+.feat .fi { width: 40px; height: 40px; border-radius: 13px; margin-bottom: 12px; background: var(--volt); box-shadow: none; transform: rotate(-5deg); }
+.feat .fi .ic { color: var(--ink); }
+.feat:nth-child(6n+2) .fi { background: var(--mint); transform: rotate(4deg); }
+.feat:nth-child(6n+3) .fi { background: var(--blue); }
+.feat:nth-child(6n+3) .fi .ic, .feat:nth-child(6n+4) .fi .ic { color: #fff; }
+.feat:nth-child(6n+4) .fi { background: var(--hot); transform: rotate(5deg); }
+.feat:nth-child(6n+6) .fi { background: var(--mint); transform: rotate(3deg); }
+.feat b { font-weight: 800; font-size: 13.5px; }
+
+.rapti-banner { background: var(--volt); color: var(--ink); border: 0; box-shadow: 0 5px 0 var(--volt-700); }
+.rapti-banner b { font-weight: 800; }
+.rapti-banner span { color: #4a3d00; }
+.home-foot { font-weight: 600; }
+
+/* ---------- 6. Lists & cards ---------- */
+.card .thumb, .ex-item .thumb, .lib-item .thumb { border: 2px solid var(--border); border-radius: 16px; background: var(--bg2); }
+.card b, .ex-item b, .lib-meta b { font-weight: 800; }
+.ex-item, .lib-item { border: 2px solid var(--border); box-shadow: 0 4px 0 var(--edge); }
+.lib-item.folder .thumb.folder-ico { background: var(--tint); }
+.lib-item.sel { border-color: var(--accent); background: var(--tint); }
+.lib-item.sel .sel-box { color: var(--on-fg); }
+.move-list button.here { background: var(--tint); }
+.page-title { text-transform: uppercase; font-size: 26px; line-height: 1.05; margin-bottom: 6px; }
+.chips { padding-bottom: 12px; }
+.chip2 { border: 2px solid var(--border); font-weight: 700; color: var(--text); box-shadow: 0 3px 0 var(--edge); }
+.chip2.on, .pal-tabs button.on, .an-tabs button.on { background: var(--on-bg); color: var(--on-fg); border-color: var(--on-bg); box-shadow: 0 3px 0 var(--on-edge); }
+.pal-tabs button, .an-tabs button { border: 2px solid var(--border); font-weight: 700; }
+.empty b { font-weight: 800; }
+
+/* ---------- 7. Bottom bar: the floating dark bar from the website's phone view ---------- */
+.bottom-nav {
+  left: 50%; right: auto; bottom: calc(10px + var(--safe-b)); transform: translateX(-50%);
+  width: min(560px, calc(100% - 20px)); padding: 7px; gap: 2px; border: 0; border-radius: 24px;
+  background: var(--nav-bg); box-shadow: 0 10px 30px -8px rgba(11, 16, 38, .55);
+}
+:root[data-theme=dark] .bottom-nav, :root[data-theme=amoled] .bottom-nav { box-shadow: 0 0 0 1px var(--border2), 0 10px 30px -8px rgba(0, 0, 0, .7); }
+.bottom-nav button { flex: 1; padding: 6px 4px; border-radius: 18px; color: #8f98c8; font-weight: 700; }
+.bottom-nav button.on { color: var(--volt); background: rgba(255, 255, 255, .09); }
+.bottom-nav button.on .ic { filter: none; }
+@media (orientation: landscape) and (max-height: 520px) { .bottom-nav { padding: 4px; bottom: calc(6px + var(--safe-b)); } .home-scroll { padding-bottom: calc(66px + var(--safe-b)); } }
+
+/* ---------- 8. Editor ---------- */
+.topbar .title b { font-weight: 800; }
+.tb { font-weight: 700; }
+.tb.run { background: var(--go); color: #fff; box-shadow: 0 3px 0 var(--go-700); }           /* green = start */
+.tb.run.on { background: var(--hot); box-shadow: 0 3px 0 var(--hot-700); }                     /* running: press to pause */
+.fab { border-radius: 20px; background: var(--volt); color: var(--ink); box-shadow: 0 5px 0 var(--volt-700); transition: transform .12s ease, box-shadow .12s ease, opacity .2s; }
+.fab:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--volt-700); }
+.hud-status { border-width: 2px; font-weight: 600; }
+.hud-status .dot.live { box-shadow: none; }
+.mode-seg { border-width: 2px; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: 0 3px 0 var(--edge); }
+.mseg { font-weight: 700; }
+.toast { background: var(--ink); color: #fff; border: 0; font-weight: 600; }
+:root[data-theme=dark] .toast, :root[data-theme=amoled] .toast { background: var(--volt); color: var(--ink); }
+.selbar, .quickbar { border-width: 2px; }
+.hint-card { border-width: 2px; }
+.hint-card b { font-weight: 800; }
+.pal-item { border: 2px solid var(--border); }
+.pal-item.added { animation: none; }
+.pal-item:active { border-color: var(--text); }
+.read b, .qb-read, .speed-val, .knob-label b, .tag-chip { color: var(--accent); }
+.insp-actions button { font-weight: 700; }
+
+/* ---------- 9. Instruments: dark screens in every theme, like real bench gear ---------- */
+.scope-panel { background: #0b1026; box-shadow: none; }
+.editor.fs.with-scope:not(.side-scope) .scope-panel { border-top-color: #0b1026; }
+.editor.fs.side-scope.with-scope .scope-panel { border-right-color: #0b1026; }
+.scope-tools { background: rgba(23, 30, 66, .92); border-color: rgba(170, 185, 255, .22); }
+.scope-tools .icon-btn { color: #c5cbee; }
+.scope-tools .icon-btn.on { color: #3ddc97; background: rgba(61, 220, 151, .14); }
+.scope-mode { color: #ffd92e; background: rgba(255, 217, 46, .12); border-color: rgba(255, 217, 46, .32); }
+.scope-mode.on { color: #3ddc97; background: rgba(61, 220, 151, .14); border-color: rgba(61, 220, 151, .4); }
+.scope-empty b { color: #ffd92e; }
+.scope-meas { background: rgba(11, 16, 38, .94); border-top-color: rgba(170, 185, 255, .16); }
+.chip { background: rgba(23, 30, 66, .92); }
+.chip i { box-shadow: none; }
+
+.meter-card { background: #171e42; border: 2px solid #2a3261; color: #f4f6ff; }
+.dmm-head b { color: #ffd92e; }
+.dmm-lcd { background: #06140f; }
+.dmm-val { text-shadow: none; }
+.seg button.on { background: #ffd92e; color: #0b1026; }
+
+.knob-dial { background: radial-gradient(circle at 50% 35%, #2a3261, #171e42 70%); box-shadow: 0 6px 0 rgba(11, 16, 38, .35), inset 0 2px 2px rgba(255, 255, 255, .1), 0 0 0 2px #0b1026; }
+.knob.active .knob-dial { box-shadow: 0 6px 0 rgba(11, 16, 38, .35), 0 0 0 4px #ffd92e, inset 0 2px 2px rgba(255, 255, 255, .1); }
+.knob-ticks i { background: rgba(170, 185, 255, .45); }
+.knob-cap { background: radial-gradient(circle at 40% 30%, #3a4588, #1f2853 75%); }
+.knob-cap i { background: #ffd92e; box-shadow: none; }
+.knob-digits span.on { color: #ffd92e; text-shadow: none; }
+.knob-label, .knob-btn { border-width: 2px; }
+.knob-btn:active { background: var(--tint); }
+
+/* the tool rail in full-screen mode sits over the circuit */
+.editor.fs .fs-rail { background: rgba(23, 30, 66, .94); }
+.editor.fs .fs-handle { background: rgba(23, 30, 66, .8); }
+.fs-btn { color: #c5cbee; }
+.fs-btn.on { color: #ffd92e; background: rgba(255, 217, 46, .14); }
+.fs-btn.fs-run { color: #3ddc97; }
+.fs-btn.fs-run.running { color: #ff8a6e; background: rgba(255, 90, 60, .16); }
+
+/* ---------- 10. Sheets, menus, settings ---------- */
+.sheet { border-top: 2px solid var(--border2); border-radius: 26px 26px 0 0; }
+.modal { background: rgba(11, 16, 38, .6); }
+.modal-card { border: 2px solid var(--border2); border-radius: 26px 26px 0 0; }
+.scrim { background: rgba(11, 16, 38, .45); }
+.menu, .popover { border: 2px solid var(--pop-line); box-shadow: var(--pop-shadow); border-radius: 18px; }
+.menu button, .sheet-actions button { font-weight: 600; }
+.search { border: 2px solid var(--border); }
+.search:focus-within { border-color: var(--accent); }
+@media (min-width: 900px) { .sheet { border: 2px solid var(--border2); border-radius: 24px; } }
+
+.set-scroll h4, .an-body h4 { font-weight: 800; letter-spacing: .09em; }
+.set-row { border: 2px solid var(--border); box-shadow: 0 3px 0 var(--edge); border-radius: 16px; }
+.set-row b { font-weight: 700; }
+.set-row select, .set-row input.num, .prop select, .prop input[type=text], .form-grid input, .form-grid select { border: 2px solid var(--border); border-radius: 12px; font-weight: 600; }
+.set-row select:focus, .set-row input.num:focus, .prop select:focus, .prop input[type=text]:focus, .form-grid input:focus, .form-grid select:focus { outline: none; border-color: var(--accent); }
+input.toggle { background: var(--border2); }
+input.toggle:checked { background: var(--accent); }
+input.toggle::after { box-shadow: 0 1px 3px rgba(11, 16, 38, .35); }
+.plot-wrap canvas { border-width: 2px; }
+.an-summary { border-width: 2px; }
+.netlist { background: #0b1026; color: #9ff0cf; border: 2px solid var(--border2); }
+.insp-ico, .quickbar .qb-main img { border-width: 2px; }
+.insp-fault { background: color-mix(in srgb, var(--danger) 8%, transparent); border-color: color-mix(in srgb, var(--danger) 50%, transparent); }
+.insp-fault .prop > span { color: var(--danger); }
+
+/* ---------- 11. Manual & about ---------- */
+.man-card { border-width: 2px; }
+.man-card .n { background: var(--tint); font-weight: 800; }
+.man-h .n { background: var(--volt); color: var(--ink); font-weight: 800; }
+.man-note { background: var(--tint); border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.man-note.warn { background: color-mix(in srgb, var(--volt) 22%, transparent); border-color: var(--volt-700); }
+.man-note.warn .ic { color: var(--volt-700); }
+.about-logo svg { filter: none; }
+.about-card { border: 2px solid var(--border); box-shadow: 0 4px 0 var(--edge); border-radius: 20px; }
+.about-card.rapti { background: var(--surface); border-color: var(--border); }
+.about-card h3 { font-weight: 800; }
+.course-chips button, .contact button { border: 2px solid var(--border); font-weight: 600; }
+.course-chips button:active { border-color: var(--text); }
+
+/* ---------- 12. Splash screen: the website's blue ---------- */
+.splash { background: radial-gradient(60% 60% at 70% 30%, #456dff 0%, transparent 70%), var(--blue); }
+.splash svg { filter: drop-shadow(0 8px 0 rgba(6, 16, 90, .45)); }
+.splash h1 { color: #fff; }
+.splash h1 span { color: var(--volt); }
+.splash p { color: #dbe2ff; font-weight: 700; }
+.splash-bar { background: rgba(255, 255, 255, .22); height: 5px; border-radius: 5px; }
+.splash-bar i { background: var(--volt); }
+
+/* ---------- 13. Load flow, network theorems, circuit from photo ---------- */
+/* a chosen tab, step or option: the same solid chip as everywhere else */
+.lf-seg button.on, .th-seg button.on, .th-crumbs i.on { background: var(--on-bg); color: var(--on-fg); border-color: var(--on-bg); }
+.lf-seg, .th-seg { border-width: 2px; }
+.lf-seg button, .th-seg button { font-weight: 700; }
+/* icon tiles: the yellow tile of the home screen */
+.lf-banner .lf-ico, .th-badge { background: var(--volt); color: var(--ink); box-shadow: none; transform: rotate(-4deg); }
+.about-pins i { background: var(--volt); color: var(--ink); font-weight: 800; }
+.ph-ico { background: var(--hot); color: #fff; transform: rotate(-4deg); }
+
+/* cards you tap */
+.lf-banner, .th-card, .lf-row { background: var(--surface); border: 2px solid var(--border); box-shadow: 0 4px 0 var(--edge); }
+.lf-banner b, .th-card b, .lf-row b { font-weight: 800; }
+.lf-list { gap: 10px; }
+.ph-hero { background: var(--tint); border: 2px solid var(--border2); }
+@media (hover: hover) and (pointer: fine) { .lf-banner:hover, .th-card:not([disabled]):hover, .lf-row:hover { border-color: var(--text); } }
+
+/* cards you read */
+.lf-card, .lf-status, .lf-tile, .lf-tw, .lf-chart, .lf-det, .th-step, .th-math, .th-fig, .th-zoom-body, .ph-edit, .ph-empty, .ph-note { border-width: 2px; }
+.lf-diag { border-width: 2px; box-shadow: none; }
+.lf-lab input, .lf-lab select, .lf-paste, .ph-row select, .ph-row .ph-val input { border-width: 2px; font-weight: 600; }
+.lf-lab input:focus, .lf-lab select:focus, .lf-paste:focus, .ph-row select:focus, .ph-row .ph-val input:focus { outline: none; border-color: var(--accent); }
+.th-answer { background-image: none; border: 2px solid var(--accent); }
+
+/* soft highlights use the theme's own tint */
+.lf-tip, .th-res span { background: var(--tint); border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.th-tbl tr.mark td, .ph-row.on { background: var(--tint); }
+.lf-badge { font-weight: 800; }
+.lf-badge.slack { background: var(--tint); }
+.lf-badge.pv { background: color-mix(in srgb, var(--ok) 16%, transparent); }
+.lf-badge.pq { background: color-mix(in srgb, var(--amber) 18%, transparent); }
+.lf-badge.xf { background: color-mix(in srgb, var(--accent2) 16%, transparent); }
+.lf-alert.okv { background: color-mix(in srgb, var(--ok) 10%, transparent); border: 2px solid color-mix(in srgb, var(--ok) 35%, transparent); }
+.th-warn, .ph-sure { background: color-mix(in srgb, var(--volt) 22%, transparent); border: 2px solid var(--volt-700); }
+.th-warn svg, .ph-sure svg, .ph-empty.bad .ic { color: var(--volt-700); }
+.ph-scan { background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--accent) 32%, transparent), transparent); }

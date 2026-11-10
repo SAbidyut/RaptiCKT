@@ -12,7 +12,7 @@ const root = path.resolve('dist');
 const server = http.createServer((req, res) => {
   const f = path.join(root, req.url === '/' ? 'index.html' : req.url.slice(1).split('?')[0]);
   if (!fs.existsSync(f)) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { 'content-type': { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html' }[path.extname(f)] || 'image/svg+xml' });
+  res.writeHead(200, { 'content-type': { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.woff2': 'font/woff2' }[path.extname(f)] || 'image/svg+xml' });
   fs.createReadStream(f).pipe(res);
 }).listen(0);
 const url = `http://127.0.0.1:${server.address().port}/`;
@@ -43,27 +43,31 @@ for (const [name, js, wait] of shots) {
 
 // ---- icon 512
 const ip = await browser.newPage({ viewport: { width: 512, height: 512 } });
-await ip.setContent(`<html><body style="margin:0;background:#070b14">${LOGO_SVG(512, 'i').replace('viewBox="0 0 128 128"', 'viewBox="-14 -14 156 156"').replace(/<rect x="4" y="4" width="120" height="120" rx="32"/g, '<rect x="-14" y="-14" width="156" height="156"')}</body></html>`);
+await ip.setContent(`<html><body style="margin:0;background:#1d4bff">${LOGO_SVG(512, 'i').replace('viewBox="0 0 128 128"', 'viewBox="-14 -14 156 156"').replace(/<rect x="4" y="4" width="120" height="120" rx="32"/g, '<rect x="-14" y="-14" width="156" height="156"')}</body></html>`);
 await ip.screenshot({ path: path.join(out, 'icon-512.png'), omitBackground: false });
 
 // ---- feature graphic 1024x500
 const shot = fs.readFileSync(path.join(out, 'screenshots', '2-lrc-oscillator.png')).toString('base64');
 const shot2 = fs.readFileSync(path.join(out, 'screenshots', '3-555-timer.png')).toString('base64');
 const fp = await browser.newPage({ viewport: { width: 1024, height: 500 } });
+const font = fs.readFileSync(path.join(root, 'fonts', 'archivo-latin.woff2')).toString('base64');
 await fp.setContent(`<html><head><style>
-  body{margin:0;width:1024px;height:500px;overflow:hidden;font-family:Inter,Roboto,system-ui,sans-serif;color:#fff;
-   background:radial-gradient(circle at 80% 20%,rgba(139,92,246,.55),transparent 55%),radial-gradient(circle at 5% 100%,rgba(34,211,238,.45),transparent 55%),linear-gradient(135deg,#0b1633,#1a1150);}
-  .t{position:absolute;left:56px;top:92px;width:520px}
-  h1{margin:18px 0 6px;font-size:66px;font-weight:800;letter-spacing:.5px}
-  h1 span{background:linear-gradient(135deg,#22d3ee,#8b5cf6);-webkit-background-clip:text;color:transparent}
-  .tag{letter-spacing:5px;text-transform:uppercase;color:#a5b4d4;font-size:16px}
-  p{font-size:25px;line-height:1.3;color:#e2ecff;margin:20px 0 0;font-weight:600}
-  .ph{position:absolute;width:236px;border-radius:30px;border:6px solid #0a0f1c;box-shadow:0 30px 60px rgba(0,0,0,.55)}
-  .wave{position:absolute;left:0;right:0;bottom:-10px;opacity:.35}
+  @font-face{font-family:Archivo;src:url(data:font/woff2;base64,${font}) format('woff2');font-weight:100 900;font-stretch:62% 125%}
+  body{margin:0;width:1024px;height:500px;overflow:hidden;font-family:Archivo,Inter,Roboto,system-ui,sans-serif;color:#fff;
+   background:radial-gradient(60% 90% at 88% 10%,#456dff 0%,transparent 70%),radial-gradient(50% 80% at 0% 100%,#0e2ab3 0%,transparent 72%),#1d4bff;}
+  body::after{content:'';position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.16) 1.3px,transparent 1.5px);background-size:24px 24px;-webkit-mask-image:linear-gradient(110deg,transparent 40%,#000)}
+  .t{position:absolute;left:56px;top:84px;width:540px;z-index:1}
+  .t svg{filter:drop-shadow(0 6px 0 rgba(6,16,90,.45))}
+  h1{margin:18px 0 6px;font-size:68px;font-weight:900;font-stretch:125%;letter-spacing:-.5px;line-height:1}
+  h1 span{color:#ffd92e}
+  .tag{letter-spacing:5px;text-transform:uppercase;color:#c8d2ff;font-size:15px;font-weight:700}
+  p{font-size:24px;line-height:1.3;color:#fff;margin:20px 0 0;font-weight:700}
+  .ph{position:absolute;width:236px;border-radius:30px;border:6px solid #0b1026;box-shadow:8px 8px 0 #0b1026;z-index:1}
+  .wave{position:absolute;left:0;right:0;bottom:-10px;opacity:.6}
 </style></head><body>
-  <svg class="wave" viewBox="0 0 1024 120"><path d="M0 60 C60 0 120 0 180 60 S300 120 360 60 480 0 540 60 660 120 720 60 840 0 900 60 1020 120 1080 60" fill="none" stroke="#22d3ee" stroke-width="3"/></svg>
+  <svg class="wave" viewBox="0 0 1024 120"><path d="M0 60 C60 0 120 0 180 60 S300 120 360 60 480 0 540 60 660 120 720 60 840 0 900 60 1020 120 1080 60" fill="none" stroke="#ffd92e" stroke-width="3"/></svg>
   <div class="t">${LOGO_SVG(84, 'f')}<h1>Rapti<span>CKT</span></h1><div class="tag">Resonance Automation</div>
-  <p>Real-time circuit simulator with oscilloscope, Bode plots &amp; 330+ components</p></div>
+  <p>Real-time circuit simulator with oscilloscope, Bode plots &amp; 520+ components</p></div>
   <img class="ph" style="left:620px;top:40px;transform:rotate(-6deg)" src="data:image/png;base64,${shot2}">
   <img class="ph" style="left:760px;top:70px;transform:rotate(5deg)" src="data:image/png;base64,${shot}">
 </body></html>`);

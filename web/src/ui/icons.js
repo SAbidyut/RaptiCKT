@@ -93,7 +93,7 @@ export function icon(name, size = 22, cls = '') {
 export const LOGO_SVG = (size = 64, id = 'lg') => `
 <svg width="${size}" height="${size}" viewBox="0 0 128 128" aria-label="RaptiCKT logo" class="rlogo">
   <defs>
-    <linearGradient id="${id}a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22d3ee"/><stop offset=".55" stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient>
+    <linearGradient id="${id}a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3d68ff"/><stop offset=".55" stop-color="#1d4bff"/><stop offset="1" stop-color="#1438e0"/></linearGradient>
     <radialGradient id="${id}b" cx=".3" cy=".2" r=".9"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/></radialGradient>
   </defs>
   <rect x="4" y="4" width="120" height="120" rx="32" fill="url(#${id}a)"/>
@@ -106,5 +106,5 @@ export const LOGO_SVG = (size = 64, id = 'lg') => `
     <circle cx="45" cy="99.5" r="6.5" stroke-width="5"/>
     <circle cx="95.5" cy="103.5" r="6.5" stroke-width="5"/>
   </g>
-  <circle class="logo-dot" cx="98" cy="30" r="8.5" fill="#fbbf24"/>
+  <circle class="logo-dot" cx="98" cy="30" r="8.5" fill="#ffd92e"/>
 </svg>`;

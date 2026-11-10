@@ -57,7 +57,8 @@ class App {
     };
     this.show('home');
     this.home.render();
-    setTimeout(() => { this.el.querySelector('.splash').classList.add('hide'); document.documentElement.classList.add('app-ready'); }, 1300);
+    document.documentElement.classList.add('booted'); // the splash is up: the page behind it may take its own colour
+    setTimeout(() => { this.el.querySelector('.splash').classList.add('hide'); document.documentElement.classList.add('app-ready'); this.splashDone = true; this.syncBars(); }, 1300);
     setTimeout(() => this.el.querySelector('.splash')?.remove(), 2000);
   }
 
@@ -66,14 +67,24 @@ class App {
   applyTheme() {
     document.documentElement.dataset.theme = this.settings.theme;
     const meta = document.querySelector('meta[name=theme-color]');
-    if (meta) meta.content = (THEMES[this.settings.theme] || THEMES.dark).bg;
+    if (meta) meta.content = (THEMES[this.settings.theme] || THEMES.light).bg;
     if (this.editor) { this.editor.palette.cache.clear(); this.editor.dirtyDraw = true; }
+    this.syncBars();
+  }
+  /** Android: the status bar takes the colour of this screen's top bar, the navigation bar the page's. */
+  syncBars() {
+    if (!this.splashDone || !bridge.isAndroid()) return; // the splash keeps its own blue
+    const hex = (c) => { const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(c || ''); return m ? '#' + m.slice(1).map((n) => (+n).toString(16).padStart(2, '0')).join('') : ''; };
+    const bg = (THEMES[this.settings.theme] || THEMES.light).bg;
+    const head = this.el.querySelector('.screen.active header');
+    bridge.setBars((head && hex(getComputedStyle(head).backgroundColor)) || bg, bg, this.settings.theme === 'light');
   }
   saveSettings() { store.saveSettings(this.settings); if (this.editor) this.editor.dirtyDraw = true; }
 
   show(name) {
     this.current = name;
     for (const s of this.el.querySelectorAll('.screen')) s.classList.toggle('active', s.classList.contains(name));
+    this.syncBars();
     if (name === 'editor') this.editor.wake(); // it waited while another screen was over it
   }
 
@@ -248,7 +259,7 @@ class App {
     r.scale = Math.min(r.scale, 1.6);
     const b = doc.bounds();
     if (b) { r.ox = w / 2 - ((b[0] + b[2]) / 2) * r.scale; r.oy = h / 2 - ((b[1] + b[3]) / 2) * r.scale; }
-    const theme = THEMES[this.settings.theme] || THEMES.dark;
+    const theme = THEMES[this.settings.theme] || THEMES.light;
     const settings = { ...this.settings, grid: 'dots', showValues: false };
     r.draw({ doc, sim: null, running: false, theme, settings, selection: new Set(), selWires: new Set(), graph: new WireGraph(doc), t: 0, probes: [] });
     return cv.toDataURL('image/jpeg', 0.78);
