@@ -369,10 +369,10 @@ export class Scope {
   drawGraticule(L, T, R, B, divX = DIV_X, divY = DIV_Y) {
     const { ctx } = this;
     const W = this.w, H = this.h;
-    ctx.fillStyle = '#04070d';
+    ctx.fillStyle = '#0b1026';
     ctx.fillRect(0, 0, W, H);
     const g = ctx.createRadialGradient((L + R) / 2, (T + B) / 2, 0, (L + R) / 2, (T + B) / 2, Math.hypot(R - L, B - T) / 1.6);
-    g.addColorStop(0, '#0c1628'); g.addColorStop(1, '#060b15');
+    g.addColorStop(0, '#141b45'); g.addColorStop(1, '#0b1026');
     ctx.fillStyle = g;
     ctx.fillRect(L, T, R - L, B - T);
     const dx = (R - L) / divX, dy = (B - T) / divY;
@@ -616,9 +616,9 @@ export class Scope {
     const { ctx } = this;
     const [L, T, R, B] = this.plotRect();
     const pw = R - L, ph = B - T;
-    ctx.fillStyle = '#04070d'; ctx.fillRect(0, 0, this.w, this.h);
+    ctx.fillStyle = '#0b1026'; ctx.fillRect(0, 0, this.w, this.h);
     const g = ctx.createLinearGradient(0, T, 0, B);
-    g.addColorStop(0, '#0c1628'); g.addColorStop(1, '#060b15');
+    g.addColorStop(0, '#141b45'); g.addColorStop(1, '#0b1026');
     ctx.fillStyle = g; ctx.fillRect(L, T, pw, ph);
     if (!this.channels.length || !this.count) { this.frameFFT(L, T, R, B, 0, 0); this.setMeas(''); return; }
     const tNow = this.tbuf[(this.head - 1 + N) % N];

@@ -65,7 +65,10 @@ public class MainActivity extends Activity {
     /** long side of a picture handed to the page, unless the page asks for another size */
     private static final int IMAGE_MAX = 2600;
     private volatile int imageMax = IMAGE_MAX;
-    private static final int BG = Color.parseColor("#0B1120");
+    /** the blue of the splash screen: what the window shows until the page has drawn its own */
+    private static final int BG = Color.parseColor("#1D4BFF");
+    private int statusColor = BG, navColor = BG, topInset;
+    private boolean lightBars;
 
     private WebView web;
     private FrameLayout root;
@@ -85,7 +88,7 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
 
         root = new FrameLayout(this);
-        root.setBackgroundColor(BG);
+        root.setBackground(new BarsBackground());
         web = new WebView(this);
         web.setBackgroundColor(BG);
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
@@ -115,6 +118,7 @@ public class MainActivity extends Activity {
                 r = insets.getSystemWindowInsetRight(); b = insets.getSystemWindowInsetBottom();
             }
             v.setPadding(l, t, r, b);
+            if (topInset != t) { topInset = t; v.invalidate(); }
             return insets;
         });
 
@@ -213,6 +217,45 @@ public class MainActivity extends Activity {
         if (web != null) web.evaluateJavascript(js, null);
     }
 
+    /**
+     * What shows behind the system bars. Android 15 draws the app edge to edge and ignores the bar
+     * colours, so the strip under the status bar is painted here in the colour of the page's top bar,
+     * and the rest in the page's background.
+     */
+    private final class BarsBackground extends android.graphics.drawable.Drawable {
+        private final android.graphics.Paint paint = new android.graphics.Paint();
+        @Override public void draw(android.graphics.Canvas c) {
+            c.drawColor(navColor);
+            paint.setColor(statusColor);
+            c.drawRect(0, 0, getBounds().width(), topInset, paint);
+        }
+        @Override public void setAlpha(int alpha) { }
+        @Override public void setColorFilter(android.graphics.ColorFilter f) { }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.OPAQUE; }
+    }
+
+    /** Colours the system bars to match the page; light = a bright theme, so the bar icons turn dark. */
+    @SuppressWarnings("deprecation")
+    private void applyBars(int status, int nav, boolean light) {
+        statusColor = status; navColor = nav; lightBars = light;
+        Window w = getWindow();
+        w.setStatusBarColor(status);
+        w.setNavigationBarColor(nav);
+        root.invalidate();
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController c = w.getInsetsController();
+            int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+            if (c != null) c.setSystemBarsAppearance(light ? mask : 0, mask);
+        } else if (!immersive) {
+            w.getDecorView().setSystemUiVisibility(legacyBarFlags());
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private int legacyBarFlags() {
+        return lightBars ? View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : View.SYSTEM_UI_FLAG_VISIBLE;
+    }
+
     /** Full screen: hide the status and navigation bars (a swipe from the edge shows them briefly). */
     @SuppressWarnings("deprecation")
     private void applyImmersive(boolean on) {
@@ -246,7 +289,7 @@ public class MainActivity extends Activity {
                     | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                     | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                     | View.SYSTEM_UI_FLAG_FULLSCREEN
-                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : View.SYSTEM_UI_FLAG_VISIBLE);
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY : legacyBarFlags());
         }
         if (root != null) root.requestApplyInsets(); // re-pad in this same frame: edge to edge in full screen
     }
@@ -540,6 +583,14 @@ public class MainActivity extends Activity {
                     imageError(String.valueOf(e.getMessage()));
                 }
             });
+        }
+
+        /** The page's colours for the status bar and the navigation bar ("#rrggbb"), and whether the theme is a bright one. */
+        @JavascriptInterface
+        public void setBars(String status, String nav, boolean light) {
+            final int s, n;
+            try { s = Color.parseColor(status); n = Color.parseColor(nav); } catch (Exception e) { return; }
+            ui.post(() -> applyBars(s, n, light));
         }
 
         @JavascriptInterface

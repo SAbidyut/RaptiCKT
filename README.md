@@ -87,7 +87,7 @@ Every push is built by GitHub Actions (`.github/workflows/android.yml`), which p
   - **Renewables**: solar home system with MPPT, Li-ion charger with BMS, grid-tie and off-grid inverters, wind charger
   - **Communication**: RS-232 null-modem, RS-485 bus, AM receiver chain, 433 MHz remote, I²C expander, SPI shift register, RFID lock, fibre link
   - Wien-bridge oscillator and a short-circuit / MCB tripping demo
-- Save/export/import `.rckt` files, PNG export, 3 themes, and an About section with RAPTI information.
+- Save/export/import `.rckt` files, PNG export, 3 themes (RAPTI Day — the bright default, RAPTI Night, Black) in the look of the RAPTI website, and an About section with RAPTI information.
 
 ## User manual
 
@@ -123,6 +123,8 @@ web/        Simulator app (vanilla JS + Canvas, bundled with esbuild)
   src/engine    MNA solver, AC/DC analyses
   src/elements  component models + symbols
   src/ui        editor, scope, inspector, palette, analyses, screens
+  src/styles.css        layout of every screen
+  src/rapti-theme.css   the look: RAPTI website colours, Archivo typeface, buttons, cards (loaded after styles.css)
   tests         node:test suites + Playwright screenshot/interaction scripts
   tools         marketing asset generator, manual → Markdown exporter
 docs/       User manual (English + Bangla Markdown)

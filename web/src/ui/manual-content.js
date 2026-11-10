@@ -797,7 +797,7 @@ export const CHAPTERS = [
       P('Open Settings from the sliders icon on Home or from **⋮ → Settings** in the editor. Every change is saved at once.'),
       H('Appearance'),
       T(['Setting', 'What it does'], [
-        ['Theme', '**Midnight** (dark blue), **AMOLED Black** (pure black, saves battery on OLED screens) or **Blueprint Light** (for bright rooms and printing).'],
+        ['Theme', '**RAPTI Day** (bright, the default: good in bright rooms and for printing), **RAPTI Night** (dark blue) or **Black** (pure black, saves battery on OLED screens).'],
         ['Grid', 'Lines, dots or none.'],
         ['Voltage colours', 'Wires glow green (+) / red (−).'],
         ['Current animation', 'Moving dots show current flow.'],

@@ -62,7 +62,7 @@ export class Editor {
 
   q(s) { return this.root.querySelector(s); }
   get settings() { return this.app.settings; }
-  get theme() { return THEMES[this.settings.theme] || THEMES.dark; }
+  get theme() { return THEMES[this.settings.theme] || THEMES.light; }
 
   // ------------------------------------------------------------------ DOM
   buildDOM() {

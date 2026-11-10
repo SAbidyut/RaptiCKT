@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="rapti_bg">#0B1120</color>
-    <color name="rapti_bg_deep">#070B14</color>
-    <color name="rapti_cyan">#22D3EE</color>
-    <color name="rapti_violet">#8B5CF6</color>
+    <!-- the RAPTI website palette -->
+    <color name="rapti_blue">#1D4BFF</color>
+    <color name="rapti_volt">#FFD92E</color>
+    <color name="rapti_ink">#0B1026</color>
 </resources>
