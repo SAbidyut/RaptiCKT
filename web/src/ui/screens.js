@@ -326,7 +326,8 @@ export class HomeScreen {
     on('[data-h=selx]', () => { this.sel = null; this.render(); });
     on('[data-h=selall]', () => {
       const keys = [...folders.map((f) => keyOf('f', f.id)), ...circuits.map((c) => keyOf('c', c.id))];
-      this.sel = nSel === keys.length ? new Set() : new Set(keys);
+      // (counted now: rows ticked one by one since this page was drawn are not in nSel)
+      this.sel = this.sel && this.sel.size === keys.length ? new Set() : new Set(keys);
       this.render();
     });
     on('[data-h=move]', () => this.moveSheet([...this.sel]));
@@ -349,6 +350,17 @@ export class HomeScreen {
         if (t === 'f') { this.folder = id; this.render(); } else this.app.openSaved(id);
       });
     });
+  }
+
+  /**
+   * A circuit that is being deleted is not offered again as "Continue where you left off"
+   * (opening that brought it straight back into My Circuits).
+   */
+  forgetAutosave(ids) {
+    const a = store.loadAutosave();
+    if (!a) return;
+    const el = JSON.stringify(a.elements);
+    if (store.circuits().some((c) => ids.includes(c.id) && c.name === a.name && JSON.stringify(c.data.elements) === el)) store.clearAutosave();
   }
 
   newProject() {
@@ -447,6 +459,7 @@ export class HomeScreen {
         if (x === 'backup') { this.app.backupAll(); return; } // stay open: delete after saving
         close();
         if (x === 'del') {
+          this.forgetAutosave([...cids, ...store.circuits().filter((c) => gone.has(c.folder)).map((c) => c.id)]);
           if (cids.length) store.deleteCircuits(cids);
           if (fids.length) store.deleteFolders(fids);
           this.sel = null;
@@ -479,7 +492,7 @@ export class HomeScreen {
         if (x === 'dup') { const d = JSON.parse(JSON.stringify(c)); d.id = this.app.uid(); d.name += ' (copy)'; d.data.name = d.name; d.updated = Date.now(); store.saveCircuit(d); this.render(); }
         if (x === 'export') this.app.bridge.saveFile(c.name.replace(/[^\w\- ]+/g, '_') + '.rckt', 'application/json', JSON.stringify(c.data, null, 1));
         if (x === 'share') this.app.bridge.share(c.name + ' – RaptiCKT circuit', JSON.stringify(c.data));
-        if (x === 'del' && confirm(`Delete "${c.name}"?`)) { store.deleteCircuit(id); this.render(); }
+        if (x === 'del' && confirm(`Delete "${c.name}"?`)) { this.forgetAutosave([id]); store.deleteCircuit(id); this.render(); }
       }));
     });
   }
@@ -522,7 +535,9 @@ export class HomeScreen {
       else if (io) io.observe(cv); else queue.push(cv);
     }
     if (!io) this.pumpThumbs();
-    this.warmThumbs();
+    // the rest are drawn ahead only where they are about to be scrolled to: the Examples page
+    // (drawing all of them behind the Home page cost seconds of work for pictures never seen)
+    if (this.tab === 'examples') this.warmThumbs();
   }
 
   /** Run fn when the page is idle and has not scrolled for a moment. */
@@ -552,8 +567,8 @@ export class HomeScreen {
     this.warming = true;
     const todo = EXAMPLES.filter((e) => !this.app.hasExampleThumb(e.id));
     const step = () => {
-      // only while Home is shown: not behind a running circuit, where it took frames from it
-      if (this.app.current !== 'home') { this.warming = false; return; }
+      // only while the Examples page is shown: not behind a running circuit, where it took frames from it
+      if (this.app.current !== 'home' || this.tab !== 'examples') { this.warming = false; return; }
       const ex = todo.shift();
       if (!ex) { this.warming = false; return; }
       this.app.exampleThumb(ex);

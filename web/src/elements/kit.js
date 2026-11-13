@@ -228,12 +228,6 @@ export class Windings {
   }
 }
 
-/** Inductance matrix for windings on one ideal core: L_kj = k_kj·√(L_k·L_j), L_k ∝ N_k². */
-export function coreMatrix(Lmag, turns, k) {
-  const n = turns.length;
-  return turns.map((a, r) => turns.map((b, c) => Lmag * a * b * (r === c ? 1 : k)));
-}
-
 // ------------------------------------------------------------ LTI blocks
 function solveSmall(M, b) {
   // Gaussian elimination for tiny systems (n ≤ 4)
@@ -465,4 +459,3 @@ export function numDeriv(f, xs, k) {
   return (f(a) - f(b)) / (2 * h);
 }
 
-export const clampNum = (x, a, b) => (x < a ? a : x > b ? b : x);

@@ -71,7 +71,7 @@ export class Analysis {
   }
 
   probeOptions(kinds) {
-    return this.ed.doc.probes.filter((p) => kinds.includes(p.kind)).map((p) => `<option value="${p.id}">${esc(p.label)}</option>`).join('');
+    return this.ed.doc.probes.filter((p) => kinds.includes(p.kind)).map((p) => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('');
   }
 
   // ------------------------------------------------------------- AC sweep
@@ -94,7 +94,7 @@ export class Analysis {
     if (outSel.options.length > 1) outSel.selectedIndex = outSel.options.length - 1;
     body.querySelector('#an-run').addEventListener('click', () => this.runBode());
     body.querySelector('#an-csv').addEventListener('click', () => this.exportCSV());
-    if (this.last && this.last.kind === 'bode') this.plotBode(this.last);
+    if (this.last && this.last.kind === 'bode' && !this.last.z) this.plotBode(this.last); // (not an impedance sweep: that is the Impedance tab's)
   }
 
   runBode() {
@@ -220,7 +220,7 @@ export class Analysis {
     if (outSel.options.length) outSel.options[0].selected = true;
     body.querySelector('#dc-run').addEventListener('click', () => this.runDC());
     body.querySelector('#dc-csv').addEventListener('click', () => this.exportCSV());
-    if (this.last && this.last.kind === 'dc') this.plotXY(this.last);
+    if (this.last && this.last.kind === 'dc' && !this.last.par) this.plotXY(this.last); // (not a parametric run: that is its own tab's)
   }
 
   runDC() {
@@ -683,8 +683,11 @@ export class Analysis {
 function prepCanvas(cv) {
   const r = cv.getBoundingClientRect();
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  // (a plot is drawn again for every move of the finger over it: a new pixel buffer only when its
+  // size really changed, a clean state otherwise)
+  const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
   const ctx = cv.getContext('2d');
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; } else if (ctx.reset) ctx.reset(); else cv.width = w;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#070b14'; ctx.fillRect(0, 0, r.width, r.height);
   return { ctx, W: r.width, H: r.height };

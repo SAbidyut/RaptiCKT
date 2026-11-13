@@ -413,13 +413,20 @@ class MainsPowered extends withChip(Element) {
   constructor(x, y) { super(x, y); this.postCurrents = new Array(this.localPosts().length).fill(0); }
   resetMains(vinit = 230) { this.v2 = new Ema(0.02); this.v2.v = vinit * vinit; this.gin = 0; }
   vrms() { return Math.sqrt(Math.max(0, this.v2?.v || 0)); }
-  mainsIn(s) { s.addI(this.nodes[0], this.nodes[1], this.gin * this.vprev); }
+  // The input's load is in the matrix as a conductance (as it was when last stamped); only what
+  // it has changed by since is a current worked out from the last step's voltage, and it is
+  // stamped anew once that is a fifth of it. (All of it used to be such a current: behind a
+  // series impedance — two of them in series — that swings further every step, up to kilovolts.)
+  stampMains(s) { this.gst = this.gin || 0; s.addG(this.nodes[0], this.nodes[1], this.gst); }
+  mainsIn(s) { s.addI(this.nodes[0], this.nodes[1], ((this.gin || 0) - (this.gst || 0)) * this.vprev); }
   trackMains(s, pin) {
     const v = s.v(this.nodes[0]) - s.v(this.nodes[1]);
     this.vprev = v;
     if (s.mode !== 'dc') this.v2.push(v * v, s.dt);
     const vr = this.vrms();
     this.gin = vr > 20 && !this.damaged ? pin / (vr * vr) : 0;
+    const g0 = this.gst || 0;
+    if (Math.abs(this.gin - g0) > 0.2 * Math.max(this.gin, g0)) s.dirty = true;
     // universal-input supply (90–265 V): the input MOV and bulk capacitor fail above ≈300 V
     if (s.mode !== 'dc') this.overheat(s, (vr / 230) ** 2, 2, 1.69, () => `Power supply burnt — ${fmtShort(vr, 'V')} on its mains input (over-voltage)`);
     return v;
@@ -449,7 +456,7 @@ export class LEDDriver extends MainsPowered {
     const r = 0.02, w = 0.01 * this.p.imax, a = sm((this.p.vset - v) / r, this.p.imax, w), b = sm(-a.y, 0, w);
     return { i: -b.y, g: -(b.da * a.da / r) };
   }
-  stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1e-7); s.addG(this.nodes[2], this.nodes[3], 1e-6); }
+  stamp(s) { this.stampMains(s); s.addG(this.nodes[0], this.nodes[1], 1e-7); s.addG(this.nodes[2], this.nodes[3], 1e-6); }
   stampNL(s) {
     const [, , p, m] = this.nodes;
     let v = s.v(p) - s.v(m);
@@ -584,7 +591,7 @@ export class EmergencyLight extends MainsPowered {
   connectivity() { return [[0, 1]]; }
   reset() { this.resetMains(); this.vprev = 0; this.q = this.p.soc / 100; this.lit = this.p.maint; this.tFail = 0; this.postCurrents.fill(0); }
   mains() { return this.vrms() > 150; }
-  stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1e-7); }
+  stamp(s) { this.stampMains(s); s.addG(this.nodes[0], this.nodes[1], 1e-7); }
   stampStep(s) { this.mainsIn(s); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1e-7); }
   accept(s) {

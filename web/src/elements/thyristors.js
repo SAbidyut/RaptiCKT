@@ -233,8 +233,10 @@ export class OptoTriac extends withChip(Element) {
   reset() { this.on = false; this.j.vd = 0; this.postCurrents.fill(0); this.if = 0; }
   out(v) {
     if (!this.on) return { i: v * GOFF, g: GOFF };
-    const f = diodeIV(Math.min(v, 3), 1e-10, 2, 0), r = diodeIV(Math.min(-v, 3), 1e-10, 2, 0);
-    return { i: f.i - r.i + v * 0.01, g: f.g + r.g + 0.01 };
+    // conducting: a diode knee up to 1 V, then on along its tangent. (It was cut off flat at 3 V
+    // with the slope it has there, 10¹⁶ S: fired with mains across it, it could not be solved.)
+    const VK = 1, a = Math.abs(v), d = diodeIV(Math.min(a, VK), 1e-10, 2, 0);
+    return { i: Math.sign(v) * (d.i + d.g * Math.max(0, a - VK)) + v * 0.01, g: d.g + 0.01 };
   }
   stampNL(s) {
     const [a, k, m2, m1] = this.nodes;

@@ -284,6 +284,7 @@ export class ManualScreen {
       input.addEventListener('input', () => {
         clearTimeout(t);
         t = setTimeout(() => {
+          if (!input.isConnected) return; // another page was opened meanwhile: it is not the list to fill
           this.query = input.value.trim().toLowerCase();
           // only the list below changes, so the keyboard stays up
           host.querySelector('.man-inner').innerHTML = this.indexPage().html;

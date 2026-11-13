@@ -34,6 +34,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -62,6 +63,7 @@ public class MainActivity extends Activity {
     private static final int REQ_OPEN = 42;
     private static final int REQ_CAMERA = 43;
     private static final int REQ_IMAGE = 44;
+    private static final String START_URL = "file:///android_asset/www/index.html";
     /** long side of a picture handed to the page, unless the page asks for another size */
     private static final int IMAGE_MAX = 2600;
     private volatile int imageMax = IMAGE_MAX;
@@ -78,9 +80,11 @@ public class MainActivity extends Activity {
     private String pendingOpenText;
     private boolean pageReady;
     private boolean immersive;
+    /** when the page's process last had to be started again, and how often in a row (see onRenderProcessGone) */
+    private long lastRestart;
+    private int restarts;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
-    @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -89,12 +93,7 @@ public class MainActivity extends Activity {
 
         root = new FrameLayout(this);
         root.setBackground(new BarsBackground());
-        web = new WebView(this);
-        web.setBackgroundColor(BG);
-        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        web.setVerticalScrollBarEnabled(false);
-        web.setHorizontalScrollBarEnabled(false);
-        root.addView(web, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        createWebView();
         setContentView(root);
 
         // Edge-to-edge (enforced on Android 15): pad content away from system bars, cutouts and the keyboard.
@@ -122,11 +121,32 @@ public class MainActivity extends Activity {
             return insets;
         });
 
+        // restoreState gives nothing back when the saved state is missing or too old (after the app was
+        // killed in the background): load the page then, instead of leaving an empty screen
+        if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
+            web.loadUrl(START_URL);
+        }
+        // a file shared into the app is opened once: not again when the activity is re-created
+        if (savedInstanceState == null) handleIntent(getIntent());
+    }
+
+    /** The WebView that shows the simulator, with its settings and the bridge, added to the window. */
+    @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
+    private void createWebView() {
+        web = new WebView(this);
+        web.setBackgroundColor(BG);
+        web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        web.setVerticalScrollBarEnabled(false);
+        web.setHorizontalScrollBarEnabled(false);
+        root.addView(web, 0, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
-        s.setAllowFileAccess(true);
+        // the page and everything it loads come from the app's assets (always readable); nothing
+        // in it may read other files of the phone
+        s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setTextZoom(100);
@@ -154,20 +174,51 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                if (view != web) return;
                 pageReady = true;
                 lastCut = "";
                 root.requestApplyInsets();
                 ui.postDelayed(MainActivity.this::deliverPendingOpen, 600);
             }
-        });
 
-        // restoreState gives nothing back when the saved state is missing or too old (after the app was
-        // killed in the background): load the page then, instead of leaving an empty screen
-        if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
-            web.loadUrl("file:///android_asset/www/index.html");
+            /**
+             * The page's process is gone: Android took its memory back while the app was in the
+             * background, or it crashed. Left unhandled this closes the whole app, so the page is
+             * started again instead. Circuits are autosaved as they are edited, so nothing is
+             * lost: "Continue where you left off" on the home screen brings the work back.
+             */
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                if (view != web) return true; // an earlier WebView, already replaced
+                long now = android.os.SystemClock.uptimeMillis();
+                restarts = now - lastRestart < 20000 ? restarts + 1 : 1;
+                lastRestart = now;
+                if (restarts > 3) return false; // it dies again and again: give up rather than loop
+                restartPage(detail.didCrash());
+                return true;
+            }
+        });
+    }
+
+    /** Throw the page away and load it afresh in a new WebView (its old process is gone). */
+    private void restartPage(boolean crashed) {
+        WebView old = web;
+        pageReady = false;
+        lastCut = "";
+        root.removeView(old);
+        try {
+            old.removeJavascriptInterface("RaptiAndroid");
+            old.destroy();
+        } catch (Exception ignored) {
+            // it is gone either way
         }
-        // a file shared into the app is opened once: not again when the activity is re-created
-        if (savedInstanceState == null) handleIntent(getIntent());
+        // what the old page had asked of the window is over: the new one starts from the splash
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if (immersive) applyImmersive(false);
+        applyBars(BG, BG, false);
+        createWebView();
+        web.loadUrl(START_URL);
+        if (crashed) Toast.makeText(this, "RaptiCKT restarted after an error. Your circuit was autosaved.", Toast.LENGTH_LONG).show();
     }
 
     @Override
@@ -194,6 +245,19 @@ public class MainActivity extends Activity {
         super.onResume();
         web.onResume();
         if (immersive) applyImmersive(true);
+    }
+
+    /**
+     * The phone is short of memory, or the app has been put away among the background apps: the
+     * page lets go of everything it can make again (icons, preview pictures, drawing caches).
+     */
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        boolean low = level >= TRIM_MEMORY_RUNNING_LOW && level < TRIM_MEMORY_UI_HIDDEN;
+        if (web != null && pageReady && (low || level >= TRIM_MEMORY_BACKGROUND)) {
+            web.evaluateJavascript("window.raptiTrim && window.raptiTrim()", null);
+        }
     }
 
     @Override
@@ -296,7 +360,9 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        ui.removeCallbacksAndMessages(null);
         if (web != null) {
+            root.removeView(web); // a WebView must be out of the window before it is destroyed
             web.removeJavascriptInterface("RaptiAndroid");
             web.destroy();
         }
@@ -314,17 +380,42 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------ intents
     private void handleIntent(Intent intent) {
         if (intent == null) return;
-        Uri uri = null;
-        if (Intent.ACTION_VIEW.equals(intent.getAction())) uri = intent.getData();
-        else if (Intent.ACTION_SEND.equals(intent.getAction())) uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
-        if (uri == null) return;
+        Uri found = null;
         try {
-            pendingOpenText = new String(readAll(uri), "UTF-8");
-            pendingOpenName = displayName(uri);
-            if (pageReady) deliverPendingOpen();
+            if (Intent.ACTION_VIEW.equals(intent.getAction())) found = intent.getData();
+            else if (Intent.ACTION_SEND.equals(intent.getAction())) {
+                Object o = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (o instanceof Uri) found = (Uri) o;
+            }
         } catch (Exception e) {
-            Toast.makeText(this, "Could not open file", Toast.LENGTH_SHORT).show();
+            found = null; // an intent that cannot be read is not a file to open
         }
+        if (found == null) return;
+        final Uri uri = found;
+        // not on the main thread: a file kept on Drive or another cloud is downloaded as it is
+        // read, and the app must not freeze (or be closed as "not responding") meanwhile
+        new Thread(() -> {
+            try {
+                final String text = new String(readAll(uri), "UTF-8");
+                final String name = displayName(uri);
+                ui.post(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    pendingOpenText = text;
+                    pendingOpenName = name;
+                    if (pageReady) deliverPendingOpen();
+                });
+            } catch (Exception e) {
+                ui.post(() -> {
+                    if (!isFinishing() && !isDestroyed()) Toast.makeText(this, "Could not open file", Toast.LENGTH_SHORT).show();
+                });
+            }
+        }, "rapti-open").start();
+    }
+
+    /** Run a script in the page, unless the activity (and its WebView) is already gone. */
+    private void js(String script) {
+        if (web == null || isFinishing() || isDestroyed()) return;
+        web.evaluateJavascript(script, null);
     }
 
     private void deliverPendingOpen() {
@@ -383,15 +474,19 @@ public class MainActivity extends Activity {
             pendingSave = null;
         } else if (requestCode == REQ_OPEN) {
             if (resultCode == RESULT_OK && data != null && data.getData() != null) {
-                try {
-                    Uri uri = data.getData();
-                    String b64 = Base64.encodeToString(readAll(uri), Base64.NO_WRAP);
-                    web.evaluateJavascript("window.__raptiFileOpened && window.__raptiFileOpened(" + JSONObject.quote(displayName(uri)) + ",'" + b64 + "')", null);
-                } catch (Exception e) {
-                    web.evaluateJavascript("window.__raptiFileError && window.__raptiFileError(" + JSONObject.quote(String.valueOf(e.getMessage())) + ")", null);
-                }
+                final Uri uri = data.getData();
+                new Thread(() -> { // (off the main thread, as in handleIntent)
+                    try {
+                        final String b64 = Base64.encodeToString(readAll(uri), Base64.NO_WRAP);
+                        final String name = JSONObject.quote(displayName(uri));
+                        ui.post(() -> js("window.__raptiFileOpened && window.__raptiFileOpened(" + name + ",'" + b64 + "')"));
+                    } catch (Exception e) {
+                        final String msg = JSONObject.quote(String.valueOf(e.getMessage()));
+                        ui.post(() -> js("window.__raptiFileError && window.__raptiFileError(" + msg + ")"));
+                    }
+                }, "rapti-open").start();
             } else {
-                web.evaluateJavascript("window.__raptiFileError && window.__raptiFileError('cancelled')", null);
+                js("window.__raptiFileError && window.__raptiFileError('cancelled')");
             }
         } else if (requestCode == REQ_CAMERA || requestCode == REQ_IMAGE) {
             Uri uri = requestCode == REQ_IMAGE && data != null ? data.getData() : null;
@@ -403,7 +498,7 @@ public class MainActivity extends Activity {
                 try {
                     byte[] raw = requestCode == REQ_CAMERA ? readFile(PhotoProvider.file(this)) : readAll(uri);
                     String b64 = Base64.encodeToString(shrinkImage(raw), Base64.NO_WRAP);
-                    ui.post(() -> web.evaluateJavascript("window.__raptiImage && window.__raptiImage('" + b64 + "')", null));
+                    ui.post(() -> js("window.__raptiImage && window.__raptiImage('" + b64 + "')"));
                 } catch (Exception e) {
                     imageError("Could not read the picture (" + e.getMessage() + ")");
                 } finally {
@@ -415,7 +510,7 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------ pictures
     private void imageError(String msg) {
-        ui.post(() -> web.evaluateJavascript("window.__raptiImageError && window.__raptiImageError(" + JSONObject.quote(msg) + ")", null));
+        ui.post(() -> js("window.__raptiImageError && window.__raptiImageError(" + JSONObject.quote(msg) + ")"));
     }
 
     private byte[] readFile(File f) throws Exception {
@@ -520,14 +615,24 @@ public class MainActivity extends Activity {
                 send.setType("text/plain");
                 send.putExtra(Intent.EXTRA_SUBJECT, title);
                 send.putExtra(Intent.EXTRA_TEXT, text);
-                startActivity(Intent.createChooser(send, title));
+                try {
+                    startActivity(Intent.createChooser(send, title));
+                } catch (Exception e) {
+                    // no app to share with, or a circuit too big to hand over as text
+                    Toast.makeText(MainActivity.this, "Could not share this circuit. Use Export file instead.", Toast.LENGTH_LONG).show();
+                }
             });
         }
 
         @JavascriptInterface
         public void saveFile(String name, String mime, String base64) {
             ui.post(() -> {
-                pendingSave = Base64.decode(base64, Base64.DEFAULT);
+                try {
+                    pendingSave = Base64.decode(base64, Base64.DEFAULT);
+                } catch (IllegalArgumentException e) {
+                    Toast.makeText(MainActivity.this, "Save failed", Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
                 i.setType(mime == null || mime.isEmpty() ? "application/octet-stream" : mime);

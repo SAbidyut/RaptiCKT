@@ -31,7 +31,10 @@ export class NL2 extends TwoTerm {
     if (r.lim) s.limited = true;
     const v = r.v; this.vd = v;
     const { i, g } = this.iv(v);
-    s.addG(a, b, g); s.addI(a, b, i - g * v);
+    // where the curve falls (a tunnel diode past its peak) the true slope would push Newton
+    // away from the solution beyond it: iterate with a tiny positive one there
+    const gs = g > 0 ? g : 1e-9;
+    s.addG(a, b, gs); s.addI(a, b, i - gs * v);
     this.gd = g;
   }
   accept(s) { const v = this.voltageDiff(s); this.vd = v; const r = this.iv(v); this.gd = r.g; this.setCurrent(r.i); }

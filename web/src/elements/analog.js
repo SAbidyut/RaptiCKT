@@ -63,7 +63,13 @@ export class OpAmp extends Element {
     return { mid: (hi + lo) / 2, half: Math.max(1e-3, (hi - lo) / 2) };
   }
   tau() { return this.p.gbw > 0 ? this.p.a0 / (2 * Math.PI * this.p.gbw) : 0; }
-  reset() { this.cx.reset(0); this.postCurrents = [0, 0, 0]; this.i = 0; this.vdOld = 0; }
+  reset(s) {
+    this.cx.reset(0); this.postCurrents = [0, 0, 0]; this.i = 0; this.vdOld = 0;
+    // the search for the operating point starts with the integrator in the middle of the supply
+    // (from 0 V a single-supply op-amp starts on its bottom rail, a long way from where it settles)
+    const x = this.inodes[0];
+    if (s && s.x && x > 0 && this.p.gbw > 0) { const { mid } = this.limits(); s.x[x - 1] = mid; if (s.xPrev) s.xPrev[x - 1] = mid; }
+  }
   stamp(s) {
     const x = this.inodes[0], k = this.branches[0], out = this.nodes[2];
     s.addG(x, 0, 1);
@@ -100,9 +106,16 @@ export class OpAmp extends Element {
     // anti-windup clamps on the integrator node
     if (this.p.gbw > 0) {
       const xv = s.v(x), m = 1.25 * half, vc = 0.05 * half + 0.01;
-      const up = Math.exp(Math.min(60, (xv - mid - m) / vc)), dn = Math.exp(Math.min(60, (mid - m - xv) / vc));
+      // The clamp is exponential up to e¹², then goes on along its tangent. (It used to be cut off
+      // flat at e⁶⁰ with the slope of the uncut curve: far out, Newton then crept back one vc per
+      // iteration and stopped there, "converged" — an LM358 follower on a single 5 V supply gave
+      // 4.96 V for 2.5 V in.)
+      const ZC = 12, EC = Math.exp(ZC);
+      const zu = (xv - mid - m) / vc, zd = (mid - m - xv) / vc;
+      const up = zu > ZC ? EC * (1 + zu - ZC) : Math.exp(zu), dup = zu > ZC ? EC : up;
+      const dn = zd > ZC ? EC * (1 + zd - ZC) : Math.exp(zd), ddn = zd > ZC ? EC : dn;
       const gc = 1e3;
-      const ic = gc * vc * (up - dn), gcl = gc * (up + dn);
+      const ic = gc * vc * (up - dn), gcl = gc * (dup + ddn);
       s.addNLCurrent(x, 0, ic, [[x, 0, gcl, xv]]);
     }
     // output = mid + sat(x - mid)

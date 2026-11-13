@@ -466,7 +466,7 @@ export class DepSource extends TwoTerm {
   static type = 'depsrc'; static title = 'Dependent Source (diamond)'; static prefix = 'D';
   static keywords = 'dependent source controlled diamond vccs vcvs cccs ccvs 0.1vx 4ix textbook';
   static props = [
-    { key: 'kind', label: 'Type', type: 'select', def: 'vccs', options: [['vccs', 'Current source, voltage controlled (VCCS)'], ['cccs', 'Current source, current controlled (CCCS)'], ['vcvs', 'Voltage source, voltage controlled (VCVS)'], ['ccvs', 'Voltage source, current controlled (CCVS)']] },
+    { key: 'kind', label: 'Type', type: 'select', def: 'vccs', structural: true, options: [['vccs', 'Current source, voltage controlled (VCCS)'], ['cccs', 'Current source, current controlled (CCCS)'], ['vcvs', 'Voltage source, voltage controlled (VCVS)'], ['ccvs', 'Voltage source, current controlled (CCVS)']] },
     { key: 'gain', label: 'Gain', unit: '', def: 0.1, min: -1e9, max: 1e9, knob: true },
     { key: 'ctrl', label: 'Controlled by', type: 'text', def: 'node:vx' },
     { key: 'sym', label: 'Symbol (as in the book)', type: 'text', def: 'vx' },

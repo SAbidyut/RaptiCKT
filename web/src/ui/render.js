@@ -158,15 +158,15 @@ export class WireGraph {
     });
     this.fPosts = [];
     for (const e of doc.elements) {
-      (e._posts || e.getPosts()).forEach((p, i) => { const v = vid.get(key(p[0], p[1])); if (v !== undefined) this.fPosts.push([e, i, v]); });
+      e.posts().forEach((p, i) => { const v = vid.get(key(p[0], p[1])); if (v !== undefined) this.fPosts.push(e, i, v); });
     }
     this.fInj = new Float64Array(N);
     this.fI = new Float64Array(this.edges.length);
   }
   fastCurrents() {
-    const inj = this.fInj, I = this.fI;
+    const inj = this.fInj, I = this.fI, P = this.fPosts;
     inj.fill(0);
-    for (const [e, i, v] of this.fPosts) inj[v] -= e.postCurrents[i] || 0;
+    for (let k = 0; k < P.length; k += 3) inj[P[k + 2]] -= P[k].postCurrents[P[k + 1]] || 0;
     for (let n = inj.length - 1; n >= 0; n--) {
       const pe = this.fEdge[n];
       if (pe < 0) continue;
@@ -175,29 +175,34 @@ export class WireGraph {
     }
   }
 
-  /** compute edge currents from element terminal currents */
+  /**
+   * Edge currents (ed.i) from element terminal currents, for the drawing. Every frame: on the
+   * index tables of prepareFast (made once per graph), not on maps keyed by point.
+   */
   solveCurrents(doc) {
-    const inj = new Map();
-    for (const e of doc.elements) {
-      const posts = e._posts || e.getPosts();
-      posts.forEach((p, i) => {
-        const k = key(p[0], p[1]);
-        inj.set(k, (inj.get(k) || 0) - (e.postCurrents[i] || 0));
-      });
-    }
-    for (const ed of this.edges) ed.i = 0;
-    const sub = new Map();
-    for (let n = this.order.length - 1; n >= 0; n--) {
-      const [v, pe] = this.order[n];
-      const total = (inj.get(v) || 0) + (sub.get(v) || 0);
-      if (pe < 0) continue;
-      const ed = this.edges[pe];
-      // current flows from child v to parent: total injection must leave via parent edge
-      ed.i = ed.ka === v ? total : -total;
-      const parent = this.order[n][2];
-      sub.set(parent, (sub.get(parent) || 0) + total);
-    }
+    if (!this.fI) this.prepareFast(doc);
+    this.fastCurrents();
+    const I = this.fI, E = this.edges;
+    // (current flows from child to parent: a vertex's total injection leaves by its parent edge;
+    // an edge outside the spanning tree carries none)
+    for (let k = 0; k < E.length; k++) E[k].i = I[k];
   }
+}
+
+/**
+ * A running fingerprint of numbers, for "has the geometry changed since the last frame?" checks.
+ * Two 32-bit sums, so that nothing is built up as text (and thrown away again) on every frame.
+ */
+function fingerprint() {
+  let a = 0x811c9dc5, b = 0x9e3779b9;
+  return {
+    add(v) {
+      const x = Math.round(v * 1000) | 0;
+      a = Math.imul(a ^ x, 16777619);
+      b = (Math.imul(b ^ (x + 0x7f4a7c15), 0x85ebca6b) + (b >>> 15)) | 0;
+    },
+    value() { return a + ':' + b; },
+  };
 }
 
 /** Does text running along a part at angle `a` read upside down (pointing down or left)? */
@@ -464,37 +469,50 @@ export class Renderer {
     const sim = st.sim;
     const running = !!st.running && sim && sim.ready;
     const nodeV = (n) => (running ? sim.nodeVoltage(n) : 0);
-    const g = makeGraphics(ctx, th, {
-      running, t: st.t, vScale: st.vScale || 5, iScale: st.iScale || 0.01,
-      voltColors: st.settings.voltColors !== false, showCharge: st.settings.showCharge !== false,
-      lw: Math.max(2.2, 1.3 / this.scale),
-    });
-    this.g = g;
+    // the drawing helper (and its colour table) is made once per theme, not again every frame
+    let g = this.g;
+    if (!g || g.theme !== th || g.ctx !== ctx) g = this.g = makeGraphics(ctx, th, {});
+    g.running = running; g.t = st.t; g.vScale = st.vScale || 5; g.iScale = st.iScale || 0.01;
+    g.voltColors = st.settings.voltColors !== false; g.showCharge = st.settings.showCharge !== false;
+    g.lw = Math.max(2.2, 1.3 / this.scale);
+    g.rot = 0; g.flip = false; g.ang = 0;
+    // what of the board is on the screen (world units, with room for glows, flames and labels):
+    // parts and current dots outside it are not drawn
+    const vm = 90 + 40 / this.scale;
+    const vx1 = -this.ox / this.scale - vm, vy1 = -this.oy / this.scale - vm, vx2 = (this.cw - this.ox) / this.scale + vm, vy2 = (this.ch - this.oy) / this.scale + vm;
+    this.view = [vx1, vy1, vx2, vy2];
 
     // wires
     const wireW = Math.max(2.4, 1.4 / this.scale);
     const vs = st.sim && st.sim.wireNodes && st.sim.wireNodes.length === st.doc.wires.length ? st.sim.wireNodes : null;
-    st.doc.wires.forEach((w, i) => {
+    const wires = st.doc.wires;
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (let i = 0; i < wires.length; i++) {
+      const w = wires[i], pts = w.pts;
       const sel = st.selWires && st.selWires.has(w);
       const col = vs && !w.burnt ? g.vc(nodeV(vs[i])) : th.body;
       ctx.beginPath();
-      w.pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      for (let k = 0; k < pts.length; k++) { if (k) ctx.lineTo(pts[k][0], pts[k][1]); else ctx.moveTo(pts[k][0], pts[k][1]); }
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       if (sel) { ctx.strokeStyle = th.select; ctx.globalAlpha = 0.35; ctx.lineWidth = wireW * 4; ctx.stroke(); ctx.globalAlpha = 1; }
-      if (w.burnt) { this.drawBurntWire(w, wireW, st.t); return; }
+      if (w.burnt) { this.drawBurntWire(w, wireW, st.t); continue; }
       const hs = running && w.heat ? w.heat.stress() : 0;
       if (hs > 0.02) { // overloaded: the insulation glows from orange to red
         ctx.strokeStyle = `rgba(255,${Math.round(150 - 110 * hs)},30,${0.25 + 0.5 * hs})`; ctx.lineWidth = wireW * (2.2 + 1.5 * hs); ctx.stroke();
       }
       ctx.strokeStyle = col; ctx.lineWidth = w.cable ? wireW * cableWidth(w.cable) : wireW; ctx.stroke();
-    });
+    }
 
     // elements
+    let pvNodes = null;
+    g.pv = (i) => (running && pvNodes[i] !== undefined ? nodeV(pvNodes[i]) : 0);
     for (const e of st.doc.elements) {
-      const nodes = e.nodes || [];
-      g.pv = (i) => (running && nodes[i] !== undefined ? nodeV(nodes[i]) : 0);
+      pvNodes = e.nodes || [];
       const sel = st.selection && st.selection.has(e);
       const err = st.errorEl === e;
+      // off the screen: nothing of it to draw (a selected or faulty part is always drawn)
+      e._off = !sel && !err && this.offScreen(e);
+      if (e._off) continue;
       ctx.save();
       ctx.translate(e.x, e.y);
       // slanted: turned to its angle (and drawn smaller when its terminals are close), its leads
@@ -509,7 +527,8 @@ export class Renderer {
         const [a, b, c, d] = e.localBox();
         g.box(ax(a) - 5, b - 5, ax(c) + 5, d + 5, { fill: err ? 'rgba(248,113,113,0.12)' : 'rgba(34,211,238,0.08)', stroke: err ? '#f87171' : th.select, width: 1.2, r: 6 });
       }
-      for (const [pi, x1, y1, x2, y2] of e.leads()) g.line(ax(x1), y1, ax(x2), y2, g.vc(g.pv(pi)), g.lw);
+      const leads = e.leads();
+      for (let k = 0; k < leads.length; k++) { const l = leads[k]; g.line(ax(l[1]), l[2], ax(l[3]), l[4], g.vc(g.pv(l[0])), g.lw); }
       e.draw(g);
       ctx.restore();
       g.rot = 0; g.flip = false; g.ang = 0;
@@ -528,10 +547,14 @@ export class Renderer {
 
     // posts & junctions
     const r = Math.max(2.6, 2.2 / this.scale);
+    const open = { fill: th.bg, stroke: th.muted, width: 1.3 };
     for (const e of st.doc.elements) {
-      for (const [x, y] of e._posts || e.getPosts()) {
+      if (e._off) continue;
+      const posts = e.posts();
+      for (let k = 0; k < posts.length; k++) {
+        const x = posts[k][0], y = posts[k][1];
         const d = st.graph ? st.graph.degree.get(key(x, y)) || 0 : 0;
-        if (d <= 1) g.circle(x, y, r * 1.15, { fill: th.bg, stroke: th.muted, width: 1.3 });
+        if (d <= 1) g.circle(x, y, r * 1.15, open);
       }
     }
     if (st.graph) {
@@ -603,6 +626,16 @@ export class Renderer {
     }
   }
 
+  /** Is the part wholly outside what the board shows (this.view)? Its box, turned and slanted with it. */
+  offScreen(e) {
+    const v = this.view;
+    if (!v) return false;
+    const b = e.localBox();
+    let rad = Math.hypot(Math.max(Math.abs(b[0]), Math.abs(b[2])), Math.max(Math.abs(b[1]), Math.abs(b[3])));
+    if (e.sv) rad = Math.max(rad, e.slantFrame().L); // (its leads are drawn out to its terminals)
+    return e.x + rad < v[0] || e.x - rad > v[2] || e.y + rad < v[1] || e.y - rad > v[3];
+  }
+
   /** A wire that burnt through: charred, with the gap where it parted. */
   drawBurntWire(w, wireW, t) {
     const ctx = this.ctx, pts = w.pts;
@@ -649,7 +682,7 @@ export class Renderer {
     }
     for (const e of st.doc.elements) {
       const st2 = running ? e.stressLevel() : 0;
-      if (!e.damaged && !e.fire && !e.smoke && st2 < 0.04) continue;
+      if ((!e.damaged && !e.fire && !e.smoke && st2 < 0.04) || e._off) continue;
       const [x1, y1, x2, y2] = e.worldBox(), cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, r = Math.max(x2 - x1, y2 - y1) / 2;
       if (e.damaged) {
         g.glow(cx, cy, r * 1.1, '30,20,12', 0.75); // soot
@@ -708,38 +741,64 @@ export class Renderer {
 
   drawDots(st, g) {
     const ctx = this.ctx, th = st.theme;
-    const spacing = 16;
+    // 16 units apart; zoomed out, where that would put them on top of each other, twice (four
+    // times…) as far, so they stay about 9 px apart on the screen — a big circuit seen whole then
+    // has a few hundred dots to draw, not thousands (every other dot stays where it was)
+    let spacing = 16;
+    while (spacing * this.scale < 9 && spacing < 512) spacing *= 2;
     const rr = Math.max(1.8, 1.6 / this.scale);
     const spr = dotSprite(th.dot), d = rr * 4.2, h = d / 2;
+    const v = this.view, vx1 = v[0], vy1 = v[1], vx2 = v[2], vy2 = v[3];
     const dotsAlong = (ax, ay, bx, by, phase) => {
+      // a run wholly off the screen has no dots to show
+      if ((ax < vx1 && bx < vx1) || (ax > vx2 && bx > vx2) || (ay < vy1 && by < vy1) || (ay > vy2 && by > vy2)) return;
       const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy);
       if (len < 1) return;
       const ux = dx / len, uy = dy / len;
       let s = ((phase % spacing) + spacing) % spacing;
-      for (; s < len; s += spacing) ctx.drawImage(spr, ax + ux * s - h, ay + uy * s - h, d, d);
+      for (; s < len; s += spacing) {
+        const x = ax + ux * s, y = ay + uy * s;
+        if (x < vx1 || x > vx2 || y < vy1 || y > vy2) continue;
+        ctx.drawImage(spr, x - h, y - h, d, d);
+      }
     };
-    if (st.graph) for (const ed of st.graph.edges) if (Math.abs(ed.i) > st.iMin) dotsAlong(ed.a[0], ed.a[1], ed.b[0], ed.b[1], ed.phase);
+    const iMin = st.iMin;
+    if (st.graph) {
+      const E = st.graph.edges;
+      for (let k = 0; k < E.length; k++) { const ed = E[k]; if (Math.abs(ed.i) > iMin) dotsAlong(ed.a[0], ed.a[1], ed.b[0], ed.b[1], ed.phase); }
+    }
     for (const e of st.doc.elements) {
-      e.leads().forEach(([pi, x1, y1, x2, y2], li) => {
-        const cur = e.postCurrents[pi] || 0;
-        if (Math.abs(cur) <= st.iMin) return;
-        const [ax, ay] = e.toWorld(x1, y1), [bx, by] = e.toWorld(x2, y2);
-        dotsAlong(ax, ay, bx, by, e.dotPhase[li] || 0);
-      });
+      if (e._off) continue;
+      const pc = e.postCurrents;
+      let any = false;
+      for (let k = 0; k < pc.length; k++) if (Math.abs(pc[k] || 0) > iMin) { any = true; break; }
+      if (!any) continue; // nothing flows in it: its leads need not even be asked for
+      const leads = e.leads();
+      for (let li = 0; li < leads.length; li++) {
+        const l = leads[li];
+        if (!(Math.abs(pc[l[0]] || 0) > iMin)) continue;
+        const a = e.toWorld(l[1], l[2]), b = e.toWorld(l[3], l[4]);
+        dotsAlong(a[0], a[1], b[0], b[1], e.dotPhase[li] || 0);
+      }
     }
   }
 
   /** advance dot phases; speed in world units per second per ampere-scale */
   advanceDots(st, dtReal) {
-    const k = (st.settings.dotSpeed ?? 1) * 60 * dtReal;
+    const k = (st.settings.dotSpeed ?? 1) * 60 * dtReal, iScale = st.iScale;
     const f = (i) => {
-      const x = i / st.iScale;
+      const x = i / iScale;
       const s = Math.sign(x) * Math.min(3, Math.sqrt(Math.abs(x)));
       return s * k;
     };
-    if (st.graph) for (const ed of st.graph.edges) ed.phase += f(ed.i);
+    if (st.graph) { const E = st.graph.edges; for (let n = 0; n < E.length; n++) E[n].phase += f(E[n].i); }
     for (const e of st.doc.elements) {
-      e.leads().forEach(([pi], li) => { e.dotPhase[li] = (e.dotPhase[li] || 0) + f(e.postCurrents[pi] || 0); });
+      const pc = e.postCurrents;
+      let any = false;
+      for (let n = 0; n < pc.length; n++) if (pc[n]) { any = true; break; }
+      if (!any) continue; // no current in any terminal: its dots stay where they are
+      const leads = e.leads(), ph = e.dotPhase;
+      for (let li = 0; li < leads.length; li++) ph[li] = (ph[li] || 0) + f(pc[leads[li][0]] || 0);
     }
   }
 
@@ -792,24 +851,39 @@ export class Renderer {
   chooseLabelSides(st) {
     const doc = st.doc;
     const lk = this.lk || 1;
-    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0) + '|' + lk + (st.phasor && VIEW.omega != null ? '|ph' : '');
-    for (const w of doc.wires) sig += '|' + w.pts.join(';');
+    const fp = fingerprint();
+    fp.add(doc.wires.length); fp.add(st.settings.showNames ? 1 : 0); fp.add(lk); fp.add(st.phasor && VIEW.omega != null ? 1 : 0);
+    for (const w of doc.wires) {
+      const pts = w.pts;
+      fp.add(pts.length);
+      for (let k = 0; k < pts.length; k++) { fp.add(pts[k][0]); fp.add(pts[k][1]); }
+    }
     // only the label's length counts (labelRect): a fan's rpm ticking over must not redo this every frame
-    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + (e.sv || '') + e.shownLabel().length;
-    if (this._sidesSig === sig) return;
-    this._sidesSig = sig;
+    for (const e of doc.elements) {
+      e._lab = e.shownLabel(); // (this frame's label text, for drawLabels and liveLayout too)
+      fp.add(e.x); fp.add(e.y); fp.add((e.rot & 3) + (e.flip ? 4 : 0)); fp.add(e._lab.length);
+      if (e.sv) { fp.add(e.sv[0] + 0.5); fp.add(e.sv[1]); }
+    }
+    const sig = fp.value();
+    if (this._sidesSig === sig && this._sidesDoc === doc) return;
+    this._sidesSig = sig; this._sidesDoc = doc;
     for (const { e, side } of sideLayout(doc, st.settings, lk)) e.chosenSide = side;
   }
 
   drawLabels(st, g) {
     const th = st.theme;
     this.chooseLabelSides(st);
+    const lk = this.lk || 1, vm = 90 + 40 / this.scale;
+    const o2 = { size: 10.5 * lk, color: th.text2, align: 'center', baseline: 'middle', bold: true, follow: false, rich: false };
     for (const e of st.doc.elements) {
-      const val = e.shownLabel();
+      const val = e._lab;
       const txt = st.settings.showNames && !e.constructor.noName ? e.name + (val ? ' ' + val : '') : val;
       if (!txt) continue;
+      // a part off the screen: its label too, unless it is long enough to reach back in
+      if (e._off && txt.length * 6.8 * lk + 24 * lk + 7 <= vm) continue;
       const o = e.labelAnchor();
-      g.text(txt, o[0], o[1], { size: 10.5 * (this.lk || 1), color: th.text2, align: o[2], baseline: o[3], bold: true, follow: false, rich: e.richName });
+      o2.align = o[2]; o2.baseline = o[3]; o2.rich = e.richName;
+      g.text(txt, o[0], o[1], o2);
     }
   }
 
@@ -823,7 +897,9 @@ export class Renderer {
     ctx.lineJoin = 'round';
     ctx.lineWidth = 3 * lk;
     ctx.strokeStyle = th.bg;
+    const v = this.view, mx = 100 * lk, my = 16 * lk;
     const put = (txt, x, y, align, base, col) => {
+      if (v && (x < v[0] - mx || x > v[2] + mx || y < v[1] - my || y > v[3] + my)) return; // off the screen
       ctx.textAlign = align; ctx.textBaseline = base;
       ctx.strokeText(txt, x, y); // halo keeps text legible over wires and grid
       ctx.fillStyle = col; ctx.fillText(txt, x, y);
@@ -909,12 +985,19 @@ export class Renderer {
   /** Placement of live labels; recomputed only when the circuit geometry or the solver changes. */
   liveLayout(st, sim) {
     const doc = st.doc, lk = this.lk || 1;
-    let sig = doc.wires.length + '|' + (st.settings.showNames ? 1 : 0) + '|' + lk + (st.phasor && VIEW.omega != null ? '|ph' : '');
+    const fp = fingerprint();
+    fp.add(doc.wires.length); fp.add(st.settings.showNames ? 1 : 0); fp.add(lk); fp.add(st.phasor && VIEW.omega != null ? 1 : 0);
     // value-label length and side matter too: turning a knob changes the label's length (its
     // text does not: a running fan's rpm changes every frame and must not redo the layout)
-    for (const e of doc.elements) sig += '|' + e.x + ',' + e.y + ',' + e.rot + (e.flip ? 'f' : '') + (e.sv || '') + e.shownLabel().length + (e.chosenSide ? e.chosenSide.join(':') : '');
-    for (const p of st.probes || []) if (p.pos) sig += '|p' + p.pos[0] + ',' + p.pos[1];
-    if (this._live && this._live.sim === sim && this._live.sig === sig) return this._live;
+    for (const e of doc.elements) {
+      fp.add(e.x); fp.add(e.y); fp.add((e.rot & 3) + (e.flip ? 4 : 0)); fp.add((e._lab ?? e.shownLabel()).length);
+      if (e.sv) { fp.add(e.sv[0] + 0.5); fp.add(e.sv[1]); }
+      const cs = e.chosenSide;
+      if (cs) { fp.add(cs[0] + 0.25); fp.add(cs[1]); fp.add(cs[2] || 0); }
+    }
+    for (const p of st.probes || []) if (p.pos) { fp.add(p.pos[0] + 0.125); fp.add(p.pos[1]); }
+    const sig = fp.value();
+    if (this._live && this._live.sim === sim && this._live.doc === doc && this._live.sig === sig) return this._live;
     // as big as the labels are drawn, or smaller where readings that big would land on each other
     // or on parts
     let best = null;
@@ -923,7 +1006,7 @@ export class Renderer {
       if (!best || L.bad < best.bad) best = L;
       if (!L.bad || k === 1) break;
     }
-    this._live = { sim, sig, ...best };
+    this._live = { sim, doc, sig, ...best };
     return this._live;
   }
 
@@ -1105,11 +1188,17 @@ export class Renderer {
     ctx.restore();
   }
 
-  /** Render an element type into a small canvas for palette icons. */
-  static iconFor(C, theme, size = 64) {
-    const cv = document.createElement('canvas');
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    cv.width = size * dpr; cv.height = size * dpr;
+  /**
+   * Render an element type as a small picture (a data URL) for the component menu and the
+   * inspector. `shown`: the size in CSS px it is displayed at, when smaller than it is drawn
+   * (the menu shows its 64 px icons at 36 px: no need for three times the pixels).
+   */
+  static iconFor(C, theme, size = 64, shown = size) {
+    // one canvas for all of them: 500 icons used to mean 500 canvases waiting for the collector
+    const cv = Renderer.iconCanvas || (Renderer.iconCanvas = document.createElement('canvas'));
+    const dpr = Math.min(window.devicePixelRatio || 1, 3) * Math.min(1, shown / size);
+    const px = Math.max(1, Math.round(size * dpr));
+    cv.width = px; cv.height = px; // (setting the size also wipes it and its drawing state)
     const ctx = cv.getContext('2d');
     const e = new C(0, 0);
     const [a, b, c, d] = e.iconBox ? e.iconBox() : e.localBox(); // a very wide part may show just its middle

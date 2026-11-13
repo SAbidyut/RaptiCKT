@@ -63,16 +63,22 @@ class Breaker extends Element {
   }
   trip(s, why) { if (!this.tripped) { this.tripped = true; this.cause = why; s.markEvent(); } }
   accept(s) {
-    const n = this.npoles(), is = this.branches.map((k) => s.x[k]);
-    is.forEach((i, k) => { this.postCurrents[k] = i; this.postCurrents[k + n] = -i; });
-    this.i = is[0];
+    // (after every step: the pole currents straight into postCurrents, no lists made on the way)
+    const n = this.npoles(), br = this.branches, pc = this.postCurrents, x = s.x;
+    let imax = 0, ir = 0;
+    for (let k = 0; k < br.length; k++) {
+      const i = x[br[k]], a = Math.abs(i);
+      pc[k] = i; pc[k + n] = -i; ir += i;
+      if (a > imax || a !== a) imax = a; // (a broken solution — NaN — still shows as one)
+    }
+    this.i = x[br[0]];
     if (s.mode === 'dc') return;
     if (!this.closed()) { // open: the bimetal cools down
       this.theta -= this.theta * Math.min(1, s.heatDt() / this.thermalTau());
       this.stress = 0;
       return;
     }
-    const In = this.ratedI(), imax = Math.max(...is.map(Math.abs));
+    const In = this.ratedI();
     // the bimetal heats on the thermal clock, so overload trips take real seconds
     this.theta += ((imax / In) ** 2 - this.theta) * Math.min(1, s.heatDt() / this.thermalTau());
     this.stress = Math.max(0, Math.min(1, (this.theta - 1) / (this.constructor.ocp ? 0.69 : 1.1)));
@@ -95,7 +101,6 @@ class Breaker extends Element {
     }
     if (this.constructor.rcd) {
       // residual current: sum of all pole currents (should be zero for a healthy circuit)
-      const ir = is.reduce((a, b) => a + b, 0);
       this.res2 += (ir * ir - this.res2) * Math.min(1, s.dt / 0.01);
       if (Math.sqrt(this.res2) > 0.8 * this.p.idn) this.trip(s, 'Earth leakage (residual current)');
     }
@@ -299,7 +304,9 @@ export class GDT extends TwoTerm {
   static description = 'Gas discharge tube: open until the voltage exceeds the spark-over value, then an arc (≈15 V) conducts until the current falls below the extinction current.';
   reset() { this.on = false; this.sgn = 1; this.setCurrent(0); }
   stamp(s) { s.addG(this.nodes[0], this.nodes[1], this.on ? 1 : 1e-10); }
-  stampStep(s) { if (this.on) s.addI(this.nodes[0], this.nodes[1], this.sgn * this.p.varc); }
+  // (the arc is its voltage in series with 1 Ω: i = v − sgn·varc, as accept() reads it; the
+  // source term had the other sign, which made the tube deliver power)
+  stampStep(s) { if (this.on) s.addI(this.nodes[1], this.nodes[0], this.sgn * this.p.varc); }
   accept(s) {
     const v = this.voltageDiff(s);
     const i = this.on ? v - this.sgn * this.p.varc : v * 1e-10;

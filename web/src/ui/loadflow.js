@@ -27,15 +27,27 @@ const TABS = [
 const TYPE_LABEL = { slack: 'Slack', pv: 'PV', pq: 'PQ' };
 const TYPE_LONG = { slack: 'Slack (swing)', pv: 'PV (generator)', pq: 'PQ (load)' };
 
+// (looked up once per theme: the animated diagram asks for eight of them on every frame, and each
+// look-up makes the browser work the page's styles out)
+const cssSeen = new Map();
 function css(name, fb) {
-  try { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fb; } catch { return fb; }
+  const k = (document.documentElement.dataset.theme || '') + '|' + name;
+  let v = cssSeen.get(k);
+  if (v === undefined) {
+    try { v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); } catch { v = ''; }
+    cssSeen.set(k, v);
+  }
+  return v || fb;
 }
 
 /** Size a canvas to its CSS box at device resolution; returns { ctx, w, h }. */
 function prep(cv) {
   const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 300, h = cv.clientHeight || 200;
-  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  // (only when its size really changed: setting it throws the pixel buffer away and makes a new
+  // one, megabytes each time, and the animated diagram comes through here on every frame)
+  const W = Math.round(w * dpr), H = Math.round(h * dpr);
   const ctx = cv.getContext('2d');
+  if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; } else if (ctx.reset) ctx.reset(); else cv.width = W; // (a clean state either way)
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
   return { ctx, w, h };
@@ -50,16 +62,32 @@ function normSystem(sys) {
   const num = (v, d = 0) => (Number.isFinite(+v) && v !== '' && v !== null ? +v : d);
   const lim = (v) => (v === '' || v === null || v === undefined || !Number.isFinite(+v) ? '' : +v); // '' = no limit
   const text = (v, d = '') => (v === undefined || v === null ? d : String(v));
-  const buses = sys.buses.filter((b) => b && typeof b === 'object').map((b, i) => ({
+  // Bus numbers are numbers: every edit, the solver's reports and the page count on it. A bus
+  // named with text in a file ("A", "North") keeps that as its name and gets the next free number
+  // (it used to turn into NaN the first time it was edited, and its text went into the page as HTML).
+  const raw = sys.buses.filter((b) => b && typeof b === 'object');
+  const asNum = (v) => (typeof v === 'number' ? v : v !== '' && v !== null && v !== undefined && typeof v !== 'object' && Number.isFinite(+v) ? +v : NaN);
+  const taken = new Set(raw.map((b) => asNum(b.id)).filter(Number.isFinite));
+  const idOf = new Map(); // a bus as the file names it → its number
+  let next = 1;
+  const ids = raw.map((b, i) => {
+    let n = asNum(b.id);
+    if (!Number.isFinite(n)) { while (taken.has(next)) next++; n = next; taken.add(n); }
+    const k = String(b.id ?? i + 1);
+    if (!idOf.has(k)) idOf.set(k, n);
+    return n;
+  });
+  const busNo = (v) => (idOf.has(String(v)) ? idOf.get(String(v)) : Number.isFinite(asNum(v)) ? asNum(v) : -1);
+  const buses = raw.map((b, i) => ({
     ...b,
-    id: typeof b.id === 'number' ? b.id : text(b.id, String(i + 1)), name: text(b.name, `Bus ${b.id ?? i + 1}`),
+    id: ids[i], name: text(b.name, `Bus ${b.id ?? i + 1}`),
     type: ['slack', 'pv', 'pq'].includes(b.type) ? b.type : 'pq',
     V: num(b.V, 1), ang: num(b.ang), Pg: num(b.Pg), Qg: num(b.Qg), Pd: num(b.Pd), Qd: num(b.Qd),
     Gs: num(b.Gs), Bs: num(b.Bs), kV: num(b.kV), Qmin: lim(b.Qmin), Qmax: lim(b.Qmax),
   }));
   const branches = sys.branches.filter((l) => l && typeof l === 'object').map((l) => ({
     ...l,
-    from: typeof l.from === 'number' ? l.from : text(l.from), to: typeof l.to === 'number' ? l.to : text(l.to),
+    from: busNo(l.from), to: busNo(l.to),
     R: num(l.R), X: num(l.X), B: num(l.B), tap: num(l.tap), shift: num(l.shift), rate: num(l.rate),
     ...(l.kind !== undefined ? { kind: l.kind === 'xf' ? 'xf' : 'line' } : {}),
   }));
@@ -96,6 +124,14 @@ export class LoadFlowScreen {
     if (d) { this.toggleMax(false); return true; }
     if (this.tab !== 'system') { this.tab = 'system'; this.render(); return true; }
     return false;
+  }
+
+  /** Left for another screen: stop what moves and let the page (its diagram and chart canvases) go; open() draws it anew. */
+  close() {
+    cancelAnimationFrame(this.flowRaf); cancelAnimationFrame(this.viewRaf);
+    this.flowRaf = 0;
+    this.diagRO?.disconnect(); this.chartRO?.disconnect();
+    this.root.innerHTML = '';
   }
 
   toast(msg) {
@@ -380,6 +416,7 @@ export class LoadFlowScreen {
     const slack = !this.sys.buses.some((b) => b.type === 'slack');
     this.sys.buses.push(newBus(id, slack ? 'slack' : 'pq', { Pd: 0, Qd: 0, x: 20 + Math.random() * 60, y: 20 + Math.random() * 60 }));
     this.markCustom(); this.changed();
+    this.render(); // the new bus is in the list (and the counts) even if its sheet is just closed
     this.editBus(this.sys.buses.length - 1, true);
   }
 
@@ -388,6 +425,7 @@ export class LoadFlowScreen {
     if (b.length < 2) { alert('Add at least two buses first.'); return; }
     this.sys.branches.push(newBranch(b[0].id, b[1].id, xf ? 0 : 0.01, xf ? 0.1 : 0.05, xf ? 0 : 0.02, xf ? { tap: 1, kind: 'xf' } : {}));
     this.markCustom(); this.changed();
+    this.render(); // (as addBus)
     this.editBranch(this.sys.branches.length - 1, true);
   }
 
@@ -431,9 +469,10 @@ export class LoadFlowScreen {
         const newId = Math.round(numIn(g('id'), b.id));
         if (newId !== +b.id && this.sys.buses.some((x) => +x.id === newId)) { alert(`Bus number ${newId} is already used.`); return; }
         const type = g('type');
+        let note = '';
         if (type === 'slack' && b.type !== 'slack') {
           const other = this.sys.buses.find((x) => x !== b && x.type === 'slack');
-          if (other) { other.type = 'pv'; this.toast(`Bus ${other.id} changed from slack to PV`); }
+          if (other) { other.type = 'pv'; note = `Bus ${other.id} changed from slack to PV`; }
         }
         if (newId !== +b.id) for (const l of this.sys.branches) { if (+l.from === +b.id) l.from = newId; if (+l.to === +b.id) l.to = newId; }
         Object.assign(b, {
@@ -442,6 +481,7 @@ export class LoadFlowScreen {
           Qmin: optNum(g('Qmin')), Qmax: optNum(g('Qmax')), Gs: numIn(g('Gs')), Bs: numIn(g('Bs')), kV: numIn(g('kV')),
         });
         this.markCustom(); this.changed(); close(); this.render();
+        if (note) this.toast(note); // (after render, which builds the page anew and would take the toast with it)
       });
       el.querySelector('[data-x=del]').addEventListener('click', () => {
         const n = this.sys.branches.filter((l) => +l.from === +b.id || +l.to === +b.id).length;
@@ -455,7 +495,7 @@ export class LoadFlowScreen {
 
   editBranch(i, isNew) {
     const l = this.sys.branches[i];
-    const opts = (v) => this.sys.buses.map((b) => `<option value="${b.id}" ${+b.id === +v ? 'selected' : ''}>${esc(b.id)} · ${esc(b.name)}</option>`).join('');
+    const opts = (v) => this.sys.buses.map((b) => `<option value="${esc(b.id)}" ${+b.id === +v ? 'selected' : ''}>${esc(b.id)} · ${esc(b.name)}</option>`).join('');
     const f = (k, label, extra = '') => `<label>${label}<input data-v="${k}" type="number" inputmode="decimal" step="any" value="${esc(l[k] ?? '')}" ${extra}></label>`;
     const xf = (+l.tap && +l.tap !== 1) || +l.shift || l.kind === 'xf';
     this.app.showSheet(isNew ? (xf ? 'New transformer' : 'New line') : `Branch ${esc(l.from)} → ${esc(l.to)}`, `
@@ -711,10 +751,13 @@ export class LoadFlowScreen {
     cancelAnimationFrame(this.flowRaf);
     const smooth = motion.smooth && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
     if (!smooth || !this.res) return;
+    let n = 0;
     const loop = () => {
       const cv = this.root.querySelector('.lf-diag canvas');
       if (!cv || this.tab !== 'diagram' || !this.root.classList.contains('active') || document.hidden) { this.flowRaf = 0; return; }
-      this.drawDiagram();
+      // every other frame is plenty for drifting dots (half the work), and none at all while a
+      // sheet covers the diagram
+      if (++n % 2 === 0 && !document.querySelector('.modal.open')) this.drawDiagram();
       this.flowRaf = requestAnimationFrame(loop);
     };
     this.flowRaf = requestAnimationFrame(loop);
@@ -730,7 +773,8 @@ export class LoadFlowScreen {
     for (const p of pos.values()) { p.x = p.wx * v.s + v.tx; p.y = p.wy * v.s + v.ty; }
     this.diagPos = pos;
     const pct = this.root.querySelector('.lf-zpct');
-    if (pct) pct.textContent = `${Math.round(v.s * 100)}%`;
+    const pctText = `${Math.round(v.s * 100)}%`;
+    if (pct && pct.textContent !== pctText) pct.textContent = pctText; // (written only when it changes: a write makes the page lay itself out again)
     if (this.diagStyle !== 'modern') { this.drawClassic(cv, ctx, w, h, pos, k); return; }
     const r = this.res, opts = this.opts;
     const rb = new Map(r ? r.buses.map((b) => [String(b.id), b]) : []);
@@ -1383,8 +1427,8 @@ export class LoadFlowScreen {
     return `<h4>Jacobian at the last iteration (${n} × ${n})</h4>
       <p class="lf-note">Rows: mismatch equations; columns: unknowns. Top-left H = ∂P/∂δ, top-right N = ∂P/∂|V|, bottom-left M = ∂Q/∂δ, bottom-right L = ∂Q/∂|V|.</p>
       <div class="lf-tw"><table class="tbl lf-mat">
-        <thead><tr><th></th>${heads.map((h, c) => `<th class="${c === ang.length ? 'sep' : ''}">${h}</th>`).join('')}</tr></thead>
-        <tbody>${J.map((row, i) => `<tr class="${i === ang.length ? 'sep' : ''}"><th>${rowsH[i]}</th>${Array.from(row).map((v, c) => `<td class="${c === ang.length ? 'sep' : ''} ${Math.abs(v) < 1e-9 ? 'z' : ''}">${Math.abs(v) < 1e-9 ? '0' : v.toFixed(3)}</td>`).join('')}</tr>`).join('')}</tbody>
+        <thead><tr><th></th>${heads.map((h, c) => `<th class="${c === ang.length ? 'sep' : ''}">${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${J.map((row, i) => `<tr class="${i === ang.length ? 'sep' : ''}"><th>${esc(rowsH[i])}</th>${Array.from(row).map((v, c) => `<td class="${c === ang.length ? 'sep' : ''} ${Math.abs(v) < 1e-9 ? 'z' : ''}">${Math.abs(v) < 1e-9 ? '0' : v.toFixed(3)}</td>`).join('')}</tr>`).join('')}</tbody>
       </table></div>`;
   }
 
@@ -1444,7 +1488,7 @@ export class LoadFlowScreen {
 
   // ---------------------------------------------------------------- Per-unit tools tab
   renderTools(body) {
-    const opts = this.sys.buses.map((b) => `<option value="${b.id}">${esc(b.id)} · ${esc(b.name)}</option>`).join('');
+    const opts = this.sys.buses.map((b) => `<option value="${esc(b.id)}">${esc(b.id)} · ${esc(b.name)}</option>`).join('');
     const base = this.sys.baseMVA;
     body.innerHTML = `
       <p class="an-help">Convert real equipment data to per unit on the system base (${base} MVA). Results update as you type; the line and transformer tools can add the result to your system.</p>

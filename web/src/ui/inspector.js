@@ -567,7 +567,7 @@ export class Knob {
   hide() { this.host.classList.remove('open'); this.el = null; }
 
   // ---- decade dial helpers
-  parts(v) { let e = Math.floor(Math.log10(v) + 1e-9), m = v / Math.pow(10, e); if (Math.round(m) >= 10) { e += 1; m /= 10; } return [m, e]; }
+  parts(v) { let e = Math.floor(Math.log10(v) + 1e-9), m = v / Math.pow(10, e); if (m >= 9.9995) { e += 1; m /= 10; } return [m, e]; } // (only rounding noise counts as the next decade: 9.6 k is 9.6 × 10³, not 0.96 × 10⁴)
   digit() { const v = this.el.p[this.prop.key]; return v > 0 ? Math.min(9, Math.max(1, Math.round(this.parts(v)[0]))) : 1; }
   digitAngle(d) { return ((d - 0.5) * 40 * Math.PI) / 180; }
   /**

@@ -49,12 +49,15 @@ class App {
     window.raptiOpenText = (name, text) => this.loadText(name, text);
     // called by Android when the app goes to the background: persist immediately
     window.raptiPause = () => {
+      this.editor.hush(); // a running buzzer or bell must not go on sounding behind the home screen
       const d = this.editor.doc;
       if (this.current === 'editor' && d.elements.length) {
         store.autosave(d.toJSON());
         if (d.id && !d.isExample) this.saveToLibrary(d, true);
       }
     };
+    // called by Android when the phone is short of memory or the app has been put away
+    window.raptiTrim = () => this.trimMemory();
     this.show('home');
     this.home.render();
     document.documentElement.classList.add('booted'); // the splash is up: the page behind it may take its own colour
@@ -64,11 +67,29 @@ class App {
 
   uid() { return 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
+  /**
+   * Let go of everything that can be made again: the icons of the component menu, the example
+   * preview pictures, the canvases they are drawn on, layouts worked out for the board. What the
+   * user made (the circuit, its undo steps while it is open) stays.
+   */
+  trimMemory() {
+    this.thumbCache.clear();
+    const ed = this.editor, R = ed.renderer;
+    ed.palette.cache.clear();
+    ed.inspector.iconCache.clear();
+    for (const cv of [this.thumbCanvas, Renderer.iconCanvas]) if (cv) { cv.width = 1; cv.height = 1; }
+    R._live = null; R._room = null; R._sidesSig = null; R._sidesDoc = null;
+    if (!ed.active) { ed.undoStack = []; ed.redoStack = []; ed.theorem.close(); }
+    if (this.current !== 'loadflow') this.loadflow.close();
+  }
+
   applyTheme() {
     document.documentElement.dataset.theme = this.settings.theme;
     const meta = document.querySelector('meta[name=theme-color]');
     if (meta) meta.content = (THEMES[this.settings.theme] || THEMES.light).bg;
-    if (this.editor) { this.editor.palette.cache.clear(); this.editor.dirtyDraw = true; }
+    // pictures drawn in the old colours are of no use any more
+    this.thumbCache?.clear();
+    if (this.editor) { this.editor.palette.cache.clear(); this.editor.inspector.iconCache.clear(); this.editor.dirtyDraw = true; }
     this.syncBars();
   }
   /** Android: the status bar takes the colour of this screen's top bar, the navigation bar the page's. */
@@ -176,6 +197,7 @@ class App {
   closeLoadFlow() {
     const from = this.loadflowFrom || 'home';
     this.show(from);
+    this.loadflow.close();
     if (from === 'home') this.home.render();
     if (from === 'editor') { this.editor.onResize(); this.editor.dirtyDraw = true; }
   }
@@ -250,9 +272,10 @@ class App {
 
   // ---------------------------------------------------------------- data
   thumbnail(doc, w = 360, h = 220) {
-    const cv = document.createElement('canvas');
-    cv.style.width = w + 'px'; cv.style.height = h + 'px';
-    cv.width = w; cv.height = h;
+    // one canvas for every preview picture: a new one each time (every autosave, every example
+    // card) left its pixels in memory until the collector got round to them
+    const cv = this.thumbCanvas || (this.thumbCanvas = document.createElement('canvas'));
+    cv.width = w; cv.height = h; // (setting the size also wipes it and its drawing state)
     const r = new Renderer(cv);
     r.dpr = 1; r.cw = w; r.ch = h;
     r.fit(doc.bounds(), 30);

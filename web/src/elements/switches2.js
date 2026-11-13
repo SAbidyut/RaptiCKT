@@ -33,12 +33,16 @@ export class MultiSwitch extends Element {
   ron() { return this.p.ron ?? 0.005; }
   branchCount() { return this.paths().length; }
   valueLabel() { return ''; }
-  stamp(s) { const c = this.closedSet(); this.paths().forEach(([a, b], k) => stampSw(s, this.nodes[a], this.nodes[b], this.branches[k], c[k], this.ron())); }
+  stamp(s) {
+    const c = this.closedSet(), P = this._paths = this.paths(); // (kept for accept, which runs after every step)
+    for (let k = 0; k < P.length; k++) stampSw(s, this.nodes[P[k][0]], this.nodes[P[k][1]], this.branches[k], c[k], this.ron());
+  }
   stampAC(ac) { const c = this.closedSet(); this.paths().forEach(([a, b], k) => stampSwAC(ac, this.nodes[a], this.nodes[b], this.branches[k], c[k], this.ron())); }
   accept(s) {
-    this.postCurrents.fill(0);
-    this.paths().forEach(([a, b], k) => { const i = s.x[this.branches[k]]; this.postCurrents[a] += i; this.postCurrents[b] -= i; });
-    this.i = this.postCurrents[0];
+    const pc = this.postCurrents, P = this._paths || this.paths(), br = this.branches, x = s.x;
+    pc.fill(0);
+    for (let k = 0; k < P.length; k++) { const i = x[br[k]]; pc[P[k][0]] += i; pc[P[k][1]] -= i; }
+    this.i = pc[0];
   }
   stateName() { return ''; }
   readings() { return [['State', this.stateName(), ''], ['Current', this.i, 'A']]; }

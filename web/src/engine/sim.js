@@ -100,6 +100,8 @@ export class Simulator {
     }
     for (const e of elements) {
       e._posts = e.getPosts();
+      // where it stood when these were taken (Element.posts() gives them back only while it has not moved)
+      e._px = e.x; e._py = e.y; e._pr = (e.rot & 3) | (e.flip ? 4 : 0); e._psv = e.sv;
       for (const p of e._posts) { uf.find(key(p[0], p[1])); points.push(p); }
     }
     // T-junctions: any point lying inside a wire segment joins that wire.
@@ -310,9 +312,10 @@ export class Simulator {
    */
   addNLCurrent(nFrom, nTo, I0, ctrl) {
     let ieq = I0;
-    for (const [p, q, g, v0] of ctrl) {
-      this.addVCCS(nFrom, nTo, p, q, g);
-      ieq -= g * v0;
+    for (let k = 0; k < ctrl.length; k++) {
+      const c = ctrl[k];
+      this.addVCCS(nFrom, nTo, c[0], c[1], c[2]);
+      ieq -= c[2] * c[3];
     }
     this.addI(nFrom, nTo, ieq);
   }
@@ -607,10 +610,14 @@ export class Simulator {
       this.error = null;
       this.reset();
       this.opFallback = true;
-      this.warnings.push(this.opNoDcPath
+      const msg = this.opNoDcPath
         ? 'A node has no DC path to ground (a capacitor fed by a current source?); starting from zero initial conditions.'
-        : 'DC operating point did not converge; starting from zero initial conditions.');
+        : 'DC operating point did not converge; starting from zero initial conditions.';
+      if (!this.warnings.includes(msg)) this.warnings.push(msg); // (once, however often it is restarted)
     }
+    // an attempt that failed on the way (before gmin or source stepping got there) left its
+    // message behind: the circuit did start, so there is no error to show
+    this.error = null; this.errorElement = null;
     this.mode = 'tran';
     this.dirty = true;
     this.started = true;
@@ -621,7 +628,9 @@ export class Simulator {
   /** Advance one timestep dt (with automatic step halving on non-convergence). */
   step(dt) {
     if (this.fatal) return false;
-    return this.stepInner(dt, 0);
+    const ok = this.stepInner(dt, 0);
+    if (ok) { this.error = null; this.errorElement = null; } // (a step that worked: an earlier failure is over)
+    return ok;
   }
 
   stepInner(dt, depth) {
@@ -652,9 +661,10 @@ export class Simulator {
     this.t += dt;
     this.event = false;
     for (const e of this.elements) if (e.accept) e.accept(this);
+    if (this.beSteps > 0) this.beSteps--;
+    // (after the count-down: the two damped steps ringing asks for are both still to come)
     if (method === 'trap') this.watchRinging(); else if (this.zig) this.zig.fill(0);
     this.xPrev.set(this.x);
-    if (this.beSteps > 0) this.beSteps--;
     if (this.event) this.beSteps = 2; // damp trapezoidal ringing after discontinuities
     return true;
   }
@@ -699,6 +709,7 @@ export class Simulator {
    */
   acSweep(inputEl, outNode, refNode, fStart, fStop, pointsPerDecade = 40) {
     const res = [];
+    if (!(fStart > 0) || !(fStop > fStart) || !Number.isFinite(fStop)) return res; // (no sweep to make: it would never end)
     const decades = Math.log10(fStop / fStart);
     const N = Math.max(2, Math.round(decades * pointsPerDecade) + 1);
     for (let i = 0; i < N; i++) {
@@ -787,7 +798,9 @@ export class Simulator {
       if (n == null) return [0, 0];
       if (n === 0) {
         // on ground: what goes in at the others comes out here (two terminals: the other one)
-        if (e.nodes.length !== 2) return [NaN, NaN];
+        // (both ends on ground: nothing to work it out from — and asking the other end would
+        // ask this one again, for ever)
+        if (e.nodes.length !== 2 || e.nodes[1 - k] === 0) return [NaN, NaN];
         const o = current(e, 1 - k);
         return [-o[0], -o[1]];
       }

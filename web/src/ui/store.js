@@ -49,6 +49,35 @@ function list(k, def, ok) {
 const isCircuit = (c) => !!c && typeof c === 'object' && typeof c.id === 'string' && !!c.data && typeof c.data === 'object';
 const isFolder = (f) => !!f && typeof f === 'object' && typeof f.id === 'string';
 
+// The saved circuits are one stored text (megabytes, with their preview pictures). Reading the
+// list parsed all of it every time — twice for every autosave, three times to show My Circuits.
+// The parsed list is kept for a moment after it was last used, so a burst of reads and writes
+// parses it once; then it is let go, so it does not sit in memory for the whole session. It is
+// used only while the stored text is still the one it was parsed from.
+let lib = null, libTimer = 0; // { raw, list }
+const LIB_KEEP_MS = 2500;
+function keepLib(raw, v) {
+  lib = { raw, list: v };
+  clearTimeout(libTimer);
+  libTimer = setTimeout(() => { lib = null; }, LIB_KEEP_MS);
+  return v;
+}
+function readLib() {
+  let raw = null;
+  try { raw = localStorage.getItem(K.circuits); } catch { return []; }
+  if (lib && lib.raw === raw) return keepLib(raw, lib.list);
+  let v = [];
+  try { v = raw ? JSON.parse(raw) : []; } catch { v = []; }
+  return keepLib(raw, Array.isArray(v) ? v.filter(isCircuit) : []);
+}
+/** Store the list of circuits. false when the storage is full (nothing is changed then). */
+function writeLib(v) {
+  let raw;
+  try { raw = JSON.stringify(v); localStorage.setItem(K.circuits, raw); } catch { return false; }
+  keepLib(raw, v);
+  return true;
+}
+
 export const store = {
   settings() {
     let s = read(K.settings, {});
@@ -58,19 +87,23 @@ export const store = {
     return { ...DEFAULT_SETTINGS, ...s };
   },
   saveSettings(s) { write(K.settings, s); },
-  circuits() { return list(K.circuits, [], isCircuit); },
+  /** The saved circuits, newest first (a list of its own: the entries are shared, so treat them as read-only). */
+  circuits() { return readLib().slice(); },
   /**
    * Save (or replace) one circuit, newest first. Nothing is ever dropped to make room: when the
    * storage is full, the circuit is kept without its preview picture before giving up.
    */
   saveCircuit(entry) {
+    // a copy of its own: what is kept must not go on changing with the circuit being edited
+    // (a document's saved form shares its wires' points and its settings with the document)
+    try { entry = JSON.parse(JSON.stringify(entry)); } catch { return false; }
     const all = this.circuits().filter((c) => c.id !== entry.id);
-    if (write(K.circuits, [entry, ...all])) return true;
-    return !!entry.thumb && write(K.circuits, [{ ...entry, thumb: null }, ...all]);
+    if (writeLib([entry, ...all])) return true;
+    return !!entry.thumb && writeLib([{ ...entry, thumb: null }, ...all]);
   },
-  deleteCircuit(id) { write(K.circuits, this.circuits().filter((c) => c.id !== id)); },
-  deleteAllCircuits() { write(K.circuits, []); write(K.folders, []); },
-  deleteCircuits(ids) { const s = new Set(ids); write(K.circuits, this.circuits().filter((c) => !s.has(c.id))); },
+  deleteCircuit(id) { writeLib(this.circuits().filter((c) => c.id !== id)); },
+  deleteAllCircuits() { writeLib([]); write(K.folders, []); },
+  deleteCircuits(ids) { const s = new Set(ids); writeLib(this.circuits().filter((c) => !s.has(c.id))); },
 
   // ---- folders (My Circuits): [{ id, name, parent }]; a circuit's `folder` is a folder id or null (top level)
   folders() { return list(K.folders, [], isFolder); },
@@ -88,10 +121,10 @@ export const store = {
     const gone = new Set(ids.flatMap((id) => this.folderTree(id)));
     const inside = this.circuits().filter((c) => gone.has(c.folder));
     this.saveFolders(this.folders().filter((f) => !gone.has(f.id)));
-    write(K.circuits, this.circuits().filter((c) => !gone.has(c.folder)));
+    writeLib(this.circuits().filter((c) => !gone.has(c.folder)));
     return inside.length;
   },
-  moveCircuits(ids, folder) { const s = new Set(ids); write(K.circuits, this.circuits().map((c) => (s.has(c.id) ? { ...c, folder: folder || null } : c))); },
+  moveCircuits(ids, folder) { const s = new Set(ids); writeLib(this.circuits().map((c) => (s.has(c.id) ? { ...c, folder: folder || null } : c))); },
   moveFolders(ids, parent) { const s = new Set(ids); this.saveFolders(this.folders().map((f) => (s.has(f.id) ? { ...f, parent: parent || null } : f))); },
   getCircuit(id) { return this.circuits().find((c) => c.id === id); },
   recent() { return list(K.recent, ['resistor', 'capacitor', 'dcv', 'ground', 'led', 'npn', 'switch', 'opamp'], (t) => typeof t === 'string'); },
@@ -100,6 +133,7 @@ export const store = {
     write(K.recent, r);
   },
   autosave(doc) { write(K.autosave, doc); },
+  clearAutosave() { try { localStorage.removeItem(K.autosave); } catch { /* ignore */ } },
   // Load Flow section: the system being worked on and the user's saved systems
   lfState() { return read(K.lf, null); },
   saveLfState(s) { return write(K.lf, s); },

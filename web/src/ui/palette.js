@@ -17,11 +17,12 @@ export class Palette {
 
   iconUrl(C) {
     const k = C.type + ':' + this.ed.settings.theme;
-    if (!this.cache.has(k)) this.cache.set(k, Renderer.iconFor(C, this.ed.theme, 64));
+    if (!this.cache.has(k)) this.cache.set(k, Renderer.iconFor(C, this.ed.theme, 64, 42)); // (shown at 36 px)
     return this.cache.get(k);
   }
 
   open() {
+    this.query = ''; // the search box is made empty: what it searched for last time goes too
     this.host.innerHTML = `
       <div class="sheet-grip"></div>
       <div class="pal-head">
@@ -58,7 +59,9 @@ export class Palette {
     let i = 0;
     const idle = window.requestIdleCallback || ((f) => setTimeout(() => f({ timeRemaining: () => 8 }), 50));
     const work = (dl) => {
-      while (i < types.length && dl.timeRemaining() > 2) this.iconUrl(types[i++]);
+      // while a circuit runs, one icon per idle moment: the simulation and its frames come first
+      const busy = this.ed.running && !this.ed.paused;
+      do { this.iconUrl(types[i++]); } while (!busy && i < types.length && dl.timeRemaining() > 2);
       if (i < types.length) idle(work);
     };
     idle(work);

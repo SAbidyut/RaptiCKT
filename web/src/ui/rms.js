@@ -2,6 +2,8 @@
 // period of the circuit's AC supply. Used for the live labels in AC circuits,
 // so a 230 V : 12 V transformer reads 12 V instead of a swinging peak value.
 
+import { Element } from '../elements/base.js';
+
 export class RmsTracker {
   /**
    * @param {number} period  window length in seconds (one cycle of the lowest AC frequency)
@@ -22,6 +24,9 @@ export class RmsTracker {
     this.n = 0;
     this.span = 0; // seconds covered by the window
     this.partIndex = new Map(parts.map((p, i) => [p, nodes + i]));
+    // parts with the usual liveCurrent() (the current in their first terminal): read straight
+    // from postCurrents after every step, instead of through a call that hands back a new number
+    this.plain = parts.map((p) => p.liveCurrent === Element.prototype.liveCurrent);
   }
 
   grow() {
@@ -37,22 +42,31 @@ export class RmsTracker {
 
   sample(sim, dt) {
     if (!(dt > 0)) return;
-    if (this.n === this.cap) {
+    // a period of more steps than the buffer should hold (a 50 Hz supply with a 20 kHz source sets
+    // 80 000 steps a cycle): steps share a slot until it is 1/4096 of the period long
+    const last = (this.head + this.n - 1) % this.cap;
+    const merge = this.n > 0 && this.dts[last] + dt <= this.T / 4096;
+    if (!merge && this.n === this.cap) {
       if (this.cap < 65536) this.grow();
       else this.drop();
     }
-    const w = this.width, slot = (this.head + this.n) % this.cap, o = slot * w;
-    const put = (k, v) => {
-      const q = v * v * dt, l = v * dt, a = o + 2 * k;
-      this.buf[a] = q; this.buf[a + 1] = l; this.sum[2 * k] += q; this.sum[2 * k + 1] += l;
-    };
-    for (let k = 1; k < this.nodes; k++) put(k, sim.nodeVoltage(k));
-    for (let j = 0; j < this.parts.length; j++) {
-      const i = this.parts[j].liveCurrent();
-      put(this.nodes + j, Number.isFinite(i) ? i : 0);
+    const w = this.width, slot = merge ? last : (this.head + this.n) % this.cap, o = slot * w;
+    if (!merge) { this.buf.fill(0, o, o + w); this.dts[slot] = 0; }
+    const buf = this.buf, sum = this.sum, nodes = this.nodes, parts = this.parts, plain = this.plain;
+    for (let k = 1; k < nodes; k++) {
+      const v = sim.nodeVoltage(k), q = v * v * dt, l = v * dt, a = o + 2 * k;
+      buf[a] += q; buf[a + 1] += l; sum[2 * k] += q; sum[2 * k + 1] += l;
     }
-    this.dts[slot] = dt;
-    this.n++;
+    for (let j = 0; j < parts.length; j++) {
+      const p = parts[j];
+      let i;
+      if (plain[j]) { const pc = p.postCurrents; i = pc.length === 2 ? pc[0] : NaN; } else i = p.liveCurrent();
+      const v = Number.isFinite(i) ? i : 0;
+      const k = nodes + j, q = v * v * dt, l = v * dt, a = o + 2 * k;
+      buf[a] += q; buf[a + 1] += l; sum[2 * k] += q; sum[2 * k + 1] += l;
+    }
+    this.dts[slot] += dt;
+    if (!merge) this.n++;
     this.span += dt;
     // keep exactly one period (plus the newest step)
     while (this.n > 1 && this.span - this.dts[this.head] >= this.T) this.drop();
