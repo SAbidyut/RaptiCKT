@@ -56,8 +56,3 @@ export function classify(bm, hand = false) {
   for (let i = 0; i < x.length; i++) x[i] /= z;
   return x.length > CLASSES.length ? x.slice(0, CLASSES.length) : x;
 }
-
-/** The k likeliest classes: [{ c, p }]. */
-export function topK(probs, k = 3) {
-  return [...probs].map((p, i) => ({ c: CLASSES[i], p })).sort((a, b) => b.p - a.p).slice(0, k);
-}

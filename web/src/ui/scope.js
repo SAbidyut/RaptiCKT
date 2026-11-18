@@ -180,6 +180,9 @@ export class Scope {
 
   setProbes(probes) {
     const old = new Map(this.channels.map((c) => [c.probe.id, c]));
+    // a channel added to a scope that already holds a trace has no past of its own: it would show
+    // (and measure) 0 V for all of it, so every channel starts again from now
+    if (this.count && probes.some((p) => !old.has(p.id))) { this.head = 0; this.count = 0; this.lastT = -Infinity; this.scales.clear(); }
     this.channels = probes.map((p) => old.get(p.id) || { probe: p, buf: new Float64Array(N) });
     this.channels.forEach((c) => { c.probe = probes.find((p) => p.id === c.probe.id); });
     if (this.mode === 'xy' && this.channels.length < 2) { this.mode = 'time'; this.host.querySelector('[data-a=mode]').textContent = 'TIME'; }
@@ -636,13 +639,17 @@ export class Scope {
     const rows = [];
     ctx.save(); ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
     this.channels.forEach((c, ci) => {
-      const re = new Float64Array(n), im = new Float64Array(n);
+      // (work arrays kept between draws: this runs 30 times a second for every channel)
+      const F = this.fftBuf && this.fftBuf.n === n ? this.fftBuf : (this.fftBuf = { n, re: new Float64Array(n), im: new Float64Array(n), mag: new Float64Array(half) });
+      const re = F.re, im = F.im;
+      im.fill(0);
       let mean = 0;
       for (let k = 0; k < n; k++) mean += c.buf[sel[k]];
       mean /= n;
       for (let k = 0; k < n; k++) re[k] = (c.buf[sel[k]] - mean) * (0.5 - 0.5 * Math.cos((2 * Math.PI * k) / (n - 1)));
       fft(re, im);
-      const mag = new Float64Array(half);
+      const mag = F.mag;
+      mag[0] = 0;
       let pk = 1;
       for (let k = 1; k < half; k++) { mag[k] = (Math.hypot(re[k], im[k]) * 4) / n; if (mag[k] > mag[pk]) pk = k; }
       const peak = mag[pk] || 1e-12, col = c.probe.color;

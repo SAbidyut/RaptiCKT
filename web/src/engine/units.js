@@ -20,7 +20,7 @@ export function parseSI(input) {
   let s = String(input).trim().replace(/\s+/g, '');
   // a decimal comma, as many phone keyboards give it ("1,5", "0,47", "4,7k"); a comma grouping
   // thousands ("1,000", "12,500,000") is dropped
-  if (/^[-+]?\d{1,3}(,\d{3})+(?!\d)/.test(s) && !s.includes('.')) s = s.replace(/,/g, '');
+  if (/^[-+]?[1-9]\d{0,2}(,\d{3})+(?!\d)/.test(s) && !s.includes('.')) s = s.replace(/,/g, '');
   else if (!s.includes('.')) s = s.replace(',', '.');
   s = s.replace(/,/g, '');
   if (!s) return NaN;

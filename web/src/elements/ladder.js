@@ -122,9 +122,10 @@ class Linked extends CoilRelay {
   stampStep() {}
   stampAC(ac) { this.constructor.paths.forEach(([a, b], j) => stampSwAC(ac, this.nodes[a], this.nodes[b], this.branches[j], this.closedAt(j), 0.005)); }
   accept(s) {
-    this.postCurrents.fill(0);
-    this.constructor.paths.forEach(([a, b], j) => { const i = s.x[this.branches[j]]; this.postCurrents[a] += i; this.postCurrents[b] -= i; });
-    this.i = s.x[this.branches[0]];
+    const pc = this.postCurrents, P = this.constructor.paths, br = this.branches, x = s.x;
+    pc.fill(0);
+    for (let j = 0; j < P.length; j++) { const i = x[br[j]]; pc[P[j][0]] += i; pc[P[j][1]] -= i; }
+    this.i = x[br[0]];
   }
   digitalSettle() { return false; }
   valueLabel() { return ''; }

@@ -15,7 +15,10 @@ export class Wire {
   get a() { return this.pts[0]; }
   get b() { return this.pts[this.pts.length - 1]; }
   /** saved form: plain point list for an ideal wire, else {p, c, b} */
-  toJSON() { return this.cable || this.burnt ? { p: this.pts, c: this.cable || undefined, b: this.burnt ? 1 : undefined } : this.pts; }
+  toJSON() {
+    const pts = this.pts.map((p) => [p[0], p[1]]); // (its own points: the saved form must not move with the wire)
+    return this.cable || this.burnt ? { p: pts, c: this.cable ? { ...this.cable } : undefined, b: this.burnt ? 1 : undefined } : pts;
+  }
 }
 
 export const snap = (v) => Math.round(v / GRID) * GRID;
@@ -38,7 +41,9 @@ export function simplify(pts) {
   for (let i = out.length - 2; i >= 1; i--) {
     const [a, b, c] = [out[i - 1], out[i], out[i + 1]];
     const cross = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-    if (cross === 0) out.splice(i, 1);
+    // in line and going on the same way: not a point where the path turns back on itself (taking
+    // that out would cut off the stretch beyond it, and whatever is joined there)
+    if (cross === 0 && (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1]) > 0) out.splice(i, 1);
   }
   return out;
 }
@@ -112,7 +117,7 @@ export class CircuitDoc {
         q.el = p.el != null ? idx.get(p.el) : undefined;
         return q;
       }),
-      sim: this.simSettings,
+      sim: { ...this.simSettings },
       bl: this.bigLabels ? 1 : undefined,
       dm: this.domain === 'phasor' ? 'p' : undefined, // AC circuit shown in the phasor domain
       om: this.omega > 0 ? this.omega : undefined,      // its ω when no source gives one
@@ -121,17 +126,22 @@ export class CircuitDoc {
 
   static fromJSON(o) {
     if (typeof o === 'string') o = JSON.parse(o);
+    if (!o || typeof o !== 'object') o = {};
     const d = new CircuitDoc(o.name ? String(o.name) : 'Imported circuit');
     d.description = o.description ? String(o.description) : '';
     // a damaged or hand-edited file: whatever is not a part, a wire or a probe is left out
     const arr = (a) => (Array.isArray(a) ? a : []);
+    const byIndex = []; // the parts as the file counts them (probes point at them by that number), left-out ones included
     for (const eo of arr(o.elements)) {
-      const e = eo && typeof eo === 'object' ? Element.fromJSON(eo) : null;
+      let e = null;
+      try { e = eo && typeof eo === 'object' ? Element.fromJSON(eo) : null; } catch { e = null; }
+      byIndex.push(e);
       if (e) d.elements.push(e);
     }
+    const pts = (a) => Array.isArray(a) && a.length >= 2 && a.every((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]));
     for (const w of arr(o.wires)) {
-      if (Array.isArray(w) && w.length >= 2) d.addWire(w);
-      else if (w && Array.isArray(w.p) && w.p.length >= 2) d.addWire(w.p, { cable: w.c, burnt: w.b });
+      if (pts(w)) d.addWire(w);
+      else if (w && typeof w === 'object' && pts(w.p)) d.addWire(w.p, { cable: w.c, burnt: w.b });
     }
     // a probe's colour and unit go into the page as they are: only well-formed ones are taken from a
     // file, so a crafted circuit cannot slip HTML or script into the app
@@ -143,13 +153,13 @@ export class CircuitDoc {
         color: COLOR.test(String(p.color)) ? p.color : PALETTE[i % PALETTE.length],
         unit: p.kind === 'cur' ? 'A' : 'V',
         pos: Array.isArray(p.pos) && p.pos.length === 2 && p.pos.every(Number.isFinite) ? [...p.pos] : undefined,
-        el: p.el != null && d.elements[p.el] ? d.elements[p.el].id : undefined,
+        el: p.el != null && byIndex[p.el] ? byIndex[p.el].id : undefined,
       }))
       .filter((p) => (p.kind === 'node' ? !!p.pos : p.el != null));
-    d.simSettings = o.sim && typeof o.sim === 'object' ? o.sim : {};
+    d.simSettings = o.sim && typeof o.sim === 'object' && !Array.isArray(o.sim) ? { ...o.sim } : {};
     d.bigLabels = !!o.bl;
     d.domain = o.dm === 'p' ? 'phasor' : 'time';
-    d.omega = +o.om > 0 ? +o.om : 0;
+    d.omega = Number.isFinite(+o.om) && +o.om > 0 ? +o.om : 0;
     d.assignNames();
     return d;
   }

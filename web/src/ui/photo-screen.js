@@ -254,7 +254,8 @@ export class PhotoScreen {
       if (e instanceof PhotoError && e.code === 'cancelled') { this.stage = 'start'; this.render(); return; }
       this.fail(e instanceof PhotoError ? e : new PhotoError('offline', String(e?.message || e)));
     } finally {
-      clearInterval(this.timer);
+      // (not when a newer read has taken over: the ticking status is that one's now)
+      if (!this.abort || this.abort === ctl) clearInterval(this.timer);
     }
   }
 
@@ -375,7 +376,7 @@ export class PhotoScreen {
         p.value = v;
         this.refresh();
       });
-      row.querySelector('[data-x=del]')?.addEventListener('click', () => { c.parts.splice(i, 1); this.hi = -1; this.refresh(); });
+      row.querySelector('[data-x=del]')?.addEventListener('click', () => { this.dropPart(c, i); this.hi = -1; this.refresh(); });
     });
     body.querySelectorAll('[data-c]').forEach((x) => x.addEventListener('click', () => { this.pick = +x.dataset.c; this.hi = -1; this.render(); }));
     body.querySelector('[data-x=undo]')?.addEventListener('click', () => { this.answer.circuits = JSON.parse(this.original); this.hi = -1; this.refresh(); });
@@ -418,11 +419,29 @@ export class PhotoScreen {
     </div>`;
   }
 
+  /**
+   * Take part i out of the drawing. What points at parts by their place in the list follows:
+   * a marked current or voltage ("ix through the 2 Ω") stays with its part instead of sliding
+   * on to the next one — which silently made a dependent source follow the wrong resistor — and
+   * one that was marked on the removed part itself now points at nothing (reported when opened).
+   */
+  dropPart(c, i) {
+    c.parts.splice(i, 1);
+    for (const q of c.quantities || []) {
+      if (typeof q.part !== 'number') continue;
+      if (q.part === i) q.part = -1; else if (q.part > i) q.part--;
+    }
+    if (c.mutuals) {
+      c.mutuals = c.mutuals.filter((m) => m.a !== i && m.b !== i)
+        .map((m) => ({ ...m, a: m.a > i ? m.a - 1 : m.a, b: m.b > i ? m.b - 1 : m.b }));
+    }
+  }
+
   /** A part read as the wrong kind: make it the kind picked (or a plain wire). */
   changeKind(i, kind) {
     const c = this.answer.circuits[this.pick], p = c.parts[i];
     if (kind === 'wire') {
-      c.parts.splice(i, 1);
+      this.dropPart(c, i);
       (c.wires ||= []).push({ from: p.from, to: p.to });
       this.hi = -1;
     } else {

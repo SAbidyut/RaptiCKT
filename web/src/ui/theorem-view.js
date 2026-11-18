@@ -40,7 +40,11 @@ export class TheoremView {
     this.render();
   }
 
-  close() { this.host.classList.remove('open'); }
+  close() {
+    this.unzoom();
+    this.host.classList.remove('open');
+    this.host.innerHTML = ''; // its step drawings are canvases (megabytes of pixels): not kept while closed; open() draws anew
+  }
 
   /** Android back: a zoomed drawing first, then one stage back, then close. */
   back() {

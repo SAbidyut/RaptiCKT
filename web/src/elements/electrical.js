@@ -529,10 +529,10 @@ export class Socket extends Element {
   }
   stampStep(s) { this.rl.step(s, this.branches[0], this.rl0()[1]); }
   accept(s) {
-    const [l, n, e] = this.nodes, [R] = this.rl0();
-    this.rl.accept(s, l, n, this.branches[0], R);
-    const il = (s.v(l) - s.v(e)) * this.gleak();
-    this.postCurrents = [this.rl.i + il, -this.rl.i, -il]; this.i = this.rl.i + il;
+    const nd = this.nodes, l = nd[0], n = nd[1], e = nd[2];
+    this.rl.accept(s, l, n, this.branches[0], this.rl0()[0]);
+    const il = (s.v(l) - s.v(e)) * this.gleak(), pc = this.postCurrents;
+    pc[0] = this.rl.i + il; pc[1] = -this.rl.i; pc[2] = -il; this.i = this.rl.i + il;
     const b = BURN[this.app().burn];
     if (s.mode === 'dc' || !b) return;
     const vr = this.rms.push(s.v(l) - s.v(n), s.dt);

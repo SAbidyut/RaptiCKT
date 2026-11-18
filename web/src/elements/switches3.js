@@ -200,7 +200,7 @@ export class RockerSwitch extends MultiSwitch {
   accept(s) {
     super.accept(s);
     const il = (s.v(this.nodes[1]) - s.v(this.nodes[2])) / this.p.rlamp;
-    this.postCurrents[1] -= il; this.postCurrents[2] += il;
+    this.postCurrents[1] += il; this.postCurrents[2] -= il; // (the lamp's current goes in at L-out and out at N)
     this.vl = Math.abs(s.v(this.nodes[1]) - s.v(this.nodes[2]));
   }
   stateName() { return this.p.on ? 'ON' : 'OFF'; }

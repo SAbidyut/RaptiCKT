@@ -275,13 +275,13 @@ function newtonRaphson(Y, st, opts) {
 }
 
 // ------------------------------------------------------------ Fast Decoupled (XB)
-function fdMatrices(sys, st) {
+function fdMatrices(sys, st, dc = false) {
   const idx = new Map(sys.buses.map((b, i) => [b.id, i])), n = st.n;
   const Bp = Array.from({ length: n }, () => new Float64Array(n));
   for (const l of sys.branches) {
     if (l.on === false) continue;
     const f = idx.get(l.from), t = idx.get(l.to), x = num(l.X) || 1e-6;
-    const b = 1 / x; // B': no resistance, charging, shunts or taps
+    const b = 1 / (dc ? x * (num(l.tap) || 1) : x);
     Bp[f][f] += b; Bp[t][t] += b; Bp[f][t] -= b; Bp[t][f] -= b;
   }
   return Bp;
@@ -315,12 +315,12 @@ function fastDecoupled(sys, Y, st, opts) {
 // ------------------------------------------------------------ DC load flow
 function dcFlow(sys, st) {
   const { n, type, Psp, Vm, Va } = st;
-  const Bp = fdMatrices(sys, st);
+  const Bp = fdMatrices(sys, st, true);
   // phase shifters inject equivalent powers
   const idx = new Map(sys.buses.map((b, i) => [b.id, i])), Pshift = new Float64Array(n);
   for (const l of sys.branches) {
     if (l.on === false || !num(l.shift)) continue;
-    const f = idx.get(l.from), t = idx.get(l.to), p = (-num(l.shift) * D2R) / (num(l.X) || 1e-6);
+    const f = idx.get(l.from), t = idx.get(l.to), p = (num(l.shift) * D2R) / ((num(l.X) || 1e-6) * (num(l.tap) || 1));
     Pshift[f] -= p; Pshift[t] += p;
   }
   const ang = [];
@@ -402,6 +402,7 @@ function results(sys, Y, st, dc) {
 export function solveLoadFlow(sys, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   if (!opts.maxIter) opts.maxIter = opts.method === 'gs' ? 1000 : opts.method === 'fd' ? 100 : 30;
+  if (!Array.isArray(sys.branches)) sys = { ...sys, branches: [] }; // (a system given without the list)
   const errors = validate(sys);
   if (errors.length) return { ok: false, errors };
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();

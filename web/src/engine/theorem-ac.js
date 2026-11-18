@@ -262,6 +262,15 @@ export function solveAC(net, elems, w, { ref = 0, only = null, extra = [], muts 
     if (e.kind === 'DI') { const { terms, k } = ctlTerms(e); let s = k; for (const [col, cf] of terms) if (col >= 0) s = C.add(s, C.mul(cf, x[col])); return C.scale(s, e.gain); }
     return [0, 0];
   };
+  for (const r of refs) {
+    let s = [0, 0], scale = 0;
+    for (const e of all) {
+      if (e.n[0] === e.n[1] || (e.n[0] !== r && e.n[1] !== r)) continue;
+      const i = cur(e); scale = Math.max(scale, C.abs(i));
+      s = e.n[0] === r ? C.sub(s, i) : C.add(s, i);
+    }
+    if (!(C.abs(s) <= 1e-9 * scale + 1e-12)) return null;
+  }
   return { v, cur, w };
 }
 
@@ -546,7 +555,7 @@ function meshWork(c, elems, w, { only = null } = {}) {
         let cf = Array.from({ length: m }, () => [0, 0]);
         if (ct.type === 'i') cf = curCo(ct.el).map((k) => [k, 0]);
         else if (ct.type === 'v') { const z = zAt(ct.el, w); cf = curCo(ct.el).map((k) => C.scale(z, k)); }
-        cf.forEach((z, kk) => { if (!isZero(z)) { A[j][kk] = C.add(A[j][kk], C.scale(z, -o * e.gain)); termsTxt[j][kk].push(`${-o * e.gain < 0 ? '−' : ''}${num(Math.abs(e.gain))}${tx(`(${e.name})`)}`); } });
+        cf.forEach((z, kk) => { if (!isZero(z)) { A[j][kk] = C.add(A[j][kk], C.scale(z, o * e.gain)); termsTxt[j][kk].push(`${o * e.gain < 0 ? '−' : ''}${num(Math.abs(e.gain))}${tx(`(${e.name})`)}`); } });
       } else if (e.kind === 'I' || e.kind === 'DI') {
         if (co(e).size > 1) { if (!shared.includes(e)) shared.push(e); } // between two meshes: a supermesh
         else fixed.set(j, e.kind === 'I' ? { e, val: on(e) ? C.scale(e.ph, curCo(e)[j] || 1) : [0, 0] } : { e, dep: true });
@@ -560,8 +569,9 @@ function meshWork(c, elems, w, { only = null } = {}) {
   for (const e of shared) {
     const [j, k] = [...co(e).keys()].sort((x, y) => x - y);
     if (fixed.has(j) || fixed.has(k) || superOf.has(j) || consOf.has(j) || superOf.has(k) || consOf.has(k)) return { error: `${e.name} shares two meshes that also meet another current source: use nodal analysis for this circuit.` };
-    for (let q = 0; q < m; q++) A[j][q] = C.add(A[j][q], A[k][q]);
-    b[j] = C.add(b[j], b[k]);
+    const sg = co(e).get(j) * co(e).get(k) > 0 ? -1 : 1;
+    for (let q = 0; q < m; q++) A[j][q] = C.add(A[j][q], C.scale(A[k][q], sg));
+    b[j] = C.add(b[j], C.scale(b[k], sg));
     for (let q = 0; q < m; q++) A[k][q] = [0, 0];
     b[k] = [0, 0];
     const ct = e.ctl;
@@ -676,6 +686,10 @@ function zthWork(c, w) {
       return { z: r.z, lines, how: 'sp' };
     }
   }
+  // nothing but current sources joins a to b once the load is out: Z_th is infinite
+  { const g = new UF();
+    for (const e of rest) if (e.kind !== 'I' && e.kind !== 'DI' && !(e.kind === 'Z' && e.C && !(w > 0))) g.union(e.n[0], e.n[1]);
+    if (g.find(c.a) !== g.find(c.b)) return { z: [Infinity, 0], lines: [`Z_{th} = ∞  ${tx('(with the sources off nothing joins a to b)')}`], how: 'open' }; }
   // a test source: 1∠0° A into a, out of b; Z_th = V_ab / 1 A
   const test = { kind: 'I', n: [c.b, c.a], ph: [1, 0], w, name: 'I_test', id: -1, src: -1 };
   const offEls = rest.map((e) => e);
@@ -703,7 +717,7 @@ function nodalMethod(c) {
   if (!work) return { ok: false, error: 'This circuit has no single solution.' };
   steps.push(step('Step 2 — KCL at the nodes', [P(`Take node ${c.net.hasGround ? '0 (ground)' : c.nm(c.ref)} as the reference and write KCL — the currents leaving each node add up to zero:`), F(work.lines)], boardFig(c, { tags: nodeTags(c) })));
   steps.push(step('Step 3 — Solve for the node voltages', nodalMatrix(c, work, c.elems, w)));
-  const Vab = C.sub(work.sol.v[c.a], work.sol.v[c.b]), I = C.div(Vab, zAt(c.T, w));
+  const Vab = C.sub(work.sol.v[c.a], work.sol.v[c.b]), I = work.sol.cur(c.T);
   steps.push(step(`Step 4 — The current and voltage of ${c.T.name}`, [
     F(`I_{L} = ${fr(c.b === c.ref ? `V_{${c.nm(c.a)}}` : c.a === c.ref ? `−V_{${c.nm(c.b)}}` : `V_{${c.nm(c.a)}} − V_{${c.nm(c.b)}}`, 'Z_{L}')} = ${fr(fV(Vab), rect(zAt(c.T, w)))}`, ...answerLines(c, I, Vab, w)),
     P('Transformed back to the time domain: a phasor I_m∠φ is the sinusoid I_m cos(ωt + φ).'),
@@ -740,8 +754,11 @@ function vthWork(c, w) {
 function thevenin(c, maxPower = false) {
   const bad = single(c); if (bad) return { ok: false, error: bad.error };
   const w = c.w, steps = [transformStep(c, 'Step 1 — Transform to the phasor domain', w)];
+  if (c.muts.some((m) => m.a === c.T || m.b === c.T)) return { ok: false, error: `${c.T.name} is magnetically coupled to another coil: use mesh or nodal analysis.` };
+  if (!Number.isFinite(zAt(c.T, w)[0])) return { ok: false, error: `${c.T.name} is an open circuit at DC: no current flows in it.` };
   const zt = zthWork(c, w);
   if (zt.error) return { ok: false, error: zt.error };
+  if (!Number.isFinite(zt.z[0]) || !Number.isFinite(zt.z[1])) return { ok: false, error: 'Z_th is infinite (nothing but a current source feeds the load): use Norton or nodal analysis.' };
   const off = offSpec(c);
   steps.push(step('Step 2 — Find Z_th', [P(`Remove ${c.T.name} (the load, between a and b) and turn the independent sources off — a voltage source becomes a short, a current source an open. Z_th is the impedance seen from a–b:`), F(zt.lines)],
     boardFig(c, { ...off, hide: [c.T.src], ab: true, show: 'Rth' }), [['Z_th', fZ(zt.z)]]));
@@ -774,6 +791,8 @@ function thevenin(c, maxPower = false) {
 function norton(c) {
   const bad = single(c); if (bad) return { ok: false, error: bad.error };
   const w = c.w, steps = [transformStep(c, 'Step 1 — Transform to the phasor domain', w)];
+  if (c.muts.some((m) => m.a === c.T || m.b === c.T)) return { ok: false, error: `${c.T.name} is magnetically coupled to another coil: use mesh or nodal analysis.` };
+  if (!Number.isFinite(zAt(c.T, w)[0])) return { ok: false, error: `${c.T.name} is an open circuit at DC: no current flows in it.` };
   const zt = zthWork(c, w);
   if (zt.error) return { ok: false, error: zt.error };
   steps.push(step('Step 2 — Find Z_N (= Z_th)', [P(`Remove ${c.T.name} and turn the independent sources off; Z_N is the impedance seen from a–b:`), F(zt.lines.map((l) => l.replace(/Z_\{th\}/g, 'Z_{N}')))],
@@ -785,7 +804,7 @@ function norton(c) {
   const IN = sol.cur(sh);
   steps.push(step('Step 3 — Find I_N', [P('Short a–b (the load replaced by a wire) with the sources on; I_N is the current in the short, from a to b:'), F(`I_{N} = ${fI(IN)}`)],
     boardFig(c, { hide: [c.T.src], ab: true, shortAB: true, show: 'IN' }), [['I_N', fI(IN)]]));
-  const ZL = zAt(c.T, w), I = C.div(C.mul(IN, zt.z), C.add(zt.z, ZL)), V = C.mul(I, ZL);
+  const ZL = zAt(c.T, w), I = Number.isFinite(zt.z[0]) && Number.isFinite(zt.z[1]) ? C.div(C.mul(IN, zt.z), C.add(zt.z, ZL)) : IN, V = C.mul(I, ZL);
   steps.push(step('Step 4 — The Norton equivalent with the load', [
     P(`I_N with Z_N in parallel feeds ${c.T.name}; the current divides:`),
     F(`I_{L} = ${fr('Z_{N}', 'Z_{N} + Z_{L}')} I_{N} = ${fr(par(zt.z), `${par(zt.z)} + ${par(ZL)}`)} × ${fI(IN)}`, ...answerLines(c, I, V, w)),

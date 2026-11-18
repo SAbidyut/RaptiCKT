@@ -262,7 +262,7 @@ export class BLDCMotor extends Element {
     this.te = this.p.ke * i.reduce((acc, x, k) => acc + x * trap(th - k * TAU / 3), 0);
     if (s.mode !== 'dc') {
       const TL = this.p.load * Math.tanh(this.wm / 0.5);
-      this.wm += ((this.te - TL - this.p.b * this.wm) / this.p.j) * s.dt;
+      this.wm = (this.wm + ((this.te - TL) / this.p.j) * s.dt) / (1 + (this.p.b / this.p.j) * s.dt); // (friction implicit: stable at any damping)
       this.ang += this.wm * s.dt;
       const h = this.hallsAt(this.thE());
       if (h.some((v, k) => v !== this.halls[k])) { this.halls = h; s.event = true; }
@@ -331,8 +331,9 @@ export class StepperMotor extends Element {
     this.te = this.p.kt * (-ia * Math.sin(x) + ib * Math.cos(x)) - this.p.tdet * Math.sin(4 * x);
     if (s.mode !== 'dc') {
       const TL = this.p.load * Math.tanh(this.wm / 0.05);
-      // semi-implicit Euler for the stiff rotor oscillation
-      this.wm += ((this.te - TL - this.p.b * this.wm) / this.p.j) * s.dt;
+      // semi-implicit Euler for the stiff rotor oscillation; the friction term implicit, so heavy
+      // damping (b·dt/J > 2) slows the rotor instead of flinging it off to 10¹⁴ rad/s
+      this.wm = (this.wm + ((this.te - TL) / this.p.j) * s.dt) / (1 + (this.p.b / this.p.j) * s.dt);
       this.th += this.wm * s.dt;
     }
     this.postCurrents = [ia, -ia, ib, -ib]; this.i = ia;

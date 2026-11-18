@@ -58,9 +58,25 @@ export class Editor {
     // system bars going away) the moment layout changes, before the frame is painted
     if (window.ResizeObserver) new ResizeObserver(() => { if (this.app.current === 'editor') this.onResize(); }).observe(this.canvas);
     this.updateLayout();
+    // the app in the background (or the page hidden): no buzzer left sounding from a board nobody
+    // sees — no frames come while hidden, so the loop could not stop it
+    document.addEventListener('visibilitychange', () => (document.hidden ? this.hush() : this.unhush()));
+  }
+
+  /** Silence at once (the app was sent to the background). */
+  hush() {
+    this.stopSound();
+    try { this.audio?.suspend?.(); } catch { /* no audio */ }
+  }
+  unhush() {
+    try { if (this.active && this.running && this.settings.sound) this.audio?.resume?.(); } catch { /* no audio */ }
+    this.wake();
   }
 
   q(s) { return this.root.querySelector(s); }
+  /** "The board must be drawn again": setting it also wakes the frame loop when it is resting. */
+  get dirtyDraw() { return this._dirty; }
+  set dirtyDraw(v) { this._dirty = v; if (v) this.wake(); }
   get settings() { return this.app.settings; }
   get theme() { return THEMES[this.settings.theme] || THEMES.light; }
 
@@ -131,7 +147,10 @@ export class Editor {
       <div class="menu more-menu"></div>
       <div class="popover speed-pop"></div>`;
     this.canvas = this.q('.board');
+    // anything touched in the editor (a button, a sheet, the knob) may change the board
+    this.root.addEventListener('pointerdown', () => this.wake(), { capture: true, passive: true });
     this.root.addEventListener('click', (ev) => {
+      this.wake();
       const b = ev.target.closest('[data-a]');
       if (!b || !this.root.contains(b) || b.closest('.inspector,.palette,.analysis,.theorem,.meter-card,.more-menu,.speed-pop,.scope-panel,.selbar,.quickbar')) return;
       this.command(b.dataset.a, b);
@@ -202,19 +221,24 @@ export class Editor {
     this.updateHint();
     if (autoRun && doc.elements.length) this.setRunning(true);
     if (note) this.toast(note, 3600);
-    if (!this.raf) this.raf = requestAnimationFrame(this.loop);
     this.active = true;
+    this.dirtyDraw = true; // (and the frame loop runs: see wake)
     if (!this.prewarmed) { this.prewarmed = true; setTimeout(() => this.palette.prewarm(), 1200); }
     if (!store.flag('editorTips')) setTimeout(() => this.showTips(), 400);
   }
 
-  /** Back on the editor from a screen opened over it: carry on. */
+  /**
+   * Start the frame loop again: back on the editor from a screen opened over it, or something
+   * changed on a board that was resting (see loop: it stops asking for frames when nothing moves).
+   */
   wake() {
-    if (this.active && !this.raf) this.raf = requestAnimationFrame(this.loop);
+    this.idleFrames = 0;
+    if (this.active && !this.raf && this.app.current === 'editor') { this.last = performance.now(); this.raf = requestAnimationFrame(this.loop); }
   }
 
   close() {
     this.active = false;
+    this.undoStack = []; this.redoStack = []; // (whole copies of the circuit: of no use once it is closed)
     if (this.fullscreen) this.setFullscreen(false);
     this.setRunning(false);
     this.stopSound();
@@ -644,8 +668,9 @@ export class Editor {
     if (this.needRebuild && !this.drag) this.rebuildNow();
     let frac = 1;
     const live = this.running && this.sim && this.sim.ready;
+    const moving = live && !this.paused;
     this.simMs = 0;
-    if (live && !this.paused) {
+    if (moving) {
       // when the circuit cannot keep up with the speed asked for, give the simulation at least as
       // much of the frame as the drawing takes (a fast-forward is fine at 20–30 fps) instead of
       // the few ms left over at 60 fps
@@ -658,26 +683,41 @@ export class Editor {
       // the speed actually reached, shown when it falls short of the setting
       if (dtReal > 0) this.realSpeed = 0.9 * (this.realSpeed ?? this.speed) + 0.1 * ((this.sim.t - s0) / dtReal);
     }
-    if (live) {
-      this.graph.solveCurrents(this.doc);
-      this.autoScale(dtReal);
-      if (!this.paused) this.renderer.advanceDots(this.drawState(), dtReal);
-      this.updateSound();
-    }
     this.frameCount = (this.frameCount || 0) + 1;
-    if (live || this.dirtyDraw || this.drag || this.wireFrom) {
+    // A paused circuit stands still: it is drawn again when something changes, and a few times a
+    // second for what still moves on its own (flames, smoke, a warning glow) — not 60 times.
+    const busy = moving || this.dirtyDraw || this.drag || this.wireFrom || this.glide;
+    if (busy || (live && ts - (this.lastDrawT || 0) > 120)) {
+      const st = this.drawState(ts / 1000);
+      if (live) {
+        this.graph.solveCurrents(this.doc);
+        this.autoScale(dtReal);
+        if (moving) this.renderer.advanceDots(st, dtReal);
+        this.updateSound();
+      }
       const t0 = performance.now();
-      this.renderer.draw(this.drawState(ts / 1000));
+      this.renderer.draw(st);
       this.drawMs = 0.8 * (this.drawMs || 0) + 0.2 * (performance.now() - t0);
       this.dirtyDraw = false;
-    }
+      this.lastDrawT = ts;
+    } else if (live) this.updateSound();
     // scope at 30 fps while running is plenty for the eye and halves its cost
-    if (this.scopeOpen && (live ? this.frameCount % 2 === 0 : this.frameCount % 20 === 0)) this.scope.draw();
+    if (this.scopeOpen && (moving ? this.frameCount % 2 === 0 : this.frameCount % 20 === 0)) this.scope.draw();
     if (this.frameCount % 12 === 0) {
       this.updateStatus();
       if (live) this.inspector.updateReadings();
     }
     if (this.meter.open) this.meter.update(dtReal);
+    // Nothing runs and nothing moves: stop asking for frames, so an open circuit that is only
+    // being looked at costs no processor time (and no battery). Whatever changes the board sets
+    // dirtyDraw, and every touch in the editor calls wake(): both start the loop again.
+    if (busy || live || this.needRebuild || this.meter.open) this.idleFrames = 0;
+    else if ((this.idleFrames = (this.idleFrames || 0) + 1) > 45) {
+      this.updateStatus();
+      if (this.scopeOpen) this.scope.draw();
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
+    }
   }
 
   /** Dynamic resolution: lower the canvas pixel density on slow devices to keep ~60 fps. */
@@ -696,8 +736,12 @@ export class Editor {
   autoScale(dt) {
     const sim = this.sim;
     let vmax = 0.5, imax = 1e-6;
-    for (let n = 1; n < sim.externalNodes; n++) vmax = Math.max(vmax, Math.abs(sim.nodeVoltage(n)));
-    for (const e of this.doc.elements) for (const c of e.postCurrents) imax = Math.max(imax, Math.abs(c || 0));
+    for (let n = 1; n < sim.externalNodes; n++) { const v = Math.abs(sim.nodeVoltage(n)); if (v > vmax) vmax = v; }
+    const els = this.doc.elements;
+    for (let k = 0; k < els.length; k++) {
+      const pc = els[k].postCurrents;
+      for (let j = 0; j < pc.length; j++) { const c = Math.abs(pc[j] || 0); if (c > imax) imax = c; }
+    }
     const a = Math.min(1, dt * 1.5);
     this.vScale += (vmax - this.vScale) * (vmax > this.vScale ? 0.5 : a);
     this.iScale += (imax - this.iScale) * (imax > this.iScale ? 0.5 : a);
@@ -724,13 +768,18 @@ export class Editor {
   }
 
   updateStatus() {
-    const s = this.q('.hud-status');
-    if (!this.running) { s.innerHTML = `${icon('speed', 14)} ${fmtSI(this.speed, 's', 2)}/s`; return; }
+    const s = this.statusEl || (this.statusEl = this.q('.hud-status'));
+    // (written only when it reads differently: this runs five times a second)
+    const show = (html) => { if (html !== this.statusHtml) { this.statusHtml = html; s.innerHTML = html; } };
+    if (!this.running) { show(`${icon('speed', 14)} ${fmtSI(this.speed, 's', 2)}/s`); return; }
     const t = this.sim ? this.sim.t : 0;
     const real = this.slow && !this.paused && this.realSpeed > 0 && this.realSpeed < 0.9 * this.speed;
-    s.innerHTML = `<i class="dot ${this.paused ? '' : 'live'}"></i>t = ${fmtSI(t, 's', 4)} · ${real ? `<em>${fmtSI(this.realSpeed, 's', 2)}/s max</em>` : `${fmtSI(this.speed, 's', 2)}/s`}`;
+    show(`<i class="dot ${this.paused ? '' : 'live'}"></i>t = ${fmtSI(t, 's', 4)} · ${real ? `<em>${fmtSI(this.realSpeed, 's', 2)}/s max</em>` : `${fmtSI(this.speed, 's', 2)}/s`}`);
     const note = this.q('.speed-pop.open .speed-note');
-    if (note) note.innerHTML = real ? `This circuit runs at most <b>${fmtSI(this.realSpeed, 's', 2)}/s</b> on this device — it cannot compute faster, so a higher setting does not help.` : '';
+    if (note) {
+      const html = real ? `This circuit runs at most <b>${fmtSI(this.realSpeed, 's', 2)}/s</b> on this device — it cannot compute faster, so a higher setting does not help.` : '';
+      if (html !== note._html) { note._html = html; note.innerHTML = html; }
+    }
   }
 
   updateToolbar() {
@@ -1806,7 +1855,7 @@ export class Editor {
 
   onDown(ev) {
     ev.preventDefault();
-    this.canvas.setPointerCapture(ev.pointerId);
+    try { this.canvas.setPointerCapture(ev.pointerId); } catch { /* the pointer is already gone */ }
     const [sx, sy] = this.local(ev);
     this.pointers.set(ev.pointerId, [sx, sy]);
     this.q('.speed-pop').classList.remove('open');
@@ -1817,7 +1866,8 @@ export class Editor {
       this.cancelGesture();
       const [a, b] = [...this.pointers.values()];
       const R = this.renderer;
-      this.gesture = { type: 'pinch', d0: Math.hypot(a[0] - b[0], a[1] - b[1]), s0: R.scale, mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], w: R.toWorld((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) };
+      // (two fingers reported at one point: a distance of 0 would zoom to NaN and lose the board)
+      this.gesture = { type: 'pinch', d0: Math.max(1, Math.hypot(a[0] - b[0], a[1] - b[1])), s0: R.scale, mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], w: R.toWorld((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) };
       return;
     }
     if (this.pointers.size > 2) return;

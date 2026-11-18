@@ -569,7 +569,7 @@ export class NJFET extends Element {
   localBox() { return [-2 * G, -2 * G, G * 1.65, 2 * G]; } // the round body reaches 1.6 G
   leads() { return [[0, -2 * G, 0, -G * 0.3, 0], [1, G, -2 * G, G, -G * 0.55], [2, G, 2 * G, G, G * 0.55]]; }
   labelSide() { return [1, 0]; }
-  reset() { this.jgs.vd = 0; this.jgd.vd = 0; this.postCurrents = [0, 0, 0]; this.sm = null; this.vgsOld = 0; this.vdsOld = 0; }
+  reset() { this.jgs.vd = 0; this.jgd.vd = 0; this.postCurrents = [0, 0, 0]; this.sm = null; this.vgsOld = 0; this.vgdOld = 0; this.vdsOld = 0; }
   ids(vgs, vds) {
     const vp = -Math.abs(this.p.vp), beta = this.p.idss / (vp * vp), lam = this.p.lambda;
     const vov = vgs - vp;
@@ -583,16 +583,22 @@ export class NJFET extends Element {
   }
   stampNL(s) {
     const [g, d, so] = this.nodes, p = this.pol;
-    let vgs = p * (s.v(g) - s.v(so)), vds = p * (s.v(d) - s.v(so));
+    let vgs = p * (s.v(g) - s.v(so));
+    const vds = p * (s.v(d) - s.v(so));
+    // Each controlling voltage is limited on its own: gate–source forward, gate–drain when the
+    // drain is below the source. (Reverse used the limited vgs minus the unlimited vds: a drain
+    // stepping below the source sent the iterations off to 10¹⁰ V and a "singular matrix".)
+    let vgd = vgs - vds;
     if (Math.abs(vgs - this.vgsOld) > 1) { vgs = this.vgsOld + Math.sign(vgs - this.vgsOld); s.limited = true; }
-    this.vgsOld = vgs; this.vdsOld = vds;
+    if (Math.abs(vgd - this.vgdOld) > 1) { vgd = this.vgdOld + Math.sign(vgd - this.vgdOld); s.limited = true; }
+    this.vgsOld = vgs; this.vgdOld = vgd; this.vdsOld = vds;
     if (vds >= 0) {
       const m = this.ids(vgs, vds);
       s.addNLCurrent(d, so, p * m.id, [[g, so, m.gm, p * vgs], [d, so, m.gds + 1e-12, p * vds]]);
       this.sm = { ...m, rev: false };
     } else {
-      const m = this.ids(vgs - vds, -vds);
-      s.addNLCurrent(so, d, p * m.id, [[g, d, m.gm, p * (vgs - vds)], [so, d, m.gds + 1e-12, -p * vds]]);
+      const m = this.ids(vgd, -vds);
+      s.addNLCurrent(so, d, p * m.id, [[g, d, m.gm, p * vgd], [so, d, m.gds + 1e-12, -p * vds]]);
       this.sm = { ...m, rev: true };
     }
     for (const [j, other] of [[this.jgs, so], [this.jgd, d]]) {
@@ -605,7 +611,7 @@ export class NJFET extends Element {
   accept(s) {
     const [g, d, so] = this.nodes, p = this.pol;
     const vgs = p * (s.v(g) - s.v(so)), vds = p * (s.v(d) - s.v(so));
-    this.vgsOld = vgs;
+    this.vgsOld = vgs; this.vgdOld = vgs - vds;
     let id;
     if (vds >= 0) { const m = this.ids(vgs, vds); id = p * m.id; this.sm = { ...m, rev: false }; } else { const m = this.ids(vgs - vds, -vds); id = -p * m.id; this.sm = { ...m, rev: true }; }
     const igs = p * diodeIV(p * (s.v(g) - s.v(so)), 1e-14, 1, 0).i, igd = p * diodeIV(p * (s.v(g) - s.v(d)), 1e-14, 1, 0).i;

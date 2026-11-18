@@ -116,6 +116,17 @@ The same text is available as Markdown: [docs/MANUAL.md](docs/MANUAL.md). It is 
 
 It also builds every example and checks that it is fully wired, solvable and gives the expected values; `tests/projects.test.js` runs the big projects like the real circuits (RCCB/MCB trips, RAM write/read-back, 59 → 00 roll-over, traffic-light timing, 5 V regulation, day/night switching).
 
+`tests/fixes.test.js` keeps fixed faults fixed: single-supply op-amps (LM358, LM324) following their input, the gas discharge tube's arc drop, tunnel diodes, JFETs and opto-TRIACs that used to stop the simulation, LED panels in series, phase shifters in the DC load flow, mesh analysis with dependent sources, damaged circuit files.
+
+## Speed, memory and stability
+
+- **The board rests when nothing moves.** The frame loop stops asking for frames once a circuit is neither running nor being touched, and starts again on the next touch or change. A paused circuit is redrawn when something changes (and a few times a second for flames and smoke), not 60 times a second.
+- **Only what is on the screen is drawn.** Parts, labels and current dots outside the visible board are skipped; zoomed out, current dots keep about 9 px apart on the screen instead of piling up, so a 120-part installation seen whole draws a few hundred dots, not thousands.
+- **Little is thrown away per frame.** The drawing helper, label layouts and wire currents are kept between frames; geometry checks compare numbers, not text built up and discarded every frame. The simulation step (thousands per second) no longer makes lists for switches, breakers, sockets, the RMS readings or the wire heating.
+- **Pictures share one canvas.** Component icons (522 of them) and circuit previews are each drawn on one reused canvas; icons are rendered at the size they are shown. Example previews are drawn when the Examples page is opened, not behind the home screen at start-up.
+- **Saved circuits are parsed once per burst of use**, not on every look at the library (twice per autosave before).
+- **Android:** if the system reclaims the page's process (or it crashes) the app starts the page again instead of closing — circuits are autosaved as they are edited; when the phone runs short of memory the page lets go of every icon, preview and layout it can make again; files are read off the main thread, so opening a circuit from a cloud drive cannot freeze the app; a buzzer or bell stops when the app goes to the background.
+
 ## Project layout
 
 ```

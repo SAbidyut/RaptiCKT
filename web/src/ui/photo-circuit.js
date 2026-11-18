@@ -211,7 +211,7 @@ export function buildFromDrawing(c) {
     el.p.sym = part.control || '';
     if (!q) { warnings.push(`${el.name} (${part.text}) is controlled by "${part.control}", which is not marked on the drawing: set its control in the part's settings.`); el.p.kind = isI ? 'vccs' : 'vcvs'; el.p.ctrl = ''; continue; }
     if (q.kind === 'node_voltage') { el.p.kind = isI ? 'vccs' : 'vcvs'; el.p.ctrl = `node:${q.name}`; continue; }
-    const ref = made[q.part];
+    const ref = made.find((m) => m.part === c.parts[q.part]); // (q.part counts the parts as read, not the ones placed)
     if (!ref) { warnings.push(`${el.name}: the part that "${q.name}" refers to is missing.`); continue; }
     // the reference part's first terminal is its head: flip the gain when the marking runs the other way
     const posEnd = q.positive === 'to' ? ref.part.to : ref.part.from;

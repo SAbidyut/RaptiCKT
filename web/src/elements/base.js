@@ -206,9 +206,25 @@ export class Element {
 
   getPosts() { return this.localPosts().map(([x, y]) => this.toWorld(x, y)); }
 
+  /**
+   * Its terminals on the board for reading only (drawing, current flow): the list the solver took
+   * when the circuit was last built, as long as the part still stands where it stood then; a part
+   * being dragged, turned or not yet in the solver gets a fresh one.
+   */
+  posts() {
+    return this._posts && this._px === this.x && this._py === this.y && this._pr === ((this.rot & 3) | (this.flip ? 4 : 0)) && this._psv === this.sv
+      ? this._posts : this.getPosts();
+  }
+
   worldBox() {
     const q = this.worldPoly();
-    return [Math.min(...q.map((p) => p[0])), Math.min(...q.map((p) => p[1])), Math.max(...q.map((p) => p[0])), Math.max(...q.map((p) => p[1]))];
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (let i = 0; i < q.length; i++) {
+      const x = q[i][0], y = q[i][1];
+      if (x < x1) x1 = x; if (x > x2) x2 = x;
+      if (y < y1) y1 = y; if (y > y2) y2 = y;
+    }
+    return [x1, y1, x2, y2];
   }
 
   /** The four corners of its box on the board, turned and slanted with it. */
@@ -257,15 +273,32 @@ export class Element {
   static fromJSON(o) {
     const C = getType(o.t);
     if (!C) return null;
-    const e = new C(o.x, o.y);
-    e.rot = o.r || 0;
+    const e = new C(Number.isFinite(+o.x) ? +o.x : 0, Number.isFinite(+o.y) ? +o.y : 0);
+    e.rot = (+o.r | 0) & 3;
     e.flip = !!o.f;
     if (o.v) e.setSlant(o.v);
     else if (o.s && e.canSlant()) { // saved by the 45°-only version: turned 45° beyond its rot
       const n = (2 * e.localPosts()[1][0]) / GRID;
       e.setSlant([[n, n], [-n, n], [-n, -n], [n, -n]][e.rot & 3]);
     }
-    if (o.p) Object.assign(e.p, o.p);
+    if (o.p && typeof o.p === 'object') {
+      Object.assign(e.p, o.p);
+      // Numbers are numbers: a damaged or hand-made file must not hand the solver text or NaN,
+      // nor a value wildly beyond what the part's settings allow (a baud rate of 10¹² asks for
+      // an endless list of bits). Values a little outside the range are left as they are.
+      for (const pr of C.props) {
+        if (pr.type || typeof pr.def !== 'number' || !(pr.key in o.p)) continue;
+        let v = o.p[pr.key];
+        if (typeof v === 'string' && v.trim() !== '') v = +v;
+        if (typeof v !== 'number' || !Number.isFinite(v)) { e.p[pr.key] = pr.def; continue; }
+        const lo = pr.min, hi = pr.max;
+        if (typeof lo === 'number' && typeof hi === 'number' && hi > lo) {
+          const span = hi - lo, far = lo > 0 ? [lo / 10, hi * 10] : lo === 0 ? [0, hi + span] : [lo - span, hi + span];
+          if (v < far[0]) v = lo; else if (v > far[1]) v = hi;
+        }
+        e.p[pr.key] = v;
+      }
+    }
     if (o.l) e.label = o.l;
     if (o.fl) e.fault = { ...o.fl };
     if (o.d) e.damaged = { why: String(o.d) };
@@ -335,7 +368,11 @@ export class Element {
     g.box(-GRID * 0.8, -GRID * 0.5, GRID * 0.8, GRID * 0.5);
   }
   /** Current (post 0 → post 1) shown as a live annotation; null for parts that have none. */
-  liveCurrent() { return this.localPosts().length === 2 && this.postCurrents.length === 2 ? this.postCurrents[0] : null; }
+  liveCurrent() {
+    if (this.postCurrents.length !== 2) return null;
+    // (asked after every simulation step: the terminals the solver last saw, not a new list each time)
+    return (this._posts ? this._posts.length : this.localPosts().length) === 2 ? this.postCurrents[0] : null;
+  }
 
   /** side (local unit vector) on which the value label is placed, outside the part */
   labelSide() { return [0, -1]; }

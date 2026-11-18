@@ -34,10 +34,12 @@ export class WireHeat {
     this.graph.fastCurrents();
     const I = this.graph.fI;
     let burnt = null;
-    for (const [w, edges] of this.list) {
+    const list = this.list;
+    for (let n = 0; n < list.length; n++) {
+      const w = list[n][0], edges = list[n][1];
       if (w.burnt) continue;
       let i = 0;
-      for (const k of edges) if (Math.abs(I[k]) > Math.abs(i)) i = I[k];
+      for (let j = 0; j < edges.length; j++) { const c = I[edges[j]]; if (Math.abs(c) > Math.abs(i)) i = c; }
       if (w.heat.step(i, sim) && w.heat.state === 'burnt') (burnt ||= []).push(w);
     }
     return burnt;

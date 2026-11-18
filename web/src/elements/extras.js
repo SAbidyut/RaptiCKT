@@ -100,8 +100,13 @@ export class LEDPanel extends Element {
   leads() { return [[0, -2 * G, 0, -1.4 * G, 0], [1, 2 * G, 0, 1.4 * G, 0]]; }
   reset() { this.v2 = this.p.v ** 2; this.vprev = 0; this.on = true; this.pin = 0; this.postCurrents = [0, 0]; }
   gin() { return this.on && !this.damaged ? (this.p.w / 0.92) / Math.max(this.v2, 100) : 0; }
-  stamp(s) { s.addG(this.nodes[0], this.nodes[1], 1e-7); }
-  stampStep(s) { s.addI(this.nodes[0], this.nodes[1], this.gin() * this.vprev); }
+  // The driver's load is in the matrix as a conductance (as it was when last stamped); only what
+  // it has changed by since is a current worked out from the last step's voltage, and it is
+  // stamped anew once that is a fifth of it. (All of it used to be such a current: behind any
+  // series impedance — two panels in series, a long cable — that swings further every step, up
+  // to megavolts.)
+  stamp(s) { this.gst = this.gin(); s.addG(this.nodes[0], this.nodes[1], 1e-7 + this.gst); }
+  stampStep(s) { s.addI(this.nodes[0], this.nodes[1], (this.gin() - (this.gst || 0)) * this.vprev); }
   stampAC(ac) { ac.addY(this.nodes[0], this.nodes[1], 1e-7); }
   accept(s) {
     const v = s.v(this.nodes[0]) - s.v(this.nodes[1]), i = this.gin() * v + v * 1e-7;
@@ -112,6 +117,8 @@ export class LEDPanel extends Element {
     const on = this.on ? this.v2 > 80 * 80 : this.v2 > 95 * 95;
     if (on !== this.on) { this.on = on; s.event = true; }
     this.overheat(s, this.v2 / this.p.v ** 2, 2, 1.5625, () => `Driver burnt — ${fmtShort(Math.sqrt(this.v2), 'V')} on a ${fmtShort(this.p.v, 'V')} panel (over-voltage)`);
+    const g = this.gin(), g0 = this.gst || 0;
+    if (Math.abs(g - g0) > 0.2 * Math.max(g, g0)) s.dirty = true;
   }
   valueLabel() { return fmtQty(this.p.w, 'W').replace(' ', ''); }
   readings() { return [['Input power', this.pin || 0, 'W'], ['Light output', (this.pin || 0) * 0.92 * this.p.eff, 'lm'], ['Supply (RMS)', Math.sqrt(this.v2 || 0), 'V'], ['Driver', this.damaged ? 'burnt' : this.on ? 'ON' : 'off (low voltage)', '']]; }
